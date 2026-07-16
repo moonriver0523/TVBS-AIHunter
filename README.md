@@ -1,6 +1,6 @@
 # TVBS-AIHunter
 
-外電（路透社 Reuters Connect / CNN Newsource）相關的自動化流程規則庫，供 Claude 或其他 AI 助手在處理外電素材時遵循。
+外電（路透社 Reuters Connect / AP Newsroom / CNN Newsource）相關的自動化流程規則庫，供 Claude 或其他 AI 助手在處理外電素材時遵循。
 
 ## 目錄
 
@@ -8,9 +8,21 @@
 - [`reuters/01-search-workflow.md`](reuters/01-search-workflow.md) — **搜尋外電素材(RT)**：依 Edit No. 或關鍵字在 Reuters Connect 找到對應素材頁面
 - [`reuters/02-wire-intake-summary.md`](reuters/02-wire-intake-summary.md) — **外電掃帶入庫(文稿摘要)**：文字摘要入庫並建立 Notion 頁面（不下載影片）
 - [`reuters/03-auto-clip-so.md`](reuters/03-auto-clip-so.md) — **自動掐SO(RT)**：依引言找 TC、下載影片、剪片、上傳
+- [`reuters/05-batch-download.md`](reuters/05-batch-download.md) — **外電批次下載**：接[`素材編號`](common/05-material-numbering.md)清單，依代碼跨來源分派（RT/AP/CNN Newsource/YouTube/X）批次下載、核對限制、存文稿、改名並上傳共用
+
+### AP Newsroom
+- [`ap/01-search-workflow.md`](ap/01-search-workflow.md) — **搜尋外電素材(AP)**：依純數字編號或關鍵字在 AP Newsroom 找到對應影片素材頁面
+- [`ap/02-photo-search.md`](ap/02-photo-search.md) — **找AP照片**：依自然語言描述自生關鍵字，搜尋並下載最新最相關的照片
 
 ### CNN Newsource
 - [`cnn/01-auto-script-writing.md`](cnn/01-auto-script-writing.md) — **自動寫稿(CTV)**：依 Story ID 找官方完整稿、下載影片、比對TC、寫出台灣播出格式完成文稿
+- [`cnn/02-clip-bite.md`](cnn/02-clip-bite.md) — **CNN掐Bite**：用 `video_analyze` 為無 TC 的 CNN／AP 官方文稿補上句子級 Bite TC
+
+### 跨來源共用流程
+- [`common/05-material-numbering.md`](common/05-material-numbering.md) — **素材編號**：在素材清單裡找出 AP/RT/RTV/ENEX/ABC/IN-XX/YouTube/X 等素材代碼並依序編號
+- [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md) — **自動寫稿(SOT)**：接續外電批次下載結果，寫成台灣電視新聞稿（稿頭/標題/次標題/OS+畫面/BITE/總長度/譯名），需使用者明確下令才啟動
+- [`common/07-bite-assistant.md`](common/07-bite-assistant.md) — **掐BITE助手**：從編號素材、CNN側錄6碼素材，或本機/雲端既有素材找 Bite TC，直接輸出SB五行雙語逐字，不剪片不上傳
+- [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md) — **自動寫稿持續校稿索引**：保存使用者修改稿帶來的規則、成熟度、案例與 Prompt 變更；所有代理執行自動寫稿前必讀
 
 ### 共用規則（跨 Reuters／CNN 流程）
 - [`common/01-shared-folders.md`](common/01-shared-folders.md) — Claude共用（雙向）／掃帶歐印萬資料夾的位置、優先讀既有雙語逐字稿、大檔案上傳方式、暫定性質
@@ -18,10 +30,8 @@
 - [`common/03-preliminary-analysis.md`](common/03-preliminary-analysis.md) — 長片「初步分析」標準流程（silence掃描＋稀疏取樣畫面，不做完整轉錄）
 - [`common/04-bilingual-subtitle-qa.md`](common/04-bilingual-subtitle-qa.md) — 混語言影片的雙語字幕品質檢查（抓語音辨識誤判外語的漏洞）
 
-> 註：`指定掐Bite`／`外電批次下載(RT)`／`CNN掐Bite` 三條規則目前在另一個尚未merge的draft PR（`agent/add-bite-and-batch-rules`）分支上，本分支（`agent/sync-gap-rules`）是從main另外切出來補共用規則缺口，兩者尚未合併前，索引暫時不完整。
-
 ## 共用慣例
-- 上傳目的地固定為 Google Drive `Claude共用` 資料夾（`G:\我的雲端硬碟\Claude共用\`，雙向：使用者丟檔＋Claude產出都放這裡；舊「Claude上傳」資料夾已停用，詳見 [`common/01-shared-folders.md`](common/01-shared-folders.md)）
+- 上傳目的地固定為 Google Drive `Claude共用` 資料夾（`G:\我的雲端硬碟\Claude共用\`，雙向：使用者放入待處理檔案、AI產出也放這裡；舊「Claude上傳」資料夾已停用）。跨來源批次下載會在其下建立以 SLUG 命名的子資料夾，詳見 [`common/01-shared-folders.md`](common/01-shared-folders.md)
 - 大檔案（幾十MB以上）上傳優先用本機同步資料夾複製，不要用 Google Drive MCP 的 inline base64 上傳工具
 - 影片下載預設路徑：`D:\Downloads`
 - 素材查找除 `Claude共用` 外，也要檢查「掃帶歐印萬」資料夾，且優先沿用該資料夾裡既有的逐字稿/雙語對照文件，不重新轉錄

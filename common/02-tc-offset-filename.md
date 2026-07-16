@@ -1,6 +1,6 @@
 # TC offset 檔名慣例
 
-適用範圍：任何在 [`01-shared-folders.md`](01-shared-folders.md) 所述資料夾（尤其是「掃帶歐印萬」）裡處理的音檔／影片檔，只要檔名是（或以）數字字串命名，都套用本規則——不限於 CNN 素材，Reuters 素材、[`../reuters/04-designated-clip-bite.md`](../reuters/04-designated-clip-bite.md) 的指定掐Bite 流程同樣適用。
+適用範圍：任何在 [`01-shared-folders.md`](01-shared-folders.md) 所述資料夾（尤其是「掃帶歐印萬」）裡處理的音檔／影片檔，只要檔名是（或以）數字字串命名，都套用本規則——不限於 CNN 素材，Reuters 素材與 [`掐BITE助手`](07-bite-assistant.md) 同樣適用。
 
 ## 規則
 
