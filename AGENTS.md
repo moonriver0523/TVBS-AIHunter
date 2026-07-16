@@ -1,0 +1,15 @@
+# AI 代理入口
+
+本專案的流程總索引在 [`README.md`](README.md)。處理任何「自動寫稿(SOT)」任務前，除讀取 [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md) 外，**必須先讀取** [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md)。
+
+## 自動寫稿的持續校稿機制
+
+使用者會提供「AI 初稿」與「使用者修改稿」進行比對。這不是一次性評論，而是自動寫稿流程的正式回饋來源。代理必須：
+
+1. 保留案例索引與差異摘要。
+2. 萃取可重複的好做法，依 `NEW / REPEATED / CONFIRMED / PROMPT / RETIRED` 標示成熟度。
+3. 區分「通用規則、風格偏好、單篇判斷」，不可把單篇創意直接寫成鐵則。
+4. 只有 `PROMPT` 規則會直接約束自動寫稿；候選規則仍須在適合的稿件中優先評估。
+5. 每次更動規則、Prompt 或成熟度，都同步更新學習索引與變更紀錄，讓後續代理可追溯。
+
+不得只在對話中聲稱已學習，卻未留下可供其他代理讀取的專案紀錄。

@@ -22,6 +22,7 @@
 - [`common/05-material-numbering.md`](common/05-material-numbering.md) — **素材編號**：在素材清單裡找出 AP/RT/RTV/ENEX/ABC/IN-XX/YouTube/X 等素材代碼並依序編號
 - [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md) — **自動寫稿(SOT)**：接續外電批次下載結果，寫成台灣電視新聞稿（稿頭/標題/次標題/OS+畫面/BITE/總長度/譯名），需使用者明確下令才啟動
 - [`common/07-bite-assistant.md`](common/07-bite-assistant.md) — **掐BITE助手**：從編號素材、CNN側錄6碼素材，或本機/雲端既有素材找 Bite TC，直接輸出SB五行雙語逐字，不剪片不上傳
+- [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md) — **自動寫稿持續校稿索引**：保存使用者修改稿帶來的規則、成熟度、案例與 Prompt 變更；所有代理執行自動寫稿前必讀
 
 ## 共用慣例
 - 上傳目的地固定為 Google Drive `Claude共用` 資料夾（`G:\我的雲端硬碟\Claude共用\`）；跨來源批次下載會在其下建立以 SLUG 命名的子資料夾
