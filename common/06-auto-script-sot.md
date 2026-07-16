@@ -34,7 +34,7 @@
 
 **5. 受訪者BITE**：
 - 穿插在記者 OS 段落間，**不可放在全篇新聞結尾**——結尾一定要是記者 OS 總結句。
-- 格式固定五行：
+- **格式與 TC 擷取程序統一以 [`掐BITE助手`](07-bite-assistant.md) 為準**（本流程素材皆有 `#編號`，對應該文件「方式1：指定素材編號掐BITE」）。固定五行格式：
 
   ```text
   SB
@@ -54,7 +54,8 @@
   Those who came in through the window in an illegal manner, in an irregular and clandestine manner, sooner rather than later, will be outside our country.
   ```
 
-- **TIMECODE 一定要核對影片檔的真實時間軸**，絕對不可以寫段落/句子編號代替真實 TC。RT 若有 Automated Translation 逐字稿可直接取用 TC；AP／CNN Newsource 無 TC 時，用 `video_analyze`（transcription）核對真實時間軸，引言文字仍以官方文稿為準。
+- **TIMECODE 一定要核對影片檔的真實時間軸**，絕對不可以寫段落/句子編號代替真實 TC；找 TC 的精確度上限、英文原句不擴寫改寫等細節，同樣依 [`掐BITE助手`](07-bite-assistant.md) 的「找 TC 共用原則」。RT 若有 Automated Translation 逐字稿可直接取用 TC；AP／CNN Newsource 無 TC 時，用 `video_analyze`（transcription）核對真實時間軸，引言文字仍以官方文稿為準。
+- 若素材音軌只有 NATURAL（環境音）沒有人聲，或官方文稿未列出任何 SAYING／BITE 段落，視為**無 BITE 可用**，不可勉強轉譯湊一句。
 
 **6. 總長度**：
 - 全篇新聞總長度不可超過 2 分鐘（120 秒），**不含主播稿頭**。
