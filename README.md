@@ -15,7 +15,7 @@
 - [`ap/02-photo-search.md`](ap/02-photo-search.md) — **找AP照片**：依自然語言描述自生關鍵字，搜尋並下載最新最相關的照片
 
 ### CNN Newsource
-- [`cnn/01-auto-script-writing.md`](cnn/01-auto-script-writing.md) — **自動寫稿(CTV)**：依 Story ID 找官方完整稿、下載影片、比對TC、寫出台灣播出格式完成文稿
+- [`cnn/01-auto-script-writing.md`](cnn/01-auto-script-writing.md) — **自動寫稿(CTV)**：依 Story ID 找官方完整稿、下載影片、只為 SB 定位 TC、寫出台灣播出格式完成文稿（省 Token：官方稿／ASR 落地不重貼、單次 transcription、先抽 SB 再關鍵字定位）
 - [`cnn/02-clip-bite.md`](cnn/02-clip-bite.md) — **CNN掐Bite**：用 `video_analyze` 為無 TC 的 CNN／AP 官方文稿補上句子級 Bite TC
 
 ### 跨來源共用流程

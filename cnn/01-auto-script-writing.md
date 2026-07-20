@@ -2,6 +2,26 @@
 
 當使用者只給一組 CNN Newsource story ID（例如「WE-018FR」）並以此名稱呼叫時，自動執行以下完整流程，不需逐步詢問許可，但需在過程中回報找到/需留意的事項（禁運期、限制等）。
 
+瀏覽器操作一律套用 [`common/08-execution-efficiency.md`](../common/08-execution-efficiency.md)。本文件另規定 CTV 特有的「只為 SB 定位 TC、不把官方稿／ASR 全文灌進對話」省 Token 流程。
+
+**Rollback：** 省 Token 改寫前的完整舊版保存在 [`_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md`](../_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md)。
+
+## 省 Token 核心流程（優先遵守）
+
+1. **官方稿只抓一次、立刻落地**：≡Q Preview 全文抓到後，直接寫 `"<ID> 原始文稿.txt"`。後續只讀這個檔，不要重開 Preview、不要把 SUPER／LEAD IN／全稿貼進對話。
+2. **對話只回摘要，不回全文**：步驟過程只回報 ID、Title、Source、Embargo／限制、TRT、Reporter、受訪者人數與必要警示。**不要**在對話重貼原始文稿、ASR 全文或逐步截圖 walkthrough。
+3. **下載確認用檔案系統**：輪詢 `D:\Downloads` 的檔名／暫存檔大小；不要截圖確認下載進度。卡住（多次輪詢大小不變）→ 回報使用者，不要無限重試，也不要升級 network log 迴圈（除非連續失敗 2–3 次仍無法判斷原因）。
+4. **TC 只服務 SB，不服務 OS**：完成文稿只有 SB 需要 `MMSS-MMSS`；OS 旁白不對 TC、不取樣畫面。
+5. **先抽 SB 句，再跑／查 ASR，不要整支片當閱讀材料**：
+   - 從 `"<ID> 原始文稿.txt"` 抽出全部可用的 SOT／SOUNDBITE／受訪者引言英文句（這才是要 TC 的集合）。
+   - 同一支片 **`video_analyze`（`transcription: true`）只跑一次**；結果若很長，落地存 `"<ID> ASR.txt"`（可與完成檔一同上傳或暫存工作目錄），**不要把整份 ASR 貼進對話**。
+   - 對每句 SB 取 5–10 個關鍵字（專有名詞、數字、特殊詞優先）→ 在 ASR 裡命中 → **只核對命中位置前後約 5 秒** 決定起訖。
+   - 寫稿 context **只保留**「SB 英文原文 + 起訖 TC」對照表。
+6. **用字以官方稿為準**：ASR 只用來定位時間；SB 英文與發言者姓名／職稱一律信官方稿／SUPER 8。ASR 有同音錯字仍可定位，但輸出不得照抄 ASR 錯字。細節同 [`cnn/02-clip-bite.md`](02-clip-bite.md)。
+7. **原則上不取 frame**：SUPER 8 已提供姓名+職稱時不要截幀；只有發言者身份在官方稿仍無法確認時才取樣畫面。
+8. **同一 ID 不重跑分析**：追加改稿、補 SB、重出完成稿時，沿用既有 `"<ID> ASR.txt"`／先前分析結果，不重新 `video_analyze`。
+9. **最終交付精簡**：對話以完成文稿路徑＋禁運／限制／「用了幾個 SB／有無 SB 無TC」為主；完整內容在檔案裡。
+
 ## 步驟 1 — 找到該則並取得**完整官方稿件**（關鍵，不可省略）
 在 CNN Newsource（newsource.ns.cnn.com）搜尋該 ID，開啟該則展開的詳細框（Story Number、Title、Description、Source、Embargo、Footage Type、TRT、Reporter、Script）。
 
@@ -9,17 +29,30 @@
 
 務必先點這個 icon、捲完整份稿件再做任何事——曾經漏掉這一步（2026-07-13, WE-018FR），導致完全依賴 AI 語音轉錄寫完成文稿，結果受訪者姓名/職稱錯誤或籠統（例如寫成「Cupertino Electric公司代表」而非正確的「Nick McComb, Director of Field Operations, Cupertino Electric」；「Soraya Ortega」應為「Sariah Ortega, Welding Apprentice」；還完全漏掉「Hannah Pettinichio, Silicon Valley Mechanical」與「Paul Gigliotti, General Superintendent, Cupertino Electric」）。
 
+搜尋 → 開詳情 → 點 ≡Q → 捲完取文：連續動作能 batch 就 batch；全文取得後立刻進入步驟 3 存檔，不要在對話貼全文。
+
 ## 步驟 2 — 下載影片
-先回報步驟 1 找到的禁運/限制事項，再點下載圖示，選擇格式 **H264 HD NTSC**（網站會記住上次選擇）與位置 **D:/Downloads**（同樣會記住）。下載為伺服器端排隊處理，需輪詢 `D:\Downloads` 中的暫存/工作檔（`#chkpt_file#...`、`#work_file#...`）確認檔案大小是否持續增長；若卡住（多次輪詢檔案大小不變），回報給使用者，不要無限重試。
+先回報步驟 1 找到的禁運/限制事項（一句話摘要即可），再點下載圖示，選擇格式 **H264 HD NTSC**（網站會記住上次選擇）與位置 **D:/Downloads**（同樣會記住）。下載為伺服器端排隊處理，需輪詢 `D:\Downloads` 中的暫存/工作檔（`#chkpt_file#...`、`#work_file#...`）確認檔案大小是否持續增長；若卡住（多次輪詢檔案大小不變），回報給使用者，不要無限重試。
 
 ## 步驟 3 — 將完整官方稿件存為「原始文稿」
-把步驟 1 從 Preview 彈窗取得的完整稿件文字（SUPER 8 清單、LEAD IN、完整記者包裝旁白+BITE、END、KEYWORD TAGS）存成 `"<ID> 原始文稿.txt"`，前面加上 Story Number/Title/Description/Source/Embargo/Footage Type/TRT/Reporter 等 metadata。此為使用者內部參考副本，非對外散布。
+把步驟 1 從 Preview 彈窗取得的完整稿件文字（SUPER 8 名單、LEAD IN、完整記者包裝旁白+BITE、END、KEYWORD TAGS）存成 `"<ID> 原始文稿.txt"`，前面加上 Story Number/Title/Description/Source/Embargo/Footage Type/TRT/Reporter 等 metadata。此為使用者內部參考副本，非對外散布。
+
+存檔後，後續步驟**只讀這個檔**；不要重抓 Preview，也不要在對話重貼全文。
 
 ## 步驟 4 — 重新命名下載的影片
 將下載的檔案（原始檔名通常是系統產生的長檔名）重新命名為 `"<ID>.mp4"`。
 
-## 步驟 5 — 比對實際影片取得精確 TC
-使用 claude-video-vision（`video_analyze`，`transcription: true`）對下載的本機檔案做逐秒時間戳分析——步驟 1 的官方稿件文字沒有時間碼，每個 SB 的 TC 需靠比對官方稿件文字與這份逐秒逐字稿取得。只有在步驟 1 之後仍無法確認發言者身份時，才需要額外取樣畫面確認（通常不需要，因為 SUPER 8 清單已提供所有姓名+職稱）。
+## 步驟 5 — 只為 SB 定位精確 TC（省 Token 版）
+
+官方稿件本身沒有時間碼；**只有受訪者 SB 需要 TC**，OS 旁白不需要。
+
+1. 讀 `"<ID> 原始文稿.txt"`，抽出全部可用的 SOT／SOUNDBITE／受訪者引言（保留官方英文用字與對應發言者）。
+2. 對 `"<ID>.mp4"` 呼叫 claude-video-vision：`video_analyze`，`filters: { transcription: true }`。**同一支片只跑一次**；輸出過長時寫入 `"<ID> ASR.txt"`，不要整份貼進對話。
+3. 對每句要出的 SB：取 5–10 個關鍵字 → 在 ASR 結果命中 → 只核對前後約 5 秒，取起訖秒數，編成 `MMSS-MMSS`。
+4. 產出精簡對照表即可進入寫稿，例如：`發言者 | 官方英文句 | MMSS-MMSS`。不要把整份 ASR 或整份官方稿再餵進寫稿 context。
+5. 英文用字與姓名／職稱以官方稿／SUPER 8 為準；ASR 僅供定位（同 [`cnn/02-clip-bite.md`](02-clip-bite.md)）。
+6. 只有官方稿仍無法確認發言者身份時，才額外取樣畫面（通常不需要）。
+7. 若某句確實無法可靠對到 ASR，標「SB 無TC」，**不要捏造 TC**。
 
 ## 步驟 6 — 撰寫完成的台灣播出格式文稿（「完成文稿」）
 
@@ -27,8 +60,8 @@
 - 忠於原始素材——不可添加原文沒有的事實。
 - 精簡用詞，短句、明快節奏。
 - 保留所有可用的受訪者 BITE/SB，翻譯成自然的台灣觀眾語感。
-- 每個 SB 都必須附上 **TIMECODE**，格式為緊湊的 `MMSS-MMSS`（例如 `0006-0013`），取自步驟 5 的實際影片分析結果——絕不可捏造。若某段確實找不到可追溯的 TC，標註「SB 無TC」。
-- 姓名/職稱/機構：使用步驟 1 官方 SUPER 8 清單裡的確切姓名/職稱。**無論是開頭的 SUPER 清單或內文每個 SB 標籤，一律「中文職稱 + 英文姓名」**，例如「Cupertino Electric現場作業總監 Nick McComb」——**不要**額外加上中文譯名（不要「尼克·麥科姆（Nick McComb）」這種寫法，英文姓名直接跟在中文職稱後面即可）。若官方稿件已提供姓名/職稱，不要自行猜測或籠統帶過。
+- 每個 SB 都必須附上 **TIMECODE**，格式為緊湊的 `MMSS-MMSS`（例如 `0006-0013`），取自步驟 5 的定位結果——絕不可捏造。若某段確實找不到可追溯的 TC，標註「SB 無TC」。
+- 姓名/職稱/機構：使用步驟 1 官方 SUPER 8 名單裡的確切姓名/職稱。**無論是開頭的 SUPER 清單或內文每個 SB 標籤，一律「中文職稱 + 英文姓名」**，例如「Cupertino Electric現場作業總監 Nick McComb」——**不要**額外加上中文譯名（不要「尼克·麥科姆（Nick McComb）」這種寫法，英文姓名直接跟在中文職稱後面即可）。若官方稿件已提供姓名/職稱，不要自行猜測或籠統帶過。
 - 避免大量 Markdown 格式，僅使用下方指定的純文字結構。
 - **斷行/標點規則（2026-07-13 訂定，同日修訂）**：此輸出是「剪接上字用逐字稿」（字幕/上字參考稿），不是主播讀稿機稿，因此每行要能直接當字幕使用。斷行文字內部**去除所有標點符號**（不出現，。、「」！？等）。**目標每行 8–10 個全形字，12字為硬性上限，絕對不可超過。**（第一版切得太碎、多數行≤5字太短；改成15字上限又太長；最終校準為 8–10 字目標 / 12 字上限。）在自然的詞語/語意邊界斷句（不要斷在字詞中間、不要把英文專有名詞切開），盡量落在 8–10 字，只有在找不到更短的乾淨斷點時才延伸到 11–12 字。此規則套用在完成文稿中的每一段 OS 旁白與每一句 SB 引言。
 
@@ -69,10 +102,10 @@ BAR4
 {結尾 OS}
 ```
 
-將完成文稿存為 `"<ID> 完成文稿.txt"`。
+將完成文稿存為 `"<ID> 完成文稿.txt"`。寫稿時以「原始文稿檔 + SB–TC 對照表」為輸入，不要把 ASR 全文再貼進對話。
 
 ## 步驟 7 — 全部上傳到 Claude共用
-將影片檔與兩份 TXT（`<ID>.mp4`、`<ID> 原始文稿.txt`、`<ID> 完成文稿.txt`）複製到 `G:\我的雲端硬碟\Claude共用\`。
+將影片檔與文稿 TXT（至少 `<ID>.mp4`、`<ID> 原始文稿.txt`、`<ID> 完成文稿.txt`；若有產生 `"<ID> ASR.txt"` 可一併放入）複製到 `G:\我的雲端硬碟\Claude共用\`。大檔用本機同步資料夾複製，不用 MCP inline 上傳。
 
 ## 版權注意
 「完成文稿」是原創改寫的播出稿，不是逐字逐句的完整翻譯——只有個別引用的 SB 引言是貼近原意的翻譯，其餘 OS 皆為改寫旁白。「原始文稿」的完整官方稿件存檔比照 Reuters 完整 shotlist 存檔的處理方式——內部參考用途，非對外散布。
