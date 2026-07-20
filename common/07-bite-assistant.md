@@ -11,7 +11,10 @@
 1. **已下載的官方外電文稿**——若文稿本身已含 TC（例如 CNN `SUPERS`／`SOT`、部分 Reuters 稿），直接用。
 2. **已有的雙語逐字稿**——本機/雲端既有檔案，優先沿用不重新轉錄。
 3. **Reuters 網頁的 time-coded transcript**（Video Transcript 面板，只要有時間標記就算，不用管是否標示自動翻譯 disclaimer）。
-4. 以上都沒有 TC，**最後才**對本機影音檔跑 `video_analyze`（`filters: {transcription: true}`）。
+4. **YouTube 官方字幕／自動字幕**（若素材是 YouTube URL）——字幕本身自帶時間碼，直接用，不需要再跑 `video_analyze`。
+5. 以上都沒有 TC，**最後才**對本機影音檔跑 `video_analyze`（`filters: {transcription: true}`）。
+
+**BITE 講者不限受訪者**：記者／主播的口白（現場連線、棚內播報）只要有可核對的逐字來源（既有逐字稿、官方字幕、或依上述優先序取得的TC），一樣可以當作 BITE 使用，不是只有受訪者引言才算——見下方方式2範例的「白宮記者 Kevin Liptak」。
 
 **先選句，再找 TC，不要整份文稿/整支影片先看完才決定：**
 
