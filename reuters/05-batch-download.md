@@ -34,6 +34,7 @@
 | YouTube URL | YouTube | `yt-dlp` 下載到 `D:\Downloads` | `YT` |
 | X 影片 URL（網址含 "Video"） | X | `yt-dlp` 下載到 `D:\Downloads` | `X` |
 | X 照片 URL（網址含 "Photo"，用**圖片編號**） | X | 瀏覽器開原圖 URL，右鍵另存到 `D:\Downloads` | `X`（檔名用 `圖#XX`） |
+| Facebook URL（社群轉發連結） | Facebook | `yt-dlp` 下載到 `D:\Downloads`，做法同 YouTube；清單摘要簡短時先抽樣看完整支片再下判斷 | `FB` |
 
 ## 各來源處理細節
 
@@ -59,6 +60,8 @@
 - 照片（URL 含 "Photo"）：瀏覽器打開該貼文/原圖 URL，右鍵另存圖片到 `D:\Downloads`。
 
 兩者都沒教「文稿」的抓取方式，遇到時先問使用者。
+
+**Facebook（或其他社群轉發連結，清單摘要只有一句話時）：** 用 `yt-dlp` 下載到 `D:\Downloads`，做法比照 YouTube。**若清單裡的摘要只有短短一句話（例如「網友轉發＿＿影片」），下載完成後務必先對整支影片做全長度抽樣（`video_analyze`＋`video_detail` 稀疏抽樣，見 [`common/07-bite-assistant.md`](../common/07-bite-assistant.md) 的 B-roll TC 補充情境），確認實際內容與敏感程度後才決定寫稿時怎麼呈現，不能只憑清單那句摘要判斷。**尤其當這篇新聞的標題本身已經偏敏感/聳動時（例如涉及特定人物人身安全、路線曝光等），更要先看完整支片再下判斷；2026-07-20「追殺川普1730」案例中，清單摘要只寫「網友下載伊朗媒體的影片轉發」，實際整支2分50秒是詳細標出座車型號、行館位置與抵達時間的動畫地圖，若不先抽樣看完整支片，容易低估內容尺度。
 
 ## 下載確認與卡住處理
 
