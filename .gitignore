@@ -22,3 +22,6 @@ downloads/
 # Python
 __pycache__/
 *.pyc
+
+# 工作狀態（進度快照等操作性檔案，不進版控）
+.omc/
