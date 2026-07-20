@@ -1,8 +1,12 @@
 # 執行效率（省Token）準則
 
-執行本 repo 任何流程（外電批次下載、掐BITE助手、搜尋外電素材RT/AP、找AP照片、自動寫稿(CTV) 等）時的瀏覽器自動化操作，一律遵守以下準則，目標：瀏覽器工具呼叫減少約60~75%、網頁snapshot回傳量減少約80~95%、整體token使用量降低約70~90%。
+執行本 repo 任何流程（外電批次下載、掐BITE助手、搜尋外電素材RT/AP、找AP照片、自動寫稿(CTV/SOT)、掃帶入庫、自動掐SO 等）時的瀏覽器自動化操作，一律遵守以下準則，目標：瀏覽器工具呼叫減少約60~75%、網頁snapshot回傳量減少約80~95%、整體token使用量降低約70~90%。
 
-CTV 另有「只為 SB 定位 TC、官方稿／ASR 落地不灌對話」的步驟級規則，見 [`cnn/01-auto-script-writing.md`](../cnn/01-auto-script-writing.md)。
+各流程另有步驟級省 Token 規則（與本文件併用）：
+- CTV：[`cnn/01-auto-script-writing.md`](../cnn/01-auto-script-writing.md)
+- SOT：[`common/06-auto-script-sot.md`](06-auto-script-sot.md)
+- 掐BITE／CNN掐Bite：[`common/07-bite-assistant.md`](07-bite-assistant.md)、[`cnn/02-clip-bite.md`](../cnn/02-clip-bite.md)
+- 掃帶入庫／自動掐SO／搜尋 RT·AP／找AP照片：見對應 `reuters/*`、`ap/*` 文件開頭的省 Token 節
 
 ## 準則
 

@@ -2,16 +2,6 @@
 
 當使用者給出 Reuters 的 **Edit No.**（例如「7300」）或關鍵字，要求尋找對應的外電素材時，使用瀏覽器工具在 **Reuters Connect**（reutersconnect.com，需已登入）上操作。
 
-瀏覽器操作套用 [`../common/08-execution-efficiency.md`](../common/08-execution-efficiency.md)。
-
-**Rollback：** 省 Token 改寫前舊版見 [`../_archive/reuters/01-search-workflow.pre-token-saving-2026-07-20.md`](../_archive/reuters/01-search-workflow.pre-token-saving-2026-07-20.md)。
-
-## 省 Token 執行備註
-
-- 搜尋 → 切 Video 分頁 → 點標題：能 batch 就 batch；不要每步截圖。
-- **預設回報欄位**：標題、Edit No.、Restrictions 摘要、是否有 Video Transcript（可否直接取 TC）。使用者沒要求全文時，不要貼 shotlist／script 全文。
-- 下游流程（入庫、掐SO、批次下載）若需要完整文稿，在該流程內抓一次並**直接落檔**，不要在「搜尋」階段就先貼一整份進對話。
-
 ## 可靠流程
 
 1. 在主搜尋框輸入編號/關鍵字，按 Enter。
