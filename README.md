@@ -29,7 +29,14 @@
 - [`common/02-tc-offset-filename.md`](common/02-tc-offset-filename.md) — 數字檔名＝母帶起始TC offset 的換算規則
 - [`common/03-preliminary-analysis.md`](common/03-preliminary-analysis.md) — 長片「初步分析」標準流程（silence掃描＋稀疏取樣畫面，不做完整轉錄；本流程本身即省 Token 設計）
 - [`common/04-bilingual-subtitle-qa.md`](common/04-bilingual-subtitle-qa.md) — 混語言影片的雙語字幕品質檢查（抓語音辨識誤判外語的漏洞）
-- [`common/08-execution-efficiency.md`](common/08-execution-efficiency.md) — 瀏覽器自動化執行效率（省Token）準則：多用批次工具、少截圖、下載改用檔案系統檢查、不重複貼原文/長清單
+- [`common/08-execution-efficiency.md`](common/08-execution-efficiency.md) — 瀏覽器自動化執行效率（省Token）準則：多用批次工具、少截圖、下載改用檔案系統檢查、統一重試階梯、不重複貼原文/長清單
+- [`common/09-known-issues.md`](common/09-known-issues.md) — 特定站台／工具的邊角症狀與解法（**不必每次預讀**，執行中撞到才查；索引在 `08` 底部）
+
+### 工具與入口
+- [`AGENTS.md`](AGENTS.md) — AI 代理入口：自動寫稿前的必讀順序與持續校稿機制的責任要求
+- [`scripts/validate_sot.py`](scripts/validate_sot.py) — SOT 完成文稿驗證（主標/次標字數、SB 的 TC 有效性、總長度加總）
+- [`scripts/slim_whisper_transcript.py`](scripts/slim_whisper_transcript.py) — 精簡 Whisper 轉錄結果
+- [`scripts/make_contact_sheet.ps1`](scripts/make_contact_sheet.ps1) — 影片接觸表（非預設分析方式，見 `09-known-issues.md`）
 
 ## 共用慣例
 - 上傳目的地固定為 Google Drive `Claude共用` 資料夾（`G:\我的雲端硬碟\Claude共用\`，雙向：使用者放入待處理檔案、AI產出也放這裡；舊「Claude上傳」資料夾已停用）。跨來源批次下載會在其下建立以 SLUG 命名的子資料夾，詳見 [`common/01-shared-folders.md`](common/01-shared-folders.md)

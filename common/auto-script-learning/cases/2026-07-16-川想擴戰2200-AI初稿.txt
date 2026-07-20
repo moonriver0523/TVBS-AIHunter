@@ -1,0 +1,120 @@
+SLUG：川想擴戰2200
+預估長度：4分30秒（長篇SOT，不含主播稿頭）
+
+【主播稿頭】
+美伊戰火再度失控。美軍最新一波攻擊，已從伊朗南部港口與霍爾木茲海峽周邊，一路擴及德黑蘭附近；伊朗則以飛彈、無人機反擊巴林、約旦和科威特。川普更把奪取卡格島、轟炸電廠橋梁，甚至地面行動都擺上檯面。這場升級，還可能把危機推進紅海曼德海峽。
+
+【主標題】
+美伊戰火失控邊緣　川普揚言擴戰奪島封港
+
+【次標題】
+美軍七小時連炸數十目標　戰火向北延燒
+川普稱伊朗急著求和　不談就要徹底解決掉
+伊朗飛彈無人機反擊　海灣三國再響警報聲
+荷莫茲若持續遭封鎖　全球能源價格再承壓
+伊朗再打曼德海峽牌　紅海航運恐被迫繞道
+川普不排除奪卡格島　電廠橋梁也列打擊表
+地面戰代價恐怕更高　盟友疾呼重返外交路
+
+【記者OS／SOT】
+
+#13 TC000006-000011 "無人機墜向科威特舒艾巴港倉庫，撞擊後竄出巨大火球"
+NS
+#13 000006-000011
+無人機撞擊倉庫爆炸聲
+
+#01 TC000005-000014 "伊朗恰巴哈爾港上空升起大片黑煙"
+#04 TC000005-000014 "伊朗基什島夜間火勢猛烈燃燒"
+爆炸火光撕開夜色，濃煙從伊朗南部港口一路竄向天際。美軍七個小時轟炸數十處目標後，十六日又把打擊範圍向北推進，伊朗官媒稱，德黑蘭周邊與彈道飛彈重鎮塞姆南省，也傳出空襲。
+
+#05 TC000005-000015 "美軍空拍黑白畫面顯示飛彈擊中目標"
+#06 TC000005-000015 "美軍公布最新一波對伊朗打擊畫面"
+美方重新封鎖伊朗港口，還說一艘開往主要石油出口樞紐卡格島的油輪，無視多次警告，美軍因此朝煙囪發射飛彈、癱瘓船隻。伊朗官員聲稱，最新空襲死亡已超過三十五人、三百多人受傷，數字仍無法獨立核實。
+
+#20 TC000040-000050 "川普在賓州國防與創新峰會談伊朗局勢"
+SB
+美國總統 川普（Donald Trump）
+他們非常想和解，不喜歡我們正在做的事。接下來就看，是跟他們達成和解，還是把事情徹底解決掉。
+#20 0040-0050
+They want to settle so badly. They don't like what we're doing, and they do want to settle. We'll find out whether or not we settle with them or we just finish it off.
+
+#07 TC000005-000015 "伊朗公布飛彈接連升空畫面"
+#08 TC000005-000012 "伊朗國會議長卡利巴夫貼文截圖"
+但德黑蘭的答案，是飛彈繼續升空。伊朗國會議長卡利巴夫強調，若拿不到實際利益，沒有理由遵守美伊諒解備忘錄；總統裴澤斯基安更把川普的威脅，轉化為捍衛國土、凝聚內部的政治號召。
+
+#09 TC000039-000054 "伊朗總統裴澤斯基安受訪，強調捍衛國土"
+SB
+伊朗總統 裴澤斯基安（Masoud Pezeshkian）
+那些想把伊朗四分五裂的人，最後走到哪裡了？我們會依照信念，以行動捍衛每一寸土地；那些不尊重人的話，只符合他們的身分，不符合我們。
+#09 0039-0054
+The people who decided to divide our Iran into pieces — in the end, where are they standing now? We, in action, based on what we believe in, will defend every inch of our soil, and these disrespectful comments are worthy of them, not us.
+
+#10 TC000058-000106 "伊朗國會議員揮旗舉拳，高喊打倒美國與復仇"
+NS
+#10 000058-000106
+伊朗國會議員高喊「打倒美國」、「復仇」
+
+#11 TC000005-000015 "伊朗官媒稱無人機自發射架升空，攻擊約旦基地"
+#12 TC000005-000015 "多架無人機夜間發射畫面"
+#14 TC000005-000014 "監視器畫面顯示巴林美軍基地遭破壞"
+口號之外，反擊已跨出國境。伊朗向巴林、約旦、科威特發射飛彈與無人機，三國都部署美軍；目前沒有立即傳出傷亡，但海灣國家再次被拖進美伊互轟的火線。
+
+#16 TC000005-000016 "衛星影像標示紅海南端巴布曼德海峽位置"
+#17 TC000005-000015 "船舶通過狹窄的曼德海峽資料畫面"
+更棘手的是，伊朗除了握住荷莫茲海峽，還放話把壓力推向紅海南端。巴布曼德海峽本來就是蘇伊士運河的門戶，荷莫茲受阻後，二零二六年第一季每天約有五百四十萬桶原油改走這條替代路線。
+
+#15 TC000238-000258 "RUSI研究員卡提納斯分析伊朗須仰賴胡塞武裝威脅紅海"
+SB
+英國皇家聯合軍事研究所研究員 卡提納斯（Petras Katinas）
+伊朗在地理上並不控制巴布曼德海峽。若要干擾航運，德黑蘭主要得仰賴控制葉門紅海沿岸大片地區的胡塞武裝；胡塞已證明，反艦飛彈、無人機和其他武器，足以讓商業航行變得危險。
+#15 0238-0258
+Iran does not control the Bab el-Mandeb geographically. To interfere with it, Tehran would have to rely mainly on Houthis, who control much of Yemen's Red Sea coastline. And the Houthis have already demonstrated that they can use anti-ship missiles, drones, and other weapons to make commercial navigation dangerous.
+
+#15 TC000343-000407 "紅海商船、胡塞武裝與航運路線畫面交錯"
+#18 TC000005-000015 "美伊戰火與海上衝突資料畫面"
+胡塞不必真的封死海峽，只要幾次成功攻擊，甚至可信威脅，就可能讓戰爭保費暴增、船東改繞好望角。荷莫茲這一頭，布蘭特原油十六日已站上每桶八十五美元，比開戰前高出超過一成五。
+
+#19 TC000044-000054 "聯合國發言人杜雅里克呼籲恢復荷莫茲海峽航行自由"
+SB
+聯合國發言人 杜雅里克（Stéphane Dujarric）
+秘書長再次呼籲，全面恢復荷莫茲海峽及其周邊的國際航行權與航行自由。
+#19 0044-0054
+The secretary-general reiterates his call for the full restoration of international navigational rights and freedom of navigation in and around the Strait of Hormuz.
+
+#21 TC000035-000040 "川普受訪表示，不排除奪取卡格島"
+#21 TC000050-000059 "川普說能源目標會留到最後"
+然而白宮擺出的選項，已從加強空襲，延伸到奪取卡格島、深入轟炸核設施，甚至不排除地面行動。美國總統沒有設定談判期限，也讓這場戰爭變成看不到明確終點的消耗戰。
+
+#21 TC000102-000119 "川普在白宮接受福斯新聞頻道記者英斯特訪問"
+SB
+美國總統 川普（Donald Trump）
+接下來一週，情況會對他們非常不利，因為電廠和橋梁都會成為目標。我們要摧毀他們所有電廠、所有橋梁，除非他們回到談判桌前。
+#21 0102-0119
+We're going to hit them very hard the night after, and then next week it gets really bad for them because next week comes the power plants. Next week comes the bridges. We're going to knock out all their power plants. We're going to knock out all their bridges, unless they get to the table and negotiate.
+（畫面強制標示：Fox News Channel's Trey Yingst；不得遮蔽Fox台標；本素材最多使用2分鐘；不得存檔、重複使用或轉售）
+
+#18 TC000015-000025 "美軍戰機與伊朗防空、飛彈資料畫面"
+CNN 060656 TC061424-061440 "比利時國防暨外貿部長弗蘭肯在阿斯本安全論壇受訪"
+SB
+比利時國防暨外貿部長 弗蘭肯（Theo Francken）
+我不認為派地面部隊能解決這個問題。對美軍和以色列軍隊來說，投入地面部隊的代價實在太高。
+CNN 060656 061424-061440
+I don't think that boots on the ground will solve this problem. I think that the disadvantage to put boots on the ground for American troops and Israeli troops are way too high.
+
+#19 TC000116-000129 "聯合國發言人表示各層級仍在接觸，推動重返外交"
+#17 TC000020-000030 "貨輪依序通過海峽，海上航路繁忙"
+專家警告，若要靠武力完全打開荷莫茲海峽，可能需要更龐大的艦隊，甚至數萬名地面部隊。問題是，空襲越升級，伊朗越能把海峽、油價與區域盟友當成籌碼；川普想用更大的軍事壓力逼出談判，卻也可能先把中東推進一場更難收尾的全面戰爭，外交退路也將被一步步壓縮。
+
+記者　　綜合報導
+
+【長度估算】
+NS＋SB：約101秒
+記者OS：約169秒（以每分鐘250字估算）
+總長：約270秒＝4分30秒
+
+【查核來源（2026/07/16最新）】
+1. 美聯社：美軍打擊擴大至伊朗北部、油輪遭癱瘓、伊朗反擊海灣三國、最新傷亡與油價。
+2. Reuters素材文稿／Reuters Connect：#01－#21畫面、逐字稿、BITE時碼與使用限制。
+3. CNN 060656雙語逐字稿：白宮記者Kevin Liptak與比利時部長Theo Francken訪談。
+4. 美國海事管理局（MARAD）：紅海、巴布曼德海峽與胡塞攻擊風險。
+5. 歐盟對外事務部／海灣合作理事會：荷莫茲海峽航行自由與外交降溫立場。

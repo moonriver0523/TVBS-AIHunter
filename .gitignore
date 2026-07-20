@@ -1,0 +1,24 @@
+# 工作暫存目錄（whisper 模型、yt-dlp、ffmpeg 等大型二進位）
+.tmp-*/
+downloads/
+
+# 素材本體與工作產物：一律不進 repo，正式交付在 Google Drive「Claude共用」
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.mp3
+*.bin
+*.exe
+
+# 根目錄的逐案工作檔（外電文稿／ASR／完成文稿／截圖等）
+# 規則庫本身的 .md 不受影響；學習案例在 common/auto-script-learning/ 底下，不套用本段
+/*.txt
+/*.json
+/*.jpg
+/*.png
+
+# Python
+__pycache__/
+*.pyc
