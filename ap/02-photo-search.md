@@ -15,6 +15,8 @@
 - **先測試帳號能否下載，再展開大量搜尋**：任選一張結果嘗試下載確認流程正常。若下載回傳明確的授權/計量錯誤（例如 `MeterExpired_Shutdown`），代表帳號下載額度或授權已到期，**立即停止，不要再換關鍵字或重試**，回報使用者是帳號授權問題。
 - **搜尋後要再次確認目前分頁**：AP 頁面切換分頁後，媒體類型（Photo／Video）狀態有時不會穩定保留，同一個站台曾出現過搜尋後自動跳回 Video、也出現過跳回 Photo 的情況，兩種方向都遇過，下載前先看清楚目前是不是 Photo 分頁。
 - **找不到跟事件本身相關的照片時，回報「無事件照片」，不要為了湊滿張數改塞不相關的舊照/背景照片**——相關性比湊滿數量重要。
+- **關鍵字要簡短，不要一次疊多個限定詞（2026-07-20 訂定）**：多字精確片語（例如「Strait of Hormuz oil tanker」「Kuwait Iran attack」「Trump Iran nuclear」）常直接回 0 結果；換成 1-2 個字的寬鬆關鍵字（「Kuwait」「Strait of Hormuz」「oil prices」「Iran US strikes」）才查得到。**預設先試短關鍵字，0 結果時才逐步拆解/簡化，不要一次把好幾個限定詞疊在同一個查詢字串裡去猜。**
+- **「content older than allowed」不是操作錯誤（2026-07-20 訂定）**：點下載後若出現「This content is older than what you are allowed to download under your subscription.」，代表帳號訂閱的可下載時間範圍限制（跟 `MeterExpired_Shutdown` 那種額度到期不同），換一張較新日期的候選照片即可，不必重試同一張、也不必回報使用者是授權問題。
 
 ## 觸發格式
 
