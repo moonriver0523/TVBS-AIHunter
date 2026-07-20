@@ -5,29 +5,29 @@
 ## 目錄
 
 ### Reuters Connect
-- [`reuters/01-search-workflow.md`](reuters/01-search-workflow.md) — **搜尋外電素材(RT)**：依 Edit No. 或關鍵字在 Reuters Connect 找到對應素材頁面
-- [`reuters/02-wire-intake-summary.md`](reuters/02-wire-intake-summary.md) — **外電掃帶入庫(文稿摘要)**：文字摘要入庫並建立 Notion 頁面（不下載影片）
-- [`reuters/03-auto-clip-so.md`](reuters/03-auto-clip-so.md) — **自動掐SO(RT)**：依引言找 TC、下載影片、剪片、上傳
+- [`reuters/01-search-workflow.md`](reuters/01-search-workflow.md) — **搜尋外電素材(RT)**：依 Edit No. 或關鍵字在 Reuters Connect 找到對應素材頁面（省 Token：預設只回標題/Edit No./Restrictions，全文留給下游落檔）
+- [`reuters/02-wire-intake-summary.md`](reuters/02-wire-intake-summary.md) — **外電掃帶入庫(文稿摘要)**：文字摘要入庫並建立 Notion 頁面（不下載影片；省 Token：交付以 Notion 為主，對話不雙貼全文）
+- [`reuters/03-auto-clip-so.md`](reuters/03-auto-clip-so.md) — **自動掐SO(RT)**：依引言找 TC、下載影片、剪片、上傳（省 Token：transcript-first、只輸出剪輯區間雙語）
 - [`reuters/05-batch-download.md`](reuters/05-batch-download.md) — **外電批次下載**：接[`素材編號`](common/05-material-numbering.md)清單，依代碼跨來源分派（RT/AP/CNN Newsource/YouTube/X）批次下載、核對限制、存文稿、改名並上傳共用
 
 ### AP Newsroom
-- [`ap/01-search-workflow.md`](ap/01-search-workflow.md) — **搜尋外電素材(AP)**：依純數字編號或關鍵字在 AP Newsroom 找到對應影片素材頁面
-- [`ap/02-photo-search.md`](ap/02-photo-search.md) — **找AP照片**：依自然語言描述自生關鍵字，搜尋並下載最新最相關的照片
+- [`ap/01-search-workflow.md`](ap/01-search-workflow.md) — **搜尋外電素材(AP)**：依純數字編號或關鍵字在 AP Newsroom 找到對應影片素材頁面（省 Token：精簡回報、下載只查 `D:\Downloads`）
+- [`ap/02-photo-search.md`](ap/02-photo-search.md) — **找AP照片**：依自然語言描述自生關鍵字，搜尋並下載最新最相關的照片（省 Token：列表 ⬇ 直下，無 ⚠️ 不開詳情）
 
 ### CNN Newsource
 - [`cnn/01-auto-script-writing.md`](cnn/01-auto-script-writing.md) — **自動寫稿(CTV)**：依 Story ID 找官方完整稿、下載影片、只為 SB 定位 TC、寫出台灣播出格式完成文稿（省 Token：官方稿／ASR 落地不重貼、單次 transcription、先抽 SB 再關鍵字定位）
-- [`cnn/02-clip-bite.md`](cnn/02-clip-bite.md) — **CNN掐Bite**：用 `video_analyze` 為無 TC 的 CNN／AP 官方文稿補上句子級 Bite TC
+- [`cnn/02-clip-bite.md`](cnn/02-clip-bite.md) — **CNN掐Bite**：用 `video_analyze` 為無 TC 的 CNN／AP 官方文稿補上句子級 Bite TC（省 Token：先選句、單次 ASR、關鍵字 ±5 秒）
 
 ### 跨來源共用流程
-- [`common/05-material-numbering.md`](common/05-material-numbering.md) — **素材編號**：在素材清單裡找出 AP/RT/RTV/ENEX/ABC/IN-XX/YouTube/X 等素材代碼並依序編號
-- [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md) — **自動寫稿(SOT)**：接續外電批次下載結果，寫成台灣電視新聞稿（稿頭/標題/次標題/OS+畫面/BITE/總長度/譯名），需使用者明確下令才啟動
+- [`common/05-material-numbering.md`](common/05-material-numbering.md) — **素材編號**：在素材清單裡找出 AP/RT/RTV/ENEX/ABC/IN-XX/YouTube/X 等素材代碼並依序編號（完整輸出一次；下游禁止重貼）
+- [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md) — **自動寫稿(SOT)**：接續外電批次下載結果，寫成台灣電視新聞稿（省 Token：瘦盤點、每片一次 ASR、完成稿落檔、照片列表直下）
 - [`common/07-bite-assistant.md`](common/07-bite-assistant.md) — **掐BITE助手**：從編號素材、CNN側錄6碼素材，或本機/雲端既有素材找 Bite TC，直接輸出SB五行雙語逐字，不剪片不上傳
 - [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md) — **自動寫稿持續校稿索引**：保存使用者修改稿帶來的規則、成熟度、案例與 Prompt 變更；所有代理執行自動寫稿前必讀
 
 ### 共用規則（跨 Reuters／CNN 流程）
 - [`common/01-shared-folders.md`](common/01-shared-folders.md) — Claude共用（雙向）／掃帶歐印萬資料夾的位置、優先讀既有雙語逐字稿、大檔案上傳方式、暫定性質
 - [`common/02-tc-offset-filename.md`](common/02-tc-offset-filename.md) — 數字檔名＝母帶起始TC offset 的換算規則
-- [`common/03-preliminary-analysis.md`](common/03-preliminary-analysis.md) — 長片「初步分析」標準流程（silence掃描＋稀疏取樣畫面，不做完整轉錄）
+- [`common/03-preliminary-analysis.md`](common/03-preliminary-analysis.md) — 長片「初步分析」標準流程（silence掃描＋稀疏取樣畫面，不做完整轉錄；本流程本身即省 Token 設計）
 - [`common/04-bilingual-subtitle-qa.md`](common/04-bilingual-subtitle-qa.md) — 混語言影片的雙語字幕品質檢查（抓語音辨識誤判外語的漏洞）
 - [`common/08-execution-efficiency.md`](common/08-execution-efficiency.md) — 瀏覽器自動化執行效率（省Token）準則：多用批次工具、少截圖、下載改用檔案系統檢查、不重複貼原文/長清單
 

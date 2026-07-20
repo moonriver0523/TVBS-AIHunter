@@ -2,17 +2,6 @@
 
 當使用者以此名稱呼叫（或說「把這則外電摘要入庫」「照資料庫格式建立這則」），依下列固定流程處理。
 
-瀏覽器操作套用 [`../common/08-execution-efficiency.md`](../common/08-execution-efficiency.md)。
-
-**Rollback：** 省 Token 改寫前舊版見 [`../_archive/reuters/02-wire-intake-summary.pre-token-saving-2026-07-20.md`](../_archive/reuters/02-wire-intake-summary.pre-token-saving-2026-07-20.md)。
-
-## 省 Token 核心流程（優先遵守）
-
-1. **稿件只抓一次**：搜尋 → 開詳情 → VIEW MORE 取全文，能 batch 就 batch；全文取得後立刻做結構化擷取，不要重開、重抓、重截圖。
-2. **交付以 Notion 頁為主**：完整 `###...###` 結構寫進 Notion 頁面即可。對話回報精簡為：Notion 頁面連結或標題、Edit No.、Restrictions 一句、必要時「可出格式」濃縮段——**不要**在對話先貼完整十段摘要，再原樣貼進 Notion 等於輸出兩次。
-3. **Restrictions 必報、全文不貼**：Restrictions 用一句話摘要回報；shotlist/script 原文不整份貼進對話（版權與 token 雙重理由）。
-4. **少截圖**：確認 Edit No.／Restrictions 優先用 accessibility／文字擷取，不是每步截圖。
-
 ## 1. 在 Reuters Connect 找到素材
 依 [`01-search-workflow.md`](01-search-workflow.md)：**使用「Video」分頁**搜尋（不是「Text」，也不是舊版曾用過的「All」——以最新更正的規則為準），依 Edit No. 或關鍵字定位，開啟該則詳細頁面。點擊 script 面板的「VIEW MORE」展開完整 shotlist/script（不要只看截斷的預覽），才能寫出準確、不虛構的摘要。
 

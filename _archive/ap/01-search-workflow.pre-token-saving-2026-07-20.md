@@ -2,17 +2,6 @@
 
 當使用者給出帶 **`AP`** 字首的編號（例如「AP4672591」）或關鍵字，要求尋找對應的外電素材時，使用瀏覽器工具在 **AP Newsroom**（newsroom.ap.org，需已登入）上操作。這是 [`搜尋外電素材(RT)`](../reuters/01-search-workflow.md) 的 AP 版本，兩站並行使用。
 
-瀏覽器操作套用 [`../common/08-execution-efficiency.md`](../common/08-execution-efficiency.md)。
-
-**Rollback：** 省 Token 改寫前舊版見 [`../_archive/ap/01-search-workflow.pre-token-saving-2026-07-20.md`](../_archive/ap/01-search-workflow.pre-token-saving-2026-07-20.md)。
-
-## 省 Token 執行備註
-
-- 搜尋 → 選對媒體分頁 → 開詳情：能 batch 就 batch；不要每步截圖。
-- **預設回報欄位**：標題、純數字 ID、媒體類型、Restriction Summary 一句、是否有 SOUNDBITE。使用者沒要求時不要貼完整 Shotlist/Storyline。
-- 下載完成與否**只查** `D:\Downloads`（檔名＋大小），不要在 AP 網站 Downloads 列表空等或截圖確認。
-- 無 TC 時的 `video_analyze` 規則見下方；同一支片只分析一次，對齊 [`../common/07-bite-assistant.md`](../common/07-bite-assistant.md)／[`../cnn/02-clip-bite.md`](../cnn/02-clip-bite.md)。
-
 ## 如何判斷該去 RT 還是 AP
 
 編號帶 **`AP`** 字首時，代表要去 AP Newsroom 找——**`AP` 本身只是站台判斷標記，不是搜尋字串的一部分**。實際搜尋只打純數字部分（例如 `4672591`）。沒有字首、或明確指名 RT/Reuters 的，走 Reuters 流程。
