@@ -29,6 +29,7 @@
 - [`common/02-tc-offset-filename.md`](common/02-tc-offset-filename.md) — 數字檔名＝母帶起始TC offset 的換算規則
 - [`common/03-preliminary-analysis.md`](common/03-preliminary-analysis.md) — 長片「初步分析」標準流程（silence掃描＋稀疏取樣畫面，不做完整轉錄）
 - [`common/04-bilingual-subtitle-qa.md`](common/04-bilingual-subtitle-qa.md) — 混語言影片的雙語字幕品質檢查（抓語音辨識誤判外語的漏洞）
+- [`common/08-execution-efficiency.md`](common/08-execution-efficiency.md) — 瀏覽器自動化執行效率（省Token）準則：多用批次工具、少截圖、下載改用檔案系統檢查、不重複貼原文/長清單
 
 ## 共用慣例
 - 上傳目的地固定為 Google Drive `Claude共用` 資料夾（`G:\我的雲端硬碟\Claude共用\`，雙向：使用者放入待處理檔案、AI產出也放這裡；舊「Claude上傳」資料夾已停用）。跨來源批次下載會在其下建立以 SLUG 命名的子資料夾，詳見 [`common/01-shared-folders.md`](common/01-shared-folders.md)
