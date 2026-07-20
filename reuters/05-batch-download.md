@@ -60,9 +60,11 @@
 
 兩者都沒教「文稿」的抓取方式，遇到時先問使用者。
 
-## 下載確認
+## 下載確認與卡住處理
 
-用 PowerShell 輪詢 `D:\Downloads`（`Get-ChildItem -File | Where-Object {LastWriteTime -gt (Get-Date).AddMinutes(-2)}`），確認檔案（.crdownload 或臨時檔）已完成、大小穩定。多次輪詢完全沒變化視為卡住，回報使用者，不要無限重試。
+用 PowerShell 輪詢 `D:\Downloads`（`Get-ChildItem -File | Where-Object {LastWriteTime -gt (Get-Date).AddMinutes(-2)}`），確認檔案（.crdownload 或臨時檔）已完成、大小穩定。
+
+**單一素材卡住（重試 2-3 次仍 503／無回應／進度不動）時，先跳過這一筆，繼續處理清單中下一筆，不要讓整批流程卡在這一筆上。** 全部其他素材跑完後，回頭把卡住的項目再補試一次；仍然失敗才在最終彙整表中列為 ⚠️ 未完成，並回報使用者是否要再手動排除障礙或換個時間重試。
 
 ## 檔名規則
 
