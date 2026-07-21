@@ -162,6 +162,26 @@ SOT_BAD_PUNCT = SOT_OK.replace(
     "美伊戰火失控邊緣,川普揚言擴戰奪島封港再加兩字",
 )
 
+_SOT_SB_SINGLE_BLOCK = """記者旁白第二句
+
+SB
+智利總統 卡斯特
+那些透過非法、不正規且秘密手段越境的人，遲早必須離開我們的國家。
+#03 0033-0044
+Those who came in illegally will be outside our country."""
+
+_SOT_SB_MULTI_BLOCK = """記者旁白第二句
+
+SB
+智利總統 卡斯特
+那些透過非法手段越境的人
+遲早必須離開我們的國家
+#03 0033-0044
+Those who came in illegally will be outside our country."""
+
+SOT_SB_SINGLE = SOT_OK.replace("記者旁白第二句", _SOT_SB_SINGLE_BLOCK)
+SOT_SB_MULTI = SOT_OK.replace("記者旁白第二句", _SOT_SB_MULTI_BLOCK)
+
 
 # --- 測試表 -----------------------------------------------------------------
 # (名稱, 模式, 稿件, 官方稿, 期望)
@@ -183,6 +203,8 @@ CASES = [
     ("CTV/中文以引號起始必須 FAIL", "ctv", ctv(SB_QUOTED_ZH), None, "引號"),
 
     # ---- SOT 主標題／次標題 ----
+    ("SOT/SB 中文單行應通過", "sot", SOT_SB_SINGLE, None, True),
+    ("SOT/SB 中文多行應通過", "sot", SOT_SB_MULTI, None, True),
     ("SOT/半形空格標題應通過", "sot", SOT_OK, None, True),
     ("SOT/全形空格標題必須 FAIL", "sot", SOT_FULLWIDTH_SPACE, None, "非半形空格"),
     ("SOT/半形逗號標題必須 FAIL", "sot", SOT_BAD_PUNCT, None, "不允許的半形標點"),

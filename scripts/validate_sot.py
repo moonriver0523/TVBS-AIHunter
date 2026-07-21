@@ -67,10 +67,68 @@ CHARS_PER_MINUTE = 250.0
 HEADLINE_MIN = 18
 HEADLINE_MAX = 19
 
-SB_BLOCK_RE = re.compile(
-    r"^SB\s*$\n(?P<speaker>.+)\n(?P<translation>.+)\n(?P<tc>.+)\n(?P<original>.+)$",
-    re.MULTILINE,
-)
+# SOT 的 SB 區塊以 TC 那行為界解析，中文翻譯**單行或多行都可以**
+# （2026-07-21 使用者裁定：「單行或多行沒關係，只要沒有殘譯殘缺即可」）。
+# SOT 的中文沒有每行字數上限，多行純粹是排版選擇；CTV 另有每行 14 全形字
+# 上限，見 cnn/01-auto-script-writing.md。
+#
+# 「TC 候選行」刻意放寬成「整行沒有中日韓文字，且含一組 數字-數字」——
+# 這樣連寫壞的 TC（例如 `CNN 060656 061424-061440`）也會被認出來、進而被
+# parse_tc_field 判為格式錯誤。若改成嚴格比對，寫壞的整段 SB 會直接解析
+# 不到而**靜默消失**，錯誤反而被吃掉（違反 common/08 的驗證紀律第 1、2 點）。
+CJK_RE = re.compile(r"[㐀-鿿豈-﫿]")
+TC_CANDIDATE_RE = re.compile(r"^(?=.*\d{3,6}\s*-\s*\d{3,6})[^㐀-鿿豈-﫿]+$")
+
+
+def is_sot_tc_candidate(line: str) -> bool:
+    """這一行看起來是不是「本來想寫成 TC」的那一行。"""
+    s = line.strip()
+    if not s:
+        return False
+    if "無TC" in s or "無 TC" in s:
+        return True
+    return bool(TC_CANDIDATE_RE.match(s))
+
+
+def parse_sot_sb_blocks(text: str):
+    """回傳 SOT 的 SB 區塊清單，每筆為 dict(speaker, zh_lines, tc, english, raw_lines)。"""
+    lines = text.splitlines()
+    blocks = []
+    i = 0
+    while i < len(lines):
+        if lines[i].strip() != "SB":
+            i += 1
+            continue
+        start = i
+        i += 1
+        speaker = lines[i].strip() if i < len(lines) else ""
+        if speaker:
+            i += 1
+        zh_lines = []
+        while i < len(lines):
+            s = lines[i].strip()
+            if not s or s == "SB" or is_sot_tc_candidate(s):
+                break
+            zh_lines.append(s)
+            i += 1
+        tc = ""
+        if i < len(lines) and is_sot_tc_candidate(lines[i].strip()):
+            tc = lines[i].strip()
+            i += 1
+        english = ""
+        if i < len(lines):
+            s = lines[i].strip()
+            if s and s != "SB":
+                english = s
+                i += 1
+        blocks.append({
+            "speaker": speaker,
+            "zh_lines": zh_lines,
+            "tc": tc,
+            "english": english,
+            "raw_lines": [l.strip() for l in lines[start:i] if l.strip()],
+        })
+    return blocks
 
 # TC field: either "#XX MMSS-MMSS" (numbered material) or plain "MMSS-MMSS" /
 # "HHMMSS-HHMMSS" (side-recorded / no-number material).
@@ -284,9 +342,16 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
     # --- SB blocks ---
     sb_seconds_total = 0.0
     sb_count = 0
-    for m in SB_BLOCK_RE.finditer(text):
+    for blk in parse_sot_sb_blocks(text):
         sb_count += 1
-        tc_field = m.group("tc")
+        tc_field = blk["tc"]
+        if not blk["zh_lines"]:
+            problems.append(f"第{sb_count}段 SB 缺少中文翻譯口白")
+        if not blk["english"]:
+            problems.append(f"第{sb_count}段 SB 缺少英文原句")
+        if not tc_field:
+            problems.append(f"第{sb_count}段 SB 找不到 TC 欄位")
+            continue
         parsed = parse_tc_field(tc_field)
         if parsed is None:
             problems.append(f"第{sb_count}段 SB 的 TC 欄位「{tc_field.strip()}」格式無法辨識")
@@ -347,7 +412,7 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
             stripped = line.strip()
             if not stripped:
                 continue
-            if stripped == "SB" or SB_BLOCK_RE.search(stripped):
+            if stripped == "SB":
                 continue
             if TC_RE.match(stripped):
                 continue
@@ -362,11 +427,13 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
     # Subtract characters already counted as part of SB blocks (speaker name /
     # translation / english line), since extract_section can't perfectly
     # distinguish them from OS paragraphs.
-    for m in SB_BLOCK_RE.finditer(os_block or ""):
-        os_chars -= full_width_len(m.group("speaker"))
-        os_chars -= full_width_len(m.group("translation"))
-        os_chars -= full_width_len(m.group("original"))
-        os_chars -= 2  # the literal "SB" line
+    # 扣掉已被算進 SB 區塊的字（講者／中文／英文），因為 extract_section 沒辦法
+    # 把它們和 OS 段落分開。中文可能多行，逐行扣（上面 os_chars 也是逐行加的）。
+    for blk in parse_sot_sb_blocks(os_block or ""):
+        os_chars -= full_width_len(blk["speaker"])
+        for zh in blk["zh_lines"]:
+            os_chars -= full_width_len(zh)
+        os_chars -= full_width_len(blk["english"])
 
     os_seconds = max(os_chars, 0) / CHARS_PER_MINUTE * 60.0
 
