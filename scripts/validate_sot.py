@@ -51,6 +51,10 @@ SB_BLOCK_RE = re.compile(
 # "HHMMSS-HHMMSS" (side-recorded / no-number material).
 TC_RE = re.compile(r"^(?:#(?P<num>\d+)\s+)?(?P<start>\d{4,6})-(?P<end>\d{4,6})\s*$")
 
+# NS line: "NS #01 0050-0053 球員登巴士歡呼" or "NS 0050-0053 現場歡聲".
+# Trailing free-text description is allowed and ignored.
+NS_RE = re.compile(r"^NS\b\s*(?P<tc>(?:#\d+\s+)?\d{4,6}-\d{4,6})\b")
+
 SECTION_MARKERS = ("【", "##", "＃＃")
 
 
@@ -178,6 +182,37 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
                         f"第{sb_count}段 SB #{num} 的TC結束秒數({end_sec})超過影片實際長度({vdur:.1f}秒) — {video_path}"
                     )
 
+    # --- NS (natural sound) seconds ---
+    # 06-auto-script-sot.md: 總長度＝OS＋全部SB＋全部NS。NS 寫成單行，例如
+    #   NS #01 0050-0053 球員登巴士歡呼
+    #   NS 0050-0053 現場歡聲
+    # 帶不帶 #編號都接受；沒有 TC 的裸 "NS" 行無法計時，另外提醒。
+    ns_seconds_total = 0.0
+    ns_count = 0
+    ns_untimed = 0
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not re.match(r"^NS\b", stripped):
+            continue
+        ns_m = NS_RE.match(stripped)
+        parsed = parse_tc_field(ns_m.group("tc")) if ns_m else None
+        if parsed is None:
+            ns_untimed += 1
+            continue
+        start_sec, end_sec, _num = parsed
+        dur = end_sec - start_sec
+        if dur <= 0:
+            problems.append(f"NS「{stripped}」結束時間不晚於開始時間")
+            continue
+        ns_count += 1
+        ns_seconds_total += dur
+        notes.append(f"NS：{stripped} = {dur:.0f}秒")
+    if ns_untimed:
+        problems.append(
+            f"有 {ns_untimed} 段 NS 沒有可解析的 TC，無法計入總長度"
+            "（NS 也要納入計時，格式如 `NS #01 0050-0053 說明`）"
+        )
+
     # --- OS reading time ---
     os_block = extract_section(text, "記者OS內文") or extract_section(text, "記者OS")
     os_chars = 0
@@ -189,6 +224,8 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
             if stripped == "SB" or SB_BLOCK_RE.search(stripped):
                 continue
             if TC_RE.match(stripped):
+                continue
+            if re.match(r"^NS\b", stripped):
                 continue
             if re.match(r"^#\d+\s+TC", stripped) or stripped.startswith("圖#"):
                 continue
@@ -207,8 +244,12 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
 
     os_seconds = max(os_chars, 0) / CHARS_PER_MINUTE * 60.0
 
-    total_seconds = os_seconds + sb_seconds_total
-    notes.append(f"OS約{os_chars}字 → 約{os_seconds:.1f}秒；SB共{sb_seconds_total:.1f}秒；總長度約{total_seconds:.1f}秒（目標{target_seconds:.0f}秒）")
+    total_seconds = os_seconds + sb_seconds_total + ns_seconds_total
+    notes.append(
+        f"OS約{os_chars}字 → 約{os_seconds:.1f}秒；SB共{sb_seconds_total:.1f}秒；"
+        f"NS共{ns_seconds_total:.1f}秒（{ns_count}段）；"
+        f"總長度約{total_seconds:.1f}秒（目標{target_seconds:.0f}秒）"
+    )
     if total_seconds > target_seconds * 1.1:
         problems.append(f"總長度約{total_seconds:.1f}秒，超過目標{target_seconds:.0f}秒的10%以上")
 

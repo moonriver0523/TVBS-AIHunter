@@ -19,7 +19,11 @@
 
 ## 可靠流程
 
-1. 頂部搜尋框輸入純數字編號或關鍵字。
+1. **優先用網址直接查詢（2026-07-21 實證）**：`navigate` 到
+   `https://newsroom.ap.org/home/search?query={關鍵字或純數字ID}&mediaType=video`
+   （照片為 `&mediaType=photo`）。本次 16 筆素材與 3 張照片全部一次到位。
+   - ⚠️ **不要用** `https://newsroom.ap.org/search?query={ID}`——會掉到 **Planning 頁**，顯示「There is no coverage plan for your selection / 0 plans」，看起來像查無資料。
+   - 頂部搜尋框仍可作備援。
 2. **務必選對媒體類型分頁**（Photo／Video／Text／Graphics／Audio）——選錯類型會直接搜不到（例如同一編號在 Photo 下 0 結果，切到 Video 才精準命中）。沒有特別說明類型時預設先試 Video。
 3. 選「Search with keywords」（不是「with AI」）。
 4. 點結果卡片會先觸發卡片內縮圖預覽播放；要開該素材的完整詳情頁，需點卡片右上角的展開圖示（↗），會開一個新分頁 `/detail/{slug}/{id}/video`。
@@ -32,6 +36,23 @@
   - **Metadata** — Slug／Arrival Date／Creation Date／Duration／**ID**（下載檔名會用這個編號）／Provided By／Source／Dateline／Location／Usage Type／People Shown／People Mentioned／Subjects
   - **Shotlist** — 對應 RT 的逐字稿頁，內容依序是：**Restriction Summary**（使用限制摘要）→ 逐條 **SOUNDBITE** 引言（帶 `++...++` 製作註記，是翻譯後的引言文字，**沒有精確 TC**）→ **STORYLINE**（完整新聞稿全文）。有「Find in Shotlist」可在頁內搜關鍵字。
 - 沒有 TC 時，比照 [`CNN掐Bite`](../cnn/02-clip-bite.md) 的做法：下載後用 `video_analyze`（transcription）補時間點，引言文字仍以官方 Shotlist/Storyline 文字為準，不可用 ASR 文字取代官方文字。
+
+### 取 Shotlist 的標準做法：開新分頁（2026-07-21 實證，取代截圖逐段讀）
+
+點卡片標題後 Shotlist 開在 **modal** 裡，此時 `get_page_text` 抓到的是**彈窗背後的搜尋清單**，不是 Shotlist——只能靠截圖逐段捲讀，很花 token 且會被裁切。
+
+**正解**：彈窗右上點 **「Open in a new tab」**，開出真正的詳情分頁 `newsroom.ap.org/detail/{標題去空白}/{hash}/video?...`，對該分頁 `get_page_text` 可一次抓到**完整純文字**，比截圖版多拿到：
+
+- 完整 **STORYLINE**（截圖版只讀得到第一段就被裁掉）
+- **Video Metadata** 全欄位（Slug／Arrival & Creation Date／Duration／ID／Dateline／Location／Usage Type／People Shown／People Mentioned／Subjects）
+- **Restrictions** 與 **Use information** 原文
+- 攝影記者署名、「More like this」相關素材清單（可當同題材補素材線索）
+
+注意事項：
+- 詳情頁網址含 hash，**無法自己組出來**，一定要先點卡片標題開 modal 再點 Open in a new tab。
+- 點卡片標題有時第一下只叫出 hover 圖示列而沒開 modal，需再點一次。
+- 會多開一個分頁，後續操作用 `tabs_context_mcp` 確認 tabId，不要對舊分頁下指令。
+- **彈窗的 Close 需要點兩次**（第一次會變成放大的播放器）。**不要關彈窗**，直接 `navigate` 到下一個搜尋網址最穩。
 
 ## 下載流程
 
