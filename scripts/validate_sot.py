@@ -16,8 +16,8 @@ file stops the two copies from drifting apart.
 --mode ctv — 自動寫稿(CTV), see cnn/01-auto-script-writing.md:
   - 稿頭存在且為單一整段
   - SUPER: 每行 <= 18 全形字
-  - BAR 1-4 字卡文字各 17-18 全形字（空格不計），最多一個半形空格，
-    半形標點只准 ! " + :
+  - BAR 1-4 字卡文字各 15-17 全形字（空格不計），最多一個半形空格，
+    半形標點只准 ! " + : .
   - 內文 BAR1-BAR4 定位標記齊全、順序正確、不重複字卡文字
   - SB 五行格式；TC 為純 MMSS-MMSS（不帶來源前綴）且 MM/SS 合法
   - OS 與 SB 中文口白每行 <= 14 全形字
@@ -83,12 +83,13 @@ NS_RE = re.compile(r"^NS\b\s*(?P<tc>(?:#\d+\s+)?\d{4,6}-\d{4,6})\b")
 SECTION_MARKERS = ("【", "##", "＃＃")
 
 # --- CTV (cnn/01-auto-script-writing.md) ---
-CTV_BAR_MIN = 17.0          # BAR 字卡下限（2026-07-21 由「固定 18」放寬為 17-18）
-CTV_BAR_MAX = 18.0          # BAR 字卡上限
+CTV_BAR_MIN = 15.0          # BAR 字卡下限（2026-07-21 二次調整：固定18 → 17-18 → 15-17）
+CTV_BAR_MAX = 17.0          # BAR 字卡上限
 CTV_BAR_MAX_SPACES = 1      # 字卡最多一個半形空格（空格本身不計入字數）
-# 字卡允許的半形標點白名單。此外的半形標點（, . ? - / % ( ) 等）一律不得使用；
+# 字卡允許的半形標點白名單。此外的半形標點（, ? - / % ( ) 等）一律不得使用；
 # 半形英文字母與數字不受此限（照樣算 0.5 個全形字）。
-CTV_BAR_ALLOWED_PUNCT = set('!"+:')
+# `.` 於 2026-07-21 補入：數值簡寫 `5.7萬`／`950.3萬` 需要小數點。
+CTV_BAR_ALLOWED_PUNCT = set('!"+:.')
 CTV_SUPER_MAX = 18.0        # SUPER 每行上限 18 全形字
 CTV_SPOKEN_MAX = 14.0       # OS／SB 中文口白每行上限 14 全形字
 CTV_LEAD_MIN = 100          # 稿頭約 100-150 字（超出只提醒，不判 FAIL）
@@ -521,7 +522,7 @@ def validate_ctv(text: str, source_text: str | None):
         else:
             notes.append(f"SUPER「{line}」換算{fmt_width(w)}個全形字 OK")
 
-    # --- BAR 字卡：17-18 全形字，且半形字元受限 ---
+    # --- BAR 字卡：15-17 全形字，且半形字元受限 ---
     if doc.card_order != [1, 2, 3, 4]:
         problems.append(
             f"BAR 字卡列表應為 `BAR 1`~`BAR 4` 四張且順序正確，實際解析到：{doc.card_order or '無'}"

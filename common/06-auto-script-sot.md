@@ -2,6 +2,8 @@
 
 接續 [`外電批次下載`](../reuters/05-batch-download.md) 下載＋改名完成的一批素材，寫成一篇完整台灣電視新聞稿。**不會自動接續下載流程執行，一定要使用者明確下令才啟動**（避免下載完就自動生成稿子，跳過人工審核判斷內容是否恰當）。
 
+**開始前必讀** [`00-寫稿通則.md`](00-寫稿通則.md)：版權原則、單位與**數值換算／數字寫法**（「x萬x千」一律簡化為 `x.x萬`、數字優先用半形）、寫稿前事實分層、SB 五行格式。
+
 瀏覽器與 AP 照片步驟套用 [`08-execution-efficiency.md`](08-execution-efficiency.md)。找 BITE／TC 一律套用 [`07-bite-assistant.md`](07-bite-assistant.md) 的省 Token 優先序；**本文件下方的找 TC 敘述若與 `07` 不一致，一律以 `07` 為準**（先文稿／既有逐字稿／有 TC 的 transcript，最後才 `video_analyze`；先選句再定位）。
 
 **Rollback：** 省 Token 改寫前舊版見 [`_archive/common/06-auto-script-sot.pre-token-saving-2026-07-20.md`](../_archive/common/06-auto-script-sot.pre-token-saving-2026-07-20.md)。
