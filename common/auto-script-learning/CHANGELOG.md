@@ -9,6 +9,7 @@
 - 新增 `P-008` 數字一律優先用半形、「x萬x千」簡化為「x.x萬」（SOT／CTV 皆適用）；寫入 [`../00-寫稿通則.md`](../00-寫稿通則.md) 第 2 節，並在 [`../06-auto-script-sot.md`](../06-auto-script-sot.md) 補「開始前必讀 00」那一行（原本 SOT 只在 SB 格式處引用 00，數字規則必須在下筆前就看到）。
 - 新增 `P-009` SOT 主標題／次標題沿用字卡的換算與字元規則：字數區間仍是 18~19，但改為半形折半換算、空格最多 1 個且須半形、半形標點白名單。`validate_sot.py` 的 `script_width()` 與 `check_card_chars()` 抽成兩流程共用，BAR 與主標次標從此是同一份實作。
   - 副作用（已知且預期）：既有 SOT 稿的全形空格標題會 `[FAIL]`，字數也會從 18~19 掉到 15~17 需補字。
+- 新增 `P-010` 規則異動不溯及既往：舊稿可以驗但不修改；寫入 [`../08-execution-efficiency.md`](../08-execution-efficiency.md) 的驗證紀律，`06` 與 `cnn/01` 各有一處指回。
 - 新增 `P-006` 驗證必須結構導向且具備亮紅燈能力；寫入 [`../08-execution-efficiency.md`](../08-execution-efficiency.md) 的準則區（CTV 與 SOT 兩條讀取鏈都會經過該檔）。
 - 新增 `P-007` 官方稿有引言時 0 段 SB 不得當成完成版；寫入 CTV 流程步驟 5 鐵則。
 - [`../../scripts/validate_sot.py`](../../scripts/validate_sot.py) 擴充 `--mode {sot,ctv}` 與 `--source-script`：CTV 模式依實際標記（`##`／`SUPER:`／`BAR n`／`SB`）解析區塊，檢查 BAR 15–17 字與半形字元白名單、SUPER 上限、五行 SB、純 4 碼 TC（`SS<=59`）、14 字口白、SUPER 與 SB 標籤一致、以 OS 收尾、至少一段 SB，並可比對官方稿引言與英文原句。SOT 模式行為不變。
