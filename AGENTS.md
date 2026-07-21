@@ -1,6 +1,6 @@
 # AI 代理入口
 
-本專案的流程總索引在 [`README.md`](README.md)。處理任何「自動寫稿(SOT)」任務前，除讀取 [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md) 外，**必須先讀取** [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md)。
+本專案的流程總索引在 [`README.md`](README.md)。處理任何「自動寫稿(SOT)」或「自動寫稿(CTV)」任務前，除讀取 [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md)／[`cnn/01-auto-script-writing.md`](cnn/01-auto-script-writing.md) 外，**必須先讀取** [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md)。
 
 ## 自動寫稿的持續校稿機制
 

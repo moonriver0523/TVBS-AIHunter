@@ -1,13 +1,34 @@
 #!/usr/bin/env python3
-"""Validate a TVBS-AIHunter SOT 完成文稿.txt before it is filed.
+"""Validate a TVBS-AIHunter 完成文稿.txt before it is filed.
 
-Checks (see common/06-auto-script-sot.md "交稿前必須用腳本精算"):
+Two modes, one implementation, because the two 流程 share the SB five-line
+format, the TC grammar and the full-width counting rules — keeping them in one
+file stops the two copies from drifting apart.
+
+--mode sot (default) — 自動寫稿(SOT), see common/06-auto-script-sot.md:
   - 主標題／次標題 full-width character counts (target 18-19)
   - SB block structure (SB / 職稱姓名 / 中文翻譯 / TC / 英文原文) and TC validity
   - Total estimated length (OS reading time + all SB seconds + any NS seconds)
     against a target (default 120s, or --target-seconds)
   - Optional: cross-check each #XX SB's TC end against the actual video
     duration via ffprobe, if --videos-dir is given
+
+--mode ctv — 自動寫稿(CTV), see cnn/01-auto-script-writing.md:
+  - 稿頭存在且為單一整段
+  - SUPER: 每行 <= 18 全形字
+  - BAR 1-4 字卡文字各 17-18 全形字（空格不計），最多一個半形空格，
+    半形標點只准 ! " + :
+  - 內文 BAR1-BAR4 定位標記齊全、順序正確、不重複字卡文字
+  - SB 五行格式；TC 為純 MMSS-MMSS（不帶來源前綴）且 MM/SS 合法
+  - OS 與 SB 中文口白每行 <= 14 全形字
+  - SUPER 名單與內文 SB 標籤互相對應且逐字一致
+  - 全篇以 OS 收尾（BAR4 之後不再接 SB）
+  - 至少一段 SB；搭配 --source-script 時，比對官方稿的 BITE 有沒有被漏掉，
+    並確認每句英文原句真的出自官方稿
+
+The 區塊 are parsed from the actual markers (`##`, `SUPER:`, `BAR n`, `SB`);
+never from fixed line numbers — a fixed-offset check silently skips whatever
+moved (see common/auto-script-learning/cases/2026-07-21-罕見四胞1600.md).
 
 This does not rewrite the script; it only reports problems so a human/agent
 can fix the source file. Exit code is non-zero if any check fails.
@@ -16,6 +37,9 @@ Usage:
     python scripts/validate_sot.py "追殺川普1730 完成文稿.txt"
     python scripts/validate_sot.py foo.txt --target-seconds 150
     python scripts/validate_sot.py foo.txt --videos-dir "G:/我的雲端硬碟/Claude共用/追殺川普1730"
+    python scripts/validate_sot.py "罕見四胞1600 完成文稿.txt" --mode ctv
+    python scripts/validate_sot.py "罕見四胞1600 完成文稿.txt" --mode ctv \
+        --source-script "罕見四胞1600 原始文稿.txt"
 """
 
 from __future__ import annotations
@@ -27,6 +51,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 
 # Windows terminals (Git Bash / cmd) often default stdout to a non-UTF-8
 # codepage, which mangles the Chinese text this script prints. Force UTF-8
@@ -57,10 +82,50 @@ NS_RE = re.compile(r"^NS\b\s*(?P<tc>(?:#\d+\s+)?\d{4,6}-\d{4,6})\b")
 
 SECTION_MARKERS = ("【", "##", "＃＃")
 
+# --- CTV (cnn/01-auto-script-writing.md) ---
+CTV_BAR_MIN = 17.0          # BAR 字卡下限（2026-07-21 由「固定 18」放寬為 17-18）
+CTV_BAR_MAX = 18.0          # BAR 字卡上限
+CTV_BAR_MAX_SPACES = 1      # 字卡最多一個半形空格（空格本身不計入字數）
+# 字卡允許的半形標點白名單。此外的半形標點（, . ? - / % ( ) 等）一律不得使用；
+# 半形英文字母與數字不受此限（照樣算 0.5 個全形字）。
+CTV_BAR_ALLOWED_PUNCT = set('!"+:')
+CTV_SUPER_MAX = 18.0        # SUPER 每行上限 18 全形字
+CTV_SPOKEN_MAX = 14.0       # OS／SB 中文口白每行上限 14 全形字
+CTV_LEAD_MIN = 100          # 稿頭約 100-150 字（超出只提醒，不判 FAIL）
+CTV_LEAD_MAX = 150
+
+CTV_CARD_RE = re.compile(r"^BAR\s+([1-4])$")     # 字卡列表：`BAR 1`
+CTV_MARK_RE = re.compile(r"^BAR([1-4])$")        # 內文定位標記：`BAR1`
+CTV_TC_RE = re.compile(r"^(?P<start>\d{4})-(?P<end>\d{4})$")
+
+# 官方稿的講者引言行，例如
+#   `Alexa Bendall, Obstetrician, Royal Brisbane and Women’s Hospital: They have...`
+#   `SOT: We are still waiting...`
+CTV_SOURCE_QUOTE_RE = re.compile(r"^(?P<label>[A-Za-z][^:]{1,80}):\s+(?P<quote>\S.*)$")
+
+OPENING_QUOTES = "「『“\"'《〈"
+
 
 def full_width_len(line: str) -> int:
     """Character count for headline sizing (每個字元算1個字，含標點)."""
     return len(line.strip())
+
+
+def ctv_width(line: str) -> float:
+    """CTV 字數換算：中文全形字算 1，英文/數字等半形字算 0.5，空白不計。
+
+    cnn/01-auto-script-writing.md 的 SUPER／BAR／口白字數一律用這個尺標。
+    """
+    total = 0.0
+    for ch in line:
+        if ch.isspace():
+            continue
+        total += 1.0 if unicodedata.east_asian_width(ch) in ("F", "W") else 0.5
+    return total
+
+
+def fmt_width(w: float) -> str:
+    return f"{w:g}"
 
 
 def parse_tc_field(tc: str):
@@ -128,8 +193,10 @@ def find_video_for_material(videos_dir: str, num: str) -> str | None:
 
 
 def validate(text: str, target_seconds: float, videos_dir: str | None):
+    """SOT 模式檢查。回傳 (problems, notes, warnings)。"""
     problems: list[str] = []
     notes: list[str] = []
+    warnings: list[str] = []
 
     # --- headline / subheadline character counts ---
     headline_block = extract_section(text, "主標題")
@@ -253,24 +320,410 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
     if total_seconds > target_seconds * 1.1:
         problems.append(f"總長度約{total_seconds:.1f}秒，超過目標{target_seconds:.0f}秒的10%以上")
 
-    return problems, notes
+    return problems, notes, warnings
+
+
+# ---------------------------------------------------------------------------
+# CTV 模式（cnn/01-auto-script-writing.md）
+# ---------------------------------------------------------------------------
+
+
+class CtvScript:
+    """依實際標記解析出來的 CTV 完成文稿結構（不使用固定行號）。"""
+
+    def __init__(self) -> None:
+        self.lead: list[str] = []               # `##` 之前的稿頭
+        self.has_separator = False
+        self.super_lines: list[str] = []        # `SUPER:` 之後的名單
+        self.cards: dict[int, str] = {}         # {1: "字卡文字", ...}
+        self.card_order: list[int] = []
+        self.marks: list[int] = []              # 內文出現的 BAR1-4 順序
+        self.body_lines: list[str] = []         # 內文區（含 SB 區塊）原文行
+        self.body_start: int | None = None
+
+
+def parse_ctv(text: str) -> CtvScript:
+    lines = text.splitlines()
+    doc = CtvScript()
+
+    # 1. `##` 分隔線之前是稿頭。
+    sep_idx = None
+    for i, line in enumerate(lines):
+        if line.strip() == "##":
+            sep_idx = i
+            break
+    if sep_idx is None:
+        doc.lead = [ln for ln in lines if ln.strip()]
+        return doc
+    doc.has_separator = True
+    doc.lead = [ln.strip() for ln in lines[:sep_idx] if ln.strip()]
+
+    # 2. `SUPER:` 之後、遇到空行或 `BAR n` 為止是 SUPER 名單。
+    idx = sep_idx + 1
+    super_idx = None
+    for i in range(idx, len(lines)):
+        if lines[i].strip().startswith("SUPER:"):
+            super_idx = i
+            break
+    if super_idx is not None:
+        for line in lines[super_idx + 1:]:
+            stripped = line.strip()
+            if not stripped or CTV_CARD_RE.match(stripped) or CTV_MARK_RE.match(stripped):
+                break
+            doc.super_lines.append(stripped)
+
+    # 3. 字卡列表：`BAR n` 的下一個非空行就是該張字卡文字。
+    scan_from = (super_idx if super_idx is not None else sep_idx) + 1
+    i = scan_from
+    while i < len(lines):
+        stripped = lines[i].strip()
+        m = CTV_CARD_RE.match(stripped)
+        if m:
+            num = int(m.group(1))
+            j = i + 1
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            card_text = lines[j].strip() if j < len(lines) else ""
+            if not CTV_CARD_RE.match(card_text) and not CTV_MARK_RE.match(card_text):
+                doc.cards[num] = card_text
+                doc.card_order.append(num)
+                i = j + 1
+                continue
+            doc.cards[num] = ""
+            doc.card_order.append(num)
+        elif CTV_MARK_RE.match(stripped) and doc.card_order:
+            doc.body_start = i
+            break
+        i += 1
+
+    if doc.body_start is None:
+        for k in range(scan_from, len(lines)):
+            if CTV_MARK_RE.match(lines[k].strip()):
+                doc.body_start = k
+                break
+
+    if doc.body_start is not None:
+        doc.body_lines = lines[doc.body_start:]
+        for line in doc.body_lines:
+            m = CTV_MARK_RE.match(line.strip())
+            if m:
+                doc.marks.append(int(m.group(1)))
+
+    return doc
+
+
+def split_ctv_body(body_lines: list[str]):
+    """把內文切成 (kind, payload) 序列：('mark', n) / ('sb', [5 lines]) / ('os', line)."""
+    items = []
+    i = 0
+    while i < len(body_lines):
+        stripped = body_lines[i].strip()
+        if not stripped:
+            i += 1
+            continue
+        m = CTV_MARK_RE.match(stripped)
+        if m:
+            items.append(("mark", int(m.group(1))))
+            i += 1
+            continue
+        if stripped == "SB":
+            block = [body_lines[k].strip() for k in range(i + 1, min(i + 5, len(body_lines)))]
+            items.append(("sb", block))
+            i += 5
+            continue
+        items.append(("os", stripped))
+        i += 1
+    return items
+
+
+def parse_ctv_tc(tc: str):
+    """回傳 (start_seconds, end_seconds) 或 None；MM/SS 必須合法（SS <= 59）。"""
+    m = CTV_TC_RE.match(tc.strip())
+    if not m:
+        return None
+    out = []
+    for digits in (m.group("start"), m.group("end")):
+        mm, ss = int(digits[:2]), int(digits[2:])
+        if ss > 59:
+            return None
+        out.append(mm * 60 + ss)
+    return out[0], out[1]
+
+
+def normalize_quote(s: str) -> str:
+    """比對官方稿用：去空白、統一引號與破折號、轉小寫。"""
+    s = s.strip().lower()
+    for ch in "“”‘’＂'\"「」":
+        s = s.replace(ch, "")
+    s = s.replace("’", "'").replace("—", "-").replace("–", "-")
+    s = re.sub(r"\s+", "", s)
+    return s
+
+
+def collect_source_quotes(source_text: str) -> list[str]:
+    """從 CNN 官方稿抽出講者引言行（SUPERS／LEAD IN／全大寫 OS 不算）。"""
+    quotes = []
+    for line in source_text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("--") or stripped.startswith("***"):
+            continue
+        m = CTV_SOURCE_QUOTE_RE.match(stripped)
+        if not m:
+            continue
+        label = m.group("label")
+        quote = m.group("quote")
+        # metadata 行（Title:／Source:／TRT: …）與全大寫記者旁白不是 BITE。
+        if label.strip() in {
+            "Story Number", "Title", "Description", "Source", "Embargo",
+            "Embargo / Restrictions", "Footage Type", "TRT", "Reporter",
+            "Official Script", "Script",
+        }:
+            continue
+        if quote.isupper():
+            continue
+        quotes.append(quote)
+    return quotes
+
+
+def validate_ctv(text: str, source_text: str | None):
+    """CTV 模式檢查。回傳 (problems, notes, warnings)。"""
+    problems: list[str] = []
+    notes: list[str] = []
+    warnings: list[str] = []
+
+    doc = parse_ctv(text)
+
+    # --- 稿頭 ---
+    if not doc.has_separator:
+        problems.append("找不到 `##` 分隔線，無法區分稿頭與 SUPER／BAR 區塊")
+    if not doc.lead:
+        problems.append("找不到主播稿頭（`##` 之前沒有內容）")
+    else:
+        if len(doc.lead) > 1:
+            problems.append(
+                f"稿頭被斷成 {len(doc.lead)} 行；稿頭要以單一整段文字呈現，不分句、不套 14 字斷行上限"
+            )
+        lead_text = "".join(doc.lead)
+        lead_n = len(re.sub(r"\s+", "", lead_text))
+        notes.append(f"稿頭共{lead_n}字")
+        if not (CTV_LEAD_MIN <= lead_n <= CTV_LEAD_MAX):
+            warnings.append(f"稿頭共{lead_n}字，不在建議的{CTV_LEAD_MIN}~{CTV_LEAD_MAX}字之間")
+
+    # --- SUPER ---
+    if not doc.super_lines:
+        problems.append("找不到 `SUPER:` 區塊或區塊內沒有任何人物")
+    for line in doc.super_lines:
+        w = ctv_width(line)
+        if w > CTV_SUPER_MAX:
+            problems.append(
+                f"SUPER「{line}」換算{fmt_width(w)}個全形字，超過上限{fmt_width(CTV_SUPER_MAX)}"
+            )
+        else:
+            notes.append(f"SUPER「{line}」換算{fmt_width(w)}個全形字 OK")
+
+    # --- BAR 字卡：17-18 全形字，且半形字元受限 ---
+    if doc.card_order != [1, 2, 3, 4]:
+        problems.append(
+            f"BAR 字卡列表應為 `BAR 1`~`BAR 4` 四張且順序正確，實際解析到：{doc.card_order or '無'}"
+        )
+    for num in doc.card_order:
+        card = doc.cards.get(num, "")
+        if not card:
+            problems.append(f"BAR {num} 沒有字卡文字")
+            continue
+
+        w = ctv_width(card)
+        if not (CTV_BAR_MIN <= w <= CTV_BAR_MAX):
+            problems.append(
+                f"BAR {num}「{card}」換算{fmt_width(w)}個全形字，"
+                f"不在{fmt_width(CTV_BAR_MIN)}~{fmt_width(CTV_BAR_MAX)}全形字範圍"
+            )
+        else:
+            notes.append(f"BAR {num}「{card}」換算{fmt_width(w)}個全形字 OK")
+
+        # 空格：最多一個，且必須是半形空格。
+        spaces = [ch for ch in card if ch.isspace()]
+        if len(spaces) > CTV_BAR_MAX_SPACES:
+            problems.append(
+                f"BAR {num}「{card}」有{len(spaces)}個空格，"
+                f"字卡最多只能有{CTV_BAR_MAX_SPACES}個半形空格"
+            )
+        for ch in spaces:
+            if ch != " ":
+                problems.append(
+                    f"BAR {num}「{card}」用了非半形空格（U+{ord(ch):04X}），字卡的空格必須是半形空格"
+                )
+                break
+
+        # 半形標點白名單：只准 ! " + : ，英數不受限。
+        bad_punct = sorted({
+            ch for ch in card
+            if not ch.isspace()
+            and unicodedata.east_asian_width(ch) not in ("F", "W")
+            and not ch.isalnum()
+            and ch not in CTV_BAR_ALLOWED_PUNCT
+        })
+        if bad_punct:
+            problems.append(
+                f"BAR {num}「{card}」用了不允許的半形標點 {' '.join(bad_punct)}；"
+                f"字卡的半形標點只准用 {' '.join(sorted(CTV_BAR_ALLOWED_PUNCT))}"
+            )
+
+    # --- 內文定位標記 ---
+    if doc.marks != [1, 2, 3, 4]:
+        problems.append(
+            f"內文定位標記應依序為 BAR1→BAR2→BAR3→BAR4 各一次，實際為：{doc.marks or '無'}"
+        )
+    body_flat = re.sub(r"\s+", "", "".join(doc.body_lines))
+    for num, card in doc.cards.items():
+        if card and re.sub(r"\s+", "", card) in body_flat:
+            problems.append(f"內文重複了 BAR {num} 的字卡文字「{card}」；內文只放 BAR{num} 定位標記")
+
+    # --- 內文逐項：OS / SB ---
+    items = split_ctv_body(doc.body_lines)
+    sb_count = 0
+    sb_speakers: list[str] = []
+    sb_english: list[str] = []
+    last_mark = 0
+    for kind, payload in items:
+        if kind == "mark":
+            last_mark = payload
+            continue
+        if kind == "os":
+            w = ctv_width(payload)
+            if w > CTV_SPOKEN_MAX:
+                problems.append(
+                    f"OS 口白「{payload}」換算{fmt_width(w)}個全形字，超過上限{fmt_width(CTV_SPOKEN_MAX)}"
+                )
+            continue
+
+        # kind == "sb"
+        sb_count += 1
+        block = payload
+        if len(block) < 4:
+            problems.append(f"第{sb_count}段 SB 五行格式不完整（只解析到 {len(block) + 1} 行）")
+            continue
+        speaker, translation, tc_field, english = block[0], block[1], block[2], block[3]
+        sb_speakers.append(speaker)
+        sb_english.append(english)
+
+        if last_mark == 4:
+            problems.append(f"第{sb_count}段 SB 出現在 BAR4 之後；BAR4 之後不再接 SB，全篇須以 OS 收尾")
+
+        if not speaker or CTV_TC_RE.match(speaker):
+            problems.append(f"第{sb_count}段 SB 第2行缺少「中文職稱 英文姓名」")
+        if translation and translation[0] in OPENING_QUOTES:
+            problems.append(f"第{sb_count}段 SB 引言「{translation}」以引號起始；SB 引言起始不加任何引號")
+        tw = ctv_width(translation)
+        if tw > CTV_SPOKEN_MAX:
+            problems.append(
+                f"第{sb_count}段 SB 引言「{translation}」換算{fmt_width(tw)}個全形字，"
+                f"超過上限{fmt_width(CTV_SPOKEN_MAX)}"
+            )
+
+        parsed = parse_ctv_tc(tc_field)
+        if parsed is None:
+            problems.append(
+                f"第{sb_count}段 SB 的 TC 欄位「{tc_field}」不是合法的純 4 碼 `MMSS-MMSS`"
+                "（CTV 不加來源前綴，且 SS 不得大於 59）"
+            )
+        else:
+            start_sec, end_sec = parsed
+            if end_sec <= start_sec:
+                problems.append(f"第{sb_count}段 SB TC「{tc_field}」結束時間不晚於開始時間")
+            else:
+                notes.append(f"第{sb_count}段 SB：{speaker}｜{tc_field} = {end_sec - start_sec}秒")
+
+        if english and english[0] in OPENING_QUOTES:
+            problems.append(f"第{sb_count}段 SB 英文原句以引號起始；英文原句不加任何引號")
+
+    legacy_sb = [
+        ln.strip() for ln in doc.body_lines
+        if re.match(r"^SB\s+(?:#\d+\s+)?\d{4,6}-\d{4,6}\s*$", ln.strip())
+    ]
+    if legacy_sb:
+        problems.append(
+            f"偵測到 {len(legacy_sb)} 處舊版三段式 `SB <TC>` 寫法（例如「{legacy_sb[0]}」）；"
+            "2026-07-21 起 CTV 一律改用 common/00-寫稿通則.md 的五行 SB 格式"
+        )
+
+    if sb_count == 0:
+        problems.append("完成文稿沒有任何 SB；CTV 完成版必須保留官方稿可用的 BITE，0 段 SB 不得當成完成版交付")
+
+    # --- SUPER 名單與內文 SB 標籤必須互相對應 ---
+    super_set = {re.sub(r"\s+", " ", s) for s in doc.super_lines}
+    speaker_set = {re.sub(r"\s+", " ", s) for s in sb_speakers}
+    for s in sorted(speaker_set - super_set):
+        problems.append(f"內文 SB 標籤「{s}」沒有逐字出現在 SUPER 區塊（兩處寫法必須完全一致）")
+    for s in sorted(super_set - speaker_set):
+        problems.append(f"SUPER「{s}」在內文沒有對應的 SB；SUPER 只列實際有引用 SB 的人物")
+
+    # --- 全篇須以 OS 收尾 ---
+    if items and items[-1][0] != "os":
+        problems.append("全篇最後一項不是 OS；BAR4 之後須以記者 OS 收尾")
+
+    # --- 與官方稿比對 ---
+    if source_text is not None:
+        source_quotes = collect_source_quotes(source_text)
+        notes.append(f"官方稿解析到{len(source_quotes)}句可用引言；完成文稿用了{sb_count}段 SB")
+        if source_quotes and sb_count == 0:
+            problems.append(
+                f"官方稿有{len(source_quotes)}句可用引言，完成文稿卻 0 段 SB —— 漏掉官方稿已有的 BITE"
+            )
+        flat_source = normalize_quote(source_text)
+        for i, english in enumerate(sb_english, start=1):
+            if english and normalize_quote(english) not in flat_source:
+                problems.append(
+                    f"第{i}段 SB 的英文原句在官方稿裡找不到：「{english}」"
+                    "（英文用字一律以官方稿為準，不可照抄 ASR）"
+                )
+        used = {normalize_quote(e) for e in sb_english}
+        unused = [q for q in source_quotes if normalize_quote(q) not in used]
+        if unused:
+            warnings.append(
+                f"官方稿還有{len(unused)}句引言未使用，確認是刻意取捨而非漏盤："
+                + "；".join(q[:30] + ("…" if len(q) > 30 else "") for q in unused)
+            )
+
+    return problems, notes, warnings
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("script_path", help="{SLUG} 完成文稿.txt 的路徑")
-    parser.add_argument("--target-seconds", type=float, default=120.0, help="目標總長度秒數，預設120")
-    parser.add_argument("--videos-dir", default=None, help="下載素材所在資料夾，提供時會用ffprobe核對TC是否超出片長")
+    parser.add_argument("--mode", choices=("sot", "ctv"), default="sot",
+                        help="sot=自動寫稿(SOT)（預設）；ctv=自動寫稿(CTV)")
+    parser.add_argument("--target-seconds", type=float, default=120.0, help="目標總長度秒數，預設120（僅 sot 模式）")
+    parser.add_argument("--videos-dir", default=None, help="下載素材所在資料夾，提供時會用ffprobe核對TC是否超出片長（僅 sot 模式）")
+    parser.add_argument("--source-script", default=None,
+                        help="`{SLUG} 原始文稿.txt` 的路徑（僅 ctv 模式）：比對官方稿 BITE 有無漏掉、英文原句是否照官方稿")
     args = parser.parse_args()
 
-    with open(args.script_path, "r", encoding="utf-8") as f:
+    if args.mode == "sot" and args.source_script:
+        parser.error("--source-script 只適用於 --mode ctv")
+    if args.mode == "ctv" and args.videos_dir:
+        parser.error("--videos-dir 只適用於 --mode sot")
+
+    with open(args.script_path, "r", encoding="utf-8-sig") as f:
         text = f.read()
 
-    problems, notes = validate(text, args.target_seconds, args.videos_dir)
+    if args.mode == "ctv":
+        source_text = None
+        if args.source_script:
+            with open(args.source_script, "r", encoding="utf-8-sig") as f:
+                source_text = f.read()
+        problems, notes, warnings = validate_ctv(text, source_text)
+    else:
+        problems, notes, warnings = validate(text, args.target_seconds, args.videos_dir)
 
     print("=== 檢查結果 ===")
     for n in notes:
         print(f"  - {n}")
+
+    if warnings:
+        print("\n=== 提醒（不影響通過與否） ===")
+        for w in warnings:
+            print(f"  [WARN] {w}")
 
     if problems:
         print("\n=== 發現問題 ===")
