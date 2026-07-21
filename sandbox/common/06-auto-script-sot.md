@@ -2,7 +2,7 @@
 
 接續 [`外電批次下載`](10-batch-download.md) 下載＋改名完成的一批素材，寫成一篇完整台灣電視新聞稿。**不會自動接續下載流程執行，一定要使用者明確下令才啟動**（避免下載完就自動生成稿子，跳過人工審核判斷內容是否恰當）。
 
-**開始前必讀**：[`00-寫稿通則.md`](00-寫稿通則.md)（版權、單位換算、譯名）、[`07-bite-assistant.md`](07-bite-assistant.md)（找 TC 與 SB 格式的唯一權威）、[`08-execution-efficiency.md`](08-execution-efficiency.md)（瀏覽器操作），以及下方「開始前必讀」的持續校稿索引。本文件只寫 SOT 流程特有的規則，不重述上述三份的內容。
+**開始前必讀**：[`00-寫稿通則.md`](00-寫稿通則.md)（版權、單位換算、**寫稿前事實分層**）、[`07-bite-assistant.md`](07-bite-assistant.md)（找 TC 與 SB 格式的唯一權威）、[`08-execution-efficiency.md`](08-execution-efficiency.md)（瀏覽器操作），以及下方「開始前必讀」的持續校稿索引。本文件只寫 SOT 流程特有的規則，不重述上述三份的內容。
 
 **Rollback：** 省 Token 改寫前舊版見 [`_archive/common/06-auto-script-sot.pre-token-saving-2026-07-20.md`](../../_archive/common/06-auto-script-sot.pre-token-saving-2026-07-20.md)。
 
