@@ -42,7 +42,15 @@
 搜尋 → 開詳情 → 點 ≡Q → 捲完取文：連續動作能 batch 就 batch；全文取得後立刻進入步驟 3 存檔，不要在對話貼全文。
 
 ## 步驟 2 — 下載影片
-先回報步驟 1 找到的禁運/限制事項（一句話摘要即可），再點下載圖示，選擇格式 **H264 HD NTSC**（網站會記住上次選擇）與位置 **D:/Downloads**（同樣會記住）。下載為伺服器端排隊處理，需輪詢 `D:\Downloads` 中的暫存/工作檔（`#chkpt_file#...`、`#work_file#...`）確認檔案大小是否持續增長；若卡住（多次輪詢檔案大小不變），回報給使用者，不要無限重試。
+先回報步驟 1 找到的禁運/限制事項（一句話摘要即可），再點下載圖示，選擇格式 **H264 HD NTSC**（網站會記住上次選擇）與位置 **D:/Downloads**（同樣會記住）。
+
+⚠️ **CNN Newsource 的下載不會出現在 Chrome 的下載清單（2026-07-21 訂定）**：它是交給**背景下載程式**處理，完成後檔案直接出現在 `D:\Downloads`，Chrome 從頭到尾不會跳任何下載提示或進度條。
+
+**所以「Chrome 沒跳下載」不等於沒下載成功，絕對不可以據此枯等或判定失敗。** 一律直接用 PowerShell 查 `D:\Downloads`（精確 filter），這是唯一可信的判斷依據。
+
+⚠️ 這一點與 [`common/08-execution-efficiency.md`](../common/08-execution-efficiency.md) 的**額度鐵則**直接相關：誤判成「沒下載成功」而再點一次 Download，就是拿會消耗額度的動作做無謂重試，正是該鐵則禁止的行為。**沒看到 Chrome 有反應時，先查檔案系統，不要重點。**
+
+下載為伺服器端排隊處理，需輪詢 `D:\Downloads` 中的暫存/工作檔（`#chkpt_file#...`、`#work_file#...`）確認檔案大小是否持續增長；若卡住（多次輪詢檔案大小不變），回報給使用者，不要無限重試。
 
 ## 步驟 3 — 將完整官方稿件存為「原始文稿」
 把步驟 1 從 Preview 彈窗取得的完整稿件文字（SUPER 8 名單、LEAD IN、完整記者包裝旁白+BITE、END、KEYWORD TAGS）存成 `"<ID> 原始文稿.txt"`，前面加上 Story Number/Title/Description/Source/Embargo/Footage Type/TRT/Reporter 等 metadata。此為使用者內部參考副本，非對外散布。
