@@ -85,11 +85,11 @@ SECTION_MARKERS = ("【", "##", "＃＃")
 # --- CTV (cnn/01-auto-script-writing.md) ---
 CTV_BAR_MIN = 15.0          # BAR 字卡下限（2026-07-21 二次調整：固定18 → 17-18 → 15-17）
 CTV_BAR_MAX = 17.0          # BAR 字卡上限
-CTV_BAR_MAX_SPACES = 1      # 字卡最多一個半形空格（空格本身不計入字數）
+CARD_MAX_SPACES = 1         # 字卡／標題最多一個半形空格（空格本身不計入字數）
 # 字卡允許的半形標點白名單。此外的半形標點（, ? - / % ( ) 等）一律不得使用；
 # 半形英文字母與數字不受此限（照樣算 0.5 個全形字）。
 # `.` 於 2026-07-21 補入：數值簡寫 `5.7萬`／`950.3萬` 需要小數點。
-CTV_BAR_ALLOWED_PUNCT = set('!"+:.')
+CARD_ALLOWED_PUNCT = set('!"+:.')
 CTV_SUPER_MAX = 18.0        # SUPER 每行上限 18 全形字
 CTV_SPOKEN_MAX = 14.0       # OS／SB 中文口白每行上限 14 全形字
 CTV_LEAD_MIN = 100          # 稿頭約 100-150 字（超出只提醒，不判 FAIL）
@@ -112,10 +112,12 @@ def full_width_len(line: str) -> int:
     return len(line.strip())
 
 
-def ctv_width(line: str) -> float:
-    """CTV 字數換算：中文全形字算 1，英文/數字等半形字算 0.5，空白不計。
+def script_width(line: str) -> float:
+    """字數換算：中文全形字算 1，英文/數字等半形字算 0.5，空白不計。
 
-    cnn/01-auto-script-writing.md 的 SUPER／BAR／口白字數一律用這個尺標。
+    這是本 repo 全部字數規格共用的唯一尺標：CTV 的 SUPER／BAR／口白
+    （cnn/01-auto-script-writing.md），以及 SOT 的主標題／次標題
+    （common/06-auto-script-sot.md，2026-07-21 起改用本尺標）。
     """
     total = 0.0
     for ch in line:
@@ -127,6 +129,41 @@ def ctv_width(line: str) -> float:
 
 def fmt_width(w: float) -> str:
     return f"{w:g}"
+
+
+def check_card_chars(label: str, text: str) -> list[str]:
+    """字卡／標題共用的半形字元規則：空格最多一個且須為半形，半形標點只准白名單。
+
+    CTV 的 BAR 與 SOT 的主標題／次標題套用同一組規則（2026-07-21 訂定）。
+    半形英文字母與數字不受限。
+    """
+    found: list[str] = []
+
+    spaces = [ch for ch in text if ch.isspace()]
+    if len(spaces) > CARD_MAX_SPACES:
+        found.append(
+            f"{label}「{text}」有{len(spaces)}個空格，最多只能有{CARD_MAX_SPACES}個半形空格"
+        )
+    for ch in spaces:
+        if ch != " ":
+            found.append(
+                f"{label}「{text}」用了非半形空格（U+{ord(ch):04X}），空格必須是半形空格"
+            )
+            break
+
+    bad_punct = sorted({
+        ch for ch in text
+        if not ch.isspace()
+        and unicodedata.east_asian_width(ch) not in ("F", "W")
+        and not ch.isalnum()
+        and ch not in CARD_ALLOWED_PUNCT
+    })
+    if bad_punct:
+        found.append(
+            f"{label}「{text}」用了不允許的半形標點 {' '.join(bad_punct)}；"
+            f"半形標點只准用 {' '.join(sorted(CARD_ALLOWED_PUNCT))}"
+        )
+    return found
 
 
 def parse_tc_field(tc: str):
@@ -203,11 +240,15 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
     headline_block = extract_section(text, "主標題")
     if headline_block:
         headline = headline_block.splitlines()[0].strip()
-        n = full_width_len(headline)
+        n = script_width(headline)
         if not (HEADLINE_MIN <= n <= HEADLINE_MAX):
-            problems.append(f"主標題「{headline}」共{n}字，不在{HEADLINE_MIN}~{HEADLINE_MAX}字範圍")
+            problems.append(
+                f"主標題「{headline}」換算{fmt_width(n)}個全形字，"
+                f"不在{HEADLINE_MIN}~{HEADLINE_MAX}字範圍"
+            )
         else:
-            notes.append(f"主標題「{headline}」共{n}字 OK")
+            notes.append(f"主標題「{headline}」換算{fmt_width(n)}個全形字 OK")
+        problems.extend(check_card_chars("主標題", headline))
     else:
         problems.append("找不到「主標題」區塊")
 
@@ -217,9 +258,15 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
             stripped = re.sub(r"^\s*\d+[.\、]\s*", "", line.strip())
             if not stripped:
                 continue
-            n = full_width_len(stripped)
+            n = script_width(stripped)
             if not (HEADLINE_MIN <= n <= HEADLINE_MAX):
-                problems.append(f"次標題「{stripped}」共{n}字，不在{HEADLINE_MIN}~{HEADLINE_MAX}字範圍")
+                problems.append(
+                    f"次標題「{stripped}」換算{fmt_width(n)}個全形字，"
+                    f"不在{HEADLINE_MIN}~{HEADLINE_MAX}字範圍"
+                )
+            else:
+                notes.append(f"次標題「{stripped}」換算{fmt_width(n)}個全形字 OK")
+            problems.extend(check_card_chars("次標題", stripped))
     else:
         problems.append("找不到「次標題」區塊")
 
@@ -514,7 +561,7 @@ def validate_ctv(text: str, source_text: str | None):
     if not doc.super_lines:
         problems.append("找不到 `SUPER:` 區塊或區塊內沒有任何人物")
     for line in doc.super_lines:
-        w = ctv_width(line)
+        w = script_width(line)
         if w > CTV_SUPER_MAX:
             problems.append(
                 f"SUPER「{line}」換算{fmt_width(w)}個全形字，超過上限{fmt_width(CTV_SUPER_MAX)}"
@@ -533,7 +580,7 @@ def validate_ctv(text: str, source_text: str | None):
             problems.append(f"BAR {num} 沒有字卡文字")
             continue
 
-        w = ctv_width(card)
+        w = script_width(card)
         if not (CTV_BAR_MIN <= w <= CTV_BAR_MAX):
             problems.append(
                 f"BAR {num}「{card}」換算{fmt_width(w)}個全形字，"
@@ -542,33 +589,8 @@ def validate_ctv(text: str, source_text: str | None):
         else:
             notes.append(f"BAR {num}「{card}」換算{fmt_width(w)}個全形字 OK")
 
-        # 空格：最多一個，且必須是半形空格。
-        spaces = [ch for ch in card if ch.isspace()]
-        if len(spaces) > CTV_BAR_MAX_SPACES:
-            problems.append(
-                f"BAR {num}「{card}」有{len(spaces)}個空格，"
-                f"字卡最多只能有{CTV_BAR_MAX_SPACES}個半形空格"
-            )
-        for ch in spaces:
-            if ch != " ":
-                problems.append(
-                    f"BAR {num}「{card}」用了非半形空格（U+{ord(ch):04X}），字卡的空格必須是半形空格"
-                )
-                break
-
-        # 半形標點白名單：只准 ! " + : ，英數不受限。
-        bad_punct = sorted({
-            ch for ch in card
-            if not ch.isspace()
-            and unicodedata.east_asian_width(ch) not in ("F", "W")
-            and not ch.isalnum()
-            and ch not in CTV_BAR_ALLOWED_PUNCT
-        })
-        if bad_punct:
-            problems.append(
-                f"BAR {num}「{card}」用了不允許的半形標點 {' '.join(bad_punct)}；"
-                f"字卡的半形標點只准用 {' '.join(sorted(CTV_BAR_ALLOWED_PUNCT))}"
-            )
+        # 空格與半形標點：與 SOT 主標題／次標題共用同一組規則。
+        problems.extend(check_card_chars(f"BAR {num}", card))
 
     # --- 內文定位標記 ---
     if doc.marks != [1, 2, 3, 4]:
@@ -591,7 +613,7 @@ def validate_ctv(text: str, source_text: str | None):
             last_mark = payload
             continue
         if kind == "os":
-            w = ctv_width(payload)
+            w = script_width(payload)
             if w > CTV_SPOKEN_MAX:
                 problems.append(
                     f"OS 口白「{payload}」換算{fmt_width(w)}個全形字，超過上限{fmt_width(CTV_SPOKEN_MAX)}"
@@ -615,7 +637,7 @@ def validate_ctv(text: str, source_text: str | None):
             problems.append(f"第{sb_count}段 SB 第2行缺少「中文職稱 英文姓名」")
         if translation and translation[0] in OPENING_QUOTES:
             problems.append(f"第{sb_count}段 SB 引言「{translation}」以引號起始；SB 引言起始不加任何引號")
-        tw = ctv_width(translation)
+        tw = script_width(translation)
         if tw > CTV_SPOKEN_MAX:
             problems.append(
                 f"第{sb_count}段 SB 引言「{translation}」換算{fmt_width(tw)}個全形字，"
