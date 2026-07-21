@@ -35,7 +35,7 @@ ffmpeg -y -i "<downloaded file>" -ss <start> -to <end> -c:v libx264 -c:a aac -av
 輸出檔名由使用者當次指定（例如「歐限兒網1800SO.mp4」），沒有固定命名規則。
 
 ## 5. 上傳剪好的片段到 Google Drive
-將輸出檔案複製到 `G:\我的雲端硬碟\Claude共用\`（目前唯一的共用上傳/輸入資料夾），檔名維持使用者指定的原樣。大檔用本機同步資料夾複製。
+將輸出檔案複製到 `G:\我的雲端硬碟\Claude共用\` **根目錄**（單支剪輯不建 SLUG 子資料夾；批次類流程才建，見 [`common/01-shared-folders.md`](../common/01-shared-folders.md)），檔名維持使用者指定的原樣。大檔用本機同步資料夾複製。
 
 ## 版權注意
 逐字引用僅限使用者指定的短引言片段，不做整則逐字稿。

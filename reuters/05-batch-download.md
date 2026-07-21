@@ -39,7 +39,7 @@
 ## 各來源處理細節
 
 **RT／RTV：**
-1. reutersconnect.com，Video 分頁，搜尋 Edit No.（My Subscription 維持預設關或開都可以，只要找得到）。
+1. reutersconnect.com，Video 分頁，搜尋 Edit No.——搜尋方式（優先直接帶網址、My Subscription 維持預設 **ON**）一律依 [`搜尋外電素材(RT)`](01-search-workflow.md)，本文件不另訂。
 2. Edit No. 可能撞號到不相關舊新聞——核對標題/主題是否符合這批清單脈絡，不要無腦點第一筆結果。
 3. 開詳情頁，記錄右側 **Restrictions** 面板完整內容＋複製 **Video Transcript**／逐字稿全文，合併存成該筆的文稿 txt。
 4. 點 **Download**（HD 60fps (MP4) 是預設選項，不用另外選）。
@@ -67,7 +67,7 @@
 
 用 PowerShell 輪詢 `D:\Downloads`（`Get-ChildItem -File | Where-Object {LastWriteTime -gt (Get-Date).AddMinutes(-2)}`），確認檔案（.crdownload 或臨時檔）已完成、大小穩定。
 
-**單一素材卡住（重試 2-3 次仍 503／無回應／進度不動）時，先跳過這一筆，繼續處理清單中下一筆，不要讓整批流程卡在這一筆上。** 全部其他素材跑完後，回頭把卡住的項目再補試一次；仍然失敗才在最終彙整表中列為 ⚠️ 未完成，並回報使用者是否要再手動排除障礙或換個時間重試。
+卡住時依 [`common/08-execution-efficiency.md`](../common/08-execution-efficiency.md) 的**統一重試階梯**（重點1次 → 仍無檔案就查 network log → 確認失敗後收尾）。本流程屬**批次類**，收尾方式為：**先跳過這一筆，繼續處理清單中下一筆，不要讓整批流程卡在這一筆上**；全部其他素材跑完後，回頭把卡住的項目再補試一次；仍然失敗才在最終彙整表中列為 ⚠️ 未完成，並回報使用者是否要再手動排除障礙或換個時間重試。
 
 ## 檔名規則
 

@@ -17,7 +17,7 @@
 
 1. **官方稿只抓一次、立刻落地**：≡Q Preview 全文抓到後，直接寫 `"<ID> 原始文稿.txt"`。後續只讀這個檔，不要重開 Preview、不要把 SUPER／LEAD IN／全稿貼進對話。
 2. **對話只回摘要，不回全文**：步驟過程只回報 ID、Title、Source、Embargo／限制、TRT、Reporter、受訪者人數與必要警示。**不要**在對話重貼原始文稿、ASR 全文或逐步截圖 walkthrough。
-3. **下載確認用檔案系統**：輪詢 `D:\Downloads` 的檔名／暫存檔大小；不要截圖確認下載進度。卡住（多次輪詢大小不變）→ 回報使用者，不要無限重試，也不要升級 network log 迴圈（除非連續失敗 2–3 次仍無法判斷原因）。
+3. **下載確認用檔案系統**：輪詢 `D:\Downloads` 的檔名／暫存檔大小；不要截圖確認下載進度。卡住時依 [`common/08-execution-efficiency.md`](../common/08-execution-efficiency.md) 的**統一重試階梯**處理（CTV 屬「單支任務」，確認失敗後直接回報使用者，不無限重試）。
 4. **TC 只服務 SB，不服務 OS**：完成文稿只有 SB 需要 `MMSS-MMSS`；OS 旁白不對 TC、不取樣畫面。
 5. **先抽 SB 句，再跑／查 ASR，不要整支片當閱讀材料**：
    - 從 `"<ID> 原始文稿.txt"` 抽出全部可用的 SOT／SOUNDBITE／受訪者引言英文句（這才是要 TC 的集合）。

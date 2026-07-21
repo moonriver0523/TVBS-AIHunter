@@ -14,15 +14,17 @@
 
 - **代碼類**：`AP`／`RT`／`RTV`／`ENEX`／`ABC` 開頭的字串（例如 `RT6722`、`AP4671347`）
 - **組合碼**：類似 `IN-78TH` 這種「字母-數字-字母」組合格式——**這就是 CNN Newsource 的素材代碼**（對應 [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md) 用的「CNN Newsource ID」），下載時走 CNN Newsource 那條線，不是走 RT 或 AP。
-- **URL 類**：YouTube URL、X（Twitter）的 URL
+- **URL 類**：YouTube URL、X（Twitter）的 URL、Facebook 等社群轉發連結
   - X 的 URL 若網址裡有 **"Video"** → 當一般素材編號
   - X 的 URL 若網址裡有 **"Photo"** → 另開**獨立**的「圖片編號」，跟一般素材編號分開計數，不混在一起
+  - **Facebook 或其他社群平台的影片轉發連結** → 比照 YouTube，當一般素材編號（下載走 [`外電批次下載`](../reuters/05-batch-download.md) 的 `FB` 分派）
 
 ## 代碼對應來源
 
 - `AP` → AP Newsroom（[`搜尋外電素材(AP)`](../ap/01-search-workflow.md)／[`找AP照片`](../ap/02-photo-search.md)）
 - `RT`／`RTV` → Reuters Connect（[`搜尋外電素材(RT)`](../reuters/01-search-workflow.md)）
 - `IN-XX` 類組合碼 → CNN Newsource（[`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md)）
+- YouTube／X／Facebook URL → 走 `yt-dlp`／右鍵存圖，見 [`外電批次下載`](../reuters/05-batch-download.md) 的來源分派表
 - `ENEX`／`ABC` → 目前尚無對應的下載來源／流程說明，**遇到這兩種前綴只做編號，不要自行猜測去哪個網站下載**，下載階段要停下來問使用者。
 
 ## 編號規則
