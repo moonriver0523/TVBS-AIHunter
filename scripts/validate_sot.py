@@ -106,6 +106,15 @@ CTV_TC_RE = re.compile(r"^(?P<start>\d{4})-(?P<end>\d{4})$")
 #   `SOT: We are still waiting...`
 CTV_SOURCE_QUOTE_RE = re.compile(r"^(?P<label>[A-Za-z][^:]{1,80}):\s+(?P<quote>\S.*)$")
 
+# 引號式引言：整行就是一句被引號包住的話，沒有講者標籤。CNN 的 TALAT／PKG 稿
+# 常用這種寫法（記者旁白全大寫、受訪者引言用引號），2026-07-21 `爆紅浣熊1600`
+# 案發現只認 `Label: quote` 會漏抓整篇。
+CTV_SOURCE_BARE_QUOTE_RE = re.compile(r'^["“](?P<quote>.+?)["”][.,]?$')
+
+# CTV 單段 SB 的長度門檻（2026-07-21 訂定，見 cnn/01-auto-script-writing.md）
+CTV_SB_MIN_SECONDS = 3       # 低於此秒數直接 FAIL：語意不可能完整
+CTV_SB_SHORT_SECONDS = 4     # 3~4 秒之間給 WARN，要能說明為何這樣取捨
+
 OPENING_QUOTES = "「『“\"'《〈"
 
 
@@ -463,7 +472,19 @@ def parse_ctv(text: str) -> CtvScript:
 
 
 def split_ctv_body(body_lines: list[str]):
-    """把內文切成 (kind, payload) 序列：('mark', n) / ('sb', [5 lines]) / ('os', line)."""
+    """把內文切成 (kind, payload) 序列。
+
+    - ('mark', n)
+    - ('sb', {speaker, zh_lines, tc, english})
+      SB 中文口白可多行（每行仍受 14 全形字上限），結構為：
+        SB
+        {職稱姓名}
+        {中文行1}
+        {中文行2...}   ← 可 1 行以上，直到 TC 行
+        {MMSS-MMSS}
+        {英文原句}
+    - ('os', line)
+    """
     items = []
     i = 0
     while i < len(body_lines):
@@ -477,9 +498,41 @@ def split_ctv_body(body_lines: list[str]):
             i += 1
             continue
         if stripped == "SB":
-            block = [body_lines[k].strip() for k in range(i + 1, min(i + 5, len(body_lines)))]
-            items.append(("sb", block))
-            i += 5
+            i += 1
+            while i < len(body_lines) and not body_lines[i].strip():
+                i += 1
+            speaker = body_lines[i].strip() if i < len(body_lines) else ""
+            if speaker:
+                i += 1
+            zh_lines: list[str] = []
+            while i < len(body_lines):
+                s = body_lines[i].strip()
+                if not s:
+                    i += 1
+                    continue
+                if CTV_TC_RE.match(s) or s == "SB" or CTV_MARK_RE.match(s):
+                    break
+                zh_lines.append(s)
+                i += 1
+            tc = ""
+            if i < len(body_lines) and CTV_TC_RE.match(body_lines[i].strip()):
+                tc = body_lines[i].strip()
+                i += 1
+            while i < len(body_lines) and not body_lines[i].strip():
+                i += 1
+            english = ""
+            if i < len(body_lines):
+                s = body_lines[i].strip()
+                # 英文原句；若下一段已是標記/下一 SB 則視為缺英文
+                if s and s != "SB" and not CTV_MARK_RE.match(s) and not CTV_TC_RE.match(s):
+                    english = s
+                    i += 1
+            items.append(("sb", {
+                "speaker": speaker,
+                "zh_lines": zh_lines,
+                "tc": tc,
+                "english": english,
+            }))
             continue
         items.append(("os", stripped))
         i += 1
@@ -517,6 +570,15 @@ def collect_source_quotes(source_text: str) -> list[str]:
         stripped = line.strip()
         if not stripped or stripped.startswith("--") or stripped.startswith("***"):
             continue
+        # 形式二：整行是一句被引號包住的話（沒有講者標籤）。
+        bare = CTV_SOURCE_BARE_QUOTE_RE.match(stripped)
+        if bare:
+            quote = bare.group("quote").strip()
+            if quote and not quote.isupper():
+                quotes.append(quote)
+            continue
+
+        # 形式一：`講者姓名／職稱: 引言`
         m = CTV_SOURCE_QUOTE_RE.match(stripped)
         if not m:
             continue
@@ -622,13 +684,12 @@ def validate_ctv(text: str, source_text: str | None):
                 )
             continue
 
-        # kind == "sb"
+        # kind == "sb" — payload 為 dict: speaker / zh_lines / tc / english
         sb_count += 1
-        block = payload
-        if len(block) < 4:
-            problems.append(f"第{sb_count}段 SB 五行格式不完整（只解析到 {len(block) + 1} 行）")
-            continue
-        speaker, translation, tc_field, english = block[0], block[1], block[2], block[3]
+        speaker = payload.get("speaker", "")
+        zh_lines = payload.get("zh_lines") or []
+        tc_field = payload.get("tc", "")
+        english = payload.get("english", "")
         sb_speakers.append(speaker)
         sb_english.append(english)
 
@@ -637,19 +698,22 @@ def validate_ctv(text: str, source_text: str | None):
 
         if not speaker or CTV_TC_RE.match(speaker):
             problems.append(f"第{sb_count}段 SB 第2行缺少「中文職稱 英文姓名」")
-        if translation and translation[0] in OPENING_QUOTES:
-            problems.append(f"第{sb_count}段 SB 引言「{translation}」以引號起始；SB 引言起始不加任何引號")
-        tw = script_width(translation)
-        if tw > CTV_SPOKEN_MAX:
-            problems.append(
-                f"第{sb_count}段 SB 引言「{translation}」換算{fmt_width(tw)}個全形字，"
-                f"超過上限{fmt_width(CTV_SPOKEN_MAX)}"
-            )
+        if not zh_lines:
+            problems.append(f"第{sb_count}段 SB 缺少中文引言口白")
+        for zh in zh_lines:
+            if zh and zh[0] in OPENING_QUOTES:
+                problems.append(f"第{sb_count}段 SB 引言「{zh}」以引號起始；SB 引言起始不加任何引號")
+            tw = script_width(zh)
+            if tw > CTV_SPOKEN_MAX:
+                problems.append(
+                    f"第{sb_count}段 SB 引言「{zh}」換算{fmt_width(tw)}個全形字，"
+                    f"超過上限{fmt_width(CTV_SPOKEN_MAX)}"
+                )
 
         parsed = parse_ctv_tc(tc_field)
         if parsed is None:
             problems.append(
-                f"第{sb_count}段 SB 的 TC 欄位「{tc_field}」不是合法的純 4 碼 `MMSS-MMSS`"
+                f"第{sb_count}段 SB 的 TC 欄位「{tc_field or '(空)'}」不是合法的純 4 碼 `MMSS-MMSS`"
                 "（CTV 不加來源前綴，且 SS 不得大於 59）"
             )
         else:
@@ -657,9 +721,24 @@ def validate_ctv(text: str, source_text: str | None):
             if end_sec <= start_sec:
                 problems.append(f"第{sb_count}段 SB TC「{tc_field}」結束時間不晚於開始時間")
             else:
-                notes.append(f"第{sb_count}段 SB：{speaker}｜{tc_field} = {end_sec - start_sec}秒")
+                dur = end_sec - start_sec
+                notes.append(f"第{sb_count}段 SB：{speaker}｜{tc_field} = {dur}秒")
+                # 過短的 BITE 語意必然不完整（2026-07-21 爆紅浣熊1600 案）。
+                if dur < CTV_SB_MIN_SECONDS:
+                    problems.append(
+                        f"第{sb_count}段 SB 只有 {dur} 秒，短於 {CTV_SB_MIN_SECONDS} 秒下限"
+                        "——語意不可能完整，不要為了湊 SB 段數塞碎句；"
+                        "這類短句改寫進 OS 敘事即可"
+                    )
+                elif dur < CTV_SB_SHORT_SECONDS:
+                    warnings.append(
+                        f"第{sb_count}段 SB 只有 {dur} 秒（偏短），確認它是完整句、"
+                        "且比改寫成 OS 更有價值"
+                    )
 
-        if english and english[0] in OPENING_QUOTES:
+        if not english:
+            problems.append(f"第{sb_count}段 SB 缺少英文原句")
+        elif english[0] in OPENING_QUOTES:
             problems.append(f"第{sb_count}段 SB 英文原句以引號起始；英文原句不加任何引號")
 
     legacy_sb = [
