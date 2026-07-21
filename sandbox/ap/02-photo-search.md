@@ -22,7 +22,7 @@
 
 ## 流程
 
-1. 搜尋框輸入自己生成的關鍵字，媒體類型切到 **Photo**，選「Search with keywords」。
+1. **優先用網址直接查詢**：`navigate` 到 `https://newsroom.ap.org/home/search?query={關鍵字}&mediaType=photo`（2026-07-21 實證）。**不要用** `newsroom.ap.org/search?query=...`，那會掉到 Planning 頁。搜尋框仍可作備援（切到 **Photo**，選「Search with keywords」）。
 2. 排序預設是「**Newest filed**」（右上角排序圖示可切 Newest filed／Best match／Newest created／Oldest），不用額外設定，結果本來就是新到舊。
 3. 結果列表卡片上直接顯示：來源（通常 AP）、幾小時前、日期、標題、caption 摘要、素材 ID，以及一排操作圖示：⚠️（有的話代表有 Special Instructions／使用限制）、**⬇下載圖示**、▾（格式選單）、⋮（更多）。
 4. **重點技巧**：Photo 不需要像 Video 那樣點進詳情頁才能下載——**直接點列表卡片上的 ⬇ 圖示就會立即下載**，比 Video 流程快很多。若要看完整 caption／攝影記者／Special Instructions（限制），或卡片上有 ⚠️，才需要點進詳情頁（`/detail/{slug}/{id}/photo`）。
@@ -31,6 +31,12 @@
 ## 下載結果
 
 Photo 下載是**同步立即**完成（不像 Video 是非同步排隊），直接落地到本機瀏覽器預設下載資料夾 `D:\Downloads`，檔名格式是 `AP{素材ID}.jpg`（例如 `AP26196329903421.jpg`）。
+
+## 搜到 PHOTO GALLERY 標題卡時（2026-07-21 實證）
+
+以「事件關鍵字」搜 Photo 有時只回 **1 筆 AP PHOTO GALLERY 標題卡**（紅底大字）——那不是可用照片，是圖輯封面。
+
+**解法**：改用該圖輯的**標題全文**當關鍵字重搜（實例：`Spain's World Cup winners return home` → 回 16 張），再從列表卡 ⬇ 直下。
 
 ## 挑片原則
 
