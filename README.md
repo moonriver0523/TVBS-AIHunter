@@ -25,6 +25,7 @@
 - [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md) — **自動寫稿持續校稿索引**：保存使用者修改稿帶來的規則、成熟度、案例與 Prompt 變更；所有代理執行自動寫稿前必讀
 
 ### 共用規則（跨 Reuters／CNN 流程）
+- [`common/00-寫稿通則.md`](common/00-寫稿通則.md) — **寫稿共用規格**：版權原則、單位換算、寫稿前事實分層、**SB 五行格式與 TC 欄位寫法**（所有輸出 SB 的流程一律以此為準）
 - [`common/01-shared-folders.md`](common/01-shared-folders.md) — Claude共用（雙向）／掃帶歐印萬資料夾的位置、優先讀既有雙語逐字稿、大檔案上傳方式、暫定性質
 - [`common/02-tc-offset-filename.md`](common/02-tc-offset-filename.md) — 數字檔名＝母帶起始TC offset 的換算規則
 - [`common/03-preliminary-analysis.md`](common/03-preliminary-analysis.md) — 長片「初步分析」標準流程（silence掃描＋稀疏取樣畫面，不做完整轉錄；本流程本身即省 Token 設計）

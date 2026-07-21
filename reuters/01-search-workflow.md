@@ -51,4 +51,4 @@
 詳情頁內含：影片、Video Transcript 面板（帶時間碼，原始語言，附「Automated Translation」切換）、完整文字稿（shotlist ＋「RESENDING WITH COMPLETE SCRIPT」正文）、右側 **Restrictions** 面板（例如「No use BBC Persian」「No use VOA Persian」）——限制對新聞編輯室很重要，找到後務必回報。
 
 ## 版權注意
-不要在對話中逐字貼出完整外電稿件內文；如使用者要求特定內容，摘要/描述結構，僅在需要時引用簡短片段。
+依 [`common/00-寫稿通則.md`](../common/00-寫稿通則.md)。
