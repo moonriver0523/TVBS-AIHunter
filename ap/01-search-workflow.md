@@ -11,7 +11,7 @@
 - 搜尋 → 選對媒體分頁 → 開詳情：能 batch 就 batch；不要每步截圖。
 - **預設回報欄位**：標題、純數字 ID、媒體類型、Restriction Summary 一句、是否有 SOUNDBITE。使用者沒要求時不要貼完整 Shotlist/Storyline。
 - 下載完成與否**只查** `D:\Downloads`（檔名＋大小），不要在 AP 網站 Downloads 列表空等或截圖確認。
-- 無 TC 時的 `video_analyze` 規則見下方；同一支片只分析一次，對齊 [`../common/07-bite-assistant.md`](../common/07-bite-assistant.md)／[`../cnn/02-clip-bite.md`](../cnn/02-clip-bite.md)。
+- 無 TC 時的 `video_analyze` 規則見下方；同一支片只分析一次，對齊 [`../common/07-bite-assistant.md`](../common/07-bite-assistant.md)／[`../cnn/02-clip-bite.md`](../cnn/02-clip-bite.md)。**本文件的找 TC 敘述若與 `07` 不一致，一律以 `07` 為準。**
 
 ## 如何判斷該去 RT 還是 AP
 

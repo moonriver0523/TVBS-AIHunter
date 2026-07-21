@@ -2,7 +2,7 @@
 
 當使用者以此名稱呼叫（或給出 Edit No. + 引言 + 目標檔名，明確要求剪出對應片段），依下列五步驟執行，不需逐步再次確認。
 
-瀏覽器操作套用 [`../common/08-execution-efficiency.md`](../common/08-execution-efficiency.md)。找 TC 的文字優先序與「先選句再定位」對齊 [`../common/07-bite-assistant.md`](../common/07-bite-assistant.md)。
+瀏覽器操作套用 [`../common/08-execution-efficiency.md`](../common/08-execution-efficiency.md)。找 TC 的文字優先序與「先選句再定位」對齊 [`../common/07-bite-assistant.md`](../common/07-bite-assistant.md)；**本文件的找 TC 敘述若與 `07` 不一致，一律以 `07` 為準**。
 
 **Rollback：** 省 Token 改寫前舊版見 [`../_archive/reuters/03-auto-clip-so.pre-token-saving-2026-07-20.md`](../_archive/reuters/03-auto-clip-so.pre-token-saving-2026-07-20.md)。
 

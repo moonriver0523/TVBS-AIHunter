@@ -56,6 +56,8 @@
 
 官方稿件本身通常沒有時間碼；**只有受訪者 SB 需要 TC**，OS 旁白不需要。
 
+> 本節的找 TC 做法若與 [`common/07-bite-assistant.md`](../common/07-bite-assistant.md) 不一致，**一律以 `07` 為準**；此處只是 CTV 情境的具體展開。
+
 0. **先檢查 `--SUPERS--` 區塊本身有沒有附 TC**（部分較短的 DONUT/PKG 稿件會在每位受訪者名字/職稱下方直接列一組 `MM:SS - MM:SS`）。若某位受訪者在完成文稿中**只引用一句**、且 SUPERS 剛好有列對應 TC，可直接採用該 TC，**不必再跑 `video_analyze`**。但 SUPERS 通常只標「該人物第一次出現」的一組 TC——若同一人要引用不只一句，或 SUPERS 完全沒附 TC，仍需下列步驟 1–2 跑 ASR 補齊其餘句子。
 1. 讀 `"<ID> 原始文稿.txt"`，抽出全部可用的 SOT／SOUNDBITE／受訪者引言（保留官方英文用字與對應發言者）。
 2. 若步驟 0 判定仍需要 ASR：對 `"<ID>.mp4"` 呼叫 claude-video-vision：`video_analyze`，`filters: { transcription: true }`。**同一支片只跑一次**；輸出過長時寫入 `"<ID> ASR.txt"`，不要整份貼進對話。
