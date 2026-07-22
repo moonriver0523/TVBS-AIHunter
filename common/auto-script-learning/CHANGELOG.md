@@ -1,5 +1,16 @@
 # 自動寫稿學習機制變更紀錄
 
+## 2026-07-22（四）— TODO-001 收尾：SOT BITE 下限入規（P-015），用實測數據訂門檻
+
+把 CTV 的 `P-012`（3 秒 BITE 下限）經驗反哺 SOT，但**不照抄**——先跑 11 支 SOT 完成稿、36 段 SB 的時長分布再決定門檻。
+
+- 數據：SB 最短 5 秒、中位數 11.5 秒、平均 13.1 秒，**0 段 < 5 秒**。證明 CTV 的 3 秒門檻搬到 SOT 是死條文（一段都擋不到）；SOT 素材（Reuters／AP／NHK）本來就是較長談話。
+- 新增 `P-015`（限 SOT）：單段 SB **< 2 秒 FAIL**（真實 SOT 不存在，多半 TC 打錯或殘句）、**2~5 秒 WARN**（確認完整句）、≥ 5 秒正常；判準主體是「官方稿完整句優先」，秒數只是輔助網。
+- `TODO-001` 標為 `RESOLVED`（原 DEFERRED），保留分析脈絡。
+- [`../../scripts/validate_sot.py`](../../scripts/validate_sot.py)：`validate()` 內加 SOT SB 秒數檢查（`SOT_SB_MIN_SECONDS=2`／`SOT_SB_SHORT_SECONDS=5`）；門檻設 `dur < 5`，實測底部的 5 秒 BITE 剛好判正常、不 WARN 洗版。
+- [`../06-auto-script-sot.md`](../06-auto-script-sot.md) SB 區塊補長度下限說明；`test_validate_sot.py` 補「SOT/1 秒 SB 必須 FAIL」「SOT/4 秒 SB 應通過（僅 WARN）」，16 案全綠。
+- **與 CTV `P-012`（3 秒）、`07` 六碼側錄（10-20 秒）各自適用不同對象，不衝突。**
+
 ## 2026-07-22（三）— 批次重出 5 支 CTV 舊稿驗證改進版＋稿頭字數停 WARN 裁定
 
 使用者要求把 `CTV自動寫稿測試` 裡的完成稿都跑一次 `--mode ctv`，有 FAIL 就另存改進版，看還能改進之處。主資料夾 5 支（Archive 舊實驗稿與已重寫的 `罕見四胞1600` 依指示不追溯）全部由 FAIL 轉 `EXIT=0`。

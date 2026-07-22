@@ -178,6 +178,12 @@ CTV_SOURCE_BARE_QUOTE_RE = re.compile(r'^["“](?P<quote>.+?)["”][.,]?$')
 CTV_SB_MIN_SECONDS = 3       # 低於此秒數直接 FAIL：語意不可能完整
 CTV_SB_SHORT_SECONDS = 4     # 3~4 秒之間給 WARN，要能說明為何這樣取捨
 
+# SOT 單段 SB 的長度門檻（2026-07-22 訂定，見 P-015／TODO-001）。
+# 門檻由 11 支 SOT 完成稿、36 段 SB 的實測分布得出（最短 5 秒、中位數 11.5 秒），
+# 刻意比 CTV 寬——SOT 素材（Reuters／AP／NHK）本來就是較長的談話，3 秒門檻擋不到。
+SOT_SB_MIN_SECONDS = 2       # < 2 秒 FAIL：真實 SOT 不存在，只可能是 TC 打錯或真碎句
+SOT_SB_SHORT_SECONDS = 5     # 2~5 秒 WARN：對齊實測下限，提醒確認是完整句、非殘句
+
 OPENING_QUOTES = "「『“\"'《〈"
 
 
@@ -368,6 +374,19 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
         dur = end_sec - start_sec
         sb_seconds_total += dur
         notes.append(f"第{sb_count}段 SB：{tc_field.strip()} = {dur:.0f}秒")
+
+        # SB 長度下限（P-015）：SOT 判準主體是「官方稿完整句優先」，秒數只是輔助網。
+        # 門檻比 CTV 寬，因為 SOT 素材本來就是較長的談話（實測最短 5 秒）。
+        if dur < SOT_SB_MIN_SECONDS:
+            problems.append(
+                f"第{sb_count}段 SB 只有 {dur:.0f} 秒，短於 {SOT_SB_MIN_SECONDS} 秒下限"
+                f"——真實 SOT 不會這麼短，多半是 TC 打錯或殘句，請核對官方稿完整句"
+            )
+        elif dur < SOT_SB_SHORT_SECONDS:
+            warnings.append(
+                f"第{sb_count}段 SB 只有 {dur:.0f} 秒（偏短），確認它是官方稿裡的完整一句、"
+                f"不是為了塞進總長度把 BITE 砍成殘句"
+            )
 
         if videos_dir and num:
             video_path = find_video_for_material(videos_dir, num)

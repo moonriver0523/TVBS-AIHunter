@@ -197,6 +197,12 @@ Those who came in illegally will be outside our country."""
 SOT_SB_SINGLE = SOT_OK.replace("記者旁白第二句", _SOT_SB_SINGLE_BLOCK)
 SOT_SB_MULTI = SOT_OK.replace("記者旁白第二句", _SOT_SB_MULTI_BLOCK)
 
+# SB 長度下限（P-015）：< 2 秒 FAIL、2~5 秒 WARN（仍通過）。
+_SOT_SB_1SEC_BLOCK = _SOT_SB_SINGLE_BLOCK.replace("#03 0033-0044", "#03 0033-0034")  # 1 秒
+_SOT_SB_4SEC_BLOCK = _SOT_SB_SINGLE_BLOCK.replace("#03 0033-0044", "#03 0033-0037")  # 4 秒
+SOT_SB_1SEC = SOT_OK.replace("記者旁白第二句", _SOT_SB_1SEC_BLOCK)
+SOT_SB_4SEC = SOT_OK.replace("記者旁白第二句", _SOT_SB_4SEC_BLOCK)
+
 
 # --- 測試表 -----------------------------------------------------------------
 # (名稱, 模式, 稿件, 官方稿, 期望)
@@ -224,6 +230,10 @@ CASES = [
     # ---- SOT 主標題／次標題 ----
     ("SOT/SB 中文單行應通過", "sot", SOT_SB_SINGLE, None, True),
     ("SOT/SB 中文多行應通過", "sot", SOT_SB_MULTI, None, True),
+
+    # ---- SOT SB 長度下限（P-015） ----
+    ("SOT/1 秒 SB 必須 FAIL", "sot", SOT_SB_1SEC, None, "秒下限"),
+    ("SOT/4 秒 SB 應通過（僅 WARN）", "sot", SOT_SB_4SEC, None, True),
     ("SOT/半形空格標題應通過", "sot", SOT_OK, None, True),
     ("SOT/全形空格標題必須 FAIL", "sot", SOT_FULLWIDTH_SPACE, None, "非半形空格"),
     ("SOT/半形逗號標題必須 FAIL", "sot", SOT_BAD_PUNCT, None, "不允許的半形標點"),
