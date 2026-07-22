@@ -136,6 +136,7 @@
 - ⚠️ **與既有規則不衝突**：OS／SB 去標點、每行 14 全形（步驟 6）與 BAR 半形標點白名單（`P-005`）都**維持不變**，本條只是把「去標點」的適用範圍講死，明文把稿頭排除在外。
 - 實作位置：[`../../cnn/01-auto-script-writing.md`](../../cnn/01-auto-script-writing.md)（步驟 6 斷行規則、輸出結構第 1 項）、[`../../scripts/validate_sot.py`](../../scripts/validate_sot.py) `--mode ctv`（稿頭整段無句讀→`[FAIL]`；有句讀但單段連續 ≥40 字→`WARN`，門檻 `CTV_LEAD_PUNCT_MIN_LEN`／`CTV_LEAD_MAX_RUN`，設 40 字避免誤殺合理短稿頭）
 - 測試：[`../../scripts/test_validate_sot.py`](../../scripts/test_validate_sot.py)「CTV/稿頭整段無句讀必須 FAIL」「CTV/稿頭有句讀應通過」
+- ⚠️ **稿頭「字數」與稿頭「句讀」是兩回事**：句讀（本條）是 `[FAIL]`；**字數 100–150 是軟性目標，永遠停在 `[WARN]`、不升 FAIL**（2026-07-22 裁定，`CTV_LEAD_MIN／MAX`）。理由：稿頭合理長度因題材而異，硬性 FAIL 會逼稿為湊字數砍事實或灌水，正是 `P-013` 要避免的。判定見案例 `2026-07-22-CTV舊稿批次新規重寫`。
 
 ## 待辦（使用者明確擱置，之後要詳細思考）
 
