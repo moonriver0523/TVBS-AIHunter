@@ -154,6 +154,11 @@ CTV_SUPER_MAX = 18.0        # SUPER 每行上限 18 全形字
 CTV_SPOKEN_MAX = 14.0       # OS／SB 中文口白每行上限 14 全形字
 CTV_LEAD_MIN = 100          # 稿頭約 100-150 字（超出只提醒，不判 FAIL）
 CTV_LEAD_MAX = 150
+# 稿頭必須保留中文句讀（2026-07-22 訂定，見 P-014）。
+# 「去除所有標點」只約束 OS／SB 斷行字幕與 BAR 字卡，不套用到主播稿頭。
+CTV_LEAD_PUNCT = "，。、；：！？"     # 中文句讀（用來判斷稿頭有沒有被誤去標點）
+CTV_LEAD_PUNCT_MIN_LEN = 40         # 短於此長度的稿頭不強制句讀，避免誤殺
+CTV_LEAD_MAX_RUN = 40               # 稿頭內連續無句讀字數超過此值就 WARN（疑似部分漂移）
 
 CTV_CARD_RE = re.compile(r"^BAR\s+([1-4])$")     # 字卡列表：`BAR 1`
 CTV_MARK_RE = re.compile(r"^BAR([1-4])$")        # 內文定位標記：`BAR1`
@@ -687,6 +692,25 @@ def validate_ctv(text: str, source_text: str | None):
         notes.append(f"稿頭共{lead_n}字")
         if not (CTV_LEAD_MIN <= lead_n <= CTV_LEAD_MAX):
             warnings.append(f"稿頭共{lead_n}字，不在建議的{CTV_LEAD_MIN}~{CTV_LEAD_MAX}字之間")
+
+        # 稿頭句讀檢查（P-014）：稿頭是主播口播稿，必須保留正常中文句讀；
+        # 「去除所有標點」只約束 OS／SB 字幕與 BAR 字卡，不得整份套到稿頭。
+        punct_n = sum(lead_text.count(c) for c in CTV_LEAD_PUNCT)
+        if lead_n >= CTV_LEAD_PUNCT_MIN_LEN and punct_n == 0:
+            problems.append(
+                f"稿頭整段沒有任何中文句讀（，。、；：！？）；稿頭是主播口播稿必須斷句，"
+                f"「去除所有標點」只適用 OS／SB 字幕與 BAR 字卡，不套用到稿頭"
+            )
+        else:
+            # 最長連續無句讀字數：抓「部分漂移」（有標點但一大段連寫）。
+            longest_run = max(
+                (len(seg) for seg in re.split(f"[{re.escape(CTV_LEAD_PUNCT)}]", lead_text)),
+                default=0,
+            )
+            if punct_n > 0 and longest_run >= CTV_LEAD_MAX_RUN:
+                warnings.append(
+                    f"稿頭有一段連續 {longest_run} 字沒有句讀，疑似部分漏標點，請確認斷句是否足夠"
+                )
 
     # --- SUPER ---
     if not doc.super_lines:

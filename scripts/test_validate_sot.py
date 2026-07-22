@@ -35,7 +35,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 # --- CTV 稿件樣板 -----------------------------------------------------------
 
-CTV_HEAD = """西雅圖一隻外型異常圓滾的浣熊在當地四處趴趴走被網友拍下因身形像球體而爆紅目擊民眾替牠取名Jimothy當地獸醫研判可能是先天脊椎縮短疾病另外在加州舊金山灣一隻落水小狗獲消防海空救援之後也順利與尋找多日的主人團圓
+CTV_HEAD = """西雅圖一隻外型異常圓滾的浣熊在當地四處趴趴走被網友拍下，因身形像球體而爆紅，目擊民眾替牠取名Jimothy。當地獸醫研判，可能是先天脊椎縮短疾病；另外在加州舊金山灣，一隻落水小狗獲消防海空救援，之後也順利與尋找多日的主人團圓。
 
 ##
 
@@ -74,6 +74,21 @@ BAR4
 
 def ctv(sb_block: str) -> str:
     return CTV_HEAD + "\n" + sb_block.strip("\n") + "\n" + CTV_TAIL
+
+
+# 稿頭去標點錯誤版（魚群暴斃1600 案）：整段連寫、無任何中文句讀。
+CTV_HEAD_NO_PUNCT = CTV_HEAD.replace(
+    "西雅圖一隻外型異常圓滾的浣熊在當地四處趴趴走被網友拍下，因身形像球體而爆紅，"
+    "目擊民眾替牠取名Jimothy。當地獸醫研判，可能是先天脊椎縮短疾病；"
+    "另外在加州舊金山灣，一隻落水小狗獲消防海空救援，之後也順利與尋找多日的主人團圓。",
+    "西雅圖一隻外型異常圓滾的浣熊在當地四處趴趴走被網友拍下因身形像球體而爆紅"
+    "目擊民眾替牠取名Jimothy當地獸醫研判可能是先天脊椎縮短疾病"
+    "另外在加州舊金山灣一隻落水小狗獲消防海空救援之後也順利與尋找多日的主人團圓",
+)
+
+
+def ctv_no_punct(sb_block: str) -> str:
+    return CTV_HEAD_NO_PUNCT + "\n" + sb_block.strip("\n") + "\n" + CTV_TAIL
 
 
 SB_MULTILINE = """
@@ -201,6 +216,10 @@ CASES = [
     # ---- 五行格式的其餘欄位不可因多行解析而漏檢 ----
     ("CTV/缺英文原句必須 FAIL", "ctv", ctv(SB_NO_ENGLISH), None, "缺少英文原句"),
     ("CTV/中文以引號起始必須 FAIL", "ctv", ctv(SB_QUOTED_ZH), None, "引號"),
+
+    # ---- 稿頭句讀（魚群暴斃1600 案，P-014） ----
+    ("CTV/稿頭有句讀應通過", "ctv", ctv(SB_MULTILINE), None, True),
+    ("CTV/稿頭整段無句讀必須 FAIL", "ctv", ctv_no_punct(SB_MULTILINE), None, "沒有任何中文句讀"),
 
     # ---- SOT 主標題／次標題 ----
     ("SOT/SB 中文單行應通過", "sot", SOT_SB_SINGLE, None, True),
