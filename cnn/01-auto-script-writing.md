@@ -225,8 +225,8 @@ python scripts/validate_sot.py "<ID> 完成文稿.txt" --mode ctv --source-scrip
 
 這一關是確定性腳本檢查，屬於上方省 Token 第 10 條所說的「後續只跑字數、格式、TC 等確定性腳本」，**不是**它排除的那種「另派 agent 重讀全部素材做深度語意審稿」。
 
-## 步驟 7 — 全部上傳到 Claude共用
-將影片檔與文稿 TXT（至少 `<ID>.mp4`、`<ID> 原始文稿.txt`、`<ID> 完成文稿.txt`；若有產生 `"<ID> ASR.txt"` 可一併放入）複製到 `G:\我的雲端硬碟\Claude共用\`。大檔用本機同步資料夾複製，不用 MCP inline 上傳。
+## 步驟 7 — 全部上傳到 Claude共用的 `CTV寫稿測試` 資料夾
+將影片檔與文稿 TXT（至少 `<ID>.mp4`、`<ID> 原始文稿.txt`、`<ID> 完成文稿.txt`；若有產生 `"<ID> ASR.txt"` 可一併放入）複製到 **`G:\我的雲端硬碟\Claude共用\CTV寫稿測試\`**（2026-07-22 訂定，可用 SLUG 子資料夾分案）。**不要直接倒進 Claude共用 母端**（`G:\我的雲端硬碟\Claude共用\` 根目錄）。大檔用本機同步資料夾複製，不用 MCP inline 上傳。
 
 ## 版權注意
 依 [`common/00-寫稿通則.md`](../common/00-寫稿通則.md)。
