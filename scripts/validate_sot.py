@@ -6,7 +6,7 @@ format, the TC grammar and the full-width counting rules — keeping them in one
 file stops the two copies from drifting apart.
 
 --mode sot (default) — 自動寫稿(SOT), see common/06-auto-script-sot.md:
-  - 主標題／次標題 full-width character counts (target 18-19)
+  - 主標題／次標題 full-width character counts (target 17.5-18.5)
   - SB block structure (SB / 職稱姓名 / 中文翻譯 / TC / 英文原文) and TC validity
   - Total estimated length (OS reading time + all SB seconds + any NS seconds)
     against a target (default 120s, or --target-seconds)
@@ -15,8 +15,8 @@ file stops the two copies from drifting apart.
 
 --mode ctv — 自動寫稿(CTV), see cnn/01-auto-script-writing.md:
   - 稿頭存在且為單一整段
-  - SUPER: 每行 <= 17 全形字
-  - BAR 1-4 字卡文字各 17-18 全形字（空格不計，18 為絕對上限），最多一個半形空格，
+  - SUPER: 每行 <= 16.5 全形字
+  - BAR 1-4 字卡文字各 16.5-17.5 全形字（半形空格算 0.5，17.5 為絕對上限），最多一個半形空格，
     半形標點只准 ! " + : . %
   - 內文 BAR1-BAR4 定位標記齊全、順序正確、不重複字卡文字
   - SB 五行格式；TC 為純 MMSS-MMSS（不帶來源前綴）且 MM/SS 合法
@@ -64,8 +64,8 @@ for _stream in (sys.stdout, sys.stderr):
             pass
 
 CHARS_PER_MINUTE = 250.0
-HEADLINE_MIN = 18
-HEADLINE_MAX = 19
+HEADLINE_MIN = 17.5         # 2026-07-23：因半形空格計寬修正，區間由 18-19 下修 0.5（見 P-019）
+HEADLINE_MAX = 18.5
 
 # SOT 的 SB 區塊以 TC 那行為界解析，中文翻譯**單行或多行都可以**
 # （2026-07-21 使用者裁定：「單行或多行沒關係，只要沒有殘譯殘缺即可」）。
@@ -141,17 +141,19 @@ NS_RE = re.compile(r"^NS\b\s*(?P<tc>(?:#\d+\s+)?\d{4,6}-\d{4,6})\b")
 SECTION_MARKERS = ("【", "##", "＃＃")
 
 # --- CTV (cnn/01-auto-script-writing.md) ---
-CTV_BAR_MIN = 17.0          # BAR 字卡下限
-# 上限 18 是硬上限——使用者明令「絕對不可超過 18 字」，不得放寬。
-# 沿革：固定18 → 17-18 → 15-17 → 17-18（現行，2026-07-21）
-CTV_BAR_MAX = 18.0
-CARD_MAX_SPACES = 1         # 字卡／標題最多一個半形空格（空格本身不計入字數）
+CTV_BAR_MIN = 16.5          # BAR 字卡下限
+# 上限原為 18（使用者明令「絕對不可超過 18 字」）；2026-07-23 因半形空格計寬
+# 修正（script_width() 先前把恰好一個的半形空格算成 0，未反映其實際版面寬度）
+# 同步下修 0.5，改為 17.5，代表的實際版面寬度與修正前的「18」相同。見 P-019。
+# 沿革：固定18 → 17-18 → 15-17 → 17-18 → 16.5-17.5（現行，2026-07-23）
+CTV_BAR_MAX = 17.5
+CARD_MAX_SPACES = 1         # 字卡／標題最多一個半形空格（該空格算 0.5 個全形字，2026-07-23 訂正）
 # 字卡允許的半形標點白名單。此外的半形標點（, ? - / % ( ) 等）一律不得使用；
 # 半形英文字母與數字不受此限（照樣算 0.5 個全形字）。
 # `.` 於 2026-07-21 補入：數值簡寫 `5.7萬`／`950.3萬` 需要小數點。
 # `%` 於 2026-07-23 補入：字卡／標題百分比一律用符號，不寫「百分之」。
 CARD_ALLOWED_PUNCT = set('!"+:.%')
-CTV_SUPER_MAX = 17.0        # SUPER 每行上限 17 全形字（2026-07-23 訂定，原 18）
+CTV_SUPER_MAX = 16.5        # SUPER 每行上限 16.5 全形字（原 18→17，2026-07-23 再因半形空格計寬修正下修 0.5，見 P-019）
 CTV_SPOKEN_MAX = 14.0       # OS／SB 中文口白每行上限 14 全形字
 CTV_LEAD_MIN = 100          # 稿頭約 100-150 字（超出只提醒，不判 FAIL）
 CTV_LEAD_MAX = 150
@@ -194,16 +196,19 @@ def full_width_len(line: str) -> int:
 
 
 def script_width(line: str) -> float:
-    """字數換算：中文全形字算 1，英文/數字等半形字算 0.5，空白不計。
+    """字數換算：中文全形字算 1，英文/數字/半形空格等半形字算 0.5。
 
     這是本 repo 全部字數規格共用的唯一尺標：CTV 的 SUPER／BAR／口白
     （cnn/01-auto-script-writing.md），以及 SOT 的主標題／次標題
     （common/06-auto-script-sot.md，2026-07-21 起改用本尺標）。
+
+    2026-07-23 訂正：半形空格先前完全不計入寬度（貢獻 0），但字卡／標題
+    規定「恰好一個半形空格」分隔前後兩個語意半句時，那個空格仍佔用實際
+    版面寬度，應與其他半形字元一樣算 0.5，不能視為 0。修正後 BAR／SUPER／
+    SOT 標題的區間與上限已同步下修 0.5（見 P-019）。
     """
     total = 0.0
     for ch in line:
-        if ch.isspace():
-            continue
         total += 1.0 if unicodedata.east_asian_width(ch) in ("F", "W") else 0.5
     return total
 
