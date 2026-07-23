@@ -15,7 +15,7 @@ file stops the two copies from drifting apart.
 
 --mode ctv — 自動寫稿(CTV), see cnn/01-auto-script-writing.md:
   - 稿頭存在且為單一整段
-  - SUPER: 每行 <= 18 全形字
+  - SUPER: 每行 <= 17 全形字
   - BAR 1-4 字卡文字各 17-18 全形字（空格不計，18 為絕對上限），最多一個半形空格，
     半形標點只准 ! " + : .
   - 內文 BAR1-BAR4 定位標記齊全、順序正確、不重複字卡文字
@@ -150,7 +150,7 @@ CARD_MAX_SPACES = 1         # 字卡／標題最多一個半形空格（空格�
 # 半形英文字母與數字不受此限（照樣算 0.5 個全形字）。
 # `.` 於 2026-07-21 補入：數值簡寫 `5.7萬`／`950.3萬` 需要小數點。
 CARD_ALLOWED_PUNCT = set('!"+:.')
-CTV_SUPER_MAX = 18.0        # SUPER 每行上限 18 全形字
+CTV_SUPER_MAX = 17.0        # SUPER 每行上限 17 全形字（2026-07-23 訂定，原 18）
 CTV_SPOKEN_MAX = 14.0       # OS／SB 中文口白每行上限 14 全形字
 CTV_LEAD_MIN = 100          # 稿頭約 100-150 字（超出只提醒，不判 FAIL）
 CTV_LEAD_MAX = 150
