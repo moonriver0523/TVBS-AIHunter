@@ -17,6 +17,7 @@
 
 - 若清單裡看到同一素材代碼在不同編號下重複出現（沒有被標成「同#XX」），先跟使用者確認是否為 Edit No./ID 打錯，不要自行假設丟棄或保留哪一筆（正常情況下 [`素材編號`](../common/05-material-numbering.md) 應該已經把真正重複的都標成同#XX 了）。
 - **標「同#XX」的項目不需要重新搜尋或下載**——直接沿用 #XX 那筆已經下載好的檔案即可，不產生新檔案、不用重新分派來源。
+- **清單裡素材代碼後方若標註「(不存)」，不代表該素材在來源網站查無資料、也不代表要跳過下載。** 2026-07-24 使用者說明：這通常是 TVBS 公司內部片庫整理時「不入庫」的標記，跟該素材是否存在於 Reuters／AP、是否要下載無關，與執行本流程的 AI 代理無關。看到「(不存)」時仍應正常搜尋、下載；不確定時向使用者確認，不要自行判斷跳過（「破一百1200」案例：#02 RT0258 一開始因標「不存」被誤判跳過，實際 Reuters Connect 上找得到）。
 
 ## 開始下載前：存清單
 
@@ -31,6 +32,7 @@
 | `IN-XX` 組合碼 | CNN Newsource | [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md) | `CNN`（NEWSOURCE＝CNN Newsource） |
 | `ENEX` | 尚無教學說明 | 遇到先問使用者要去哪裡找 | `ENEX` |
 | `ABC` | 尚無教學說明 | 遇到先問使用者要去哪裡找 | `ABC` |
+| DVIDS URL（`dvidshub.net`） | DVIDS（美國國防部影像庫） | 見下方「DVIDS」細節 | `DVIDS` |
 | YouTube URL | YouTube | `yt-dlp` 下載到 `D:\Downloads` | `YT` |
 | X 影片 URL（網址含 "Video"） | X | `yt-dlp` 下載到 `D:\Downloads` | `X` |
 | X 照片 URL（網址含 "Photo"，用**圖片編號**） | X | 瀏覽器開原圖 URL，右鍵另存到 `D:\Downloads` | `X`（檔名用 `圖#XX`） |
@@ -46,7 +48,7 @@
 
 **AP：**
 1. 用純數字 ID 搜尋，媒體類型選對 Video 或 Photo（不要照抄「AP」字首去搜，那只是站台判斷標記）。
-2. 影片：進詳情頁的 **Shotlist** 分頁（限制摘要＋SOUNDBITE＋STORYLINE）存成文稿 txt；按 Download 選 Master＋任一 HD 格式送出——**非同步處理，不用在 AP 網站的 Downloads 頁面等 ready，完成後直接進 D:\Downloads**。
+2. 影片：進詳情頁的 **Shotlist** 分頁（限制摘要＋SOUNDBITE＋STORYLINE）存成文稿 txt——**取全文時依 [`搜尋外電素材(AP)`](../ap/01-search-workflow.md) 的「取 Shotlist 的標準做法：開新分頁」，點彈出 modal 右上角「Open in a new tab」再對該分頁 `get_page_text`；不要對 modal 直接 `get_page_text`**（會抓到背後列表頁摘要而不是 Shotlist 內容，只能改靠截圖逐段捲讀，浪費 token 又會被裁切，2026-07-24「破一百1200」案例踩過）。按 Download 選 Master＋任一 HD 格式送出——**非同步處理，不用在 AP 網站的 Downloads 頁面等 ready，完成後直接進 D:\Downloads**。
 3. 照片：列表頁卡片上的 ⬇ 圖示可直接下載（同步即時）；詳情頁 **Photo Metadata** 含 **Special Instructions**（限制）存成文稿 txt。
 
 **CNN Newsource（`IN-XX` 組合碼）：** 依 [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md)，用「≡Q」預覽圖示取得官方 script 全文存成文稿 txt，下載影片，比對 TC。
@@ -54,6 +56,17 @@
 **ENEX／ABC：** 沒有教學對應網站/流程，遇到時停下來問使用者，不要自行猜測去哪裡下載。
 
 **YouTube：** 用 `yt-dlp` 下載影片到 `D:\Downloads`（選合理可用的最高畫質 mp4）。沒有教「文稿」的抓取方式，若使用者要文稿，先問。**清單裡有多支彼此獨立的 YouTube 影片時，可以平行/背景執行多個 `yt-dlp` 下載，不用一支一支排隊等**，這是效率最好的一種下載方式。若同時下載官方/自動字幕，通常只需保留 `-orig`（原始語言）那一份即可，不必把翻譯版字幕也一起留著。
+
+**DVIDS（`dvidshub.net`，2026-07-24 訂定）：** 美國國防部公開影像庫（DVIDS＝Defense Visual Information Distribution Service），素材在清單裡是直接給 `https://www.dvidshub.net/video/{id}/{slug}` 這種網址（使用者通常已登入該站）。
+
+1. **影片本體**：用 `yt-dlp` 下載到 `D:\Downloads`，做法比照 YouTube（可平行/背景多支同時跑）。格式挑合理最高畫質 mp4，例如 `-f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b"`。
+2. **文稿一定要抓（不要比照 YouTube 略過）**：DVIDS 詳情頁本身就有可用的文字資訊，抓法很簡單——**直接對詳情頁 `get_page_text` 就能一次拿到全部欄位**，不像 AP 要另開分頁。存成 `{SLUG} #XX DVIDS (外電文稿).txt`。要保留的欄位：
+   - **標題**、**DESCRIPTION**（英文說明段，通常 1~3 句）
+   - **拍攝者 / 單位**（Video by …／所屬中隊、AFCENT、CENTCOM 等）
+   - **Date Taken**、**Date Posted**、**Category**（多半是 `B-Roll`）、**Length**、**Location**（常是 `(UNDISCLOSED LOCATION)`）
+   - **Video ID / VIRIN / Filename**（DVIDS 內部編號，存查用）
+   - **版權**：多為 `PUBLIC DOMAIN`（公有領域），但仍須遵守 `https://www.dvidshub.net/about/copyright` 所列限制，文稿裡照抄那句聲明。
+3. ⚠️ **Date Taken 常常不是新聞當日**：DVIDS 多是 B-Roll 資料帶，拍攝日可能是幾週、幾個月甚至前一年。文稿裡務必註明拍攝日，並提醒寫稿時判斷這支是否只能當**背景/資料畫面**，不可當成事件當日的新畫面。（2026-07-24「加倍轟伊2200」案例：#08 拍攝日 2025-10-23、#09 拍攝日 2026-04-23，都比新聞當日早很多。）
 
 **X（Twitter）：**
 - 影片（URL 含 "Video"）：`yt-dlp` 下載到 `D:\Downloads`。
@@ -66,6 +79,8 @@
 ## 下載確認與卡住處理
 
 用 PowerShell 輪詢 `D:\Downloads`（`Get-ChildItem -File | Where-Object {LastWriteTime -gt (Get-Date).AddMinutes(-2)}`），確認檔案（.crdownload 或臨時檔）已完成、大小穩定。
+
+RT 詳情頁點連結後畫面還停在列表摘要、或 Download 點了 `D:\Downloads` 沒有新檔案等症狀，先查 [`common/09-known-issues.md`](../common/09-known-issues.md#瀏覽器自動化) 有沒有對應解法（通常是「再點一次」或「頁面要維持在最上方再點 Download」），再進入下方重試階梯。
 
 卡住時依 [`common/08-execution-efficiency.md`](../common/08-execution-efficiency.md) 的**統一重試階梯**（重點1次 → 仍無檔案就查 network log → 確認失敗後收尾）。本流程屬**批次類**，收尾方式為：**先跳過這一筆，繼續處理清單中下一筆，不要讓整批流程卡在這一筆上**；全部其他素材跑完後，回頭把卡住的項目再補試一次；仍然失敗才在最終彙整表中列為 ⚠️ 未完成，並回報使用者是否要再手動排除障礙或換個時間重試。
 
