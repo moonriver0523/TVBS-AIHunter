@@ -33,6 +33,7 @@
 - [`common/04-bilingual-subtitle-qa.md`](common/04-bilingual-subtitle-qa.md) — 混語言影片的雙語字幕品質檢查（抓語音辨識誤判外語的漏洞）
 - [`common/08-execution-efficiency.md`](common/08-execution-efficiency.md) — 瀏覽器自動化執行效率（省Token）準則：多用批次工具、少截圖、下載改用檔案系統檢查、統一重試階梯、不重複貼原文/長清單
 - [`common/09-known-issues.md`](common/09-known-issues.md) — 特定站台／工具的邊角症狀與解法（**不必每次預讀**，執行中撞到才查；索引在 `08` 底部）
+- [`common/10-寫稿風格指南.md`](common/10-寫稿風格指南.md) — **寫稿風格指南（人味層）**：合成自 style-corpus 100 篇人稿分析；稿頭四型、敘事節奏、比喻開關、情緒紀律、簽名層額度、收尾句型、長篇專題結構、生成檢核表。屬風格參照層，與格式規則衝突時以格式規則為準
 
 ### 工具與入口
 - [`AGENTS.md`](AGENTS.md) — AI 代理入口：自動寫稿前的必讀順序與持續校稿機制的責任要求
