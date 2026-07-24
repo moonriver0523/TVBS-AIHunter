@@ -35,6 +35,14 @@
 - [`common/09-known-issues.md`](common/09-known-issues.md) — 特定站台／工具的邊角症狀與解法（**不必每次預讀**，執行中撞到才查；索引在 `08` 底部）
 - [`common/10-寫稿風格指南.md`](common/10-寫稿風格指南.md) — **寫稿風格指南（人味層）**：合成自 style-corpus 100 篇人稿分析；稿頭四型、敘事節奏、比喻開關、情緒紀律、簽名層額度、收尾句型、長篇專題結構、生成檢核表。屬風格參照層，與格式規則衝突時以格式規則為準
 
+### 製片產出（Production）— 自動剪片配音上字
+> 端到端的最後一段：完成文稿 + 素材影片 → 配音上字成品。**建置中，逐步回填**（首個實測案例：CTV 魚群暴斃1600）。
+- [`production/00-overview.md`](production/00-overview.md) — **製片總覽**：在系統中的位置（下載→寫稿→**製片**→成品）、輸入輸出、子流程、前置依賴（os_voice3 待重訓）
+- [`production/01-voiceover-os.md`](production/01-voiceover-os.md) — **OS 配音**：GPT-SoVITS 本人聲音配過音（跳過 LEAD/SB）；分組合成、int16 峰值正規化、ASR 覆蓋驗收、弱句換 seed
+- [`production/02-video-assembly.md`](production/02-video-assembly.md) — **剪接組裝**：時間軸（OS/SB 交錯）、SB 接點 VAD 精裁、B-roll 不重複、影片配合音訊（不 -shortest）
+- [`production/03-subtitle-burn.md`](production/03-subtitle-burn.md) — **上字**：硬字幕 + BAR 下標 + SUPER 名條；ASR 詞級同步、零長度防呆、ASS 燒錄
+- [`production/09-known-issues.md`](production/09-known-issues.md) — **製片踩雷與定版流程**（已驗證，做製片前必讀）：int16 爆音、逐句更慘、字幕零長度塌陷、污染判定文字>聲學
+
 ### 工具與入口
 - [`AGENTS.md`](AGENTS.md) — AI 代理入口：自動寫稿前的必讀順序與持續校稿機制的責任要求
 - [`scripts/validate_sot.py`](scripts/validate_sot.py) — SOT 完成文稿驗證（主標/次標字數、SB 的 TC 有效性、總長度加總）
