@@ -21,7 +21,7 @@
 4. **TC 只服務 SB，不服務 OS**：完成文稿只有 SB 需要 `MMSS-MMSS`；OS 旁白不對 TC、不取樣畫面。
 5. **先抽 SB 句，再跑／查 ASR，不要整支片當閱讀材料**：
    - 從 `"<ID> 原始文稿.txt"` 抽出全部可用的 SOT／SOUNDBITE／受訪者引言英文句（這才是要 TC 的集合）。
-   - 同一支片 **`video_analyze`（`transcription: true`）只跑一次**；結果若很長，落地存 `"<ID> ASR.txt"`（可與完成檔一同上傳或暫存工作目錄），**不要把整份 ASR 貼進對話**。
+   - 同一支片 **`video_analyze`（`transcription: true`）只跑一次**；結果若很長，落地存 `"<ID> ASR.txt"`，**不要把整份 ASR 貼進對話**。**只要有產生這份檔案，步驟 7 上傳時一律隨完成檔一起上傳**（2026-07-24 訂定，見 [`common/08-execution-efficiency.md`](../common/08-execution-efficiency.md)）——但這條不影響「該不該跑 `video_analyze`」的判斷，找 TC 仍先查官方稿／既有逐字稿，不為了上傳而多跑或提前跑轉譯。
    - 對每句 SB 取 5–10 個關鍵字（專有名詞、數字、特殊詞優先）→ 在 ASR 裡命中 → **只核對命中位置前後約 5 秒** 決定起訖。
    - 寫稿 context **只保留**「SB 英文原文 + 起訖 TC」對照表。
 6. **用字以官方稿為準**：ASR 只用來定位時間；SB 英文與發言者姓名／職稱一律信官方稿／SUPER 8。ASR 有同音錯字仍可定位，但輸出不得照抄 ASR 錯字。細節同 [`cnn/02-clip-bite.md`](02-clip-bite.md)。
@@ -226,7 +226,7 @@ python scripts/validate_sot.py "<ID> 完成文稿.txt" --mode ctv --source-scrip
 這一關是確定性腳本檢查，屬於上方省 Token 第 10 條所說的「後續只跑字數、格式、TC 等確定性腳本」，**不是**它排除的那種「另派 agent 重讀全部素材做深度語意審稿」。
 
 ## 步驟 7 — 全部上傳到 Claude共用的 `CTV自動寫稿測試` 資料夾
-將影片檔與文稿 TXT（至少 `<ID>.mp4`、`<ID> 原始文稿.txt`、`<ID> 完成文稿.txt`；若有產生 `"<ID> ASR.txt"` 可一併放入）複製到 **`G:\我的雲端硬碟\Claude共用\CTV自動寫稿測試\`**（2026-07-22 訂定，可用 SLUG 子資料夾分案）。**不要直接倒進 Claude共用 母端**（`G:\我的雲端硬碟\Claude共用\` 根目錄）。大檔用本機同步資料夾複製，不用 MCP inline 上傳。
+將影片檔與文稿 TXT（至少 `<ID>.mp4`、`<ID> 原始文稿.txt`、`<ID> 完成文稿.txt`；**若有產生 `"<ID> ASR.txt"` 一律一併放入**，2026-07-24 訂定）複製到 **`G:\我的雲端硬碟\Claude共用\CTV自動寫稿測試\`**（2026-07-22 訂定，可用 SLUG 子資料夾分案）。**不要直接倒進 Claude共用 母端**（`G:\我的雲端硬碟\Claude共用\` 根目錄）。大檔用本機同步資料夾複製，不用 MCP inline 上傳。
 
 ## 版權注意
 依 [`common/00-寫稿通則.md`](../common/00-寫稿通則.md)。
