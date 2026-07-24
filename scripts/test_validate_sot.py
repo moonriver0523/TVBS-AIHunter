@@ -197,6 +197,19 @@ Those who came in illegally will be outside our country."""
 SOT_SB_SINGLE = SOT_OK.replace("記者旁白第二句", _SOT_SB_SINGLE_BLOCK)
 SOT_SB_MULTI = SOT_OK.replace("記者旁白第二句", _SOT_SB_MULTI_BLOCK)
 
+# CNN 六碼側錄的 TC 欄位格式（common/00-寫稿通則.md）：`CNN HHMMSS-HHMMSS`。
+# 2026-07-24「破一百1200」案例：TC_RE 原本不認得 CNN 前綴，這兩段 SB 會被判
+# 「TC 欄位格式無法辨識」，見 common/09-known-issues.md#validate_sotpy。
+_SOT_SB_CNN_BLOCK = """記者旁白第二句
+
+SB
+CNN記者 尼克·羅伯森（Nick Robertson）
+過去一小時，我們就看到「以眼還眼」的真實案例，一次美軍打擊命中邊境口岸伊朗一側。
+CNN 210359-210418
+Now we've had a very, very real world example of an eye for an eye in the past hour or so."""
+
+SOT_SB_CNN = SOT_OK.replace("記者旁白第二句", _SOT_SB_CNN_BLOCK)
+
 # SB 長度下限（P-015）：< 2 秒 FAIL、2~5 秒 WARN（仍通過）。
 _SOT_SB_1SEC_BLOCK = _SOT_SB_SINGLE_BLOCK.replace("#03 0033-0044", "#03 0033-0034")  # 1 秒
 _SOT_SB_4SEC_BLOCK = _SOT_SB_SINGLE_BLOCK.replace("#03 0033-0044", "#03 0033-0037")  # 4 秒
@@ -230,6 +243,7 @@ CASES = [
     # ---- SOT 主標題／次標題 ----
     ("SOT/SB 中文單行應通過", "sot", SOT_SB_SINGLE, None, True),
     ("SOT/SB 中文多行應通過", "sot", SOT_SB_MULTI, None, True),
+    ("SOT/CNN六碼側錄TC格式應通過", "sot", SOT_SB_CNN, None, True),
 
     # ---- SOT SB 長度下限（P-015） ----
     ("SOT/1 秒 SB 必須 FAIL", "sot", SOT_SB_1SEC, None, "秒下限"),

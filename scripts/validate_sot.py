@@ -130,9 +130,10 @@ def parse_sot_sb_blocks(text: str):
         })
     return blocks
 
-# TC field: either "#XX MMSS-MMSS" (numbered material) or plain "MMSS-MMSS" /
+# TC field: "#XX MMSS-MMSS" (numbered material), "CNN HHMMSS-HHMMSS" (CNN
+# 六碼側錄, see common/00-寫稿通則.md TC 欄位寫法表), or plain "MMSS-MMSS" /
 # "HHMMSS-HHMMSS" (side-recorded / no-number material).
-TC_RE = re.compile(r"^(?:#(?P<num>\d+)\s+)?(?P<start>\d{4,6})-(?P<end>\d{4,6})\s*$")
+TC_RE = re.compile(r"^(?:#(?P<num>\d+)\s+|CNN\s+)?(?P<start>\d{4,6})-(?P<end>\d{4,6})\s*$")
 
 # NS line: "NS #01 0050-0053 球員登巴士歡呼" or "NS 0050-0053 現場歡聲".
 # Trailing free-text description is allowed and ignored.

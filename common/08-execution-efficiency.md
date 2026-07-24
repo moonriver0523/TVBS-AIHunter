@@ -65,8 +65,10 @@
 | 撞到的症狀／需要的手段 | 查這裡 |
 |---|---|
 | CNN Newsource 搜尋框按 Enter 沒反應／下載檔案時間戳記異常 | [CNN Newsource](09-known-issues.md#cnn-newsource) |
-| 瀏覽器座標點擊點不中／`find`工具過載／下載檔案沒出現在預期資料夾 | [瀏覽器自動化](09-known-issues.md#瀏覽器自動化) |
+| 瀏覽器座標點擊點不中／`find`工具過載／下載檔案沒出現在預期資料夾／點連結後畫面還是列表摘要／Download點了沒反應 | [瀏覽器自動化](09-known-issues.md#瀏覽器自動化) |
 | 多支影片同時跑 `video_analyze` 被安全分類器拒絕 | [video_analyze](09-known-issues.md#video_analyze) |
 | 需要一次瀏覽整支片縮圖（接觸表） | [接觸表（Contact Sheet）](09-known-issues.md#接觸表contact-sheet) |
+| 對「掃帶歐印萬」等大型雲端資料夾 `ls`/`grep` 逾時或報錯 | [掃帶歐印萬資料夾／大型雲端同步資料夾](09-known-issues.md#掃帶歐印萬資料夾大型雲端同步資料夾) |
+| `validate_sot.py` 回報 SOT 的 CNN 六碼 TC 格式無法辨識 | [validate_sot.py](09-known-issues.md#validate_sotpy) |
 
 **How to apply：** 執行本 repo 任何流程時的瀏覽器操作，預設套用本文件準則；沒有特別情況不需要每次向使用者重新確認。各準則的由來與實測案例見 [`09-known-issues.md` 的「規則由來案例」](09-known-issues.md#規則由來案例歷史紀錄)，**執行時不需要讀那一節**。
