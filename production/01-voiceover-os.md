@@ -14,10 +14,11 @@
 
 ## 模型與環境
 
-- 現用：`os_voice`(v1)：SoVITS `D:\voice-training\models\os_voice_v1\os_voice_e8_s368.pth`、GPT `os_voice-e12.ckpt`
-- 目標：`os_voice3`（待重訓去污染，前置阻擋）
+- 現用：**`os_voice3` 低 epoch**（去污染乾淨資料 394 段）：SoVITS `SoVITS_weights_v2\os_voice3_e8_s1064.pth`、GPT `GPT_weights_v2\os_voice3-e12.ckpt`
+- ⚠️ **選檢查點別挑最高 epoch**：e20/SoVITS12 會「合成感重、很假」（把多支新聞語調平均掉）；降到 GPT e12 + SoVITS e8 音色追平 v1 又保乾淨資料優勢。**乾淨資料 ≠ 好聽，過度訓練反而爛**
 - 引擎：GPT-SoVITS v2，conda 環境 `D:\CondaEnvs\GPTSoVits`（torch 2.5.1+cu124）
 - 呼叫：`TTS_infer_pack.TTS`，config `tts_infer.yaml` 覆寫 t2s/vits 權重路徑，`device=cuda, is_half=True, version=v2`
+- ⚠️ **log 重導向檔案時 stdout 是 cp950**，中文診斷 print 會 `UnicodeEncodeError` 崩 → 啟動前加 `PYTHONIOENCODING=utf-8 PYTHONUTF8=1`
 
 ## 參考音（決定輸出乾淨度）
 
@@ -28,8 +29,9 @@
 ## 合成流程（已驗證）
 
 1. 完成文稿 OS 段 → 切字幕級短句 →（TODO：通用解析器；目前手動分組）
-2. **2–3 句一組**合成（甜蜜點；`text_split_method=cut0`，組內用 `，` 串、尾加 `。`）
+2. **2–3 句一組**合成（甜蜜點；`text_split_method=cut0`，組內用 `，` 串）
    - 逐句更慘、整段跳句，故取中間
+   - **尾字修復（已驗證）**：組尾接**犧牲字** `。嗯。`（`gtext = "，".join(lines) + "。嗯。"`）。AR 解碼器收尾常吃掉真正最後一個音節（加 padding 無效，因為根本沒錄到）；犧牲字逼模型把真字念完，再用 ASR 詞級對齊**切在最後一個真字之後 +0.12s**、丟掉犧牲字。**只在 ASR 覆蓋足夠真字數才切，否則保留全長**（不誤切）。實測 weak 8→3、尾字補回
 3. **int16 修正 + 峰值正規化**（防爆音，硬約束）：
    ```python
    y = np.asarray(audio, np.float32)
@@ -54,5 +56,4 @@
 ## 待補（TODO）
 
 - [ ] 完成文稿 → OS 短句 + 分組的通用解析器（目前手動）
-- [ ] 合成/驗收腳本從 `D:\voice-training\work\` 整理進 repo `scripts/`
-- [ ] os_voice3 重訓後更新模型路徑與（可望）取消「刪弱句」的補救
+- [ ] 合成/驗收腳本（`synth_os_groups_v3.py`）從 `D:\voice-training\work\` 整理進 repo `scripts/`
