@@ -25,7 +25,7 @@ OUT = HERE / "reading_status.json"
 def picks(d: Path) -> set[str]:
     s: set[str] = set()
     for f in d.glob("batch_*.md"):
-        for m in re.finditer(r"^=== 稿件：(.+?)\s*(?:（長篇專題）)?\s*$", f.read_text(encoding="utf-8"), re.M):
+        for m in re.finditer(r"^=== 稿件：(.+?)\s*(?:（長篇專題）|（超長稿）|（短稿）)?\s*$", f.read_text(encoding="utf-8"), re.M):
             s.add(m.group(1).strip())
     return s
 
@@ -33,6 +33,7 @@ def picks(d: Path) -> set[str]:
 def main() -> None:
     b1 = picks(HERE / "sample_B")
     b2 = picks(HERE / "sample_B2")
+    b3 = picks(HERE / "sample_B3")
     records = [json.loads(l) for l in CORPUS.read_text(encoding="utf-8").splitlines() if l.strip()]
 
     status: dict[str, str] = {}
@@ -43,6 +44,8 @@ def main() -> None:
             status[f] = "B1"
         elif f in b2:
             status[f] = "B2"
+        elif f in b3:
+            status[f] = "B3"
         else:
             status[f] = "unread"
             n = len(r["draft"])
@@ -53,6 +56,7 @@ def main() -> None:
         "total": len(records),
         "read_B1": sum(1 for v in status.values() if v == "B1"),
         "read_B2": sum(1 for v in status.values() if v == "B2"),
+        "read_B3": sum(1 for v in status.values() if v == "B3"),
         "unread": sum(1 for v in status.values() if v == "unread"),
         "unread_by_length": bands,
     }
