@@ -14,8 +14,9 @@ Signals per draft (z-scored against the unread population, |z| summed):
   - rare-trigram ratio (trigrams appearing in ≤3 drafts corpus-wide —
     罕見用語；會偏向特殊題材，但特殊題材本就常伴隨特殊寫法，交給精讀判斷)
 
-Drafts with AI-template markers (【主播稿頭】 etc., see B3 warning) are
-excluded up front — they are contaminated, not creative.
+Drafts flagged non-`ok` in reading_status.json's `quality` map (practice /
+test drafts, AI-template-contaminated drafts, near-empty stubs) are excluded
+up front — see tag_unread.py. Any future sampling round must do the same.
 
 Writes:
   - b4_screening.json  : full ranking with per-draft signal breakdown
@@ -42,7 +43,6 @@ OUT_DIR = HERE / "sample_B4"
 TOP_N = 40
 PER_BATCH = 10
 MIN_CHARS = 700          # too-short stubs carry no style
-AI_MARKERS = ("【主播稿頭】", "【記者OS內文", "【總長度】", "預估朗讀長度")
 
 CJK_RE = re.compile(r"[一-鿿]")
 ONOMATOPOEIA = "砰轟碰咻唰嘟嗡叩噠鏘鏗咚喀嘎唏". replace(" ", "")
@@ -72,7 +72,9 @@ def features(draft: str, rare_ratio: float) -> dict[str, float]:
 
 
 def main() -> None:
-    status = json.loads(STATUS.read_text(encoding="utf-8"))["status"]
+    _status_doc = json.loads(STATUS.read_text(encoding="utf-8"))
+    status = _status_doc["status"]
+    quality = _status_doc["quality"]   # regenerate via tag_unread.py if missing
     records = [json.loads(l) for l in CORPUS.read_text(encoding="utf-8").splitlines() if l.strip()]
 
     # document frequency of trigrams across the WHOLE corpus (read + unread)
@@ -85,17 +87,17 @@ def main() -> None:
         df.update(grams)
 
     pool = []
-    n_ai = 0
+    n_excluded = 0
     for r in records:
         if status.get(r["file"]) != "unread" or len(r["draft"]) < MIN_CHARS:
             continue
-        if any(m in r["draft"] for m in AI_MARKERS):
-            n_ai += 1
+        if quality.get(r["file"]) != "ok":   # practice / ai_assisted / stub
+            n_excluded += 1
             continue
         grams = grams_per_file[r["file"]]
         rare_ratio = (sum(1 for g in grams if df[g] <= 3) / len(grams)) if grams else 0.0
         pool.append((r, features(r["draft"], rare_ratio)))
-    print(f"unread pool screened: {len(pool)} (excluded {n_ai} AI-marker drafts)")
+    print(f"unread pool screened: {len(pool)} (excluded {n_excluded} non-ok-quality drafts)")
 
     # z-score each feature over the pool
     keys = list(pool[0][1].keys())

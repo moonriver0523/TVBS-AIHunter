@@ -2,7 +2,7 @@
  {
   "file": "1206 3837ae2235074fbc98d967ea8bdc9632.md",
   "chars": 1543,
-  "score": 18.6,
+  "score": 18.59,
   "signals": {
    "onoma": 14.5,
    "ellipsis": 1.9,
@@ -156,24 +156,24 @@
   }
  },
  {
-  "file": "1105-3 1351e5181440809c90dacecc86a40a86.md",
-  "chars": 2324,
-  "score": 10.64,
-  "signals": {
-   "redup": 4.0,
-   "ellipsis": 3.6
-  }
- },
- {
   "file": "1021-1 1261e51814408060b89ae0bec0c5931c.md",
   "chars": 1726,
-  "score": 10.62,
+  "score": 10.63,
   "signals": {
    "question": 2.7,
    "line_std": 2.6,
    "redup": 2.1,
    "exclam": 1.2,
    "rare3": 1.1
+  }
+ },
+ {
+  "file": "1105-3 1351e5181440809c90dacecc86a40a86.md",
+  "chars": 2324,
+  "score": 10.63,
+  "signals": {
+   "redup": 4.0,
+   "ellipsis": 3.6
   }
  },
  {
@@ -200,7 +200,7 @@
  {
   "file": "Draft - 左右對照 NEW 99b5fe321d014cf8be7a7ec1b2a710f5.md",
   "chars": 1263,
-  "score": 10.29,
+  "score": 10.28,
   "signals": {
    "onoma": 4.8,
    "redup": 2.2,
@@ -219,16 +219,16 @@
  {
   "file": "0113-2 17a1e518144080aabe75fb151e394f71.md",
   "chars": 3015,
-  "score": 9.96,
+  "score": 9.97,
   "signals": {
-   "line_std": 8.5,
+   "line_std": 8.6,
    "redup": 1.1
   }
  },
  {
   "file": "0613-4 55608c94797d4fe88f87fbe89805d5e0.md",
   "chars": 1338,
-  "score": 9.8,
+  "score": 9.79,
   "signals": {
    "onoma": 3.9,
    "ellipsis": 2.5,
@@ -248,7 +248,7 @@
  {
   "file": "0501-2 96138d77dafc44a086ec39c7298fe4ce.md",
   "chars": 886,
-  "score": 9.48,
+  "score": 9.47,
   "signals": {
    "onoma": 4.5,
    "exclam": 2.9
@@ -364,7 +364,7 @@
  {
   "file": "1012-1 2891e518144080acb053ddc5a50ca953.md",
   "chars": 2865,
-  "score": 8.32,
+  "score": 8.31,
   "signals": {
    "ellipsis": 5.2,
    "split_lines": 1.2
@@ -373,10 +373,10 @@
  {
   "file": "0218-3 30b1e518144080e68c06c1522fd6dd83.md",
   "chars": 6501,
-  "score": 8.26,
+  "score": 8.27,
   "signals": {
    "onoma": 4.6,
-   "quote": 1.5,
+   "quote": 1.6,
    "exclam": 1.4
   }
  },
@@ -438,7 +438,7 @@
  {
   "file": "普欽彈劾1230 8c6f3e7f033a49c3a70b599ff86a1210.md",
   "chars": 1023,
-  "score": 7.86,
+  "score": 7.85,
   "signals": {
    "redup": 3.8,
    "exclam": 2.5
@@ -503,7 +503,7 @@
  {
   "file": "0208 db9356e3527945a3a032471d0c69d165.md",
   "chars": 1008,
-  "score": 7.62,
+  "score": 7.61,
   "signals": {
    "split_lines": 2.6,
    "redup": 2.5,
@@ -523,7 +523,7 @@
  {
   "file": "0320-1 3291e518144080799faac5aef516d598.md",
   "chars": 7192,
-  "score": 7.45,
+  "score": 7.46,
   "signals": {
    "line_std": 6.0,
    "question": 1.5
@@ -569,7 +569,7 @@
  {
   "file": "0903-1 2631e51814408098b32de116c796d358.md",
   "chars": 7249,
-  "score": 7.2,
+  "score": 7.21,
   "signals": {
    "line_std": 6.7
   }
@@ -637,7 +637,7 @@
  {
   "file": "1010-1 890a5e2ca4044d6dbead585e97fedca9.md",
   "chars": 3574,
-  "score": 7.14,
+  "score": 7.13,
   "signals": {
    "ellipsis": 2.6,
    "exclam": 1.6,
@@ -914,6 +914,15 @@
   }
  },
  {
+  "file": "0722-3 1e11d291fbde4eae98ceaa9b9a52baf4.md",
+  "chars": 1386,
+  "score": 6.56,
+  "signals": {
+   "exclam": 4.5,
+   "rare3": 1.2
+  }
+ },
+ {
   "file": "0703-1 3921e5181440804c9b4ae7fcfafcd49a.md",
   "chars": 3521,
   "score": 6.55,
@@ -921,15 +930,6 @@
    "exclam": 4.0,
    "quote": 1.3,
    "rare3": 1.1
-  }
- },
- {
-  "file": "0722-3 1e11d291fbde4eae98ceaa9b9a52baf4.md",
-  "chars": 1386,
-  "score": 6.55,
-  "signals": {
-   "exclam": 4.5,
-   "rare3": 1.2
   }
  },
  {
@@ -943,6 +943,15 @@
   }
  },
  {
+  "file": "0201-2 19f6b8da0ab1413f91ef19c736d24c83.md",
+  "chars": 2275,
+  "score": 6.46,
+  "signals": {
+   "line_std": 4.2,
+   "exclam": 1.1
+  }
+ },
+ {
   "file": "0703-4 c16eeb47a0d74434aeb82a6b007f60d3.md",
   "chars": 1448,
   "score": 6.46,
@@ -951,15 +960,6 @@
    "split_lines": 1.4,
    "exclam": 1.2,
    "rare3": 1.1
-  }
- },
- {
-  "file": "0201-2 19f6b8da0ab1413f91ef19c736d24c83.md",
-  "chars": 2275,
-  "score": 6.45,
-  "signals": {
-   "line_std": 4.2,
-   "exclam": 1.1
   }
  },
  {
@@ -995,7 +995,7 @@
  {
   "file": "0702-1 2241e518144080b99514ee6dd590f3d5.md",
   "chars": 2530,
-  "score": 6.42,
+  "score": 6.41,
   "signals": {
    "quote": 1.8,
    "ellipsis": 1.6,
@@ -1116,7 +1116,7 @@
  {
   "file": "1220 2cf1e51814408061a74ce0745386f4dc.md",
   "chars": 1912,
-  "score": 6.26,
+  "score": 6.25,
   "signals": {
    "split_lines": 4.0,
    "question": 1.5
@@ -1317,19 +1317,10 @@
  {
   "file": "0208-2 ca59965865fc4244ab893df8b9906826.md",
   "chars": 1540,
-  "score": 6.04,
+  "score": 6.03,
   "signals": {
    "redup": 2.6,
    "split_lines": 2.5
-  }
- },
- {
-  "file": "1730 49baf081eeb445b195105add415be142.md",
-  "chars": 1463,
-  "score": 6.04,
-  "signals": {
-   "onoma": 4.1,
-   "ellipsis": 1.3
   }
  },
  {
@@ -1340,6 +1331,15 @@
    "quote": 1.9,
    "rare3": 1.8,
    "redup": 1.6
+  }
+ },
+ {
+  "file": "1730 49baf081eeb445b195105add415be142.md",
+  "chars": 1463,
+  "score": 6.03,
+  "signals": {
+   "onoma": 4.1,
+   "ellipsis": 1.3
   }
  },
  {
@@ -1426,7 +1426,7 @@
  {
   "file": "0507-2 3591e51814408070a79be8cdeb96fc6d.md",
   "chars": 1744,
-  "score": 5.95,
+  "score": 5.94,
   "signals": {
    "split_lines": 2.9,
    "redup": 1.8
@@ -1658,15 +1658,6 @@
   }
  },
  {
-  "file": "0501-4 702ad2bc868c49fba567dd49fe17ad3c.md",
-  "chars": 1185,
-  "score": 5.55,
-  "signals": {
-   "onoma": 3.9,
-   "redup": 1.0
-  }
- },
- {
   "file": "0724-4 ef37885ab28241c5961fce389d773584.md",
   "chars": 1565,
   "score": 5.55,
@@ -1674,6 +1665,15 @@
    "redup": 2.3,
    "onoma": 1.4,
    "ellipsis": 1.2
+  }
+ },
+ {
+  "file": "0501-4 702ad2bc868c49fba567dd49fe17ad3c.md",
+  "chars": 1185,
+  "score": 5.54,
+  "signals": {
+   "onoma": 3.9,
+   "redup": 1.0
   }
  },
  {
@@ -1812,7 +1812,7 @@
  {
   "file": "0917-1 2711e5181440806588fce028ac375691.md",
   "chars": 4113,
-  "score": 5.39,
+  "score": 5.4,
   "signals": {
    "line_std": 3.7
   }
