@@ -1,0 +1,1902 @@
+[
+ {
+  "file": "1206 3837ae2235074fbc98d967ea8bdc9632.md",
+  "chars": 1543,
+  "score": 18.6,
+  "signals": {
+   "onoma": 14.5,
+   "ellipsis": 1.9,
+   "redup": 1.2
+  }
+ },
+ {
+  "file": "0917-2 1041e51814408040809adba5d56b401c.md",
+  "chars": 3263,
+  "score": 16.8,
+  "signals": {
+   "onoma": 12.7,
+   "quote": 2.6
+  }
+ },
+ {
+  "file": "0508-2 b96c955d8f76477bbec847a33fdc7854.md",
+  "chars": 747,
+  "score": 14.68,
+  "signals": {
+   "quote": 6.9,
+   "split_lines": 2.6,
+   "exclam": 2.0,
+   "rare3": 1.5,
+   "onoma": 1.5
+  }
+ },
+ {
+  "file": "倒掛救援1700 fcad39b9879f450b8d7e81349d36eacb.md",
+  "chars": 1339,
+  "score": 14.32,
+  "signals": {
+   "exclam": 4.1,
+   "question": 3.7,
+   "redup": 1.9,
+   "ellipsis": 1.6,
+   "split_lines": 1.5,
+   "rare3": 1.5
+  }
+ },
+ {
+  "file": "0707-2 b8faa5ca0d584be19a9d37700e376000.md",
+  "chars": 1934,
+  "score": 13.91,
+  "signals": {
+   "question": 8.7,
+   "quote": 2.4,
+   "exclam": 1.6,
+   "rare3": 1.2
+  }
+ },
+ {
+  "file": "0105-1 1721e5181440808d92efc12830f8cc1d.md",
+  "chars": 1945,
+  "score": 13.63,
+  "signals": {
+   "ellipsis": 5.2,
+   "question": 3.0,
+   "quote": 2.6,
+   "redup": 1.2
+  }
+ },
+ {
+  "file": "主播吞蠅1700 ccf70c7598dd48ebb43654beb527c239.md",
+  "chars": 1252,
+  "score": 13.16,
+  "signals": {
+   "ellipsis": 5.7,
+   "exclam": 2.6,
+   "question": 1.9,
+   "rare3": 1.3,
+   "split_lines": 1.0
+  }
+ },
+ {
+  "file": "0209-1 1951e5181440807e8a9ada68d9c5228a.md",
+  "chars": 1517,
+  "score": 12.86,
+  "signals": {
+   "redup": 7.9,
+   "quote": 2.4
+  }
+ },
+ {
+  "file": "0829-1 80be7b49a47642bfaa7d3e21f54f9db6.md",
+  "chars": 7570,
+  "score": 11.72,
+  "signals": {
+   "redup": 4.9,
+   "question": 3.3,
+   "exclam": 1.4
+  }
+ },
+ {
+  "file": "1125-3 1491e518144080839757f45ce97c16e0.md",
+  "chars": 1747,
+  "score": 11.57,
+  "signals": {
+   "question": 6.7,
+   "ellipsis": 2.2,
+   "onoma": 1.2
+  }
+ },
+ {
+  "file": "0729-1 ebcd3292ae56497b9b74d60370c44ffe.md",
+  "chars": 1531,
+  "score": 11.23,
+  "signals": {
+   "redup": 8.2,
+   "rare3": 1.1,
+   "quote": 1.0
+  }
+ },
+ {
+  "file": "0212-2 1981e518144080a8b104e8e245bcf402.md",
+  "chars": 2996,
+  "score": 11.2,
+  "signals": {
+   "redup": 7.5,
+   "quote": 2.0,
+   "split_lines": 1.4
+  }
+ },
+ {
+  "file": "0531-3 影音 b8eeef807c9f4aab9b4e111753dcd989.md",
+  "chars": 998,
+  "score": 11.03,
+  "signals": {
+   "quote": 5.4,
+   "exclam": 4.3,
+   "rare3": 1.3
+  }
+ },
+ {
+  "file": "0715-3 2311e518144080f5ac5ccfcefbc86405.md",
+  "chars": 5956,
+  "score": 10.89,
+  "signals": {
+   "redup": 7.3,
+   "quote": 2.6
+  }
+ },
+ {
+  "file": "0805-2 8805519072714846b03c7de0c8687c90.md",
+  "chars": 1266,
+  "score": 10.77,
+  "signals": {
+   "redup": 6.5,
+   "quote": 1.8,
+   "rare3": 1.6
+  }
+ },
+ {
+  "file": "1105-3 1351e5181440809c90dacecc86a40a86.md",
+  "chars": 2324,
+  "score": 10.64,
+  "signals": {
+   "redup": 4.0,
+   "ellipsis": 3.6
+  }
+ },
+ {
+  "file": "1021-1 1261e51814408060b89ae0bec0c5931c.md",
+  "chars": 1726,
+  "score": 10.62,
+  "signals": {
+   "question": 2.7,
+   "line_std": 2.6,
+   "redup": 2.1,
+   "exclam": 1.2,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "0223-1 1e259da72c634b648f03f6b8a6564e99.md",
+  "chars": 1430,
+  "score": 10.5,
+  "signals": {
+   "onoma": 5.5,
+   "exclam": 2.1,
+   "quote": 1.2
+  }
+ },
+ {
+  "file": "1004-1 1151e51814408029a991f3f06444dbbb.md",
+  "chars": 1509,
+  "score": 10.38,
+  "signals": {
+   "exclam": 3.3,
+   "onoma": 3.2,
+   "ellipsis": 2.6,
+   "question": 1.1
+  }
+ },
+ {
+  "file": "Draft - 左右對照 NEW 99b5fe321d014cf8be7a7ec1b2a710f5.md",
+  "chars": 1263,
+  "score": 10.29,
+  "signals": {
+   "onoma": 4.8,
+   "redup": 2.2,
+   "split_lines": 1.5
+  }
+ },
+ {
+  "file": "0718-3 52500a3ec3cf4ccc96fd3ae1a257ec19.md",
+  "chars": 1044,
+  "score": 10.22,
+  "signals": {
+   "onoma": 6.9,
+   "quote": 1.3
+  }
+ },
+ {
+  "file": "0113-2 17a1e518144080aabe75fb151e394f71.md",
+  "chars": 3015,
+  "score": 9.96,
+  "signals": {
+   "line_std": 8.5,
+   "redup": 1.1
+  }
+ },
+ {
+  "file": "0613-4 55608c94797d4fe88f87fbe89805d5e0.md",
+  "chars": 1338,
+  "score": 9.8,
+  "signals": {
+   "onoma": 3.9,
+   "ellipsis": 2.5,
+   "redup": 2.4
+  }
+ },
+ {
+  "file": "0822 prsctice 2d5dae409a764c2a986ae7506fa2be3c.md",
+  "chars": 1324,
+  "score": 9.66,
+  "signals": {
+   "split_lines": 4.4,
+   "redup": 3.4,
+   "question": 1.2
+  }
+ },
+ {
+  "file": "0501-2 96138d77dafc44a086ec39c7298fe4ce.md",
+  "chars": 886,
+  "score": 9.48,
+  "signals": {
+   "onoma": 4.5,
+   "exclam": 2.9
+  }
+ },
+ {
+  "file": "0618-1 3831e51814408067b719c8d7e9a520e8.md",
+  "chars": 3593,
+  "score": 9.25,
+  "signals": {
+   "question": 5.2,
+   "quote": 2.1
+  }
+ },
+ {
+  "file": "長眠溫莎 1730 c147f1e7645a47f4a3740e952a61aa6e.md",
+  "chars": 1128,
+  "score": 9.22,
+  "signals": {
+   "onoma": 3.4,
+   "redup": 3.1,
+   "rare3": 1.3
+  }
+ },
+ {
+  "file": "泰總停權1300 68a9dda8853a444e9e339db523709078.md",
+  "chars": 1490,
+  "score": 9.09,
+  "signals": {
+   "redup": 4.3,
+   "split_lines": 3.6,
+   "rare3": 1.2
+  }
+ },
+ {
+  "file": "17歲環遊1800 a18edc594612487d85dccdfbbb87dd6d.md",
+  "chars": 1533,
+  "score": 8.98,
+  "signals": {
+   "redup": 4.2,
+   "split_lines": 1.9,
+   "rare3": 1.4
+  }
+ },
+ {
+  "file": "0218-1 fdbfa88898134a0e9ad9df11e070e366.md",
+  "chars": 1141,
+  "score": 8.88,
+  "signals": {
+   "ellipsis": 2.5,
+   "redup": 2.4,
+   "exclam": 1.9,
+   "split_lines": 1.4
+  }
+ },
+ {
+  "file": "0122-4 1ab71645a00c4829bede6cde9189e03b.md",
+  "chars": 2486,
+  "score": 8.79,
+  "signals": {
+   "line_std": 8.1
+  }
+ },
+ {
+  "file": "0214-1 19a1e518144080f484b4f7c9f7aed7c2.md",
+  "chars": 3548,
+  "score": 8.62,
+  "signals": {
+   "ellipsis": 5.5,
+   "line_std": 1.7
+  }
+ },
+ {
+  "file": "0115-1 27829f7df3dc4ade82250ce3c37a28ea.md",
+  "chars": 1532,
+  "score": 8.56,
+  "signals": {
+   "redup": 4.3,
+   "quote": 2.3,
+   "exclam": 1.5
+  }
+ },
+ {
+  "file": "0425-3 34d1e518144080c786aced75d7c15b09.md",
+  "chars": 1129,
+  "score": 8.53,
+  "signals": {
+   "exclam": 6.4
+  }
+ },
+ {
+  "file": "0514-1 caaf619a655b4eed873bd57d501ad915.md",
+  "chars": 6271,
+  "score": 8.53,
+  "signals": {
+   "question": 4.7,
+   "ellipsis": 1.2,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "0702-2 3930da383fbc40ceaee1f099ce41d48a.md",
+  "chars": 2055,
+  "score": 8.45,
+  "signals": {
+   "redup": 2.2,
+   "question": 1.9,
+   "exclam": 1.4,
+   "quote": 1.3,
+   "ellipsis": 1.2
+  }
+ },
+ {
+  "file": "1012-1 2891e518144080acb053ddc5a50ca953.md",
+  "chars": 2865,
+  "score": 8.32,
+  "signals": {
+   "ellipsis": 5.2,
+   "split_lines": 1.2
+  }
+ },
+ {
+  "file": "0218-3 30b1e518144080e68c06c1522fd6dd83.md",
+  "chars": 6501,
+  "score": 8.26,
+  "signals": {
+   "onoma": 4.6,
+   "quote": 1.5,
+   "exclam": 1.4
+  }
+ },
+ {
+  "file": "0929-3 1101e51814408072b5c0d7649eb0f419.md",
+  "chars": 1191,
+  "score": 8.14,
+  "signals": {
+   "ellipsis": 3.0,
+   "quote": 2.0,
+   "onoma": 1.6
+  }
+ },
+ {
+  "file": "0920-1 1071e518144080688393f5add9eb9b20.md",
+  "chars": 2407,
+  "score": 8.11,
+  "signals": {
+   "exclam": 3.9,
+   "quote": 1.3
+  }
+ },
+ {
+  "file": "0515-1 0923ccf9deb2432388431422f27c99d2.md",
+  "chars": 1357,
+  "score": 8.01,
+  "signals": {
+   "question": 6.8
+  }
+ },
+ {
+  "file": "1227-4 b1344b5b385447faaba478a46d2f33a3.md",
+  "chars": 1832,
+  "score": 7.98,
+  "signals": {
+   "exclam": 2.8,
+   "ellipsis": 1.5,
+   "rare3": 1.2
+  }
+ },
+ {
+  "file": "0516-1 cd34e7ae087b40b49047b7e1217f8f50.md",
+  "chars": 1115,
+  "score": 7.97,
+  "signals": {
+   "exclam": 3.5,
+   "split_lines": 2.9
+  }
+ },
+ {
+  "file": "0207-1 1931e518144080ff8351ee2d79748cc8.md",
+  "chars": 10710,
+  "score": 7.96,
+  "signals": {
+   "line_std": 4.0,
+   "question": 3.2
+  }
+ },
+ {
+  "file": "普欽彈劾1230 8c6f3e7f033a49c3a70b599ff86a1210.md",
+  "chars": 1023,
+  "score": 7.86,
+  "signals": {
+   "redup": 3.8,
+   "exclam": 2.5
+  }
+ },
+ {
+  "file": "0308-2 31d1e51814408041949dcf73225db818.md",
+  "chars": 3989,
+  "score": 7.84,
+  "signals": {
+   "ellipsis": 6.1
+  }
+ },
+ {
+  "file": "0916-3 e7529ec2dac74c1c89f719b6c86aef6d.md",
+  "chars": 1942,
+  "score": 7.81,
+  "signals": {
+   "exclam": 3.4,
+   "ellipsis": 2.3,
+   "redup": 1.1
+  }
+ },
+ {
+  "file": "0912-1 9d65c3a0fd784a52aede1229c32c294e.md",
+  "chars": 1988,
+  "score": 7.74,
+  "signals": {
+   "ellipsis": 3.3,
+   "redup": 2.0,
+   "line_std": 2.0
+  }
+ },
+ {
+  "file": "1121-1 1451e518144080048051d3bba0f24257.md",
+  "chars": 1314,
+  "score": 7.68,
+  "signals": {
+   "onoma": 2.9,
+   "quote": 1.7,
+   "exclam": 1.3
+  }
+ },
+ {
+  "file": "0720-4 1b361464bb2a4f17b9c03cfe9f9b2dc8.md",
+  "chars": 1665,
+  "score": 7.65,
+  "signals": {
+   "exclam": 3.1,
+   "quote": 2.7,
+   "rare3": 1.5
+  }
+ },
+ {
+  "file": "0205-2 2fe1e51814408051acccfd7ab0767f08.md",
+  "chars": 8383,
+  "score": 7.63,
+  "signals": {
+   "line_std": 5.4
+  }
+ },
+ {
+  "file": "0208 db9356e3527945a3a032471d0c69d165.md",
+  "chars": 1008,
+  "score": 7.62,
+  "signals": {
+   "split_lines": 2.6,
+   "redup": 2.5,
+   "onoma": 1.9
+  }
+ },
+ {
+  "file": "0729-2 42e26e966daf44a69ff3214cbc0e0f3e.md",
+  "chars": 1513,
+  "score": 7.54,
+  "signals": {
+   "redup": 2.7,
+   "exclam": 1.8,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "0320-1 3291e518144080799faac5aef516d598.md",
+  "chars": 7192,
+  "score": 7.45,
+  "signals": {
+   "line_std": 6.0,
+   "question": 1.5
+  }
+ },
+ {
+  "file": "1018-1 1231e518144080258824dc04d50847a1.md",
+  "chars": 4437,
+  "score": 7.4,
+  "signals": {
+   "ellipsis": 4.9,
+   "quote": 1.3
+  }
+ },
+ {
+  "file": "0624-1 9f1f81d5edf24a24880ce031cb6f07e7.md",
+  "chars": 4090,
+  "score": 7.32,
+  "signals": {
+   "ellipsis": 3.1,
+   "exclam": 1.8
+  }
+ },
+ {
+  "file": "0702-1 f71681337fce413b8efd0dc7a6fee20f.md",
+  "chars": 1617,
+  "score": 7.26,
+  "signals": {
+   "quote": 3.5,
+   "exclam": 1.7,
+   "rare3": 1.3
+  }
+ },
+ {
+  "file": "0722-1 b88cb1fa25e24182bf979f42a985d1e3.md",
+  "chars": 7006,
+  "score": 7.22,
+  "signals": {
+   "question": 3.3,
+   "ellipsis": 1.9
+  }
+ },
+ {
+  "file": "0903-1 2631e51814408098b32de116c796d358.md",
+  "chars": 7249,
+  "score": 7.2,
+  "signals": {
+   "line_std": 6.7
+  }
+ },
+ {
+  "file": "1800-1 巴基斯坦前總理 5d7efdce22274581b34cfa2972164dcc.md",
+  "chars": 1133,
+  "score": 7.2,
+  "signals": {
+   "split_lines": 2.8,
+   "exclam": 2.0,
+   "rare3": 1.0
+  }
+ },
+ {
+  "file": "0307-2 1af1e518144080c2bbf2dc5ee795dd13.md",
+  "chars": 2460,
+  "score": 7.18,
+  "signals": {
+   "exclam": 4.1,
+   "quote": 1.7
+  }
+ },
+ {
+  "file": "0121-3 d05dd16a91344876885d4a648e08b20a.md",
+  "chars": 1431,
+  "score": 7.17,
+  "signals": {
+   "ellipsis": 2.4,
+   "split_lines": 1.2,
+   "redup": 1.1
+  }
+ },
+ {
+  "file": "0122-2 dd6c682cb4d94375a03700b03b364e11.md",
+  "chars": 1418,
+  "score": 7.17,
+  "signals": {
+   "redup": 2.5,
+   "ellipsis": 2.0,
+   "rare3": 1.2
+  }
+ },
+ {
+  "file": "0801-1 be8dfe52b2d247cbb38718066a8d4804.md",
+  "chars": 1814,
+  "score": 7.16,
+  "signals": {
+   "exclam": 2.8,
+   "redup": 1.6,
+   "rare3": 1.4,
+   "quote": 1.4
+  }
+ },
+ {
+  "file": "0619-3 3841e5181440803ab963fc54bf98e6e9.md",
+  "chars": 5686,
+  "score": 7.14,
+  "signals": {
+   "question": 3.1,
+   "exclam": 1.4,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "1010-1 890a5e2ca4044d6dbead585e97fedca9.md",
+  "chars": 3574,
+  "score": 7.14,
+  "signals": {
+   "ellipsis": 2.6,
+   "exclam": 1.6,
+   "question": 1.6
+  }
+ },
+ {
+  "file": "0929-2 1101e518144080599df5d0b74d9619a0.md",
+  "chars": 1272,
+  "score": 7.11,
+  "signals": {
+   "onoma": 5.1,
+   "quote": 2.0
+  }
+ },
+ {
+  "file": "獨力反攻1800 5290e3cc90e140f9a44682dd33560204.md",
+  "chars": 1314,
+  "score": 7.11,
+  "signals": {
+   "exclam": 3.9,
+   "onoma": 1.2,
+   "split_lines": 1.1
+  }
+ },
+ {
+  "file": "歡迎新王 1200 4b43205becbd4226aaec683f15a23a00.md",
+  "chars": 1505,
+  "score": 7.1,
+  "signals": {
+   "exclam": 2.9,
+   "redup": 1.8,
+   "rare3": 1.2,
+   "split_lines": 1.1
+  }
+ },
+ {
+  "file": "0611-2 37c1e518144080cdab0dcc348075f262.md",
+  "chars": 2975,
+  "score": 7.07,
+  "signals": {
+   "question": 3.3,
+   "quote": 1.4,
+   "line_std": 1.4
+  }
+ },
+ {
+  "file": "0708-5 618bdbab78524a46be347460bab8bffa.md",
+  "chars": 1601,
+  "score": 7.07,
+  "signals": {
+   "onoma": 5.4,
+   "redup": 1.1
+  }
+ },
+ {
+  "file": "0319-1 92e115ec24904d2cb996e3327c9d4bc9.md",
+  "chars": 1500,
+  "score": 7.04,
+  "signals": {
+   "exclam": 3.9
+  }
+ },
+ {
+  "file": "1007-3 2851e518144080af9e7fe6814670e0a2.md",
+  "chars": 3759,
+  "score": 7.04,
+  "signals": {
+   "redup": 3.9,
+   "rare3": 1.3,
+   "quote": 1.0
+  }
+ },
+ {
+  "file": "1219-2 3c9747f7a7cd4b419e347b8d4eec31f3.md",
+  "chars": 1263,
+  "score": 7.04,
+  "signals": {
+   "ellipsis": 5.3,
+   "redup": 1.2
+  }
+ },
+ {
+  "file": "1018-1 65d430f28ecb499ba316c4d02b5bf0f5.md",
+  "chars": 5102,
+  "score": 7.03,
+  "signals": {
+   "onoma": 2.3,
+   "exclam": 2.1,
+   "question": 1.4
+  }
+ },
+ {
+  "file": "0415-1 b002c7e03e4c4fbda4e647aaa111a360.md",
+  "chars": 3396,
+  "score": 6.97,
+  "signals": {
+   "onoma": 3.6,
+   "ellipsis": 2.0,
+   "quote": 1.0
+  }
+ },
+ {
+  "file": "0707-1 3961e5181440804da1f7f1e6c931a0a3.md",
+  "chars": 4791,
+  "score": 6.97,
+  "signals": {
+   "exclam": 3.6,
+   "onoma": 1.6,
+   "line_std": 1.1
+  }
+ },
+ {
+  "file": "1004-3 1151e518144080fd8465de77d9af9f01.md",
+  "chars": 1666,
+  "score": 6.96,
+  "signals": {
+   "exclam": 4.0,
+   "quote": 1.1
+  }
+ },
+ {
+  "file": "1114-1 39888bc5fcb74db1867fd3498d88e0f3.md",
+  "chars": 3960,
+  "score": 6.93,
+  "signals": {
+   "ellipsis": 2.0,
+   "onoma": 1.4,
+   "redup": 1.3
+  }
+ },
+ {
+  "file": "0530-1 8ad85fa35100401e9b1bc465f285fe85.md",
+  "chars": 1039,
+  "score": 6.86,
+  "signals": {
+   "onoma": 5.6,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "1800-2 芬蘭女總理 28a3e1f8d7df4e3ca206e24a4d23a80b.md",
+  "chars": 809,
+  "score": 6.82,
+  "signals": {
+   "split_lines": 3.1,
+   "exclam": 1.9,
+   "rare3": 1.2
+  }
+ },
+ {
+  "file": "0727 360a4f21a7014b86a7fb860d97759d9f.md",
+  "chars": 803,
+  "score": 6.8,
+  "signals": {
+   "exclam": 4.1,
+   "quote": 1.6
+  }
+ },
+ {
+  "file": "0520-1 97103a6555494a52b3a2427e7b6e0d2d.md",
+  "chars": 1732,
+  "score": 6.79,
+  "signals": {
+   "exclam": 3.5,
+   "redup": 2.1,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "0825-1 8890b4e6ae0c485c9a6a138f97a9de79.md",
+  "chars": 2919,
+  "score": 6.78,
+  "signals": {
+   "line_std": 3.8,
+   "ellipsis": 2.1
+  }
+ },
+ {
+  "file": "0717-1 2331e518144080e6849bffd6029b1255.md",
+  "chars": 3900,
+  "score": 6.7,
+  "signals": {
+   "ellipsis": 3.3,
+   "exclam": 1.9
+  }
+ },
+ {
+  "file": "0131-2 19af943836a34581a188fea21a43305c.md",
+  "chars": 1336,
+  "score": 6.69,
+  "signals": {
+   "ellipsis": 3.1,
+   "quote": 2.1,
+   "rare3": 1.5
+  }
+ },
+ {
+  "file": "0315-1 1b71e5181440804dbdf3ff67fd1cdf8a.md",
+  "chars": 1045,
+  "score": 6.65,
+  "signals": {
+   "quote": 2.0,
+   "redup": 1.5,
+   "ellipsis": 1.2,
+   "split_lines": 1.0
+  }
+ },
+ {
+  "file": "外媒習大1730 f8a095b06fb1488aa2010d9dd20db9b3.md",
+  "chars": 1632,
+  "score": 6.64,
+  "signals": {
+   "ellipsis": 3.8,
+   "split_lines": 1.4
+  }
+ },
+ {
+  "file": "梅根被罵 723b6da2eade410db556accc30a7d6c4.md",
+  "chars": 1328,
+  "score": 6.64,
+  "signals": {
+   "redup": 2.5,
+   "rare3": 1.2,
+   "onoma": 1.2,
+   "ellipsis": 1.0
+  }
+ },
+ {
+  "file": "0306-1 8214131443674451bc22c8765fc8d519.md",
+  "chars": 1655,
+  "score": 6.63,
+  "signals": {
+   "exclam": 3.2,
+   "ellipsis": 1.2
+  }
+ },
+ {
+  "file": "0914-4 26e1e5181440807f8f12e52cf0e59ea8.md",
+  "chars": 2104,
+  "score": 6.63,
+  "signals": {
+   "onoma": 3.4,
+   "ellipsis": 1.1
+  }
+ },
+ {
+  "file": "1209-1 1561e51814408052aa75f5edf5488ebc.md",
+  "chars": 1843,
+  "score": 6.6,
+  "signals": {
+   "question": 3.0,
+   "exclam": 1.8,
+   "quote": 1.6
+  }
+ },
+ {
+  "file": "1008-1 1191e518144080799b00c0a14bc5e8f4.md",
+  "chars": 2400,
+  "score": 6.59,
+  "signals": {
+   "ellipsis": 2.2,
+   "quote": 1.8,
+   "question": 1.5
+  }
+ },
+ {
+  "file": "0702-4 2241e518144080f2a784c6e3e1ecec5e.md",
+  "chars": 4679,
+  "score": 6.57,
+  "signals": {
+   "question": 3.8,
+   "line_std": 2.7
+  }
+ },
+ {
+  "file": "0703-1 3921e5181440804c9b4ae7fcfafcd49a.md",
+  "chars": 3521,
+  "score": 6.55,
+  "signals": {
+   "exclam": 4.0,
+   "quote": 1.3,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "0722-3 1e11d291fbde4eae98ceaa9b9a52baf4.md",
+  "chars": 1386,
+  "score": 6.55,
+  "signals": {
+   "exclam": 4.5,
+   "rare3": 1.2
+  }
+ },
+ {
+  "file": "1002-1 1131e518144080b89f3cd2ca68a25717.md",
+  "chars": 2152,
+  "score": 6.55,
+  "signals": {
+   "ellipsis": 3.2,
+   "redup": 1.3,
+   "question": 1.1
+  }
+ },
+ {
+  "file": "0703-4 c16eeb47a0d74434aeb82a6b007f60d3.md",
+  "chars": 1448,
+  "score": 6.46,
+  "signals": {
+   "redup": 2.2,
+   "split_lines": 1.4,
+   "exclam": 1.2,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "0201-2 19f6b8da0ab1413f91ef19c736d24c83.md",
+  "chars": 2275,
+  "score": 6.45,
+  "signals": {
+   "line_std": 4.2,
+   "exclam": 1.1
+  }
+ },
+ {
+  "file": "0207-2 3001e5181440809f8a35f5cb68f53641.md",
+  "chars": 6503,
+  "score": 6.43,
+  "signals": {
+   "question": 4.1,
+   "exclam": 1.3,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "1200-2 ede3ee2febce4991baae35dbc0343b97.md",
+  "chars": 1150,
+  "score": 6.43,
+  "signals": {
+   "split_lines": 2.9,
+   "redup": 2.1,
+   "rare3": 1.5
+  }
+ },
+ {
+  "file": "0122-5 ff5d155915774b1db1d7571e54907ef2.md",
+  "chars": 2121,
+  "score": 6.42,
+  "signals": {
+   "quote": 2.4,
+   "rare3": 1.5,
+   "question": 1.3
+  }
+ },
+ {
+  "file": "0702-1 2241e518144080b99514ee6dd590f3d5.md",
+  "chars": 2530,
+  "score": 6.42,
+  "signals": {
+   "quote": 1.8,
+   "ellipsis": 1.6,
+   "split_lines": 1.5,
+   "question": 1.4
+  }
+ },
+ {
+  "file": "0214-4 28879a4941a24f51b6f488f77af32cf1.md",
+  "chars": 2328,
+  "score": 6.4,
+  "signals": {
+   "ellipsis": 2.7,
+   "line_std": 2.0,
+   "quote": 1.0
+  }
+ },
+ {
+  "file": "0215-1 e31ca8b05be04932a0dc1663e65aeb61.md",
+  "chars": 849,
+  "score": 6.36,
+  "signals": {
+   "split_lines": 4.2,
+   "rare3": 1.3
+  }
+ },
+ {
+  "file": "0708-4 09b658947c724e73b9c8f8d601ae3737.md",
+  "chars": 1539,
+  "score": 6.35,
+  "signals": {
+   "quote": 2.3,
+   "rare3": 1.5,
+   "exclam": 1.4,
+   "redup": 1.2
+  }
+ },
+ {
+  "file": "0306-2 e9ce423091dd4cf68f07a07e587d6000.md",
+  "chars": 1559,
+  "score": 6.34,
+  "signals": {
+   "onoma": 3.9,
+   "quote": 1.0
+  }
+ },
+ {
+  "file": "0706-3 2281e518144080e8b263e3fd2dfb18bc.md",
+  "chars": 1810,
+  "score": 6.34,
+  "signals": {
+   "split_lines": 3.9,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "0708-3 22a1e5181440808bbd53dec93b097ab3.md",
+  "chars": 1810,
+  "score": 6.34,
+  "signals": {
+   "split_lines": 3.9,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "0722-2 2381e518144080d68df8fb8a1d1b6901.md",
+  "chars": 1810,
+  "score": 6.34,
+  "signals": {
+   "split_lines": 3.9,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "0830-1 02c15b9e34494641bed4c5f11aa3c0c1.md",
+  "chars": 6666,
+  "score": 6.3,
+  "signals": {
+   "question": 1.8,
+   "exclam": 1.5,
+   "line_std": 1.4
+  }
+ },
+ {
+  "file": "12-1 核廠碘片 5c2fa3076ff04eaaabb9fbcada6bf2cd.md",
+  "chars": 934,
+  "score": 6.3,
+  "signals": {
+   "onoma": 5.3
+  }
+ },
+ {
+  "file": "0828-1 8edddcd91a364c9389f0db325034047d.md",
+  "chars": 5074,
+  "score": 6.28,
+  "signals": {
+   "redup": 4.8
+  }
+ },
+ {
+  "file": "0930-1 1111e518144080c3bc0bcbad034b2cf2.md",
+  "chars": 3812,
+  "score": 6.28,
+  "signals": {
+   "ellipsis": 2.5,
+   "quote": 1.4
+  }
+ },
+ {
+  "file": "0204-3 1901e518144080c5a13adde696a84166.md",
+  "chars": 2679,
+  "score": 6.26,
+  "signals": {
+   "ellipsis": 2.8,
+   "split_lines": 1.5
+  }
+ },
+ {
+  "file": "1220 2cf1e51814408061a74ce0745386f4dc.md",
+  "chars": 1912,
+  "score": 6.26,
+  "signals": {
+   "split_lines": 4.0,
+   "question": 1.5
+  }
+ },
+ {
+  "file": "世足卡達 74df534b2ed14b689fca3fb70fb7a2ca.md",
+  "chars": 2462,
+  "score": 6.22,
+  "signals": {
+   "redup": 4.4
+  }
+ },
+ {
+  "file": "0119-2 508e05502fd94f5fb2ecf6758f19736d.md",
+  "chars": 5191,
+  "score": 6.19,
+  "signals": {
+   "line_std": 4.0,
+   "ellipsis": 1.9
+  }
+ },
+ {
+  "file": "0111-3 47aa22702d8747d9bab2bfca0af3841e.md",
+  "chars": 1411,
+  "score": 6.16,
+  "signals": {
+   "redup": 2.3,
+   "ellipsis": 1.9,
+   "quote": 1.4
+  }
+ },
+ {
+  "file": "0305-3 b979056790df44d0b1709e71acd9cc5c.md",
+  "chars": 1177,
+  "score": 6.15,
+  "signals": {
+   "redup": 2.3,
+   "line_std": 1.9,
+   "quote": 1.2
+  }
+ },
+ {
+  "file": "1001-1 7e42168c507a40ad90725764f00fce50.md",
+  "chars": 1172,
+  "score": 6.14,
+  "signals": {
+   "exclam": 2.4,
+   "redup": 1.7,
+   "rare3": 1.4
+  }
+ },
+ {
+  "file": "1111-2 13b1e5181440805a9f08c75d64fce32c.md",
+  "chars": 2129,
+  "score": 6.13,
+  "signals": {
+   "line_std": 1.8,
+   "redup": 1.5
+  }
+ },
+ {
+  "file": "1800烏俄 2e22f471b32d4a9d855cfb3ce60290c6.md",
+  "chars": 1361,
+  "score": 6.13,
+  "signals": {
+   "onoma": 4.4,
+   "split_lines": 1.4
+  }
+ },
+ {
+  "file": "0620-3 e60a4ed6956647b685ed80d8bf6bef7b.md",
+  "chars": 1183,
+  "score": 6.12,
+  "signals": {
+   "redup": 4.5
+  }
+ },
+ {
+  "file": "0103 2dd1e5181440805b9061fdd9c40f4d52.md",
+  "chars": 1824,
+  "score": 6.11,
+  "signals": {
+   "split_lines": 3.8,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "0113-1 2e61e518144080a5bc92dd0c39801e43.md",
+  "chars": 1824,
+  "score": 6.11,
+  "signals": {
+   "split_lines": 3.8,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "0124-2 2f21e518144080279e65f8d2032c26bb.md",
+  "chars": 1824,
+  "score": 6.11,
+  "signals": {
+   "split_lines": 3.8,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "0327-1 9f6f2334f8ac4f4abd2440bb84581d01.md",
+  "chars": 1282,
+  "score": 6.11,
+  "signals": {
+   "ellipsis": 4.7
+  }
+ },
+ {
+  "file": "0415-2 3431e5181440804cade0f1d377ae8625.md",
+  "chars": 1824,
+  "score": 6.11,
+  "signals": {
+   "split_lines": 3.8,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "0810-1 24b1e51814408079bd2eee483ee6c3a4.md",
+  "chars": 1824,
+  "score": 6.11,
+  "signals": {
+   "split_lines": 3.8,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "0902-3 2631e518144080748cedcd69708b603e.md",
+  "chars": 1824,
+  "score": 6.11,
+  "signals": {
+   "split_lines": 3.8,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "1101 29e1e518144080b08ca9f329879a8e86.md",
+  "chars": 1824,
+  "score": 6.11,
+  "signals": {
+   "split_lines": 3.8,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "DATE 31a1e518144080e48e86d495f2d705af.md",
+  "chars": 1824,
+  "score": 6.11,
+  "signals": {
+   "split_lines": 3.8,
+   "question": 1.8
+  }
+ },
+ {
+  "file": "1104-1 1341e518144080189c50fa420cf90377.md",
+  "chars": 7107,
+  "score": 6.09,
+  "signals": {
+   "ellipsis": 2.6,
+   "question": 1.2
+  }
+ },
+ {
+  "file": "0206-1 ca4b55b955e54656a2eac885c333da36.md",
+  "chars": 1470,
+  "score": 6.07,
+  "signals": {
+   "ellipsis": 2.7,
+   "redup": 1.9,
+   "split_lines": 1.1
+  }
+ },
+ {
+  "file": "0814-3 dc9a51b139604615afee1f2a8aa14660.md",
+  "chars": 1523,
+  "score": 6.05,
+  "signals": {
+   "ellipsis": 3.9,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "0829-2 f221e7ef6731491483d8b904bca66dbb.md",
+  "chars": 4295,
+  "score": 6.05,
+  "signals": {
+   "question": 1.8,
+   "quote": 1.1,
+   "exclam": 1.1,
+   "redup": 1.1
+  }
+ },
+ {
+  "file": "0208-2 ca59965865fc4244ab893df8b9906826.md",
+  "chars": 1540,
+  "score": 6.04,
+  "signals": {
+   "redup": 2.6,
+   "split_lines": 2.5
+  }
+ },
+ {
+  "file": "1730 49baf081eeb445b195105add415be142.md",
+  "chars": 1463,
+  "score": 6.04,
+  "signals": {
+   "onoma": 4.1,
+   "ellipsis": 1.3
+  }
+ },
+ {
+  "file": "0818-1 c6e5661e6bfb4db994c9878f846f24a0.md",
+  "chars": 1004,
+  "score": 6.03,
+  "signals": {
+   "quote": 1.9,
+   "rare3": 1.8,
+   "redup": 1.6
+  }
+ },
+ {
+  "file": "王室珠寶 1200 58c11b1c385d49ca9139e6b6c298e079.md",
+  "chars": 1112,
+  "score": 6.03,
+  "signals": {
+   "redup": 3.1,
+   "rare3": 1.4
+  }
+ },
+ {
+  "file": "0624-3 3891e518144080c6a088f96616df82bb.md",
+  "chars": 1799,
+  "score": 6.02,
+  "signals": {
+   "split_lines": 3.7,
+   "question": 1.7
+  }
+ },
+ {
+  "file": "DATE 3441e518144080deabe3c25033468de7.md",
+  "chars": 1799,
+  "score": 6.02,
+  "signals": {
+   "split_lines": 3.7,
+   "question": 1.7
+  }
+ },
+ {
+  "file": "DATE 3571e5181440803ebc10f1a6eff8f741.md",
+  "chars": 1799,
+  "score": 6.02,
+  "signals": {
+   "split_lines": 3.7,
+   "question": 1.7
+  }
+ },
+ {
+  "file": "DATE 974b023a583e48f2ad4dc3eb2fef3674.md",
+  "chars": 1799,
+  "score": 6.02,
+  "signals": {
+   "split_lines": 3.7,
+   "question": 1.7
+  }
+ },
+ {
+  "file": "1001-1 1121e51814408046b8add7b188616c8c.md",
+  "chars": 3621,
+  "score": 6.01,
+  "signals": {
+   "question": 3.4,
+   "redup": 1.1
+  }
+ },
+ {
+  "file": "烏南反攻 1200 2f0f98ebf44c40889070c51e4f8a9330.md",
+  "chars": 1135,
+  "score": 6.01,
+  "signals": {
+   "exclam": 4.6
+  }
+ },
+ {
+  "file": "0918-1 2721e518144080de92d5f7cb830d7ad6.md",
+  "chars": 6347,
+  "score": 6.0,
+  "signals": {
+   "line_std": 3.9,
+   "ellipsis": 1.2
+  }
+ },
+ {
+  "file": "0315-2 1b71e5181440800e9cbcdb39062c3a62.md",
+  "chars": 6024,
+  "score": 5.95,
+  "signals": {
+   "redup": 1.7,
+   "ellipsis": 1.2,
+   "quote": 1.2
+  }
+ },
+ {
+  "file": "0507-2 3591e51814408070a79be8cdeb96fc6d.md",
+  "chars": 1744,
+  "score": 5.95,
+  "signals": {
+   "split_lines": 2.9,
+   "redup": 1.8
+  }
+ },
+ {
+  "file": "0611-1 ef83bce6f29e45658f6120ac4c023f2d.md",
+  "chars": 3402,
+  "score": 5.92,
+  "signals": {
+   "exclam": 2.1,
+   "question": 1.6,
+   "quote": 1.5
+  }
+ },
+ {
+  "file": "0113-1 2e61e5181440806994c0f3e92b1b5f74.md",
+  "chars": 4772,
+  "score": 5.89,
+  "signals": {
+   "exclam": 1.8,
+   "redup": 1.5,
+   "ellipsis": 1.2
+  }
+ },
+ {
+  "file": "0201-5 a96e6e277a1a4ef0b18c3fa06e211e0d.md",
+  "chars": 1991,
+  "score": 5.88,
+  "signals": {
+   "line_std": 2.8,
+   "ellipsis": 1.4
+  }
+ },
+ {
+  "file": "0315-2 9217b56885fe4a14b3e862470a7dcb88.md",
+  "chars": 1470,
+  "score": 5.85,
+  "signals": {
+   "ellipsis": 2.0,
+   "split_lines": 1.6,
+   "onoma": 1.5
+  }
+ },
+ {
+  "file": "0508-5 c7b6c15a240c4178a16ca2117bb8e5c3.md",
+  "chars": 2141,
+  "score": 5.85,
+  "signals": {
+   "redup": 1.7,
+   "question": 1.6,
+   "rare3": 1.5
+  }
+ },
+ {
+  "file": "1004-4 1151e5181440801ab407c2b5bbbb8eaa.md",
+  "chars": 1285,
+  "score": 5.85,
+  "signals": {
+   "exclam": 1.9,
+   "redup": 1.1
+  }
+ },
+ {
+  "file": "0803-2 2441e518144080f3873fd1b779673c3f.md",
+  "chars": 5901,
+  "score": 5.84,
+  "signals": {
+   "line_std": 3.2,
+   "question": 1.3,
+   "quote": 1.1
+  }
+ },
+ {
+  "file": "1105-2 1351e518144080cbb0b9fd61d42912e5.md",
+  "chars": 1814,
+  "score": 5.81,
+  "signals": {
+   "ellipsis": 1.5,
+   "question": 1.3,
+   "split_lines": 1.2,
+   "quote": 1.0
+  }
+ },
+ {
+  "file": "守靈鎮位1730 8141ef9733f942cd980ecfa3ff395ae0.md",
+  "chars": 1367,
+  "score": 5.79,
+  "signals": {
+   "redup": 4.3,
+   "rare3": 1.5
+  }
+ },
+ {
+  "file": "0427-1 3f024de8ee004deaa0e735048500dbc7.md",
+  "chars": 3770,
+  "score": 5.78,
+  "signals": {
+   "redup": 1.8,
+   "question": 1.7,
+   "quote": 1.2
+  }
+ },
+ {
+  "file": "0816-1 2511e518144080969bdbcf0a5b2f2265.md",
+  "chars": 2953,
+  "score": 5.77,
+  "signals": {
+   "question": 3.8,
+   "line_std": 1.7
+  }
+ },
+ {
+  "file": "0309-3 a033592bc5ff44b489382f3bca116718.md",
+  "chars": 1898,
+  "score": 5.72,
+  "signals": {
+   "question": 2.2,
+   "redup": 1.1
+  }
+ },
+ {
+  "file": "烏專 cee500dfbe7943e9a3c9b618e7ea6313.md",
+  "chars": 6661,
+  "score": 5.7,
+  "signals": {
+   "split_lines": 3.4,
+   "onoma": 1.4
+  }
+ },
+ {
+  "file": "0202-2 18e1e5181440807088ecd270937c8555.md",
+  "chars": 1195,
+  "score": 5.69,
+  "signals": {
+   "quote": 3.8,
+   "split_lines": 1.7
+  }
+ },
+ {
+  "file": "0425-5 34d1e5181440800a999fe0852947a40f.md",
+  "chars": 3165,
+  "score": 5.68,
+  "signals": {
+   "ellipsis": 4.1
+  }
+ },
+ {
+  "file": "1128-1 ac84d66a8c344b9f982137de9479388c.md",
+  "chars": 3858,
+  "score": 5.68,
+  "signals": {
+   "ellipsis": 2.1,
+   "exclam": 1.4,
+   "question": 1.3
+  }
+ },
+ {
+  "file": "1111-1 13a1e51814408007976dd963f661afb3.md",
+  "chars": 1924,
+  "score": 5.66,
+  "signals": {
+   "onoma": 2.9,
+   "ellipsis": 1.2
+  }
+ },
+ {
+  "file": "0221-2 522419757b154d19831ec9ff9eab2936.md",
+  "chars": 2027,
+  "score": 5.62,
+  "signals": {
+   "question": 2.7,
+   "ellipsis": 1.1,
+   "redup": 1.1
+  }
+ },
+ {
+  "file": "1002-2 0152c9a1d1974711acc21cf9cf61242c.md",
+  "chars": 816,
+  "score": 5.62,
+  "signals": {
+   "quote": 3.1
+  }
+ },
+ {
+  "file": "0707-4 da2a0bfca9f74f06a1c3cdb6854e01c8.md",
+  "chars": 1949,
+  "score": 5.6,
+  "signals": {
+   "redup": 3.3,
+   "rare3": 1.2,
+   "quote": 1.2
+  }
+ },
+ {
+  "file": "0131-2 18c1e5181440800aae21e3be223964e1.md",
+  "chars": 4839,
+  "score": 5.59,
+  "signals": {
+   "quote": 1.8,
+   "ellipsis": 1.8,
+   "exclam": 1.0
+  }
+ },
+ {
+  "file": "1105-1 1351e518144080a58716c118a67af17b.md",
+  "chars": 1562,
+  "score": 5.58,
+  "signals": {
+   "exclam": 2.7
+  }
+ },
+ {
+  "file": "0430-1 ead003016e804b69b5fcda9fc2ff0068.md",
+  "chars": 4040,
+  "score": 5.57,
+  "signals": {
+   "ellipsis": 3.9
+  }
+ },
+ {
+  "file": "0423-1 34b1e518144080f0ab61f211968ab76d.md",
+  "chars": 6896,
+  "score": 5.55,
+  "signals": {
+   "question": 2.9,
+   "line_std": 1.1,
+   "quote": 1.0
+  }
+ },
+ {
+  "file": "0501-4 702ad2bc868c49fba567dd49fe17ad3c.md",
+  "chars": 1185,
+  "score": 5.55,
+  "signals": {
+   "onoma": 3.9,
+   "redup": 1.0
+  }
+ },
+ {
+  "file": "0724-4 ef37885ab28241c5961fce389d773584.md",
+  "chars": 1565,
+  "score": 5.55,
+  "signals": {
+   "redup": 2.3,
+   "onoma": 1.4,
+   "ellipsis": 1.2
+  }
+ },
+ {
+  "file": "普欽簽了1200 2eae0b8f45384d198030bb7e04871c96.md",
+  "chars": 1389,
+  "score": 5.54,
+  "signals": {
+   "onoma": 4.0,
+   "split_lines": 1.5
+  }
+ },
+ {
+  "file": "0610-1 20f1e518144080e798abd3e423f870a1.md",
+  "chars": 11668,
+  "score": 5.53,
+  "signals": {
+   "line_std": 2.2,
+   "quote": 1.4,
+   "ellipsis": 1.0
+  }
+ },
+ {
+  "file": "1216-1 15e1e518144080c59fb9f87a5c45b817.md",
+  "chars": 2541,
+  "score": 5.53,
+  "signals": {
+   "redup": 3.9
+  }
+ },
+ {
+  "file": "0405-1 6709ef7f4f4e475b995625b07f68ba38.md",
+  "chars": 1572,
+  "score": 5.52,
+  "signals": {
+   "ellipsis": 2.9,
+   "exclam": 1.6
+  }
+ },
+ {
+  "file": "馬林道歉1200 99f7ad5738f94234a1c63c4523ede0d4.md",
+  "chars": 1044,
+  "score": 5.49,
+  "signals": {
+   "split_lines": 2.5,
+   "exclam": 1.9,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "1229-1 d1a4b7c26b4549ed92ace9e8b77eab94.md",
+  "chars": 1777,
+  "score": 5.47,
+  "signals": {
+   "line_std": 2.5,
+   "redup": 1.6,
+   "ellipsis": 1.3
+  }
+ },
+ {
+  "file": "空中吸塵 1700 d6b60c22ba1b4264baef5844cb778a3f.md",
+  "chars": 1263,
+  "score": 5.46,
+  "signals": {
+   "split_lines": 2.9,
+   "rare3": 1.6,
+   "exclam": 1.0
+  }
+ },
+ {
+  "file": "0206-1 2ff1e51814408043a577c43ce2df18b8.md",
+  "chars": 3190,
+  "score": 5.44,
+  "signals": {
+   "question": 1.8,
+   "quote": 1.8,
+   "split_lines": 1.4
+  }
+ },
+ {
+  "file": "0616-1 3811e518144080ffac81d95829abb717.md",
+  "chars": 6117,
+  "score": 5.44,
+  "signals": {
+   "question": 1.2,
+   "rare3": 1.1,
+   "quote": 1.0
+  }
+ },
+ {
+  "file": "1218-2 3a5c6f3a03aa4adaad3b42c38587bf52.md",
+  "chars": 1213,
+  "score": 5.44,
+  "signals": {
+   "ellipsis": 2.1,
+   "rare3": 1.5,
+   "quote": 1.1
+  }
+ },
+ {
+  "file": "0625-2 282faad68b9c40f3a5c8fd504b9ec66a.md",
+  "chars": 1021,
+  "score": 5.43,
+  "signals": {
+   "onoma": 3.0,
+   "rare3": 1.1,
+   "redup": 1.1
+  }
+ },
+ {
+  "file": "1002-2 1131e5181440806aa287cd3220fc9ad5.md",
+  "chars": 1772,
+  "score": 5.42,
+  "signals": {
+   "ellipsis": 2.6,
+   "onoma": 1.1
+  }
+ },
+ {
+  "file": "1219-1 0bf4c7e4d49745c68f8dfc6974a34841.md",
+  "chars": 3140,
+  "score": 5.41,
+  "signals": {
+   "onoma": 2.0,
+   "ellipsis": 1.7
+  }
+ },
+ {
+  "file": "0825-1 9c96bfdd7fe04dcf9a6405ec257d6cf9.md",
+  "chars": 4284,
+  "score": 5.4,
+  "signals": {
+   "ellipsis": 2.8,
+   "question": 1.5
+  }
+ },
+ {
+  "file": "0917-1 2711e5181440806588fce028ac375691.md",
+  "chars": 4113,
+  "score": 5.39,
+  "signals": {
+   "line_std": 3.7
+  }
+ },
+ {
+  "file": "0327-3 a52aac77bb1045d2aafcf5bdbedfd4c5.md",
+  "chars": 1760,
+  "score": 5.36,
+  "signals": {
+   "exclam": 2.0,
+   "quote": 1.2,
+   "ellipsis": 1.1,
+   "rare3": 1.0
+  }
+ },
+ {
+  "file": "0222-2 30f1e518144080e4aedac95e1065c278.md",
+  "chars": 4618,
+  "score": 5.35,
+  "signals": {
+   "line_std": 4.5
+  }
+ },
+ {
+  "file": "1009-2 795bb37759e6403c94b3a868f6af9d14.md",
+  "chars": 3692,
+  "score": 5.35,
+  "signals": {
+   "ellipsis": 1.7,
+   "onoma": 1.6,
+   "question": 1.3
+  }
+ },
+ {
+  "file": "0511-4 77793e8483354377ba05814188bc78dc.md",
+  "chars": 1393,
+  "score": 5.34,
+  "signals": {
+   "exclam": 2.6,
+   "onoma": 1.8
+  }
+ },
+ {
+  "file": "0812-1 9ac2f9b4327e48deba10c1fdc5b75d05.md",
+  "chars": 1702,
+  "score": 5.34,
+  "signals": {
+   "exclam": 2.8,
+   "rare3": 1.1
+  }
+ },
+ {
+  "file": "北溪漏氣 1200 fb58585362c046899f0d4921a3fbcbd1.md",
+  "chars": 1641,
+  "score": 5.34,
+  "signals": {
+   "question": 3.1
+  }
+ },
+ {
+  "file": "0401-2 fa07b96a0f214dab98b7523b363ae0e8.md",
+  "chars": 3473,
+  "score": 5.32,
+  "signals": {
+   "ellipsis": 2.4,
+   "exclam": 1.4,
+   "question": 1.2
+  }
+ },
+ {
+  "file": "1004 d0e9a314ea014e43ae1eae1c35407382.md",
+  "chars": 1411,
+  "score": 5.32,
+  "signals": {
+   "exclam": 2.0,
+   "quote": 1.6
+  }
+ },
+ {
+  "file": "1024-1 7ac549d9b9c4454087b2a03cd6f1c1e3.md",
+  "chars": 2623,
+  "score": 5.32,
+  "signals": {
+   "line_std": 4.6
+  }
+ }
+]
