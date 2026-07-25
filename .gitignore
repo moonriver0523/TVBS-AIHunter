@@ -25,3 +25,6 @@ __pycache__/
 
 # 工作狀態（進度快照等操作性檔案，不進版控）
 .omc/
+
+# 語料清除用的機密字串清單：內含真實帳密，絕對不可進版控
+style-corpus/.secret-tokens.txt
