@@ -1,0 +1,2024 @@
+{
+ "video_style_candidates": [
+  "0211-4 3041e51814408002a497dcfd7387ad05.md",
+  "0218-4 30b1e518144080a48b70e7960f670363.md",
+  "0226-2 3131e518144080acb127efbd296a5dc1.md",
+  "0410-2 33e1e5181440809bac17c0b8976bd62d.md"
+ ],
+ "ranking": [
+  {
+   "file": "0308-2 31d1e51814408041949dcf73225db818.md",
+   "chars": 3989,
+   "score": 17.25,
+   "signals": {
+    "ellipsis": 6.5,
+    "phrase_repeat": 2.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "0717-1 2331e518144080e6849bffd6029b1255.md",
+   "chars": 3705,
+   "score": 13.93,
+   "signals": {
+    "ellipsis": 3.4,
+    "phrase_repeat": 2.7,
+    "exclam_os": 1.3,
+    "onoma": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "1004 d0e9a314ea014e43ae1eae1c35407382.md",
+   "chars": 1411,
+   "score": 13.4,
+   "signals": {
+    "phrase_repeat": 6.3,
+    "exclam_os": 2.7,
+    "onoma": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0619-1 a7f1f1ca6855439498c79535ad4f245a.md",
+   "chars": 1549,
+   "score": 13.04,
+   "signals": {
+    "phrase_repeat": 5.3,
+    "ellipsis": 2.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "1010-1 890a5e2ca4044d6dbead585e97fedca9.md",
+   "chars": 3574,
+   "score": 12.99,
+   "signals": {
+    "ellipsis": 2.8,
+    "question_os": 2.3,
+    "exclam_os": 2.2,
+    "phrase_repeat": 1.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "0910-1 f169d8c4e220489fbdddfe15b1d817cf.md",
+   "chars": 1066,
+   "score": 12.76,
+   "signals": {
+    "phrase_repeat": 7.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "世足卡達 74df534b2ed14b689fca3fb70fb7a2ca.md",
+   "chars": 2462,
+   "score": 12.44,
+   "signals": {
+    "phrase_repeat": 8.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0322-2 e4cb2c8956a3460c9a2f4bbbf7c185d4.md",
+   "chars": 844,
+   "score": 11.95,
+   "signals": {
+    "phrase_repeat": 7.0,
+    "split_lines": 2.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0405-1 6709ef7f4f4e475b995625b07f68ba38.md",
+   "chars": 1572,
+   "score": 11.95,
+   "signals": {
+    "ellipsis": 3.1,
+    "exclam_os": 2.2,
+    "phrase_repeat": 1.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "1227-4 b1344b5b385447faaba478a46d2f33a3.md",
+   "chars": 1832,
+   "score": 11.57,
+   "signals": {
+    "exclam_os": 3.7,
+    "phrase_repeat": 2.4,
+    "ellipsis": 1.6,
+    "question_os": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "1018-1 1231e518144080258824dc04d50847a1.md",
+   "chars": 4437,
+   "score": 11.5,
+   "signals": {
+    "ellipsis": 5.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0415-1 b002c7e03e4c4fbda4e647aaa111a360.md",
+   "chars": 3396,
+   "score": 11.49,
+   "signals": {
+    "onoma": 5.9,
+    "ellipsis": 2.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0113-1 2e61e5181440806994c0f3e92b1b5f74.md",
+   "chars": 4577,
+   "score": 11.41,
+   "signals": {
+    "phrase_repeat": 5.1,
+    "ellipsis": 1.3,
+    "question_os": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "1219-2 3c9747f7a7cd4b419e347b8d4eec31f3.md",
+   "chars": 1263,
+   "score": 11.3,
+   "signals": {
+    "ellipsis": 5.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0910-2 895d0709fa8c452d80a77f75b2807011.md",
+   "chars": 1876,
+   "score": 11.14,
+   "signals": {
+    "phrase_repeat": 5.8,
+    "ellipsis": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0305-3 b979056790df44d0b1709e71acd9cc5c.md",
+   "chars": 1177,
+   "score": 11.12,
+   "signals": {
+    "phrase_repeat": 7.0,
+    "line_std": 2.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "1105-1 1351e518144080a58716c118a67af17b.md",
+   "chars": 1562,
+   "score": 10.85,
+   "signals": {
+    "phrase_repeat": 3.8,
+    "exclam_os": 3.0,
+    "ellipsis": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "1111-1 13a1e51814408007976dd963f661afb3.md",
+   "chars": 1924,
+   "score": 10.63,
+   "signals": {
+    "onoma": 5.9,
+    "ellipsis": 1.3,
+    "exclam_os": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0327-1 9f6f2334f8ac4f4abd2440bb84581d01.md",
+   "chars": 1282,
+   "score": 10.56,
+   "signals": {
+    "ellipsis": 5.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0929-2 1101e518144080599df5d0b74d9619a0.md",
+   "chars": 1272,
+   "score": 10.38,
+   "signals": {
+    "onoma": 10.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "1215-3 15d1e51814408005bcc3d34cab3e8e76.md",
+   "chars": 1494,
+   "score": 10.32,
+   "signals": {
+    "phrase_repeat": 3.8,
+    "ellipsis": 1.7,
+    "question_os": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0903-1 dd8e5d815ccb445e91c509faa1fd9114.md",
+   "chars": 4627,
+   "score": 10.27,
+   "signals": {
+    "onoma": 3.0,
+    "phrase_repeat": 2.8,
+    "ellipsis": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0914-4 26e1e5181440807f8f12e52cf0e59ea8.md",
+   "chars": 2104,
+   "score": 10.18,
+   "signals": {
+    "onoma": 5.7,
+    "phrase_repeat": 1.3,
+    "ellipsis": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "1219-1 0bf4c7e4d49745c68f8dfc6974a34841.md",
+   "chars": 3140,
+   "score": 10.17,
+   "signals": {
+    "onoma": 4.2,
+    "ellipsis": 1.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "0204-3 1901e518144080c5a13adde696a84166.md",
+   "chars": 2679,
+   "score": 10.03,
+   "signals": {
+    "ellipsis": 2.9,
+    "onoma": 1.9,
+    "split_lines": 1.6,
+    "phrase_repeat": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "1121-1 1451e518144080048051d3bba0f24257.md",
+   "chars": 1314,
+   "score": 9.74,
+   "signals": {
+    "onoma": 5.9,
+    "exclam_os": 1.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "0122-1 65cb607d99124909b4e3a745d115394b.md",
+   "chars": 1388,
+   "score": 9.65,
+   "signals": {
+    "phrase_repeat": 5.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "1218-2 3a5c6f3a03aa4adaad3b42c38587bf52.md",
+   "chars": 1213,
+   "score": 9.62,
+   "signals": {
+    "phrase_repeat": 3.1,
+    "ellipsis": 2.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0628-4 9e77950e371c4c93abbfd422cf9adef5.md",
+   "chars": 1242,
+   "score": 9.55,
+   "signals": {
+    "phrase_repeat": 2.6,
+    "exclam_os": 1.9,
+    "ellipsis": 1.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "1002-2 1131e5181440806aa287cd3220fc9ad5.md",
+   "chars": 1772,
+   "score": 9.5,
+   "signals": {
+    "ellipsis": 2.8,
+    "onoma": 2.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0707-1 3961e5181440804da1f7f1e6c931a0a3.md",
+   "chars": 4791,
+   "score": 9.45,
+   "signals": {
+    "exclam_os": 4.6,
+    "onoma": 3.5,
+    "line_std": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0530-1 8ad85fa35100401e9b1bc465f285fe85.md",
+   "chars": 1039,
+   "score": 9.34,
+   "signals": {
+    "onoma": 8.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "1025-1 58e78d1a115444749afb09b0d12d9a7f.md",
+   "chars": 4643,
+   "score": 9.34,
+   "signals": {
+    "phrase_repeat": 5.0,
+    "onoma": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0722-3 1e11d291fbde4eae98ceaa9b9a52baf4.md",
+   "chars": 1386,
+   "score": 9.25,
+   "signals": {
+    "exclam_os": 5.7,
+    "phrase_repeat": 2.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "0515-1 0923ccf9deb2432388431422f27c99d2.md",
+   "chars": 1357,
+   "score": 9.23,
+   "signals": {
+    "question_os": 7.8,
+    "exclam_os": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0430-1 ead003016e804b69b5fcda9fc2ff0068.md",
+   "chars": 4040,
+   "score": 9.15,
+   "signals": {
+    "ellipsis": 4.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0725-1 c744c6e12597425c97e7bde858b68efc.md",
+   "chars": 3263,
+   "score": 9.1,
+   "signals": {
+    "onoma": 4.8,
+    "exclam_os": 3.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0425-5 34d1e5181440800a999fe0852947a40f.md",
+   "chars": 3165,
+   "score": 9.08,
+   "signals": {
+    "ellipsis": 4.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "0811-1 6cceed40650d4060b1dcfc08e458e259.md",
+   "chars": 2043,
+   "score": 9.05,
+   "signals": {
+    "question_os": 2.2,
+    "exclam_os": 2.1,
+    "phrase_repeat": 1.4,
+    "ellipsis": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0201-2 19f6b8da0ab1413f91ef19c736d24c83.md",
+   "chars": 2275,
+   "score": 8.96,
+   "signals": {
+    "line_std": 4.4,
+    "phrase_repeat": 3.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0814-1 cfe9103c6d7c4612882a5bab3bdaf0f7.md",
+   "chars": 1247,
+   "score": 8.92,
+   "signals": {
+    "ellipsis": 3.6,
+    "question_os": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0722-1 b88cb1fa25e24182bf979f42a985d1e3.md",
+   "chars": 7006,
+   "score": 8.83,
+   "signals": {
+    "question_os": 4.2,
+    "ellipsis": 2.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0609-1 e0d7ceab124945cfb1db6098960263f9.md",
+   "chars": 2038,
+   "score": 8.77,
+   "signals": {
+    "exclam_os": 2.6,
+    "question_os": 2.0,
+    "phrase_repeat": 1.2,
+    "ellipsis": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0401-2 fa07b96a0f214dab98b7523b363ae0e8.md",
+   "chars": 3473,
+   "score": 8.68,
+   "signals": {
+    "ellipsis": 2.6,
+    "phrase_repeat": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0212-1 8ba2385abe5749cd9859b7b039ab9476.md",
+   "chars": 1594,
+   "score": 8.65,
+   "signals": {
+    "onoma": 5.2,
+    "phrase_repeat": 2.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "1213 f47b4de43fb145798392e8b2fb64a524.md",
+   "chars": 2008,
+   "score": 8.57,
+   "signals": {
+    "ellipsis": 3.3,
+    "phrase_repeat": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "外媒習大1730 f8a095b06fb1488aa2010d9dd20db9b3.md",
+   "chars": 1632,
+   "score": 8.54,
+   "signals": {
+    "ellipsis": 4.0,
+    "split_lines": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "1108-1 1351e518144080bbbb8adb2c7cf86f2f.md",
+   "chars": 4929,
+   "score": 8.53,
+   "signals": {
+    "question_os": 2.3,
+    "phrase_repeat": 1.8,
+    "ellipsis": 1.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "1002-1 1131e518144080b89f3cd2ca68a25717.md",
+   "chars": 2152,
+   "score": 8.51,
+   "signals": {
+    "ellipsis": 3.4,
+    "question_os": 1.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0624-1 9f1f81d5edf24a24880ce031cb6f07e7.md",
+   "chars": 4090,
+   "score": 8.46,
+   "signals": {
+    "ellipsis": 3.4,
+    "exclam_os": 1.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "1105-2 1351e518144080cbb0b9fd61d42912e5.md",
+   "chars": 1814,
+   "score": 8.45,
+   "signals": {
+    "phrase_repeat": 1.7,
+    "ellipsis": 1.6,
+    "split_lines": 1.3,
+    "question_os": 1.2,
+    "onoma": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "1004-4 1151e5181440801ab407c2b5bbbb8eaa.md",
+   "chars": 1285,
+   "score": 8.44,
+   "signals": {
+    "exclam_os": 2.6,
+    "phrase_repeat": 2.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0802-4 2431e51814408086ae44e64615108176.md",
+   "chars": 8768,
+   "score": 8.42,
+   "signals": {
+    "ellipsis": 2.2,
+    "phrase_repeat": 2.1,
+    "line_std": 1.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "0713-1 7547582b73054ebfbb5273b5a85caf2a.md",
+   "chars": 2100,
+   "score": 8.41,
+   "signals": {
+    "phrase_repeat": 2.7,
+    "question_os": 2.2,
+    "ellipsis": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0614-1 dac133f8e8f24b9c93f9ccf4fbb75745.md",
+   "chars": 1659,
+   "score": 8.37,
+   "signals": {
+    "ellipsis": 2.9,
+    "onoma": 1.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "0814-3 dc9a51b139604615afee1f2a8aa14660.md",
+   "chars": 1523,
+   "score": 8.36,
+   "signals": {
+    "ellipsis": 4.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0724-1 bebf5c84958e4dd6ab3810607ff4f258.md",
+   "chars": 2839,
+   "score": 8.24,
+   "signals": {
+    "phrase_repeat": 3.4,
+    "exclam_os": 1.4,
+    "line_std": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0912-1 9d65c3a0fd784a52aede1229c32c294e.md",
+   "chars": 1988,
+   "score": 8.19,
+   "signals": {
+    "ellipsis": 3.5,
+    "line_std": 2.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "普欽簽了1200 2eae0b8f45384d198030bb7e04871c96.md",
+   "chars": 1389,
+   "score": 8.17,
+   "signals": {
+    "onoma": 4.7,
+    "phrase_repeat": 2.0,
+    "split_lines": 1.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0524-1 b3fa7fda416d41eeab2137332c94233f.md",
+   "chars": 1529,
+   "score": 8.12,
+   "signals": {
+    "phrase_repeat": 5.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0408-1 abec658bb1554f288b21445a47229340.md",
+   "chars": 4375,
+   "score": 8.11,
+   "signals": {
+    "ellipsis": 2.7,
+    "question_os": 1.2,
+    "exclam_os": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "獨力反攻1800 5290e3cc90e140f9a44682dd33560204.md",
+   "chars": 1314,
+   "score": 8.05,
+   "signals": {
+    "exclam_os": 4.9,
+    "onoma": 2.8,
+    "split_lines": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0315-2 9217b56885fe4a14b3e862470a7dcb88.md",
+   "chars": 1470,
+   "score": 8.02,
+   "signals": {
+    "onoma": 3.2,
+    "ellipsis": 2.2,
+    "split_lines": 1.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "0814-1 85e9fde8710b4044af75207cb2e6e658.md",
+   "chars": 4843,
+   "score": 7.89,
+   "signals": {
+    "ellipsis": 2.6,
+    "question_os": 2.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "1127-1 2b71e51814408037917ae7dac13a6985.md",
+   "chars": 3176,
+   "score": 7.88,
+   "signals": {
+    "phrase_repeat": 4.9,
+    "line_std": 1.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "0703-1 3921e5181440804c9b4ae7fcfafcd49a.md",
+   "chars": 3521,
+   "score": 7.85,
+   "signals": {
+    "exclam_os": 4.8,
+    "phrase_repeat": 2.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "颶風斷電 1700 6c86a235f46b4bd4a98f67e5750fc728.md",
+   "chars": 1188,
+   "score": 7.82,
+   "signals": {
+    "ellipsis": 3.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "1018-1 65d430f28ecb499ba316c4d02b5bf0f5.md",
+   "chars": 5102,
+   "score": 7.8,
+   "signals": {
+    "exclam_os": 2.8,
+    "question_os": 2.0,
+    "onoma": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "梅根被罵 723b6da2eade410db556accc30a7d6c4.md",
+   "chars": 1328,
+   "score": 7.68,
+   "signals": {
+    "onoma": 2.7,
+    "phrase_repeat": 1.8,
+    "ellipsis": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0912-2 be901e4f828744368a0fe31ae945c83d.md",
+   "chars": 3336,
+   "score": 7.66,
+   "signals": {
+    "ellipsis": 1.9,
+    "phrase_repeat": 1.7,
+    "exclam_os": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "1231-2 baecca22d5e74540890d35607c40209d.md",
+   "chars": 1488,
+   "score": 7.66,
+   "signals": {
+    "onoma": 3.2,
+    "ellipsis": 2.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0606-1 981b6cab41eb4ca8b666ba2788499b2d.md",
+   "chars": 4468,
+   "score": 7.63,
+   "signals": {
+    "ellipsis": 2.1,
+    "phrase_repeat": 1.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "0708-5 618bdbab78524a46be347460bab8bffa.md",
+   "chars": 1601,
+   "score": 7.6,
+   "signals": {
+    "onoma": 7.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0724-1 ec5a314880c64a7596e9f108f7fe4bff.md",
+   "chars": 1950,
+   "score": 7.57,
+   "signals": {
+    "phrase_repeat": 3.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "1114-1 39888bc5fcb74db1867fd3498d88e0f3.md",
+   "chars": 3960,
+   "score": 7.54,
+   "signals": {
+    "ellipsis": 2.1,
+    "question_os": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0822-1 d8759e7b9b5e4ad1aa46419cee3b1a7a.md",
+   "chars": 3165,
+   "score": 7.44,
+   "signals": {
+    "phrase_repeat": 1.8,
+    "ellipsis": 1.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "0912-3 e596933a12634d509bc6b6481f6dbf7e.md",
+   "chars": 1422,
+   "score": 7.43,
+   "signals": {
+    "phrase_repeat": 2.3,
+    "ellipsis": 1.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0310-2 52bd9c17594b4618af92390b6c3aed8d.md",
+   "chars": 775,
+   "score": 7.42,
+   "signals": {
+    "phrase_repeat": 4.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0619-3 3841e5181440803ab963fc54bf98e6e9.md",
+   "chars": 5686,
+   "score": 7.37,
+   "signals": {
+    "question_os": 4.2,
+    "exclam_os": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0615-1 5d4bd1e1b5a24ab2b28fa603e62cee56.md",
+   "chars": 1914,
+   "score": 7.36,
+   "signals": {
+    "ellipsis": 2.0,
+    "exclam_os": 1.3,
+    "phrase_repeat": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0212-2 dadc322ffb734e8798b6c32bf302c50a.md",
+   "chars": 1936,
+   "score": 7.3,
+   "signals": {
+    "phrase_repeat": 2.8,
+    "line_std": 1.4,
+    "ellipsis": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "1009-1 11a1e5181440805bb549c864d357a896.md",
+   "chars": 1552,
+   "score": 7.26,
+   "signals": {
+    "phrase_repeat": 2.2,
+    "ellipsis": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "1006-1 2831e518144080cc945ac84f06899d66.md",
+   "chars": 4173,
+   "score": 7.24,
+   "signals": {
+    "onoma": 1.8,
+    "phrase_repeat": 1.7,
+    "question_os": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0501-1 2d3416d8ee6346c4944d6f2c92eb494e.md",
+   "chars": 3181,
+   "score": 7.21,
+   "signals": {
+    "ellipsis": 3.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0111-3 47aa22702d8747d9bab2bfca0af3841e.md",
+   "chars": 1411,
+   "score": 7.18,
+   "signals": {
+    "ellipsis": 2.1,
+    "phrase_repeat": 2.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0426 c5f03f47f8e542d18d68dca2a5dae6c6.md",
+   "chars": 1529,
+   "score": 7.18,
+   "signals": {
+    "onoma": 4.1,
+    "phrase_repeat": 1.7,
+    "line_std": 1.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "0825-1 9c96bfdd7fe04dcf9a6405ec257d6cf9.md",
+   "chars": 4284,
+   "score": 7.17,
+   "signals": {
+    "ellipsis": 3.0,
+    "question_os": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "1008-1 1191e518144080799b00c0a14bc5e8f4.md",
+   "chars": 2400,
+   "score": 7.13,
+   "signals": {
+    "ellipsis": 2.4,
+    "question_os": 2.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0122-5 ff5d155915774b1db1d7571e54907ef2.md",
+   "chars": 2121,
+   "score": 7.0,
+   "signals": {
+    "question_os": 1.9,
+    "phrase_repeat": 1.7,
+    "onoma": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0803-1 52e3915abc4a457a9847449ef094967c.md",
+   "chars": 1293,
+   "score": 7.0,
+   "signals": {
+    "question_os": 2.7,
+    "phrase_repeat": 2.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0925-4 10c1e518144080d59541dd19517db3d9.md",
+   "chars": 1602,
+   "score": 6.91,
+   "signals": {
+    "ellipsis": 2.3,
+    "onoma": 1.1,
+    "exclam_os": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "無標題 6c6050bbae1840db8bf11aef26b2b2bf.md",
+   "chars": 991,
+   "score": 6.9,
+   "signals": {
+    "exclam_os": 3.5,
+    "phrase_repeat": 2.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0913-4 e5bcefaa50ea400cb6af6480967632b6.md",
+   "chars": 1132,
+   "score": 6.88,
+   "signals": {
+    "phrase_repeat": 3.9,
+    "exclam_os": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0130-1 18b1e51814408036a5c4cc363a98b614.md",
+   "chars": 2248,
+   "score": 6.85,
+   "signals": {
+    "question_os": 2.9,
+    "phrase_repeat": 1.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "0406-1 8cdfd606695b4dce874987544b3ade5c.md",
+   "chars": 1283,
+   "score": 6.85,
+   "signals": {
+    "onoma": 4.8,
+    "exclam_os": 2.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0916-3 e7529ec2dac74c1c89f719b6c86aef6d.md",
+   "chars": 1942,
+   "score": 6.79,
+   "signals": {
+    "ellipsis": 2.5,
+    "exclam_os": 1.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "0909-2 ed938f3454e44d768136be764a2a6a16.md",
+   "chars": 1706,
+   "score": 6.77,
+   "signals": {
+    "exclam_os": 3.5,
+    "ellipsis": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "1104-1 1341e518144080189c50fa420cf90377.md",
+   "chars": 7107,
+   "score": 6.73,
+   "signals": {
+    "ellipsis": 2.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "0215-1 54e5e262592b465ea80d21d5cb677000.md",
+   "chars": 1623,
+   "score": 6.7,
+   "signals": {
+    "exclam_os": 2.3,
+    "ellipsis": 2.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0214-4 28879a4941a24f51b6f488f77af32cf1.md",
+   "chars": 2328,
+   "score": 6.68,
+   "signals": {
+    "ellipsis": 2.9,
+    "line_std": 2.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0605-3 f585828a073d496d927341a0e177ddde.md",
+   "chars": 1256,
+   "score": 6.68,
+   "signals": {
+    "phrase_repeat": 2.5,
+    "exclam_os": 1.8,
+    "question_os": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0131-2 19af943836a34581a188fea21a43305c.md",
+   "chars": 1336,
+   "score": 6.62,
+   "signals": {
+    "ellipsis": 3.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0310-1 1b21e5181440805a83a6c5159e0f3b83.md",
+   "chars": 3206,
+   "score": 6.61,
+   "signals": {
+    "phrase_repeat": 2.7,
+    "line_std": 1.4,
+    "ellipsis": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0331-3 7f46c7c8f67e4494bc89e12aebb41068.md",
+   "chars": 1768,
+   "score": 6.61,
+   "signals": {
+    "onoma": 2.6,
+    "phrase_repeat": 1.7,
+    "exclam_os": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0128-1 504b6b840278434fac136c92716b584e.md",
+   "chars": 1017,
+   "score": 6.57,
+   "signals": {
+    "phrase_repeat": 3.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "仇恨美選1730 1a130fed03bd433ebeaa0a6427fef5b7.md",
+   "chars": 1515,
+   "score": 6.56,
+   "signals": {
+    "split_lines": 2.3,
+    "phrase_repeat": 2.1,
+    "ellipsis": 1.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "展示爆炸 1730 7213caa02df24c928f6b1205fd4d1662.md",
+   "chars": 1361,
+   "score": 6.53,
+   "signals": {
+    "onoma": 6.2,
+    "split_lines": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "1225-1 86671f69e8594032bcd786df95f86026.md",
+   "chars": 2150,
+   "score": 6.41,
+   "signals": {
+    "exclam_os": 3.0,
+    "phrase_repeat": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0120-2 05bd8268c0c14e0b9be4fcae7b071573.md",
+   "chars": 1677,
+   "score": 6.4,
+   "signals": {
+    "exclam_os": 3.4,
+    "phrase_repeat": 1.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "0516-1 84d911914d794bd38c499b293fd05701.md",
+   "chars": 3998,
+   "score": 6.39,
+   "signals": {
+    "ellipsis": 1.9,
+    "onoma": 1.6,
+    "exclam_os": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0830-1 02c15b9e34494641bed4c5f11aa3c0c1.md",
+   "chars": 6666,
+   "score": 6.39,
+   "signals": {
+    "question_os": 1.7,
+    "line_std": 1.5,
+    "onoma": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "1130 100b086354bf4a63a729045ae8c20b5e.md",
+   "chars": 1499,
+   "score": 6.39,
+   "signals": {
+    "ellipsis": 3.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0116-2 f2794cc493df4129983a040bdd94d5cd.md",
+   "chars": 4319,
+   "score": 6.38,
+   "signals": {
+    "line_std": 2.1,
+    "phrase_repeat": 2.0,
+    "ellipsis": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0121-3 d05dd16a91344876885d4a648e08b20a.md",
+   "chars": 1431,
+   "score": 6.32,
+   "signals": {
+    "ellipsis": 2.6,
+    "split_lines": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "1128-1 ac84d66a8c344b9f982137de9479388c.md",
+   "chars": 3858,
+   "score": 6.32,
+   "signals": {
+    "ellipsis": 2.2,
+    "question_os": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0320-1 3291e518144080799faac5aef516d598.md",
+   "chars": 7192,
+   "score": 6.31,
+   "signals": {
+    "line_std": 6.3,
+    "question_os": 2.1,
+    "phrase_repeat": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0321-3 0b6964bf82474672ad5d53ebbacf56d1.md",
+   "chars": 922,
+   "score": 6.3,
+   "signals": {
+    "phrase_repeat": 2.5,
+    "exclam_os": 2.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0911-3 4dc885632a004c35b94bb73dcdf86aa2.md",
+   "chars": 1134,
+   "score": 6.3,
+   "signals": {
+    "phrase_repeat": 3.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0208-4 1941e518144080309586d62bbf612ebd.md",
+   "chars": 2469,
+   "score": 6.26,
+   "signals": {
+    "phrase_repeat": 2.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0421-1 cf73acfc5a1b491792a64356a75c4110.md",
+   "chars": 1556,
+   "score": 6.19,
+   "signals": {
+    "onoma": 2.7,
+    "ellipsis": 1.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "0622-3 3871e518144080299fa3ef06fb2f0173.md",
+   "chars": 2753,
+   "score": 6.19,
+   "signals": {
+    "exclam_os": 2.5,
+    "question_os": 1.9,
+    "phrase_repeat": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0731-2 d3a36462519c4b48aa7310ff1420dfc5.md",
+   "chars": 1516,
+   "score": 6.19,
+   "signals": {
+    "ellipsis": 2.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "0206-1 ca4b55b955e54656a2eac885c333da36.md",
+   "chars": 1470,
+   "score": 6.16,
+   "signals": {
+    "ellipsis": 2.9,
+    "split_lines": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0207-2 3001e5181440809f8a35f5cb68f53641.md",
+   "chars": 6503,
+   "score": 6.11,
+   "signals": {
+    "question_os": 3.1,
+    "phrase_repeat": 1.3,
+    "exclam_os": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0824-1 247d5446963541ad8c4436fdaa1f9668.md",
+   "chars": 1339,
+   "score": 6.09,
+   "signals": {
+    "question_os": 2.3,
+    "ellipsis": 1.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "1011-1 2881e518144080cf99c0c5ed0969a4a9.md",
+   "chars": 4643,
+   "score": 6.06,
+   "signals": {
+    "phrase_repeat": 2.6,
+    "question_os": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "1730 49baf081eeb445b195105add415be142.md",
+   "chars": 1463,
+   "score": 6.05,
+   "signals": {
+    "onoma": 3.1,
+    "ellipsis": 1.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "0822-2 58962f0faa314c419eed585531f49ea7.md",
+   "chars": 3214,
+   "score": 6.04,
+   "signals": {
+    "ellipsis": 2.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "0426-1 0cd04cbfdb5d46f1a64f60acc021fef2.md",
+   "chars": 1469,
+   "score": 6.02,
+   "signals": {
+    "ellipsis": 2.4,
+    "exclam_os": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0407-3 5445397c80594162b3a27e8064296c9a.md",
+   "chars": 764,
+   "score": 5.93,
+   "signals": {
+    "onoma": 4.4,
+    "exclam_os": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0825-1 8890b4e6ae0c485c9a6a138f97a9de79.md",
+   "chars": 2919,
+   "score": 5.92,
+   "signals": {
+    "line_std": 4.0,
+    "ellipsis": 2.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "1114-2 13d1e51814408066bdaefa0fe01b3b62.md",
+   "chars": 837,
+   "score": 5.92,
+   "signals": {
+    "onoma": 4.4,
+    "question_os": 1.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "烏南反攻 1200 2f0f98ebf44c40889070c51e4f8a9330.md",
+   "chars": 1135,
+   "score": 5.92,
+   "signals": {
+    "exclam_os": 4.6,
+    "onoma": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0218-2 ea74f67345f24a39a32e717ef4294db4.md",
+   "chars": 773,
+   "score": 5.91,
+   "signals": {
+    "phrase_repeat": 3.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "烏南戰術1730 6254e524c73d47ae82c068d417ea0910.md",
+   "chars": 1405,
+   "score": 5.89,
+   "signals": {
+    "ellipsis": 2.7,
+    "split_lines": 1.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0801-3 aabea0085d2c4128b8114a238c416c4a.md",
+   "chars": 3606,
+   "score": 5.86,
+   "signals": {
+    "ellipsis": 2.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "0910-3 0237ceebf4f341d4bdadb700d144a422.md",
+   "chars": 1570,
+   "score": 5.84,
+   "signals": {
+    "phrase_repeat": 1.6,
+    "question_os": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0201-5 a96e6e277a1a4ef0b18c3fa06e211e0d.md",
+   "chars": 1991,
+   "score": 5.79,
+   "signals": {
+    "line_std": 3.0,
+    "ellipsis": 1.6,
+    "phrase_repeat": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0122-2 dd6c682cb4d94375a03700b03b364e11.md",
+   "chars": 1418,
+   "score": 5.77,
+   "signals": {
+    "ellipsis": 2.2,
+    "split_lines": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0907-3 2671e5181440801fbef8e9655b604a53.md",
+   "chars": 4004,
+   "score": 5.76,
+   "signals": {
+    "phrase_repeat": 3.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "0111-2 3c3079adbb8a4371b7a9e1514fa409d0.md",
+   "chars": 1800,
+   "score": 5.72,
+   "signals": {
+    "exclam_os": 2.8,
+    "phrase_repeat": 1.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "0505-1 e093f6ca46cb4ed0b21c10e6d219885a.md",
+   "chars": 1723,
+   "score": 5.72,
+   "signals": {
+    "onoma": 3.3,
+    "split_lines": 1.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "0811-1 7ca97c7b17264458b64d0935ac1cb96c.md",
+   "chars": 1476,
+   "score": 5.71,
+   "signals": {
+    "ellipsis": 1.8,
+    "onoma": 1.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "0119-2 508e05502fd94f5fb2ecf6758f19736d.md",
+   "chars": 5191,
+   "score": 5.67,
+   "signals": {
+    "line_std": 4.2,
+    "ellipsis": 2.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0808-1 6f29fa47197443f8824025aedc1df3ba.md",
+   "chars": 4995,
+   "score": 5.66,
+   "signals": {
+    "question_os": 2.7,
+    "ellipsis": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0816-1 2511e518144080969bdbcf0a5b2f2265.md",
+   "chars": 2953,
+   "score": 5.66,
+   "signals": {
+    "question_os": 5.1,
+    "line_std": 1.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "Draft - 左右對照 NEW faebd339f2104c968e774149bf41d3ce.md",
+   "chars": 887,
+   "score": 5.66,
+   "signals": {
+    "phrase_repeat": 2.8,
+    "question_os": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0611-1 ef83bce6f29e45658f6120ac4c023f2d.md",
+   "chars": 3402,
+   "score": 5.64,
+   "signals": {
+    "question_os": 2.3,
+    "exclam_os": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0315-2 1b71e5181440800e9cbcdb39062c3a62.md",
+   "chars": 6024,
+   "score": 5.63,
+   "signals": {
+    "phrase_repeat": 1.4,
+    "ellipsis": 1.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "0913-2 69ee78583cb84caead99ad3cfa832341.md",
+   "chars": 1673,
+   "score": 5.62,
+   "signals": {
+    "ellipsis": 2.0,
+    "onoma": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0620-1 227997cc8613442f9d5a1fc5002382c0.md",
+   "chars": 2411,
+   "score": 5.6,
+   "signals": {
+    "exclam_os": 1.4,
+    "phrase_repeat": 1.2,
+    "ellipsis": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "1012-1 503c764e3ae54ca38e26d5175d57093a.md",
+   "chars": 4561,
+   "score": 5.56,
+   "signals": {
+    "phrase_repeat": 1.4,
+    "exclam_os": 1.2,
+    "question_os": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0102-1 3e64ca88cc5c4fbd88ce3198fb20ca85.md",
+   "chars": 4293,
+   "score": 5.55,
+   "signals": {
+    "question_os": 3.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "0601-1 4a58ae8f009b43289a9a4072e40c5779.md",
+   "chars": 1800,
+   "score": 5.55,
+   "signals": {
+    "ellipsis": 2.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0324-2 32d1e5181440805193aad859e3c5cb02.md",
+   "chars": 2226,
+   "score": 5.54,
+   "signals": {
+    "ellipsis": 1.6,
+    "question_os": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "1117-1 c10addfd0a8744e6be9ffd56cd1a7b41.md",
+   "chars": 1217,
+   "score": 5.51,
+   "signals": {
+    "phrase_repeat": 2.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0208 db9356e3527945a3a032471d0c69d165.md",
+   "chars": 1008,
+   "score": 5.5,
+   "signals": {
+    "onoma": 3.9,
+    "split_lines": 2.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "紅潮未現 1800 699e3c2acb8e4e4b9945bd2b4c743d54.md",
+   "chars": 1865,
+   "score": 5.5,
+   "signals": {
+    "ellipsis": 1.6,
+    "phrase_repeat": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0217-3 b8d70ba1ae684260b552787f924ad2a6.md",
+   "chars": 1263,
+   "score": 5.47,
+   "signals": {
+    "phrase_repeat": 2.4,
+    "question_os": 1.1,
+    "split_lines": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0225 e0c65378b4ab4ecab2ffe93adfbc9b0f.md",
+   "chars": 1740,
+   "score": 5.47,
+   "signals": {
+    "question_os": 4.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "1101-1 f105d4191bd24c1483a80f155d656bf6.md",
+   "chars": 2123,
+   "score": 5.47,
+   "signals": {
+    "ellipsis": 1.8,
+    "phrase_repeat": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0930-1 1111e518144080c3bc0bcbad034b2cf2.md",
+   "chars": 3812,
+   "score": 5.43,
+   "signals": {
+    "ellipsis": 2.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "0511-1 c611c9eba4954b14b2dd8fbafe589b47.md",
+   "chars": 1613,
+   "score": 5.42,
+   "signals": {
+    "phrase_repeat": 2.5,
+    "split_lines": 1.1,
+    "exclam_os": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0821-3 e757b76efcee4a7fb17a170195e2d3c1.md",
+   "chars": 3589,
+   "score": 5.42,
+   "signals": {
+    "ellipsis": 2.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "1121-1 8f042022c0ef4aab82968a1366e5ab45.md",
+   "chars": 3435,
+   "score": 5.41,
+   "signals": {
+    "ellipsis": 2.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0221-2 522419757b154d19831ec9ff9eab2936.md",
+   "chars": 2027,
+   "score": 5.4,
+   "signals": {
+    "question_os": 3.0,
+    "ellipsis": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0423-1 34b1e518144080f0ab61f211968ab76d.md",
+   "chars": 6896,
+   "score": 5.4,
+   "signals": {
+    "question_os": 3.7,
+    "line_std": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0710-2 28d1750cf2e34bf09a8ad444349c1c54.md",
+   "chars": 3830,
+   "score": 5.39,
+   "signals": {
+    "phrase_repeat": 2.6,
+    "exclam_os": 1.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "0102-3 16f1e518144080d1af1ad0e0c2838976.md",
+   "chars": 1722,
+   "score": 5.36,
+   "signals": {
+    "ellipsis": 2.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0327-2 3301e518144080c980d8c1fe7ea61f09.md",
+   "chars": 4841,
+   "score": 5.36,
+   "signals": {
+    "ellipsis": 1.7,
+    "line_std": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0524-2 df7a89f2f4724d6ab9b0ebefcc89715e.md",
+   "chars": 1445,
+   "score": 5.36,
+   "signals": {
+    "exclam_os": 2.2,
+    "onoma": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0716-1 2321e518144080b5ad0bda5feb579256.md",
+   "chars": 9391,
+   "score": 5.36,
+   "signals": {
+    "line_std": 2.7,
+    "phrase_repeat": 2.4,
+    "question_os": 1.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0925-1 10c1e5181440800b8f67dea9e7c29db3.md",
+   "chars": 1209,
+   "score": 5.36,
+   "signals": {
+    "question_os": 3.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0319-1 92e115ec24904d2cb996e3327c9d4bc9.md",
+   "chars": 1500,
+   "score": 5.35,
+   "signals": {
+    "exclam_os": 3.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "0312-4 58d503fc3a9a433393ab6fd47a891137.md",
+   "chars": 2127,
+   "score": 5.34,
+   "signals": {
+    "ellipsis": 1.8,
+    "question_os": 1.7
+   },
+   "video_style": false
+  },
+  {
+   "file": "0229-2 16f883cc7c47445cacf1c272b8756a44.md",
+   "chars": 3608,
+   "score": 5.33,
+   "signals": {
+    "phrase_repeat": 1.8,
+    "onoma": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0814-2 24f1e5181440805d8bd2e9004d84dd63.md",
+   "chars": 6710,
+   "score": 5.32,
+   "signals": {
+    "line_std": 2.2,
+    "phrase_repeat": 2.0,
+    "question_os": 1.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0907-1 ac24dec0297e4207a44d6b00bc5cfe9e.md",
+   "chars": 1666,
+   "score": 5.29,
+   "signals": {
+    "ellipsis": 1.8,
+    "question_os": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "無標題 ea86ad95b17742dc80e0c4fe84df00b6.md",
+   "chars": 1208,
+   "score": 5.25,
+   "signals": {
+    "onoma": 4.8
+   },
+   "video_style": false
+  },
+  {
+   "file": "0818-2 52bcf85b06eb43728809875af67c87ef.md",
+   "chars": 3649,
+   "score": 5.24,
+   "signals": {
+    "ellipsis": 2.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0915-1 5f8851488f904188ad62848a912d1a05.md",
+   "chars": 1396,
+   "score": 5.21,
+   "signals": {
+    "phrase_repeat": 2.1,
+    "exclam_os": 2.0
+   },
+   "video_style": false
+  },
+  {
+   "file": "0501-2 36f06cebea714a2995284fc762c49b16.md",
+   "chars": 717,
+   "score": 5.2,
+   "signals": {
+    "onoma": 2.9,
+    "exclam_os": 2.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0131-2 18c1e5181440800aae21e3be223964e1.md",
+   "chars": 4839,
+   "score": 5.18,
+   "signals": {
+    "ellipsis": 2.0,
+    "onoma": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0310-4 49a86b9a1a94465d9517fa563a310820.md",
+   "chars": 3113,
+   "score": 5.17,
+   "signals": {
+    "ellipsis": 1.8,
+    "line_std": 1.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0614-1 2121e5181440809caef3f616d586f074.md",
+   "chars": 1468,
+   "score": 5.16,
+   "signals": {
+    "phrase_repeat": 3.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "0330-3 7691b16e13754c14a910c99caad3a573.md",
+   "chars": 1819,
+   "score": 5.15,
+   "signals": {
+    "ellipsis": 1.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "0911-2 17ea435ad0794d84af66d7e7f8d0b915.md",
+   "chars": 1501,
+   "score": 5.13,
+   "signals": {
+    "ellipsis": 1.8,
+    "question_os": 1.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "0306-1 8214131443674451bc22c8765fc8d519.md",
+   "chars": 1655,
+   "score": 5.12,
+   "signals": {
+    "exclam_os": 1.8,
+    "ellipsis": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "1003-1 1141e51814408068980cf35797e2215a.md",
+   "chars": 1450,
+   "score": 5.12,
+   "signals": {
+    "ellipsis": 2.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "1225-4 e17a06697c154670a2dd2d540c3921de.md",
+   "chars": 1345,
+   "score": 5.09,
+   "signals": {
+    "question_os": 1.9,
+    "ellipsis": 1.6
+   },
+   "video_style": false
+  },
+  {
+   "file": "0904-1 1567436407ef47a795daf18d1e235a4f.md",
+   "chars": 3337,
+   "score": 5.07,
+   "signals": {
+    "exclam_os": 3.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "0708-2 adfbc813a59046e29dfefa1739947c4f.md",
+   "chars": 1602,
+   "score": 5.06,
+   "signals": {
+    "onoma": 1.9,
+    "exclam_os": 1.3,
+    "phrase_repeat": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0327-3 a52aac77bb1045d2aafcf5bdbedfd4c5.md",
+   "chars": 1760,
+   "score": 5.05,
+   "signals": {
+    "exclam_os": 2.7,
+    "ellipsis": 1.2
+   },
+   "video_style": false
+  },
+  {
+   "file": "0926-1 6fb342f96fce4ab58c90080265dde01c.md",
+   "chars": 3136,
+   "score": 5.02,
+   "signals": {
+    "onoma": 2.0,
+    "ellipsis": 1.5
+   },
+   "video_style": false
+  },
+  {
+   "file": "0819-2 46f40bfb779240a1a1ffc7c38271c111.md",
+   "chars": 1494,
+   "score": 5.0,
+   "signals": {
+    "ellipsis": 2.4
+   },
+   "video_style": false
+  },
+  {
+   "file": "1025 7d80a4c81a4646e8a83713b0b79abc9e.md",
+   "chars": 2987,
+   "score": 4.95,
+   "signals": {
+    "phrase_repeat": 2.1,
+    "exclam_os": 1.1
+   },
+   "video_style": false
+  },
+  {
+   "file": "颱風準 d0adcbf1932947fca020942a3bdd23db.md",
+   "chars": 1473,
+   "score": 4.95,
+   "signals": {
+    "onoma": 4.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "0327-1 3301e51814408066b4eaf0a7254c93ab.md",
+   "chars": 2450,
+   "score": 4.92,
+   "signals": {
+    "phrase_repeat": 1.4,
+    "ellipsis": 1.3
+   },
+   "video_style": false
+  },
+  {
+   "file": "1024-1 7ac549d9b9c4454087b2a03cd6f1c1e3.md",
+   "chars": 2623,
+   "score": 4.92,
+   "signals": {
+    "line_std": 4.9,
+    "phrase_repeat": 1.9
+   },
+   "video_style": false
+  },
+  {
+   "file": "0724-4 ef37885ab28241c5961fce389d773584.md",
+   "chars": 1565,
+   "score": 4.9,
+   "signals": {
+    "ellipsis": 1.3,
+    "onoma": 1.3
+   },
+   "video_style": false
+  }
+ ]
+}

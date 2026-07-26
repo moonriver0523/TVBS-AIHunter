@@ -59,6 +59,7 @@ def main() -> None:
     b1 = picks(HERE / "sample_B")
     b2 = picks(HERE / "sample_B2")
     b3 = picks(HERE / "sample_B3")
+    b4 = picks(HERE / "sample_B4")
     records = [json.loads(l) for l in CORPUS.read_text(encoding="utf-8").splitlines() if l.strip()]
 
     # `status` stays a flat {file: read-state} map — sample_for_B_round3.py and
@@ -80,6 +81,8 @@ def main() -> None:
             status[f] = "B2"
         elif f in b3:
             status[f] = "B3"
+        elif f in b4:
+            status[f] = "B4"
         else:
             status[f] = "unread"
             if q == "ok":  # bands describe the *usable* unread pool
@@ -93,6 +96,7 @@ def main() -> None:
         "read_B1": sum(1 for v in status.values() if v == "B1"),
         "read_B2": sum(1 for v in status.values() if v == "B2"),
         "read_B3": sum(1 for v in status.values() if v == "B3"),
+        "read_B4": sum(1 for v in status.values() if v == "B4"),
         "unread_total": sum(1 for v in status.values() if v == "unread"),
         "unread_usable": clean_unread,
         "unread_usable_by_length": bands,
