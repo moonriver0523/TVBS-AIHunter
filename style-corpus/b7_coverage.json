@@ -1,0 +1,280 @@
+{
+ "method": "B7 未讀子類抽樣（B6 §8 三項建議：子類抽樣＋標籤前驗＋AI產出前置偵測）",
+ "pool_sizes": {
+  "訃聞追悼": 30,
+  "法庭審判": 20,
+  "選舉開票": 56,
+  "太空科學": 69,
+  "宗教儀典": 19,
+  "教育校園": 31,
+  "移民難民": 48,
+  "勞資爭議": 14
+ },
+ "rejected": {
+  "quality 非 ok": 68,
+  "已讀過（B1–B6）": 286,
+  "過短 <1200 字": 282,
+  "不屬八個未讀子類（或標籤未過驗）": 774,
+  "疑似流程／AI 產出": 4
+ },
+ "ai_flagged": [
+  {
+   "file": "0608-3 3791e5181440806f852adcf86f9bac95.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  },
+  {
+   "file": "0611-3 37c1e518144080fcb624c475b2aabb15.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  },
+  {
+   "file": "0619-2 3841e518144080ce805cf11ed99ed110.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  },
+  {
+   "file": "0619-5 3841e5181440803dacc7ee7a6af01636.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  }
+ ],
+ "picked": [
+  {
+   "subtopic": "訃聞追悼",
+   "file": "0309-1 a066cf03f468449493331578518eeb7e.md",
+   "chars": 1802,
+   "hits": 13
+  },
+  {
+   "subtopic": "訃聞追悼",
+   "file": "0218-1 30b1e518144080689186d704fe3ef2f8.md",
+   "chars": 3995,
+   "hits": 7
+  },
+  {
+   "subtopic": "訃聞追悼",
+   "file": "0605-1 185aa39e9dd240feaf6403a1e0920cd2.md",
+   "chars": 2659,
+   "hits": 6
+  },
+  {
+   "subtopic": "訃聞追悼",
+   "file": "女王靈車1730 4ad29865b37f4c6ca27b2f1271f61a56.md",
+   "chars": 1319,
+   "hits": 5
+  },
+  {
+   "subtopic": "訃聞追悼",
+   "file": "0328-1 e373f1d9aa5e4f9d9150fd4227e45389.md",
+   "chars": 1337,
+   "hits": 3
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "1216-1 15e1e518144080c59fb9f87a5c45b817.md",
+   "chars": 2541,
+   "hits": 54
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0917-1 2711e5181440806588fce028ac375691.md",
+   "chars": 3918,
+   "hits": 19
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0510-4 d3ba69cf41f7409eb0c8985c2829f658.md",
+   "chars": 1342,
+   "hits": 13
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0326-1 163739e5ebfe4d5581a56e3995ed240c.md",
+   "chars": 1512,
+   "hits": 4
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0221-1 359521d89a7c4b09810234c6028179d0.md",
+   "chars": 1383,
+   "hits": 3
+  },
+  {
+   "subtopic": "選舉開票",
+   "file": "1104-1 1341e518144080189c50fa420cf90377.md",
+   "chars": 7107,
+   "hits": 43
+  },
+  {
+   "subtopic": "選舉開票",
+   "file": "無標題 2d31e518144080d6aaadc0a72b43dabd.md",
+   "chars": 3367,
+   "hits": 14
+  },
+  {
+   "subtopic": "選舉開票",
+   "file": "1029-1 12e1e518144080628a8dfaf9826f9b10.md",
+   "chars": 2255,
+   "hits": 11
+  },
+  {
+   "subtopic": "選舉開票",
+   "file": "0623-1 583b7d5e5b234311829022312237bd57.md",
+   "chars": 3008,
+   "hits": 8
+  },
+  {
+   "subtopic": "選舉開票",
+   "file": "0927-1 10e1e518144080e3b47cee186ddbefa9.md",
+   "chars": 1484,
+   "hits": 5
+  },
+  {
+   "subtopic": "太空科學",
+   "file": "1026-1 006a16be1ebc4d7cb48d0eaa022a569b.md",
+   "chars": 3208,
+   "hits": 114
+  },
+  {
+   "subtopic": "太空科學",
+   "file": "0416-1 3441e518144080069ca3e59f2d42f86a.md",
+   "chars": 4622,
+   "hits": 18
+  },
+  {
+   "subtopic": "太空科學",
+   "file": "0127-2 2f51e51814408038b822ecf0a07900e5.md",
+   "chars": 4041,
+   "hits": 9
+  },
+  {
+   "subtopic": "太空科學",
+   "file": "0614-1 dac133f8e8f24b9c93f9ccf4fbb75745.md",
+   "chars": 1659,
+   "hits": 6
+  },
+  {
+   "subtopic": "太空科學",
+   "file": "0128-3 d2acdbac70c54cd3be200eb68ee82188.md",
+   "chars": 1995,
+   "hits": 3
+  },
+  {
+   "subtopic": "宗教儀典",
+   "file": "0417-3 3451e518144080918d82c770b39cd7b0.md",
+   "chars": 8030,
+   "hits": 74
+  },
+  {
+   "subtopic": "宗教儀典",
+   "file": "0803-3 2441e518144080219bf8c74908f02fa7.md",
+   "chars": 6050,
+   "hits": 44
+  },
+  {
+   "subtopic": "宗教儀典",
+   "file": "0724-1 ec5a314880c64a7596e9f108f7fe4bff.md",
+   "chars": 1950,
+   "hits": 13
+  },
+  {
+   "subtopic": "宗教儀典",
+   "file": "0321-1 32a1e518144080279606c1c5b38ee817.md",
+   "chars": 3190,
+   "hits": 8
+  },
+  {
+   "subtopic": "宗教儀典",
+   "file": "0130 cd63e1b51f224e23b675664a276dce51.md",
+   "chars": 1789,
+   "hits": 6
+  },
+  {
+   "subtopic": "教育校園",
+   "file": "開戰中學1800 b4208307fb124b4da8f9b0331ac7d155.md",
+   "chars": 1509,
+   "hits": 49
+  },
+  {
+   "subtopic": "教育校園",
+   "file": "0321-1 1bd1e518144080fb87b8cde799153f65.md",
+   "chars": 2201,
+   "hits": 25
+  },
+  {
+   "subtopic": "教育校園",
+   "file": "0222-3 30f1e51814408072a832f5fb82434529.md",
+   "chars": 1954,
+   "hits": 11
+  },
+  {
+   "subtopic": "教育校園",
+   "file": "0313-1 威廉其人 18c48ce5f80a467aa1ad8654c1ab4760.md",
+   "chars": 2066,
+   "hits": 6
+  },
+  {
+   "subtopic": "教育校園",
+   "file": "0511-3 6a71212d3b7640a3ba9c6e5aad02a141.md",
+   "chars": 1925,
+   "hits": 4
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0130-3 18b1e518144080a0a7a4cd54b7dd2ee4.md",
+   "chars": 5482,
+   "hits": 68
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0728-2 23e1e518144080da93c5c31fadc91251.md",
+   "chars": 8910,
+   "hits": 25
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0910-3 0237ceebf4f341d4bdadb700d144a422.md",
+   "chars": 1570,
+   "hits": 9
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0516-1 84d911914d794bd38c499b293fd05701.md",
+   "chars": 3998,
+   "hits": 5
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0212-1 1981e51814408042a312d11239ba70bc.md",
+   "chars": 2360,
+   "hits": 3
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0703-1 2251e5181440804a8488f28ad0fd0174.md",
+   "chars": 13964,
+   "hits": 23
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "1224-1 1661e5181440802dbebde5f00fe7b4fa.md",
+   "chars": 1674,
+   "hits": 15
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0828-1 25d1e5181440804a8d39d48f18e69c2d.md",
+   "chars": 13134,
+   "hits": 8
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0304-4 1ac1e518144080ba8a83c73f3a75947f.md",
+   "chars": 2936,
+   "hits": 5
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0711-1 efaa0f649a21498aa32891425a77aa45.md",
+   "chars": 6299,
+   "hits": 5
+  }
+ ]
+}
