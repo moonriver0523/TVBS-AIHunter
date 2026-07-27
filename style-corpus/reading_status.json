@@ -1,8 +1,8 @@
 {
  "summary": {
   "total": 1701,
-  "unread_total": 1332,
-  "unread_usable": 1264,
+  "unread_total": 1330,
+  "unread_usable": 1262,
   "unread_usable_by_length": {
    "<1200": 282,
    "1200-9000": 1022,
@@ -25,7 +25,8 @@
   "read_B7": 40,
   "read_B8": 25,
   "read_B9": 16,
-  "read_B10": 2
+  "read_B10": 2,
+  "read_B11": 2
  },
  "status": {
   "0 39bbff7b17aa486e81dd4cb1ec82cd71.md": "unread",
@@ -544,9 +545,9 @@
   "0408-1 33c1e5181440808ba70cd626b9910118.md": "unread",
   "0408-1 abec658bb1554f288b21445a47229340.md": "B9",
   "0408-2 1cf1e51814408045b711cbf5f9f29fbe.md": "unread",
-  "0408-2 33c1e5181440802c9a1cd0364c9dad51.md": "unread",
+  "0408-2 33c1e5181440802c9a1cd0364c9dad51.md": "B11",
   "0409-1 1d01e5181440800cb436d3e8a7d6e929.md": "unread",
-  "0409-1 33d1e5181440806bbc59f3562d5b23f9.md": "unread",
+  "0409-1 33d1e5181440806bbc59f3562d5b23f9.md": "B11",
   "0409-1 b6d05f40d8624617943abbc76f0ed13a.md": "unread",
   "0410-1 33e1e518144080a8a75affc2bfbe5d90.md": "unread",
   "0410-1 485c06bb9d294c6793a439c0e56283bd.md": "unread",
