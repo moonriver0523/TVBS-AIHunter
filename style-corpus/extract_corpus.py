@@ -15,6 +15,24 @@ Each raw file mixes three things:
   - `### ***Note***` (or `*Note*`): CG (Chyron) caption text draft — a
     separate, shorter style (headline/label register, not narrative prose).
 
+Known limitation — one file can hold several unrelated stories (B7-M7)
+--------------------------------------------------------------------
+Measured at 12.5% of the B7 sample: a single Daily Draft file sometimes
+contains two or three separate news items written the same day (e.g. the
+Honduran election result *and* a southern-California storm). Nothing here
+splits them, so every downstream consumer sees only the first/dominant one.
+Consequences already observed:
+  - topic distribution stats undercount the trailing stories
+  - topic-coverage sampling wastes quota (you read the story that was not
+    the one the quota was for)
+  - techniques get attributed to the wrong topic
+
+No reliable split signal found yet. The obvious candidate — a second
+`網路標:` block — was measured against the 40-draft B7 sample and only
+catches 1 of the 5 composite files (0 false positives, 4 missed): the
+trailing stories usually share one headline block rather than opening a new
+one. Do not build a splitter on that signal alone.
+
 Usage:
     python extract_corpus.py
 Writes:
