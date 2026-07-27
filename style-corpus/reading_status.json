@@ -1,14 +1,8 @@
 {
  "summary": {
   "total": 1701,
-  "read_B1": 50,
-  "read_B2": 50,
-  "read_B3": 60,
-  "read_B4": 40,
-  "read_B5": 44,
-  "read_B6": 42,
-  "unread_total": 1334,
-  "unread_usable": 1266,
+  "unread_total": 1332,
+  "unread_usable": 1264,
   "unread_usable_by_length": {
    "<1200": 282,
    "1200-9000": 1022,
@@ -22,9 +16,16 @@
    "ai_assisted": 3
   },
   "note": "抽樣請只取 status=unread 且 quality=ok 的稿件（B4 語料衛生，2026-07-25）",
+  "read_B1": 50,
+  "read_B2": 50,
+  "read_B3": 60,
+  "read_B4": 40,
+  "read_B5": 44,
+  "read_B6": 42,
   "read_B7": 40,
   "read_B8": 25,
-  "read_B9": 16
+  "read_B9": 16,
+  "read_B10": 2
  },
  "status": {
   "0 39bbff7b17aa486e81dd4cb1ec82cd71.md": "unread",
@@ -326,7 +327,7 @@
   "0225-1 3121e51814408040b531fb38a3991c08.md": "unread",
   "0225-1 f06a04bdb94b44e5b48913b125c095e5.md": "unread",
   "0225-2 f52bf87ce0bb406ab2b27cf812f88d2f.md": "unread",
-  "0225-3 7907d855146542b6bfb34b1ae2ae3e77.md": "unread",
+  "0225-3 7907d855146542b6bfb34b1ae2ae3e77.md": "B10",
   "0225-4 bf23e37a6e75402782a4aa72b5c30dca.md": "unread",
   "0226 db4f9fd34f9e447a91d1d17d3828a3c3.md": "unread",
   "0226-1 1a61e518144080e4925fe4eb4a65d071.md": "unread",
@@ -797,7 +798,7 @@
   "0608-2 a84cdb5cf9804c2fb20c874f6c7934a9.md": "unread",
   "0608-3 3791e5181440806f852adcf86f9bac95.md": "unread",
   "0609-1 20d1e518144080b5b3a9fa1e7cf1d87d.md": "B9",
-  "0609-1 37a1e518144080c998dac01d95a45a08.md": "unread",
+  "0609-1 37a1e518144080c998dac01d95a45a08.md": "B10",
   "0609-1 e0d7ceab124945cfb1db6098960263f9.md": "unread",
   "0610-1 20f1e518144080e798abd3e423f870a1.md": "unread",
   "0610-1 37b1e518144080989906f79e0e73662e.md": "unread",
