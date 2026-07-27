@@ -1,8 +1,8 @@
 {
  "summary": {
   "total": 1701,
-  "unread_total": 1330,
-  "unread_usable": 1262,
+  "unread_total": 1326,
+  "unread_usable": 1258,
   "unread_usable_by_length": {
    "<1200": 282,
    "1200-9000": 1022,
@@ -26,7 +26,7 @@
   "read_B8": 25,
   "read_B9": 16,
   "read_B10": 2,
-  "read_B11": 2
+  "read_B11": 6
  },
  "status": {
   "0 39bbff7b17aa486e81dd4cb1ec82cd71.md": "unread",
@@ -633,10 +633,10 @@
   "0505-1 1ea1e518144080a499fbf20f084d2dd8.md": "unread",
   "0505-1 3571e5181440800c9b44dca006607091.md": "unread",
   "0505-1 e093f6ca46cb4ed0b21c10e6d219885a.md": "unread",
-  "0505-2 3571e518144080d89596fe297a0bdb00.md": "unread",
+  "0505-2 3571e518144080d89596fe297a0bdb00.md": "B11",
   "0505-2 ca452ed6f5464c399be980d06e0807a7.md": "unread",
   "0506-1 02784520fe68487094289fe4abee7a78.md": "unread",
-  "0506-1 1eb1e51814408021aa15d38b50cbe237.md": "unread",
+  "0506-1 1eb1e51814408021aa15d38b50cbe237.md": "B11",
   "0506-1 3581e5181440807d8babecfcbfdbfe38.md": "unread",
   "0506-1 a303d0064b72402cb318550818ca4dfe.md": "unread",
   "0506-2 3581e518144080f08f64db6884ff840f.md": "B2",
@@ -682,7 +682,7 @@
   "0513-2 dcfd71edff2b4a8b8287d0509357e022.md": "unread",
   "0513-3 50d66ffd9d8f453e80db07c590bfb2cb.md": "unread",
   "0514-1 1f31e518144080a38162e74d359d702a.md": "unread",
-  "0514-1 3601e518144080889bc3fe71b7d8e422.md": "unread",
+  "0514-1 3601e518144080889bc3fe71b7d8e422.md": "B11",
   "0514-1 caaf619a655b4eed873bd57d501ad915.md": "B4",
   "0515-1 0923ccf9deb2432388431422f27c99d2.md": "B5",
   "0515-1 185ef3801cfa4023973672e0a5814554.md": "unread",
@@ -940,7 +940,7 @@
   "0703-1 3921e5181440804c9b4ae7fcfafcd49a.md": "unread",
   "0703-1 51a1a18ef494497392b74cb5264ef673.md": "unread",
   "0703-1 ee92eb87013f43369eb20f3cacedd992.md": "B1",
-  "0703-2 3921e518144080a6a6d2c51211f11b75.md": "unread",
+  "0703-2 3921e518144080a6a6d2c51211f11b75.md": "B11",
   "0703-2 dc24bc39cd1c4ea2b6902cadf30adc0a.md": "B3",
   "0703-3 a7b367ee58cc4e0887aed5bd84680d35.md": "unread",
   "0703-4 c16eeb47a0d74434aeb82a6b007f60d3.md": "unread",
