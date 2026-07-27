@@ -1,0 +1,184 @@
+{
+ "method": "B8 抽乾法庭＋勞資（B7 最高產出的兩個子類；關鍵詞改為只用專屬動作詞）",
+ "pool_sizes": {
+  "法庭審判": 15,
+  "勞資爭議": 10
+ },
+ "rejected": {
+  "quality 非 ok": 68,
+  "已讀過（B1–B7）": 326,
+  "過短 <1200 字": 282,
+  "不屬這兩個子類": 996,
+  "疑似流程／AI 產出": 4
+ },
+ "ai_flagged": [
+  {
+   "file": "0608-3 3791e5181440806f852adcf86f9bac95.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  },
+  {
+   "file": "0611-3 37c1e518144080fcb624c475b2aabb15.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  },
+  {
+   "file": "0619-2 3841e518144080ce805cf11ed99ed110.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  },
+  {
+   "file": "0619-5 3841e5181440803dacc7ee7a6af01636.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  }
+ ],
+ "picked": [
+  {
+   "subtopic": "法庭審判",
+   "file": "0429-2 3511e5181440809e8ffec96f42523c98.md",
+   "chars": 10739,
+   "hits": 31
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "1216-2 15e1e518144080c9b7c5d16cb84af63a.md",
+   "chars": 2269,
+   "hits": 31
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0109-4 833c9f9c0dfb48ba8254da466ae27de8.md",
+   "chars": 1338,
+   "hits": 24
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0331 518aba1780684e3abb72fad16c671753.md",
+   "chars": 2800,
+   "hits": 16
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0405-1 7844435be56c49f7968adea51d8ba9c2.md",
+   "chars": 3646,
+   "hits": 16
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0907-2 c16b0d2787274a0db0a62ef7fe50db95.md",
+   "chars": 2160,
+   "hits": 15
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0912-2 26c1e5181440800cb902fc63508efe62.md",
+   "chars": 7876,
+   "hits": 7
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0103-3 1701e51814408076afc9e8555530aa37.md",
+   "chars": 2014,
+   "hits": 5
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0221-1 30e1e518144080c29771d3b282ba7d13.md",
+   "chars": 5189,
+   "hits": 4
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0803-1 52e3915abc4a457a9847449ef094967c.md",
+   "chars": 1293,
+   "hits": 4
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "1208-2 1551e51814408063ab56cf250a05a559.md",
+   "chars": 3899,
+   "hits": 4
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "1215-2 15d1e518144080e8bdf0f146d60180d6.md",
+   "chars": 1566,
+   "hits": 4
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0527-4 36d1e51814408086a37aeecffc29018a.md",
+   "chars": 4212,
+   "hits": 3
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "0807-1 220f50e0a8184e09bcd555f3a5e267b7.md",
+   "chars": 1438,
+   "hits": 3
+  },
+  {
+   "subtopic": "法庭審判",
+   "file": "1227-2 94d8b67e9f4b4c4db3c4eeefd18ee0ad.md",
+   "chars": 1658,
+   "hits": 3
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0531-1 43bf307abc264642974dbf6280fe5a0c.md",
+   "chars": 3548,
+   "hits": 14
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0602-4 3731e518144080719c4fe6a6c0fe0b1b.md",
+   "chars": 3256,
+   "hits": 9
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0720-4 1b361464bb2a4f17b9c03cfe9f9b2dc8.md",
+   "chars": 1665,
+   "hits": 9
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0913-1 6fc979a39e4c4d729f6f2c05af4c52f1.md",
+   "chars": 1812,
+   "hits": 8
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0307-1 1af1e518144080309564c80a7b78a59a.md",
+   "chars": 3375,
+   "hits": 5
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0601-3 6d64342530d34b4091bafcf94207c1bd.md",
+   "chars": 1662,
+   "hits": 5
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0613-1 13478dfa9d1c4937ac8e6bfecc92a018.md",
+   "chars": 1687,
+   "hits": 4
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "專題 AI新職業 3761e51814408013b1b2ebc270b5e035.md",
+   "chars": 16735,
+   "hits": 4
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "紅潮未現 1800 699e3c2acb8e4e4b9945bd2b4c743d54.md",
+   "chars": 1865,
+   "hits": 4
+  },
+  {
+   "subtopic": "勞資爭議",
+   "file": "0905-1 7b07b8cedc9a4ff9a39f7bfee06cbf42.md",
+   "chars": 3469,
+   "hits": 3
+  }
+ ]
+}
