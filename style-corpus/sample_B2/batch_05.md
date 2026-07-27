@@ -1616,7 +1616,7 @@ new
 [https://newsroombeta.ap.org/home](https://newsroombeta.ap.org/home)
 
 [[已移除]](mailto:[已移除])
-Tvbsnews@@451
+[已移除]
 標示寫 (圖／達志影像美聯社)
 
 Shutterstock 請愛用已下載過的照片 重複使用
@@ -1634,18 +1634,18 @@ Reuters
 
 歐新社帳密　
 [https://epaimages.com/](https://epaimages.com/)[[已移除]](mailto:[已移除])
-Tvbs@451
+[已移除]
 標示寫 (圖／達志影像歐新社)
 
 NEWSCOM
 [https://www.newscom.com](https://www.newscom.com/)[[已移除]](mailto:[已移除])
-X+3Ch8*gMuHN^L9c
+[已移除]
 標示寫 (圖／達志影像Newscom)
 
 TPGNEWS
 [http://www.tpgimages.com/editorial.php](http://www.tpgimages.com/editorial.php)
 [已移除]
-Tvbs@@ruiguang451
+[已移除]
 標示寫(圖／達志影像TPG)
 
 </aside>
@@ -3324,7 +3324,7 @@ new
 [https://newsroombeta.ap.org/home](https://newsroombeta.ap.org/home)
 
 [[已移除]](mailto:[已移除])
-Tvbsnews@@451
+[已移除]
 標示寫 (圖／達志影像美聯社)
 
 Shutterstock 請愛用已下載過的照片 重複使用
@@ -3342,18 +3342,18 @@ Reuters
 
 歐新社帳密　
 [https://epaimages.com/](https://epaimages.com/)[[已移除]](mailto:[已移除])
-Tvbs@451
+[已移除]
 標示寫 (圖／達志影像歐新社)
 
 NEWSCOM
 [https://www.newscom.com](https://www.newscom.com/)[[已移除]](mailto:[已移除])
-X+3Ch8*gMuHN^L9c
+[已移除]
 標示寫 (圖／達志影像Newscom)
 
 TPGNEWS
 [http://www.tpgimages.com/editorial.php](http://www.tpgimages.com/editorial.php)
 [已移除]
-Tvbs@@ruiguang451
+[已移除]
 標示寫(圖／達志影像TPG)
 
 </aside>
@@ -3787,7 +3787,7 @@ new
 [https://newsroombeta.ap.org/home](https://newsroombeta.ap.org/home)
 
 [[已移除]](mailto:[已移除])
-Tvbsnews@@451
+[已移除]
 標示寫 (圖／達志影像美聯社)
 
 Shutterstock 請愛用已下載過的照片 重複使用
@@ -3805,18 +3805,18 @@ Reuters
 
 歐新社帳密　
 [https://epaimages.com/](https://epaimages.com/)[[已移除]](mailto:[已移除])
-Tvbs@451
+[已移除]
 標示寫 (圖／達志影像歐新社)
 
 NEWSCOM
 [https://www.newscom.com](https://www.newscom.com/)[[已移除]](mailto:[已移除])
-X+3Ch8*gMuHN^L9c
+[已移除]
 標示寫 (圖／達志影像Newscom)
 
 TPGNEWS
 [http://www.tpgimages.com/editorial.php](http://www.tpgimages.com/editorial.php)
 [已移除]
-Tvbs@@ruiguang451
+[已移除]
 標示寫(圖／達志影像TPG)
 
 </aside>

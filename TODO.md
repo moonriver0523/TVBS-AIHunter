@@ -9,10 +9,10 @@
 > 🔴 **2026-07-27 更新（B7 精讀時發現）：上次的清除只清掉一半，工作區至今仍有明文密碼。**
 > `redact_secrets.py` 錨定的是「標籤＋值」的行（`帳號 …`／`密碼 …`），但**沒有標籤、單獨成行的密碼字串整批倖存**：
 > `Tvbsnews@@451`、`Tvbs@451`、`Tvbs@@ruiguang451`、`X+3Ch8*gMuHN^L9c`。
-> 實測波及：`raw/` 401 檔、`cleaned/` 401 檔、`draft_corpus.jsonl` 247 筆、`sample_B`～`sample_B7` 26 檔，全部在版控裡。
+> 實測波及：`raw/` 401 檔、`cleaned/` 401 檔、`draft_corpus.jsonl` 336 筆、`sample_B`～`sample_B7` 26 檔，全部在版控裡。
 > 原本寫在這裡的「工作區已清乾淨（`ffda02f`）」**當時就不成立**，已刪除該敘述。
 
-- [ ] **補做第二輪清除（裸 token）**——把上列四個字串加進 gitignored 的 `.secret-tokens.txt`，`redact_secrets.py` 增加「無標籤裸 token」的比對階段後重跑。範圍與第一輪相同的 401 篇。這件事我可以做，但它只是止血，仍不能取代下一項。
+- [x] **補做第二輪清除（裸 token）**（2026-07-27 完成）——四個裸 token 已加進 gitignored 的 `.secret-tokens.txt`。發現腳本**本來就有** stage 3 裸 token 階段，第一輪失效的真正原因有兩個：①`.secret-tokens.txt` 裡沒有這四個密碼 ②`DIRS` 硬編到 `sample_B4`，B5–B7 三輪的樣本從來沒被掃過（現已改為 glob，未來輪次自動涵蓋）。清除 1164 個交付物、4760 行，複驗零殘留，31 行提到「帳號／密碼／分機」的新聞內文未誤刪。同時補上 `test_redact_secrets.py`（19 項，含當初漏掉的裸 token 案例）。
 - [ ] **更換這些帳密（最優先，只有使用者能做）**——清除只是止血；憑證仍存在於 git 歷史，任何有 repo 讀取權者都拿得到。**改密碼是唯一有效的補救**，不做這件事其他都沒意義。
 - [ ] **（可選）改寫 git 歷史徹底移除舊憑證**——需 `git filter-repo`，代價：全部 commit hash 改變、必須 force-push、Mac 那台的自動 pull hook 失效。**建議與下方「`.git` 肥大清理」合併成同一次歷史改寫**，只付一次代價。考量這是私人 repo，且帳密更換後舊憑證即失效，不改寫歷史亦可接受——但上一項不能省。
 - [ ] **源頭防治**：這批帳密是 Notion 稿件範本的頁尾，日後再從 Notion 匯出語料仍會帶進來。要嘛請同事把範本裡的帳密拿掉，要嘛每次匯入後固定跑一次 `python style-corpus/redact_secrets.py`（需先備妥 gitignored 的 `.secret-tokens.txt`）。

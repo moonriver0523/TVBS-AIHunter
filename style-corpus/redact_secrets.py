@@ -31,7 +31,21 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 JSONL = HERE / "draft_corpus.jsonl"
-DIRS = ["raw", "cleaned", "sample_B", "sample_B2", "sample_B3", "sample_B4"]
+
+
+def corpus_dirs() -> list[str]:
+    """raw/, cleaned/, and every sampling round.
+
+    Globbed rather than hard-coded: the original list stopped at sample_B4,
+    so rounds B5–B7 were never swept and kept their unredacted copies. Any
+    future sample_B<n>/ is now picked up automatically.
+    """
+    fixed = [d for d in ("raw", "cleaned") if (HERE / d).is_dir()]
+    rounds = sorted(p.name for p in HERE.glob("sample_B*") if p.is_dir())
+    return fixed + rounds
+
+
+DIRS = corpus_dirs()
 
 PLACEHOLDER = "[已移除]"
 CJK_RE = re.compile(r"[一-鿿]")
@@ -46,14 +60,22 @@ CJK_RE = re.compile(r"[一-鿿]")
 # file would put the very secrets we are removing back into the repository.
 # Put them one-per-line in `.secret-tokens.txt` (gitignored) when an exact-token
 # sweep is needed; the structural rules below work without it.
-CORP_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@tvbs\.com\.tw", re.I)
+# The leading lookbehind is a performance guard, not a semantic change: without
+# it the engine restarts `[A-Za-z0-9._%+-]+` at every offset inside a long
+# alphanumeric run (the corpus is full of them — MOS metadata, long URLs) and
+# backtracks looking for `@`, which is quadratic in the run length. Measured at
+# 19 s per million chars before, ~0.01 s after. The matched text is identical:
+# either way the whole local-part run is consumed.
+CORP_EMAIL_RE = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@tvbs\.com\.tw", re.I)
 TOKENS_FILE = HERE / ".secret-tokens.txt"
 
 
 def load_secret_tokens() -> list[str]:
+    """Longest first, so a token that is a prefix of another cannot mask it."""
     if not TOKENS_FILE.exists():
         return []
-    return [t.strip() for t in TOKENS_FILE.read_text(encoding="utf-8").splitlines() if t.strip()]
+    toks = [t.strip() for t in TOKENS_FILE.read_text(encoding="utf-8").splitlines() if t.strip()]
+    return sorted(toks, key=len, reverse=True)
 
 
 SECRET_TOKENS = load_secret_tokens()
@@ -61,35 +83,43 @@ SECRET_TOKENS = load_secret_tokens()
 # Anchored: line STARTS with the label, then whitespace, then the value.
 # Value must be short and contain no CJK — real credentials/extensions look
 # like `someaccount`, `SomePass123`, `[a@b.com](mailto:a@b.com)`, `1234`.
-LABEL_RE = re.compile(r"^(?P<label>帳號|密碼|分機)(?P<sep>[\s　]+)(?P<value>\S.*)$")
+#
+# Applied with re.MULTILINE over the whole document rather than per line: the
+# original per-line loop ran 8 str.replace() calls plus two regex calls on
+# every one of ~2.3M lines and took >6 min of CPU for a 58 MB corpus. Three
+# whole-text passes do the same work in seconds.
+# NOTE: the separator class must be HORIZONTAL whitespace only. Writing it as
+# `[\s　]+` here (as the per-line version safely did, because it never saw a
+# newline) lets the match run across line boundaries under re.MULTILINE and
+# backtrack catastrophically — that alone took the sweep from seconds to >5min.
+LABEL_RE = re.compile(
+    r"^(?P<indent>[ \t　]*)(?P<label>帳號|密碼|分機)[ \t　]+(?P<value>\S[^\n]*)$",
+    re.M,
+)
 MAX_VALUE_LEN = 80
 
+# One alternation instead of N sequential replaces. load_secret_tokens()
+# returns longest-first and Python alternation is leftmost-first, so a token
+# that is a prefix of another cannot mask it.
+TOKEN_RE = re.compile("|".join(re.escape(t) for t in SECRET_TOKENS)) if SECRET_TOKENS else None
 
-def redact_line(line: str) -> str | None:
-    """Return redacted line, or None if the line should stay as-is."""
-    stripped = line.strip()
-    m = LABEL_RE.match(stripped)
-    if not m:
-        return None
+
+def _label_sub(m: re.Match) -> str:
     value = m.group("value").strip()
     if len(value) > MAX_VALUE_LEN or CJK_RE.search(value):
-        return None          # prose, not a credential record
-    indent = line[: len(line) - len(line.lstrip())]
-    return f"{indent}{m.group('label')} {PLACEHOLDER}"
+        return m.group(0)        # prose, not a credential record
+    return f"{m.group('indent')}{m.group('label')} {PLACEHOLDER}"
 
 
 def redact_text(text: str) -> tuple[str, int]:
-    out, n = [], 0
-    for line in text.splitlines():
-        new = redact_line(line) or line          # stage 1: label + value lines
-        new = CORP_EMAIL_RE.sub(PLACEHOLDER, new)  # stage 2: embedded secrets
-        for tok in SECRET_TOKENS:
-            new = new.replace(tok, PLACEHOLDER)
-        if new != line:
-            n += 1
-        out.append(new)
-    trailing = "\n" if text.endswith("\n") else ""
-    return "\n".join(out) + trailing, n
+    new = LABEL_RE.sub(_label_sub, text)        # stage 1: label + value lines
+    new = CORP_EMAIL_RE.sub(PLACEHOLDER, new)   # stage 2: embedded corporate mail
+    if TOKEN_RE is not None:                    # stage 3: bare account/password tokens
+        new = TOKEN_RE.sub(PLACEHOLDER, new)
+    if new == text:
+        return text, 0
+    n = sum(1 for a, b in zip(text.splitlines(), new.splitlines()) if a != b)
+    return new, n
 
 
 def main() -> None:
@@ -112,7 +142,7 @@ def main() -> None:
                 hits += n
                 if not args.dry_run:
                     f.write_text(new, encoding="utf-8")
-        print(f"{d + '/':14s} {files:4d} files, {hits:5d} lines redacted")
+        print(f"{d + '/':14s} {files:4d} files, {hits:5d} lines redacted", flush=True)
         total_files += files
         total_lines += hits
 
