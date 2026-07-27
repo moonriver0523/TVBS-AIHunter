@@ -1,0 +1,154 @@
+{
+ "method": "B9 重抽太空／教育／移民（關鍵詞改為專屬動作詞）＋預先登記的排序器測試",
+ "hypothesis": {
+  "H1": "hits >= 10 的稿件，嚴格命中率 >= 85%",
+  "H2": "hits < 10 的稿件，嚴格命中率 <= 60%",
+  "H3": "兩層的差距 >= 25 個百分點",
+  "note": "抽樣刻意分層（高段6篇＋低段2篇）而非只取前段，只取前段無法證偽"
+ },
+ "high_band_threshold": 10,
+ "pool_sizes": {
+  "太空科學": 9,
+  "教育校園": 6,
+  "移民難民": 20
+ },
+ "rejected": {
+  "quality 非 ok": 68,
+  "已讀過（B1–B8）": 351,
+  "過短 <1200 字": 282,
+  "不屬這三個子類": 961,
+  "疑似流程／AI 產出": 4
+ },
+ "ai_flagged": [
+  {
+   "file": "0608-3 3791e5181440806f852adcf86f9bac95.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  },
+  {
+   "file": "0611-3 37c1e518144080fcb624c475b2aabb15.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  },
+  {
+   "file": "0619-2 3841e518144080ce805cf11ed99ed110.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  },
+  {
+   "file": "0619-5 3841e5181440803dacc7ee7a6af01636.md",
+   "shape": "形態三：BAR分段成品、無素材編號"
+  }
+ ],
+ "picked": [
+  {
+   "subtopic": "太空科學",
+   "file": "0827-2 319e47619782492c989e4469c4a4122f.md",
+   "chars": 2022,
+   "hits": 37,
+   "band": "高段"
+  },
+  {
+   "subtopic": "太空科學",
+   "file": "0408-1 abec658bb1554f288b21445a47229340.md",
+   "chars": 4375,
+   "hits": 18,
+   "band": "高段"
+  },
+  {
+   "subtopic": "太空科學",
+   "file": "0928-1 8481192e4f2246739f8e5aeabe6048ea.md",
+   "chars": 1408,
+   "hits": 18,
+   "band": "高段"
+  },
+  {
+   "subtopic": "太空科學",
+   "file": "0424-1 1df1e518144080aea207d068e75af62a.md",
+   "chars": 5102,
+   "hits": 17,
+   "band": "高段"
+  },
+  {
+   "subtopic": "太空科學",
+   "file": "0106-3 1731e5181440801fa840fa2084e142e3.md",
+   "chars": 1880,
+   "hits": 4,
+   "band": "低段"
+  },
+  {
+   "subtopic": "太空科學",
+   "file": "0426 c5f03f47f8e542d18d68dca2a5dae6c6.md",
+   "chars": 1529,
+   "hits": 3,
+   "band": "低段"
+  },
+  {
+   "subtopic": "教育校園",
+   "file": "0513-1 ad4c52dd340242d597485584f238f134.md",
+   "chars": 2084,
+   "hits": 8,
+   "band": "低段"
+  },
+  {
+   "subtopic": "教育校園",
+   "file": "0729-2 23f1e518144080de852cdb7b416876ef.md",
+   "chars": 7294,
+   "hits": 4,
+   "band": "低段"
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0215-2 19b1e518144080dcb1e8f3aad99ca37d.md",
+   "chars": 5150,
+   "hits": 36,
+   "band": "高段"
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0908-2 2681e51814408015baf7ef4434afc9f8.md",
+   "chars": 4839,
+   "hits": 33,
+   "band": "高段"
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0907-1 2671e518144080b08beefffacb9c5fd2.md",
+   "chars": 5423,
+   "hits": 31,
+   "band": "高段"
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0609-1 20d1e518144080b5b3a9fa1e7cf1d87d.md",
+   "chars": 13426,
+   "hits": 27,
+   "band": "高段"
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0711-3 22d1e518144080ef8538f39718afa2df.md",
+   "chars": 5339,
+   "hits": 18,
+   "band": "高段"
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0125-1 2f31e518144080c0b7bec65b3ec12c85.md",
+   "chars": 4159,
+   "hits": 17,
+   "band": "高段"
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "1225-1 86671f69e8594032bcd786df95f86026.md",
+   "chars": 2150,
+   "hits": 9,
+   "band": "低段"
+  },
+  {
+   "subtopic": "移民難民",
+   "file": "0203-2 18f1e5181440808cb934d8d12234efca.md",
+   "chars": 5571,
+   "hits": 4,
+   "band": "低段"
+  }
+ ]
+}
