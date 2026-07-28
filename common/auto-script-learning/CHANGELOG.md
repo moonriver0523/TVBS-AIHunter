@@ -1,5 +1,14 @@
 # 自動寫稿學習機制變更紀錄
 
+## 2026-07-28 — 朝增兵俄2200（Fable版）：CNN 主播與記者 SB 姓名改用英文原名
+
+雲端 SOT 寫稿（原目標 5 分鐘，後授權放寬）交稿後，使用者直接下令：「CNN主播與記者SB的姓名都改用英文（也記入規則）」。
+
+- 新增 `P-023`（`PROMPT`，限 SOT／掐BITE助手）：SB 講者行遇 **CNN 主播／記者（含前 CNN 新聞人員）** 時，姓名一律用英文原名、職稱仍中文（`CNN主播 Erin Burnett`／`CNN記者 Will Ripley`／`前CNN北京分社社長 Mike Chinoy`）；非 CNN 講者維持台灣譯名慣例，OS 內文首次提及仍寫 `中文（英文）`。與 CTV 既有「中文職稱＋英文姓名」規格對齊。
+- 實作位置：[`../06-auto-script-sot.md`](../06-auto-script-sot.md)（輸出結構第 5 項）、[`../07-bite-assistant.md`](../07-bite-assistant.md)（輸出格式）。
+- **驗證器零改動**：講者行語言無法可靠自動判別，由寫稿代理依規則自律。
+- 本案 `朝增兵俄2200 完成文稿 Fable版.txt` 已套用（Erin Burnett／Will Ripley×2／Mike Chinoy 共 4 段 SB）。
+
 ## 2026-07-28 — 居酒屋倒2200：記者 STAND 升為最優先 BITE 候選
 
 單支 NHK 側錄素材（`許岱軒NHK 061326.mxf`）寫 4分30秒～5分鐘 SOT。交稿後使用者連續三次追加 BITE 要求，最後直接下令新增規則：「若素材裡面有記者STAND 優先掐 因為畫面好看且有臨場感」。

@@ -111,6 +111,7 @@
   Those who came in through the window in an illegal manner, in an irregular and clandestine manner, sooner rather than later, will be outside our country.
   ```
 
+- **CNN 主播與記者的講者行姓名一律用英文原名（2026-07-28 訂定，`P-023`）**：SB 第 2 行遇 CNN 主播、記者（含前 CNN 新聞人員）時，姓名寫英文原名、職稱仍中文（例：`CNN主播 Erin Burnett`、`CNN記者 Will Ripley`）；非 CNN 講者維持 `中文（英文）` 譯名慣例，OS 內文首次提及也照譯名規則寫 `中文（英文）`。
 - **TIMECODE 一定要核對影片檔的真實時間軸**，絕對不可以寫段落/句子編號代替真實 TC；找 TC 的精確度上限、英文原句不擴寫改寫、**先選句再定位**、每支片最多一次 ASR 等細節，全部依 [`掐BITE助手`](07-bite-assistant.md) 的省 Token 核心與「找 TC 共用原則」。RT 若文稿或網頁 transcript 已有 TC，直接取用、**不要**再跑 `video_analyze`；AP／CNN Newsource 無 TC 時，同一支片 transcription 一次後用關鍵字定位，引言文字仍以官方文稿為準。
 - 若素材音軌只有 NATURAL（環境音）沒有人聲，或官方文稿未列出任何 SAYING／BITE 段落，視為**無 BITE 可用**，不可勉強轉譯湊一句。
 - **單段 SB 長度下限（2026-07-22 訂定，`P-015`）**：判準主體是**「取官方稿裡的完整一句」**，秒數只是輔助網。**單段 SB < 2 秒會 `[FAIL]`**（真實 SOT 不存在這種長度，多半是 TC 打錯或殘句）；**2~5 秒會 `[WARN]`**，要確認它是完整句、不是為了塞進總長度把 BITE 砍短。≥ 5 秒正常。此門檻比 CTV 的 3 秒寬，因為 SOT 素材（Reuters／AP／NHK）本來就是較長的談話——依 11 支完成稿實測，SB 最短 5 秒、中位數 11.5 秒。（與 CTV `P-012`、`07` 六碼側錄「10-20 秒」各自適用不同對象，不衝突。）

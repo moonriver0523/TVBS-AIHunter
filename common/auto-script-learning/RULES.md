@@ -222,6 +222,16 @@
 - 與既有規則的關係（不衝突）：[`../07-bite-assistant.md`](../07-bite-assistant.md) 早已寫明「BITE 講者不限受訪者，記者／主播口白只要有可核對逐字來源一樣能當 BITE」，本條是在那個基礎上**加一層優先序**——把記者素材裡的 STAND 拉到候選最前面，而不是新開放一種來源。SB 五行格式、TC 合法性、`P-015` 秒數下限一律照常適用。
 - 實作位置：[`../06-auto-script-sot.md`](../06-auto-script-sot.md)（輸出結構第 5 項「受訪者BITE」）、[`../07-bite-assistant.md`](../07-bite-assistant.md)（省 Token 核心流程的 BITE 講者段）、[`../../cnn/01-auto-script-writing.md`](../../cnn/01-auto-script-writing.md)（BITE 盤點）
 
+### P-023 CNN 主播與記者的 SB 姓名一律用英文原名
+
+- 狀態：`PROMPT`
+- 類型：通用規則（**限自動寫稿(SOT)／掐BITE助手**；CTV 本來就規定「中文職稱＋英文姓名」，不受影響）
+- 來源案例：`2026-07-28-朝增兵俄2200`（Fable版）；使用者直接下令「CNN主播與記者SB的姓名都改用英文（也記入規則）」，由 `NEW` 直接升為 `PROMPT`。
+- 規則：SB 第 2 行（講者行）遇到 **CNN 主播、記者（含前 CNN 新聞人員）** 時，姓名一律寫**英文原名**、不用中文譯名；職稱仍用中文。例：`CNN主播 Erin Burnett`、`CNN記者 Will Ripley`、`前CNN北京分社社長 Mike Chinoy`。**非 CNN 人員的講者（受訪者、政要、專家）不適用**，維持各流程的台灣譯名慣例（SOT 為 `中文（英文）`）；OS 內文首次提及時也仍照 SOT 譯名規則寫 `中文（英文）`，本條只約束 SB 講者行。
+- 由來：與 CTV（[`../../cnn/01-auto-script-writing.md`](../../cnn/01-auto-script-writing.md)）既有「中文職稱＋英文姓名」規格對齊——CNN 人員的名字，觀眾在畫面 super 上看到的就是英文原名，中文譯名反而增加辨識成本。
+- 驗證器零改動：講者行的語言無法可靠自動判別，由寫稿代理依規則自律。
+- 實作位置：[`../06-auto-script-sot.md`](../06-auto-script-sot.md)（輸出結構第 5 項）、[`../07-bite-assistant.md`](../07-bite-assistant.md)（輸出格式）
+
 ## 待辦（使用者明確擱置，之後要詳細思考）
 
 ### TODO-001 SOT 要不要也訂 BITE 最短長度？（已解決）
