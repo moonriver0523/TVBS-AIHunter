@@ -71,6 +71,16 @@
 - [ ] force-push 後，Mac 那台 clone 的 `git pull --ff-only` 自動化 hook 會失效，需要在 Mac 上重新 clone 或手動 reset 到新歷史。
 - [ ] 使用者 2026-07-24 裁決：先不動手，列入 TODO 待之後再決定執行時機。
 
+## RT 網站定時盯盤試跑（2026-07-28 提出，待處理）
+
+使用者問：如果要 AI 在一段時間內（例如 4 小時）持續監控 Reuters Connect，有新素材進來就摘要彙整進素材清單，token 會不會炸？初步討論結論：
+
+- **會比一次性查詢貴，但做法對的話可以壓低**。最貴的是「截圖盯畫面」（螢幕截圖本身很吃 token）與「每次都展開全部素材寫完整摘要」；改成**純文字比對**（`get_page_text` 抓清單、跟上次記錄的 Edit No 集合做差集，只有真的出現新素材才展開該則詳情摘要）可以省下大部分空轉輪詢的成本。
+- 建議輪詢間隔拉長到 **20–30 分鐘**一次而非分鐘級盯盤——RT 本身更新頻率也不到分秒必爭，即時性犧牲不大，換到的 token 節省很明顯。
+- 機制上可以用 `ScheduleWakeup`（動態排程喚醒）搭配一份「已見過的 Edit No 清單」存檔比對，而不是掛著單一長對話一直輪詢。
+
+- [ ] **待處理**：實際抓一輪跑跑看，量出「純文字輪詢空轉一次」與「展開一則新素材寫摘要」的實際 token 花費，再決定要不要真的排 4 小時的 RT 盯盤，或要不要把這個機制寫進 `common/11-wire-rundown-organizer.md` 的「輸入模式」變成第四種模式（定時監控模式）。
+
 ## 已完成
 
 - [x] **DVIDS 也要抓文稿**（2026-07-24 完成）：已在 [`reuters/05-batch-download.md`](reuters/05-batch-download.md) 補 DVIDS 來源分派與處理細節（影片本體 `yt-dlp`＋詳情頁 `get_page_text` 抓文稿、欄位清單、B-Roll 拍攝日非當日的提醒），並在 [`common/05-material-numbering.md`](common/05-material-numbering.md) 補 DVIDS URL 的編號歸屬。
