@@ -26,7 +26,8 @@
 先用既有搜尋流程找候選素材，再整理成稿單：
 - `AP` 代碼 → [`搜尋外電素材(AP)`](../ap/01-search-workflow.md)
 - `RT`／`RTV` 代碼 → [`搜尋外電素材(RT)`](../reuters/01-search-workflow.md)
-- **CNN Newsource（`IN-XX` 組合碼）目前沒有關鍵字搜尋流程**，只能靠 Story ID 直接查（見 [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md)）。使用者只給主題、沒給 CNN 的 Story ID 時，CNN 這條先略過，不要自行猜測或跳過警告，回報使用者「CNN 這部分需要 Story ID，目前找不到」。
+- **CNN Newsource（`IN-XX`／`PO-XX` 等組合碼）沒有網址查詢，但首頁右上角的搜尋框可以直接打自由關鍵字**（2026-07-28 實測：`newsource.ns.cnn.com` 搜尋框輸入「Trump Russia Ukraine」有回結果，不是只能查 Story ID；只有 `?search=` 這類網址參數查詢不支援，見 [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md) 的既有警告，那條指的是網址查詢，跟這裡的頁面搜尋框是兩回事）。
+  - ⚠️ **左側 TRENDING 分類（例如「Russia-Ukraine」）不齊全**，同一次實測中，真正相關的一則索材（`PO-65MO`，川普轉述澤倫斯基指控俄羅斯援伊朗的完整原始 gaggle）並未被歸進「Russia-Ukraine」分類，只有用關鍵字搜尋才找得到。**兩種找法都要做**：先用分類瀏覽抓大概，再額外用關鍵字搜尋框查一次，避免漏掉分類沒收錄的素材。
 
 找到候選後，依下方語法整理成區塊；每個主題找幾則候選、選哪些角度，由 AI 依素材摘要內容判斷相關性即可，不必窮舉。
 
