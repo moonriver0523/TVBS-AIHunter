@@ -60,8 +60,8 @@
 
 ## 待補（TODO）
 
-- [ ] 完成文稿 → OS 短句 + 分組的通用解析器（目前手動）
-- [ ] 合成/驗收腳本（`synth_os_groups_v3.py`）從 `D:\voice-training\work\` 整理進 repo `scripts/`
+- [x] 完成文稿 → OS 短句 + 分組的通用解析器（2026-07-28 完成，見 [`scripts/production/ctv_common.py`](../scripts/production/ctv_common.py) 的 `load_script`／`group_os_lines`）
+- [x] 合成/驗收腳本整理進 repo（2026-07-28）：[`scripts/production/synth_os.py`](../scripts/production/synth_os.py)
 
 ## 模型改進路線（TODO，依 CP 值排序）
 

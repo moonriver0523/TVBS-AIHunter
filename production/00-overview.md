@@ -30,6 +30,8 @@
 | `03-subtitle-burn.md` | 上字（硬字幕 / BAR 下標 / SUPER 名條 / 安全框） | 待回填 |
 | `09-known-issues.md` | 已驗證踩雷與定版流程 | 已有內容 |
 
+**實作腳本**：[`scripts/production/`](../scripts/production/README.md)（`locate_sb` → `synth_os` → `build_video` → `make_subs` → `final_check`，照這個順序跑，最後一支 exit 0 才可交）。
+
 ## 前置依賴（阻擋正式上鏡）
 
 - **聲音模型**：目前用 `os_voice`(v1)，尾字偶爾偏軟。需先修訓練資料污染、重訓 **os_voice3**（見本機 `project_voice_clone_gptsovits` 記憶 / `D:\voice-training`）才夠正式播出。

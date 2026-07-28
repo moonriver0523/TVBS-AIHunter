@@ -55,9 +55,9 @@ BAR1段OS(B-roll) → SB1(受訪原聲) → BAR2段OS → SB2 → … → 收尾
 
 ## 待補（TODO）
 
-- [ ] 完成文稿 → 時間軸解析（BAR/SB 交錯結構自動抽取）
+- [x] 完成文稿 → 時間軸解析（2026-07-28 完成，沿用驗證器的 `parse_ctv`，見 [`scripts/production/ctv_common.py`](../scripts/production/ctv_common.py)；SB 精確起訖由 [`locate_sb.py`](../scripts/production/locate_sb.py) 對 ASR 詞級時間戳求出）
 - [ ] B-roll **智慧選片**（語意對齊畫面與旁白內容；目前為順序填）
-- [ ] 組裝腳本整理進 repo `scripts/`
+- [x] 組裝腳本整理進 repo（2026-07-28）：[`scripts/production/build_video.py`](../scripts/production/build_video.py)
 - [ ] ⚠️ **剪接接點「夾畫面／裁切不乾淨」**（使用者 2026-07-25 回報）：**部分解，仍有優化空間**
   - ✅ 已解一半：SB 內容被砍掉的部分，根因是**在 ASR 邊界上再做 VAD 二次裁**（見上方路線 B）。浣熊改用 ASR 詞級邊界直接切後，兩段 SB 內容完整
   - ⬜ 未解：**視訊切點本身仍未做幀級對齊**。切點落在鏡頭轉換中間時，接點前後會夾到前/後一鏡的殘幀

@@ -41,4 +41,4 @@ MarginL/R 均為 140
 
 - [ ] **TVBS 正規 CG 樣式**：BAR/SUPER 的正式配色、字級、位置、動態
 - [x] **安全框**套用（2026-07-28 完成）：見本機記憶 `reference_tvbs_safe_frame_spec`（1920×1080 基準 X=140/Y=109/W=1634/H=751，來源 tools.tvbs.ai/tools/locked-frame/）→ 已落成上方 MarginL/R 140、MarginV 220/300
-- [ ] 字幕腳本整理進 repo `scripts/`
+- [x] 字幕腳本整理進 repo（2026-07-28）：[`scripts/production/make_subs.py`](../scripts/production/make_subs.py)、終檢 [`final_check.py`](../scripts/production/final_check.py)
