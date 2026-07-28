@@ -51,8 +51,9 @@
 - **CNN 官網影音頻道 [CNNi Fast](https://edition.cnn.com/videos/fast/cnni-fast)**
 - **YouTube [CNA（Channel NewsAsia）](https://www.youtube.com/channelnewsasia)**
 - **YouTube [韓聯社（Yonhap）](https://www.youtube.com/channel/UCTHCOPwqNfZ0uiKOvFyhGwg/videos)**——**僅限南北韓新聞使用，禁用他們的國際編譯新聞**（使用者 2026-07-28 明訂：韓聯社頻道上非南北韓主題的國際新聞是他們自己編譯改寫的二手內容，不可當一手外電引用）。
+- **DVIDS [dvidshub.net](https://www.dvidshub.net/)**——美軍相關新聞的 B-ROLL 畫面（美國防部官方公開發布的視覺素材平台，任何涉及美軍的稿單都可以找，不限特定戰事）。DVIDS 連結**已是既有規則收錄的正式素材類型**，不算社群/未查證來源：比照 [`素材編號`](05-material-numbering.md) 直接當一般素材編號，下載走 [`外電批次下載`](../reuters/05-batch-download.md) 的 DVIDS 分派（下載影片本體＋抓詳情頁文稿），不用加「社群素材、需查證」的備註。
 
-這幾個 YouTube 頻道雖然是通訊社／新聞台自己開的官方頻道，但發布的是**剪輯過的新聞短片**，不是 AP Newsroom／Reuters Connect／CNN Newsource 那種可下載母帶＋Shotlist 的正式供稿素材，所以歸在「備援」而非取代既有搜尋流程；引用時同樣要在 `(備註)` 標明是通訊社 YouTube 頻道畫面，不是母帶。
+這幾個 YouTube 頻道雖然是通訊社／新聞台自己開的官方頻道，但發布的是**剪輯過的新聞短片**，不是 AP Newsroom／Reuters Connect／CNN Newsource 那種可下載母帶＋Shotlist 的正式供稿素材，所以歸在「備援」而非取代既有搜尋流程；引用時同樣要在 `(備註)` 標明是通訊社 YouTube 頻道畫面，不是母帶（DVIDS 除外，見上）。
 
 找法：
 - X 帳號：站內搜尋 `from:{帳號} {關鍵字} since:{YYYY-MM-DD}`（例：`from:NOELreports Caspian since:2026-07-25`），或直接看該帳號的 Media 分頁再用 `since:` 限制在近幾天。
