@@ -30,11 +30,14 @@
 | `03-subtitle-burn.md` | 上字（硬字幕 / BAR 下標 / SUPER 名條 / 安全框） | 待回填 |
 | `09-known-issues.md` | 已驗證踩雷與定版流程 | 已有內容 |
 
+**實作腳本**：[`scripts/production/`](../scripts/production/README.md)（`locate_sb` → `synth_os` → `build_video` → `make_subs` → `final_check`，照這個順序跑，最後一支 exit 0 才可交）。
+
 ## 前置依賴（阻擋正式上鏡）
 
 - **聲音模型**：目前用 `os_voice`(v1)，尾字偶爾偏軟。需先修訓練資料污染、重訓 **os_voice3**（見本機 `project_voice_clone_gptsovits` 記憶 / `D:\voice-training`）才夠正式播出。
 - 環境：GPT-SoVITS 於 `E:\GitHub\GPT-SoVITS`、conda 環境 `D:\CondaEnvs\GPTSoVits`（torch 須 2.5.1+cu124）。
 
-## 首個實測案例
+## 實測案例
 
-CTV「魚群暴斃1600」：外電成品 → TVBS 中文版（配音 + 上字），流程全自動走通，成品在 `Claude共用\CTV自動寫稿測試\魚群暴斃1600\`。
+- CTV「魚群暴斃1600」（首例）：外電成品 → TVBS 中文版（配音 + 上字），流程全自動走通，成品在 `Claude共用\CTV自動寫稿測試\魚群暴斃1600\`。
+- CTV「胰癌新藥1600」（2026-07-28，PY-11MO）：寫稿→配音→剪接→上字全鏈一次跑完，成品 89.9 秒。本案新增 `09` A7／A8 兩條踩雷（組首雜訊、繁簡多音字誤判）與 `03` 的安全框 MarginV、SB 字幕錨詞做法。
