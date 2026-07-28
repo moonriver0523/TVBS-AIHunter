@@ -35,12 +35,30 @@
 
 前線爆炸／交戰即時畫面，通訊社常常來不及收錄，這時可以到以下社群帳號找候選影片。這些不是通訊社正式供稿，用了要依上方「素材代碼」小節的規則在 `(備註)` 標明來源性質與查證提醒；內容真偽不確定時要在對話中明講、讓使用者自己判斷，不要片面斷定為真或假。
 
+**烏俄戰事專用：**
 - **X [@NOELreports](https://x.com/NOELreports)**：烏俄戰事媒體帳號，貼文常附前線／打擊目標影片。
 - **X [@wartranslated](https://x.com/wartranslated)**（WarTranslated，愛沙尼亞籍部落客）：烏俄戰事翻譯／彙整帳號，同樣常附影片，但部分內容曾在留言區被質疑真偽（例如「這明顯不是軍事車隊」），引用前留意留言區有沒有反駁。
+- **YouTube [@UNITED24media](https://www.youtube.com/@UNITED24media/videos)**：烏克蘭政府支持的官方宣傳頻道 UNITED24，立場偏烏克蘭官方，引用時留意這點。
 
-找法：X 站內搜尋 `from:{帳號} {關鍵字} since:{YYYY-MM-DD}`（例：`from:NOELreports Caspian since:2026-07-25`），或直接看該帳號的 Media 分頁再用 `since:` 限制在近幾天。**務必點進推文核對實際發文日期**，不能只憑縮圖判斷新舊——2026-07-28 曾誤把畫面震撼但其實是 2024 年的舊素材當成「最新」結果，同一組帳號的舊爆炸/大火影片常因畫面搶眼被重複轉發。
+**美伊戰爭／中東專用：**
+- **X [@OSINTWarfare](https://x.com/OSINTWarfare)**
+- **X [@CENTCOM](https://x.com/CENTCOM)**：美軍中央司令部官方帳號，屬美方官方發布，非獨立第三方。
 
-這份清單只是起點，日後找到其他可用來源時比照這裡的格式加進來（不限 X，其他平台也算）。
+**不分主題、任何稿單都可以找：**
+- **YouTube [Reuters](https://www.youtube.com/@Reuters)**（排除 LIVE 直播影片）
+- **YouTube [Associated Press](https://www.youtube.com/@AssociatedPress/videos)**（排除 LIVE 直播影片）
+- **YouTube [CNN](https://www.youtube.com/@CNN/videos)**（排除 LIVE 直播影片）
+- **CNN 官網影音頻道 [CNNi Fast](https://edition.cnn.com/videos/fast/cnni-fast)**
+
+這三個 YouTube 頻道雖然是通訊社／CNN 自己開的官方頻道，但發布的是**剪輯過的新聞短片**，不是 AP Newsroom／Reuters Connect／CNN Newsource 那種可下載母帶＋Shotlist 的正式供稿素材，所以歸在「備援」而非取代既有搜尋流程；引用時同樣要在 `(備註)` 標明是通訊社 YouTube 頻道畫面，不是母帶。
+
+找法：
+- X 帳號：站內搜尋 `from:{帳號} {關鍵字} since:{YYYY-MM-DD}`（例：`from:NOELreports Caspian since:2026-07-25`），或直接看該帳號的 Media 分頁再用 `since:` 限制在近幾天。
+- YouTube 頻道：先看頻道「影片」分頁排最新，或用頻道內搜尋框打關鍵字；LIVE／直播中的影片跳過不用。
+
+**務必點進原始貼文／影片頁核對實際發布日期**，不能只憑縮圖或標題判斷新舊——2026-07-28 曾誤把畫面震撼但其實是 2024 年的舊素材當成「最新」結果，同一組帳號的舊爆炸/大火影片常因畫面搶眼被重複轉發。
+
+這份清單只是起點，日後找到其他可用來源時比照這裡的格式加進來（不限 X／YouTube，其他平台也算）。
 
 ## 稿單區塊語法
 
