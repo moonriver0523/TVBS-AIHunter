@@ -88,6 +88,13 @@
 > - **並非每則「最新」都已有完整文稿**：這輪最新 7 則裡有 2 則（`EUROPE-WEATHER/FRANCE-FIRECLOUD`、`ASIA-WEATHER/INDIA-UPDATE`）標示「SHOTLIST ONLY / TEMPLATE ONLY, COMPLETE SCRIPT TO FOLLOW」，稿子晚點才會補上——**盯盤機制要處理「先收到 shotlist、稿子隨後才到」這種延遲到稿的情況**，不能假設清單上出現就代表可以馬上摘要，可能需要記錄「已見過但文稿未到」的狀態，之後補跑一次確認是否補齊。
 > - 尚未測 AP／CNN 這一輪；也還沒實際排過 4 小時盯盤，仍待後續實驗才能給出「真的要不要排」的建議。
 
+> 🔍 **第二輪實測（2026-07-28，測 AP）**：`https://newsroom.ap.org/home`（Latest／Video），測「摘要最新 5 則」。
+> - **清單頁本身可以正常截圖讀取**（不用像 RT 一路靠截圖逐段拼），且**這輪抓到的 5 則全部已有完整 STORYLINE**——跟 RT 那輪 2/7 卡在「稿未到」不同，AP 的「Newsroom Ready」項目看起來是稿齊了才上架，不會像 RT 先放 shotlist 佔位。
+> - **清單是真即時更新，會被插隊**：抓到第 4 則中途，清單頂端被新進一則高球稿擠進來，原本 5 則全部往下推一位——盯盤邏輯不能只看「頂端是不是變了」，要用素材 ID／編號集合做差集，不能假設新項目只會「加在最上面而已」。
+> - 單則成本流程＝點卡片標題開 modal（**不能只點一次就假設成功，偶爾點到舊 modal 沒真的換頁，需截圖確認標題對不對**）→ 點「Open in a new tab」開真詳情頁 → 該分頁 `get_page_text` 一次拿全 Shotlist／STORYLINE／Metadata／Restrictions／「More like this」相關清單。彈窗 **Close 有時點一次沒關乾淨**（點了又立刻重開同一則），需視情況多點一次確認。
+> - 5 則裡有 **2 則是 SNTV（非 AP 原生）供稿**（`Provided by: SNTV`，頁尾註明「This content is not produced or verified by the Associated Press」），其中 1 則還是舊畫面剪輯的「FILE」重發稿——跟既有規則的「非通訊社正式供稿要標註」一致，AP 站內清單並不會特別把這類內容跟原生內容分開排列，得逐則看 Provided by 欄位才能分辨。
+> - 尚未測 CNN Newsource 這一輪；AP／RT 兩輪都還沒實際排過 4 小時盯盤。
+
 ## 已完成
 
 - [x] **DVIDS 也要抓文稿**（2026-07-24 完成）：已在 [`reuters/05-batch-download.md`](reuters/05-batch-download.md) 補 DVIDS 來源分派與處理細節（影片本體 `yt-dlp`＋詳情頁 `get_page_text` 抓文稿、欄位清單、B-Roll 拍攝日非當日的提醒），並在 [`common/05-material-numbering.md`](common/05-material-numbering.md) 補 DVIDS URL 的編號歸屬。
