@@ -95,7 +95,8 @@ SB
 
 - 順序固定為：SB → 職稱姓名 → 中文翻譯 → TC欄位 → 英文原文。
 - **有 `#編號` 的素材**（方式1）：TC欄位＝`#{素材編號} {TC起}-{TC訖}`。
-- **沒有 `#編號` 的素材**（方式2、方式3、補充情境）：TC欄位＝純**6碼無冒號格式**起訖時間，例如 `060900-060923`，不帶清單上的原始代碼。
+- **CNN 六碼側錄素材**（方式2）：TC欄位＝`CNN {M/D} {TC起}-{TC訖}`，`{M/D}` 為母帶錄製日期（2026-07-28 訂定，`P-025`），例 `CNN 7/28 060900-060923`。
+- **其他無 `#編號` 素材**（方式3、補充情境）：TC欄位＝純**6碼無冒號格式**起訖時間，例如 `060900-060923`，不帶清單上的原始代碼。
 - 中文翻譯必須是忠於原意的原創繁體中文翻譯，不帶「」引號。
 - **CNN 主播／記者（含前 CNN 新聞人員）的講者行姓名一律用英文原名**，職稱仍中文（2026-07-28 訂定，`P-023`，例：`CNN主播 Erin Burnett`）；其他講者維持原有譯名慣例。
 - 英文逐字照抄來源原文；若來源是官方文稿，一律以官方文稿為準，不採信 ASR 文字。
@@ -117,6 +118,6 @@ Those who came in through the window in an illegal manner, in an irregular and c
 SB
 白宮記者 Kevin Liptak
 他們不必造成巨大破壞或把船擊沉，就能實質關閉水道，因為船長不願冒險通過。除非透過外交手段讓伊朗退讓，否則要重新開放該水道會很難。
-060900-060923
+CNN 7/28 060900-060923
 They don't have to really cause that much damage or sink them, but they still are able to essentially close the waterway because ship captains are unwilling to take the risk of trying to transit through. And unless you get the Iranians to back off of that diplomatically, it will be very difficult to get that waterway reopened.
 ```
