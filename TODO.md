@@ -106,6 +106,8 @@
 > - **CNN**：「Has Script」篩選勾選框點擊無效，改用逐則辨認列尾圖示排除未到稿項目；modal 關閉後畫面偶爾跳回頂端輪播，需重新捲動定位。
 > - **共同點**：AP／CNN 清單都是即時更新（會被新進項目插隊，AP 那次全部往下推一位），盯盤邏輯不能假設「新項目只會加在最上面」，要用素材編號集合做差集判斷。
 
+> 📄 **格式參考案例（2026-07-28 使用者補充）**：使用者提供一份自己既有的「自動監控掃帶產出的整理清單」範例，存於 [`common/wire-rundown-cases/2026-07-28-自動監控掃帶-格式參考.txt`](../common/wire-rundown-cases/2026-07-28-自動監控掃帶-格式參考.txt)（差異說明見同資料夾 `README.md`）。跟現行 `common/11-wire-rundown-organizer.md` 規格的落差：①多一層跨主題的大分類區塊（`\====主題=====`）②重量級連線段落會整段展開翻譯逐字稿並附精確 6 碼 TC，不只是一句話摘要——這也回答了 `11` 開頭列的待驗證項「6 碼 CNN 側錄素材是否適用 BITE 標記」，答案是適用且比原猜測更豐富。**「定時監控模式」若要正式定案，這份範例格式要先跟使用者對齊，不要自行套用。**
+
 ## 已完成
 
 - [x] **DVIDS 也要抓文稿**（2026-07-24 完成）：已在 [`reuters/05-batch-download.md`](reuters/05-batch-download.md) 補 DVIDS 來源分派與處理細節（影片本體 `yt-dlp`＋詳情頁 `get_page_text` 抓文稿、欄位清單、B-Roll 拍攝日非當日的提醒），並在 [`common/05-material-numbering.md`](common/05-material-numbering.md) 補 DVIDS URL 的編號歸屬。
