@@ -2,7 +2,7 @@
 
 當使用者只給一組 CNN Newsource story ID（例如「WE-018FR」）並以此名稱呼叫時，自動執行以下完整流程，不需逐步詢問許可，但需在過程中回報找到/需留意的事項（禁運期、限制等）。
 
-**開始前必讀**：[`common/00-寫稿通則.md`](../common/00-寫稿通則.md)（版權、單位換算、**數字寫法**、**寫稿前事實分層**、**SB 五行格式**）與 [`common/08-execution-efficiency.md`](../common/08-execution-efficiency.md)（瀏覽器操作、額度禁令、下載重試）。**寫稿階段另讀** [`common/10-寫稿風格指南.md`](../common/10-寫稿風格指南.md)（人味層：稿頭四型、敘事節奏、比喻開關、情緒紀律、收尾簽名句；屬風格參照，與格式規則衝突時以格式規則為準）。本文件另規定 CTV 特有的「只為 SB 定位 TC、不把官方稿／ASR 全文灌進對話」省 Token 流程。
+**開始前必讀**：[`common/00-寫稿通則.md`](../common/00-寫稿通則.md)（版權、單位換算、**數字寫法**、**寫稿前事實分層**、**SB 五行格式**）與 [`common/08-execution-efficiency.md`](../common/08-execution-efficiency.md)（瀏覽器操作、額度禁令、下載重試）。**寫稿階段另讀** [`common/10-寫稿風格指南.md`](../common/10-寫稿風格指南.md)（人味層：稿頭四型、敘事節奏、比喻開關、情緒紀律、收尾簽名句；屬風格參照，與格式規則衝突時以格式規則為準）。⚠️ **該檔 600 行以上，不要從頭讀到尾**——依其開頭的「分層讀法」表：起稿前讀**第 0–13 節**、交付前讀**第 15 節題材禁忌**，第 14 節稀有招式庫（佔全檔一半）預設不預讀、按需查。**交付前是兩道關卡**：`validate_sot.py --mode ctv` 管格式，第 12 節生成檢核表管風格，兩道都過才叫完成稿。本文件另規定 CTV 特有的「只為 SB 定位 TC、不把官方稿／ASR 全文灌進對話」省 Token 流程。
 
 **Rollback：** 省 Token 改寫前的完整舊版保存在 [`_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md`](../_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md)。
 
