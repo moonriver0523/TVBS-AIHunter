@@ -19,6 +19,7 @@
 - [`cnn/02-clip-bite.md`](cnn/02-clip-bite.md) — **CNN掐Bite**：用 `video_analyze` 為無 TC 的 CNN／AP 官方文稿補上句子級 Bite TC（省 Token：先選句、單次 ASR、關鍵字 ±5 秒）
 
 ### 跨來源共用流程
+- [`common/11-wire-rundown-organizer.md`](common/11-wire-rundown-organizer.md) — **外電稿單整理**：把雜亂的外電候選素材（或只給主題）整理成稿頭+素材代碼+一句話短摘要的稿單，存 txt 供編輯瀏覽決定（新流程，`+`分隔符與「參考」行語意待使用中驗證）
 - [`common/05-material-numbering.md`](common/05-material-numbering.md) — **素材編號**：在素材清單裡找出 AP/RT/RTV/ENEX/ABC/IN-XX/YouTube/X 等素材代碼並依序編號（完整輸出一次；下游禁止重貼）
 - [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md) — **自動寫稿(SOT)**：接續外電批次下載結果，寫成台灣電視新聞稿（省 Token：瘦盤點、每片一次 ASR、完成稿落檔、照片列表直下）
 - [`common/07-bite-assistant.md`](common/07-bite-assistant.md) — **掐BITE助手**：從編號素材、CNN側錄6碼素材，或本機/雲端既有素材找 Bite TC，直接輸出SB五行雙語逐字，不剪片不上傳
