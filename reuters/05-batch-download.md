@@ -27,9 +27,9 @@
 
 | 代碼前綴/類型 | 實際來源 | 細節流程 | 檔名來源縮寫 |
 |---|---|---|---|
-| `RT`／`RTV` | Reuters Connect | [`搜尋外電素材(RT)`](01-search-workflow.md) | `RT` |
+| `RT`（`RTV` 正規化為 `RT`） | Reuters Connect | [`搜尋外電素材(RT)`](01-search-workflow.md) | `RT` |
 | `AP` | AP Newsroom | [`搜尋外電素材(AP)`](../ap/01-search-workflow.md)／[`找AP照片`](../ap/02-photo-search.md) | `AP` |
-| `IN-XX` 組合碼 | CNN Newsource | [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md) | `CNN`（NEWSOURCE＝CNN Newsource） |
+| `{2 字母}-{數字}{星期兩碼}` 組合碼<br>（`IN-07SU`／`PO-35TU`／`WE-018FR`…前綴不固定） | CNN Newsource | [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md) | `CNN`（NEWSOURCE＝CNN Newsource） |
 | `ENEX` | 尚無教學說明 | 遇到先問使用者要去哪裡找 | `ENEX` |
 | `ABC` | 尚無教學說明 | 遇到先問使用者要去哪裡找 | `ABC` |
 | DVIDS URL（`dvidshub.net`） | DVIDS（美國國防部影像庫） | 見下方「DVIDS」細節 | `DVIDS` |
@@ -40,7 +40,7 @@
 
 ## 各來源處理細節
 
-**RT／RTV：**
+**RT（含來源端寫成 `RTV` 者，一律當 `RT` 處理）：**
 1. reutersconnect.com，Video 分頁，搜尋 Edit No.——搜尋方式（優先直接帶網址、My Subscription 維持預設 **ON**）一律依 [`搜尋外電素材(RT)`](01-search-workflow.md)，本文件不另訂。
 2. Edit No. 可能撞號到不相關舊新聞——核對標題/主題是否符合這批清單脈絡，不要無腦點第一筆結果。
 3. 開詳情頁，記錄右側 **Restrictions** 面板完整內容＋複製 **Video Transcript**／逐字稿全文，合併存成該筆的文稿 txt。
@@ -51,7 +51,7 @@
 2. 影片：進詳情頁的 **Shotlist** 分頁（限制摘要＋SOUNDBITE＋STORYLINE）存成文稿 txt——**取全文時依 [`搜尋外電素材(AP)`](../ap/01-search-workflow.md) 的「取 Shotlist 的標準做法：開新分頁」，點彈出 modal 右上角「Open in a new tab」再對該分頁 `get_page_text`；不要對 modal 直接 `get_page_text`**（會抓到背後列表頁摘要而不是 Shotlist 內容，只能改靠截圖逐段捲讀，浪費 token 又會被裁切，2026-07-24「破一百1200」案例踩過）。按 Download 選 Master＋任一 HD 格式送出——**非同步處理，不用在 AP 網站的 Downloads 頁面等 ready，完成後直接進 D:\Downloads**。
 3. 照片：列表頁卡片上的 ⬇ 圖示可直接下載（同步即時）；詳情頁 **Photo Metadata** 含 **Special Instructions**（限制）存成文稿 txt。
 
-**CNN Newsource（`IN-XX` 組合碼）：** 依 [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md)，用「≡Q」預覽圖示取得官方 script 全文存成文稿 txt，下載影片，比對 TC。
+**CNN Newsource（`{2 字母}-{數字}{星期兩碼}` 組合碼）：** 依 [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md)，用「≡Q」預覽圖示取得官方 script 全文存成文稿 txt，下載影片，比對 TC。
 
 **ENEX／ABC：** 沒有教學對應網站/流程，遇到時停下來問使用者，不要自行猜測去哪裡下載。
 

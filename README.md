@@ -2,6 +2,8 @@
 
 外電（路透社 Reuters Connect / AP Newsroom / CNN Newsource）相關的自動化流程規則庫，供 Claude 或其他 AI 助手在處理外電素材時遵循。
 
+> 🗺️ **先看全貌**：[`common/12-子系統地圖.md`](common/12-子系統地圖.md) — 這 26 份規則實際上組成 9 個子系統＋一層共用地基＋一層參考知識。下方目錄仍按「來源」排列（歷史結構），跟子系統邊界是垂直交叉的。
+
 ## 目錄
 
 ### Reuters Connect
@@ -20,7 +22,7 @@
 
 ### 跨來源共用流程
 - [`common/11-wire-rundown-organizer.md`](common/11-wire-rundown-organizer.md) — **外電稿單整理**：把雜亂的外電候選素材（或只給主題）整理成稿頭+素材代碼+一句話短摘要的稿單，存 txt 供編輯瀏覽決定（新流程，`+`分隔符與「參考」行語意待使用中驗證）
-- [`common/05-material-numbering.md`](common/05-material-numbering.md) — **素材編號**：在素材清單裡找出 AP/RT/RTV/ENEX/ABC/IN-XX/YouTube/X 等素材代碼並依序編號（完整輸出一次；下游禁止重貼）
+- [`common/05-material-numbering.md`](common/05-material-numbering.md) — **素材編號**：在素材清單裡找出 AP/RT/APcctv/ENEX/ABC/CNN Newsource 組合碼/YouTube/X 等素材代碼並依序編號（`RTV` 正規化為 `RT`）（完整輸出一次；下游禁止重貼）
 - [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md) — **自動寫稿(SOT)**：接續外電批次下載結果，寫成台灣電視新聞稿（省 Token：瘦盤點、每片一次 ASR、完成稿落檔、照片列表直下）
 - [`common/07-bite-assistant.md`](common/07-bite-assistant.md) — **掐BITE助手**：從編號素材、CNN側錄6碼素材，或本機/雲端既有素材找 Bite TC，直接輸出SB五行雙語逐字，不剪片不上傳
 - [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md) — **自動寫稿持續校稿索引**：保存使用者修改稿帶來的規則、成熟度、案例與 Prompt 變更；所有代理執行自動寫稿前必讀

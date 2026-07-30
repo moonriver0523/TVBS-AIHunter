@@ -12,8 +12,14 @@
 
 ## 要找的素材類型
 
-- **代碼類**：`AP`／`RT`／`RTV`／`ENEX`／`ABC` 開頭的字串（例如 `RT6722`、`AP4671347`）
-- **組合碼**：類似 `IN-78TH` 這種「字母-數字-字母」組合格式——**這就是 CNN Newsource 的素材代碼**（對應 [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md) 用的「CNN Newsource ID」），下載時走 CNN Newsource 那條線，不是走 RT 或 AP。
+- **代碼類**：`AP`／`RT`／`RTV`／`APcctv`／`ENEX`／`ABC` 開頭的字串（例如 `RT6722`、`AP4671347`）
+  - **`RTV` 一律正規化為 `RT`**（2026-07-30 訂定）：來源端仍會出現 `RTV` 寫法，辨識時照收，但**寫進清單／稿單／庫存時統一寫成 `RT`**，不保留 RTV。
+  - **`APcctv` ＋ 6 碼數字**是 AP 網站上的另一種編碼，**照常收錄**——它跟 `AP` ＋ 7 碼一樣都是 AP 網站素材，只是編碼格式不同。
+  - 🚫 **其他前綴的 AP 供稿排除**（`vrb017589`／`stltd029775`／`un010491` 這類 stringer／UGC 供稿商代碼，通常標 `10cr`／`15cr` 點數）：要額外付費，[`S2 定時掃帶`](13-S2-定時掃帶.md) 階段直接排除不錄。
+- **組合碼**：格式為 **`{2 英文字母}-{2~3 位數字}{星期兩碼}`**——**這就是 CNN Newsource 的素材代碼**（對應 [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md) 用的「CNN Newsource ID」），下載時走 CNN Newsource 那條線，不是走 RT 或 AP。
+  - ⚠️ **前綴不是只有 `IN`**（2026-07-30 訂正，實測 10 種）：`IN`／`NE`／`TE`／`PO`／`NA`／`MW`／`WX`／`PY`／`SE`／`WE`，日後還可能出現沒見過的兩碼。**判斷依據是格式，不是前綴白名單。**
+  - 結尾兩碼是**星期縮寫**（`MO`／`TU`／`WE`／`TH`／`FR`／`SA`／`SU`）。
+  - 實例：`IN-07SU`、`PO-35TU`、`WE-018FR`、`MW-002TU`、`PY-03MO`、`NE-002SU`、`IN-116MO`。
 - **URL 類**：YouTube URL、X（Twitter）的 URL、Facebook 等社群轉發連結、DVIDS（`dvidshub.net`）影片連結
   - X 的 URL 若網址裡有 **"Video"** → 當一般素材編號
   - X 的 URL 若網址裡有 **"Photo"** → 另開**獨立**的「圖片編號」，跟一般素材編號分開計數，不混在一起
@@ -23,8 +29,9 @@
 ## 代碼對應來源
 
 - `AP` → AP Newsroom（[`搜尋外電素材(AP)`](../ap/01-search-workflow.md)／[`找AP照片`](../ap/02-photo-search.md)）
-- `RT`／`RTV` → Reuters Connect（[`搜尋外電素材(RT)`](../reuters/01-search-workflow.md)）
-- `IN-XX` 類組合碼 → CNN Newsource（[`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md)）
+- `RT`／`RTV`（**輸出一律寫 `RT`**）→ Reuters Connect（[`搜尋外電素材(RT)`](../reuters/01-search-workflow.md)）
+- `APcctv` ＋ 6 碼 → AP Newsroom 上的另一種編碼，照常收錄
+- **`{2 字母}-{數字}{星期兩碼}` 組合碼**（`IN-07SU`／`PO-35TU`／`WE-018FR`…，前綴不固定，見上節）→ CNN Newsource（[`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md)）
 - YouTube／X／Facebook URL → 走 `yt-dlp`／右鍵存圖，見 [`外電批次下載`](../reuters/05-batch-download.md) 的來源分派表
 - DVIDS URL（`dvidshub.net`）→ `yt-dlp` 下載影片本體＋詳情頁抓文稿，見 [`外電批次下載`](../reuters/05-batch-download.md) 的 `DVIDS` 分派
 - `ENEX`／`ABC` → 目前尚無對應的下載來源／流程說明，**遇到這兩種前綴只做編號，不要自行猜測去哪個網站下載**，下載階段要停下來問使用者。
