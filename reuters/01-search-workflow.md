@@ -50,16 +50,27 @@
 
 詳情頁內含：影片、Video Transcript 面板（帶時間碼，原始語言，附「Automated Translation」切換）、完整文字稿（shotlist ＋「RESENDING WITH COMPLETE SCRIPT」正文）、右側 **Restrictions** 面板（例如「No use BBC Persian」「No use VOA Persian」）——限制對新聞編輯室很重要，找到後務必回報。
 
-## 詳情頁 Previous／Next（‹ ›）連讀（2026-07-31）
+## 詳情頁 Previous／Next（‹ ›）連讀（2026-07-31；同日晚鐵律）
 
-當任務是**連掃多則**（例如 S2 定時掃帶的「近 2 小時」）、已在同一組 Video 篩選結果內時：
+當任務是**連掃多則**（S2 時間窗、近 N 小時），**只准**走：
 
-- 詳情頁有 **Previous／Next** 按鈕（畫面常作 **‹ ›**，a11y 為 `Previous`／`Next`）——在**當前結果集**內切上一則／下一則，**不要每則都回清單重點**。
-- **操作口訣**：**從最新的素材進去 → 用 Next（›）往時間更早收集**；Details 時間低於截止就停。Previous（‹）往更新。
-- ⚠️ **‹ › 只在「本來就有前頁清單」的結果集才有**——單支 `search=all:####` 或純 `/detail` **沒有**前後鍵。應從 `all?media-types=vid`（或 `all?id=…&media-types=vid`）列表點進。
-- 列表**淺色＝已看過**。
-- 單筆 Edit No.／關鍵字精準搜尋仍用上方標準流程；連掃才用 ‹ ›。
-- S2 場景見 [`../common/13-S2-定時掃帶.md`](../common/13-S2-定時掃帶.md)「RT 詳情頁 Previous／Next」。
+1. `all?media-types=vid`（My Subscription ON、Newest First）  
+2. **點清單最上方最新一則**進詳情（保留結果集；URL 宜為 `all?id=…&media-types=vid`）  
+3. 詳情內反覆 **Next（›）＝往更早**；Details 時間低於截止就停  
+4. Edit No. → `RT####` 對狀態 JSON 差集  
+
+**口訣：列表最新 → 點進去 → Next 往早。**
+
+### 禁則（2026-07-31 晚連卡兩次後寫死）
+
+- ❌ 列表狂按 **LOAD MORE**／深捲當主掃法（會把結果集拖成隔日舊帶，最新窗消失）  
+- ❌ 純 `/detail?id=…` 或單支 `search=all:####` 再開了還想按 ‹ ›（**沒結果集就沒有前後鍵**）  
+- ❌ 每則回清單重點、或把 ‹ › 當瀏覽器分頁  
+- ✅ 頂端 1 屏確認最新 → 立刻點進 → Next 鏈收到截止  
+
+列表淺色＝已看過（提示用）；覆蓋範圍以 **Details 時間 + JSON 差集** 為準。  
+單筆 Edit No.／關鍵字精準搜尋仍用上方標準流程。  
+S2 完整版（5 步＋檢查清單）見 [`../common/13-S2-定時掃帶.md`](../common/13-S2-定時掃帶.md)「RT 詳情頁 Previous／Next」。
 
 ## CCTV／CCTV+ 供稿（2026-07-31 使用者訂正）
 
