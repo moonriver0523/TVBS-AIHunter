@@ -61,5 +61,12 @@
 - 單筆 Edit No.／關鍵字精準搜尋仍用上方標準流程；連掃才用 ‹ ›。
 - S2 場景見 [`../common/13-S2-定時掃帶.md`](../common/13-S2-定時掃帶.md)「RT 詳情頁 Previous／Next」。
 
+## CCTV／CCTV+ 供稿（2026-07-31 使用者訂正）
+
+- **SOURCE: China Central Television (CCTV)**、`CCTV+`、slug／標題含 `CCTV+` 的素材：**免費可用，S2／搜尋／入庫都要收**，代碼仍是 **`RT`＋Edit No.**，備註標 **`(CCTV)`**。
+- 常見限制：`No access Chinese mainland`（限非陸媒）——**照收**，在備註或 Restrictions 回報即可，不要整則排除。
+- ❌ 不要把 CCTV 跟「Paid Content／CNS／要另扣點的 stringer」混成「一律付費排除」。列表上的 **Paid Content** 徽章**不能**單獨當作「本帳不能用／要略過」的依據——以能否免點下載與來源規則為準。
+- **CNS（China News Service）** 與 CCTV 不同源：詳情為 FREE TO ME／Included 或可免點下載則可收並標 `(CNS)`；明確另購點數再排除。S2 細則見 [`../common/13-S2-定時掃帶.md`](../common/13-S2-定時掃帶.md)。
+
 ## 版權注意
 依 [`common/00-寫稿通則.md`](../common/00-寫稿通則.md)。

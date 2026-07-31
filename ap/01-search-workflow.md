@@ -37,6 +37,7 @@
   - **Shotlist** — 對應 RT 的逐字稿頁，內容依序是：**Restriction Summary**（使用限制摘要）→ 逐條 **SOUNDBITE** 引言（帶 `++...++` 製作註記，是翻譯後的引言文字，**沒有精確 TC**）→ **STORYLINE**（完整新聞稿全文）。有「Find in Shotlist」可在頁內搜關鍵字。
 - **SNTV（2026-07-31；同日晚修識別）**：**可以收、不要略過**。**SNTV＝AP 體育供稿**；**編號一定是 `AP5` 開頭**（如 `AP5466549`），**不是 `AP4`（`467…`）**。寫進庫存／稿單備註**必標 `(SNTV)`**。頁尾常有「This content is not produced or verified by the Associated Press」——與 `vrb`／`stltd`／`un` 等**要扣點的 stringer 前綴**不同，不要混判排除。  
   - ⚠️ Latest 列表 `get_page_text` 會把**下一則**卡上的 `SNTV` 標籤黏在**上一則**編號後面；**`AP4…` 後出現的 `SNTV` 字樣多半屬於下一則 `AP5…` 體育**，不可誤標。詳見 [`../common/13-S2-定時掃帶.md`](../common/13-S2-定時掃帶.md)。
+- **CCTV／`APcctv`（2026-07-31 使用者訂正）**：**免費可用，必收**。代碼 **`APcctv`＋6 碼**（或 Metadata 顯示 CCTV 供稿）照常入庫；**禁止**當付費 stringer／整批略過。詳見 [`../common/13-S2-定時掃帶.md`](../common/13-S2-定時掃帶.md)。
 - 沒有 TC 時，比照 [`CNN掐Bite`](../cnn/02-clip-bite.md) 的做法：下載後用 `video_analyze`（transcription）補時間點，引言文字仍以官方 Shotlist/Storyline 文字為準，不可用 ASR 文字取代官方文字。
 
 ### 取 Shotlist 的標準做法：開新分頁（2026-07-21 實證，取代截圖逐段讀）
