@@ -34,8 +34,8 @@
 | `ABC` | 尚無教學說明 | 遇到先問使用者要去哪裡找 | `ABC` |
 | DVIDS URL（`dvidshub.net`） | DVIDS（美國國防部影像庫） | 見下方「DVIDS」細節 | `DVIDS` |
 | YouTube URL | YouTube | `yt-dlp` 下載到 `D:\Downloads` | `YT` |
-| X 影片 URL（網址含 "Video"） | X | `yt-dlp` 下載到 `D:\Downloads` | `X` |
-| X 照片 URL（網址含 "Photo"，用**圖片編號**） | X | 瀏覽器開原圖 URL，右鍵另存到 `D:\Downloads` | `X`（檔名用 `圖#XX`） |
+| X 影片貼文（一般 `#XX`） | X | `yt-dlp` 下載到 `D:\Downloads` | `X` |
+| X 照片貼文（**圖片編號** `圖#XX`） | X | 取 `pbs.twimg.com` 原圖網址下載 | `X`（檔名用 `圖#XX`） |
 | Facebook URL（社群轉發連結） | Facebook | `yt-dlp` 下載到 `D:\Downloads`，做法同 YouTube；清單摘要簡短時先抽樣看完整支片再下判斷 | `FB` |
 
 ## 各來源處理細節
@@ -68,11 +68,14 @@
    - **版權**：多為 `PUBLIC DOMAIN`（公有領域），但仍須遵守 `https://www.dvidshub.net/about/copyright` 所列限制，文稿裡照抄那句聲明。
 3. ⚠️ **Date Taken 常常不是新聞當日**：DVIDS 多是 B-Roll 資料帶，拍攝日可能是幾週、幾個月甚至前一年。文稿裡務必註明拍攝日，並提醒寫稿時判斷這支是否只能當**背景/資料畫面**，不可當成事件當日的新畫面。（2026-07-24「加倍轟伊2200」案例：#08 拍攝日 2025-10-23、#09 拍攝日 2026-04-23，都比新聞當日早很多。）
 
-**X（Twitter）：**
-- 影片（URL 含 "Video"）：`yt-dlp` 下載到 `D:\Downloads`。
-- 照片（URL 含 "Photo"）：瀏覽器打開該貼文/原圖 URL，右鍵另存圖片到 `D:\Downloads`。
+**X（Twitter，2026-07-31 訂正）：**
 
-兩者都沒教「文稿」的抓取方式，遇到時先問使用者。
+⚠️ 判斷是影片還是照片、以及有幾件媒體，依 [`素材編號`](../common/05-material-numbering.md) 的「X 連結不能只看網址字串」規則——一般 `.../status/{id}` 連結先打開貼文確認內容，不要假設沒有影片/照片就跳過不下載（「俄炸朝彈2200」案例 5 則 X 連結全部因此誤判漏編漏下載，事後補救）。
+
+- **影片**：`yt-dlp` 直接對 `https://x.com/{user}/status/{id}` 下載，**不需要登入/cookies**（2026-07-31 實測，公開貼文可直接抓）。格式建議 `-f "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/b"`。
+  - 同一則貼文含多支影片時，`yt-dlp` 會當成 playlist 依序下載出多個檔案（對應多個 `#XX`），下載順序即貼文內影片顯示順序。
+- **照片**：`yt-dlp` 不處理純圖片貼文。改用 `read_network_requests` 篩 `pbs.twimg.com` 找出該貼文自己的圖片（媒體 ID 通常同一批貼文共用相近前綴，注意排除頁面上其他人頭像/回覆串裡的圖），把網址參數改成 `?format=jpg&name=orig` 取原始解析度，用 `curl -sL "{url}" -o "{檔名}"` 直接落地，比瀏覽器右鍵另存更穩定也更快（一次可批量抓多張）。同一貼文多張照片，每張各自存成一個 `圖#XX`。
+- **文稿/備註**：X 沒有 Restrictions 面板，改存一份簡短 txt 記錄：貼文帳號、URL、發文時間、原文 caption 全文、以及跟稿單哪一段對應；不確定的背景資訊（例如是否為同一事件的不同鏡頭）用備註標註，不要略過。
 
 **Facebook（或其他社群轉發連結，清單摘要只有一句話時）：** 用 `yt-dlp` 下載到 `D:\Downloads`，做法比照 YouTube。**若清單裡的摘要只有短短一句話（例如「網友轉發＿＿影片」），下載完成後務必先對整支影片做全長度抽樣（`video_analyze`＋`video_detail` 稀疏抽樣，見 [`common/07-bite-assistant.md`](../common/07-bite-assistant.md) 的 B-roll TC 補充情境），確認實際內容與敏感程度後才決定寫稿時怎麼呈現，不能只憑清單那句摘要判斷。**尤其當這篇新聞的標題本身已經偏敏感/聳動時（例如涉及特定人物人身安全、路線曝光等），更要先看完整支片再下判斷（案例見 [`../common/09-known-issues.md`](../common/09-known-issues.md#規則由來案例歷史紀錄)）。
 
