@@ -33,8 +33,9 @@
 - 標題 + **Download** 按鈕 + pin/copy/print/share 圖示
 - 三個分頁：
   - **Thumbnails** — 縮圖
-  - **Metadata** — Slug／Arrival Date／Creation Date／Duration／**ID**（下載檔名會用這個編號）／Provided By／Source／Dateline／Location／Usage Type／People Shown／People Mentioned／Subjects
+  - **Metadata** — Slug／Arrival Date／Creation Date／Duration／**ID**（下載檔名會用這個編號）／**Provided By**／Source／Dateline／Location／Usage Type／People Shown／People Mentioned／Subjects
   - **Shotlist** — 對應 RT 的逐字稿頁，內容依序是：**Restriction Summary**（使用限制摘要）→ 逐條 **SOUNDBITE** 引言（帶 `++...++` 製作註記，是翻譯後的引言文字，**沒有精確 TC**）→ **STORYLINE**（完整新聞稿全文）。有「Find in Shotlist」可在頁內搜關鍵字。
+- **`Provided by: SNTV`（2026-07-31）**：**可以收、不要略過**。仍用 `AP`＋7 碼編號；寫進庫存／稿單／回報時備註**必標 `(SNTV)`**。頁尾常有「This content is not produced or verified by the Associated Press」——與 `vrb`／`stltd`／`un` 等**要扣點的 stringer 前綴**不同，不要混判排除。詳見 [`../common/13-S2-定時掃帶.md`](../common/13-S2-定時掃帶.md)。
 - 沒有 TC 時，比照 [`CNN掐Bite`](../cnn/02-clip-bite.md) 的做法：下載後用 `video_analyze`（transcription）補時間點，引言文字仍以官方 Shotlist/Storyline 文字為準，不可用 ASR 文字取代官方文字。
 
 ### 取 Shotlist 的標準做法：開新分頁（2026-07-21 實證，取代截圖逐段讀）

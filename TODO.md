@@ -104,6 +104,7 @@
 > - **清單是真即時更新，會被插隊**：抓到第 4 則中途，清單頂端被新進一則高球稿擠進來，原本 5 則全部往下推一位——盯盤邏輯不能只看「頂端是不是變了」，要用素材 ID／編號集合做差集，不能假設新項目只會「加在最上面而已」。
 > - 單則成本流程＝點卡片標題開 modal（**不能只點一次就假設成功，偶爾點到舊 modal 沒真的換頁，需截圖確認標題對不對**）→ 點「Open in a new tab」開真詳情頁 → 該分頁 `get_page_text` 一次拿全 Shotlist／STORYLINE／Metadata／Restrictions／「More like this」相關清單。彈窗 **Close 有時點一次沒關乾淨**（點了又立刻重開同一則），需視情況多點一次確認。
 > - 5 則裡有 **2 則是 SNTV（非 AP 原生）供稿**（`Provided by: SNTV`，頁尾註明「This content is not produced or verified by the Associated Press」），其中 1 則還是舊畫面剪輯的「FILE」重發稿——跟既有規則的「非通訊社正式供稿要標註」一致，AP 站內清單並不會特別把這類內容跟原生內容分開排列，得逐則看 Provided by 欄位才能分辨。
+> - ✅ **規則已改（2026-07-31）**：**SNTV 可收**，備註必標 `(SNTV)`；不要整批排除。見 `common/13`／`common/05`／`ap/01`。
 > - 尚未測 CNN Newsource 這一輪；AP／RT 兩輪都還沒實際排過 4 小時盯盤。
 
 > 🔍 **第三輪實測（2026-07-28，測 CNN Newsource）**：`https://newsource.ns.cnn.com/`（Latest／All Stories），測「摘要最新 5 則」。
