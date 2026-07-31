@@ -50,5 +50,14 @@
 
 詳情頁內含：影片、Video Transcript 面板（帶時間碼，原始語言，附「Automated Translation」切換）、完整文字稿（shotlist ＋「RESENDING WITH COMPLETE SCRIPT」正文）、右側 **Restrictions** 面板（例如「No use BBC Persian」「No use VOA Persian」）——限制對新聞編輯室很重要，找到後務必回報。
 
+## 詳情頁 Previous／Next（‹ ›）連讀（2026-07-31）
+
+當任務是**連掃多則**（例如 S2 定時掃帶的「近 2 小時」）、已在同一組 Video 篩選結果內時：
+
+- 詳情頁有 **Previous／Next** 按鈕（畫面常作 **‹ ›**，a11y 為 `Previous`／`Next`）——在**當前結果集**內切上一則／下一則，**不要每則都回清單重點**。
+- 掃時間窗：先開最新一則 → 反覆 **Next** 往舊的走 → 看 Details 時間低於截止就停。
+- 單筆 Edit No.／關鍵字精準搜尋仍用上方標準流程；連掃才用 ‹ ›。
+- S2 場景的完整說明見 [`../common/13-S2-定時掃帶.md`](../common/13-S2-定時掃帶.md)「RT 詳情頁 Previous／Next」。
+
 ## 版權注意
 依 [`common/00-寫稿通則.md`](../common/00-寫稿通則.md)。
