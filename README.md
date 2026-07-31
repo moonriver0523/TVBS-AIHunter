@@ -26,6 +26,7 @@
 - [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md) — **自動寫稿(SOT)**：接續外電批次下載結果，寫成台灣電視新聞稿（省 Token：瘦盤點、每片一次 ASR、完成稿落檔、照片列表直下）
 - [`common/07-bite-assistant.md`](common/07-bite-assistant.md) — **掐BITE助手**：從編號素材、CNN側錄6碼素材，或本機/雲端既有素材找 Bite TC，直接輸出SB五行雙語逐字，不剪片不上傳
 - [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md) — **自動寫稿持續校稿索引**：保存使用者修改稿帶來的規則、成熟度、案例與 Prompt 變更；所有代理執行自動寫稿前必讀
+- [`common/15-歐印萬掃帶.md`](common/15-歐印萬掃帶.md) — **歐印萬掃帶**：監控「掃帶歐印萬」資料夾、指定/自動翻譯側錄音檔成 TC中文大段翻譯 或 雙語逐字稿全文，存於來源音檔旁（與 S2b 濃縮摘要不同，見文件內說明）
 - [`style-corpus/README.md`](style-corpus/README.md) — **風格語料庫**：使用者過去實際寫的 TVBS 國際新聞完成稿（1701 篇 `Draft`），作為未來提升寫稿「人味」的風格參照基礎；不是規則來源，字數/格式仍以上方規則文件為準
 
 ### 共用規則（跨 Reuters／CNN 流程）
