@@ -69,8 +69,8 @@ python scripts/s2_state.py needs-review list
 ## 3. 品質掃／統計／比對：`s2_validate.py`
 
 ```
-python scripts/s2_validate.py check "G:\...\0801晚班交接.txt"   # 格式異常掃描，輸出命中清單（行號＋原因）
-python scripts/s2_validate.py stats "G:\...\0801晚班交接.txt"   # 輸出檔頭兩行（掃帶時段＋來源則數統計）
+python scripts/s2_validate.py check "G:\...\0802晚班交接.txt"   # 格式異常掃描，輸出命中清單（行號＋原因）
+python scripts/s2_validate.py stats "G:\...\0802晚班交接.txt" --window "14:00 - 15:00"   # 輸出檔頭三行（日期由檔名推得）
 python scripts/s2_validate.py diff3 current.txt snapshot.txt    # 三方比對：列出人工編輯過的行
 ```
 
