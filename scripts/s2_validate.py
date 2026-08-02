@@ -64,6 +64,9 @@ def check(path):
             hit(n, "缺 ▎畫面： 段")
         if not has_bite_seg and not has_nobite:
             hit(n, "結尾既非 無BITE 也無 BITE： 段")
+        # 行尾必須是 無BITE。／BITE 引號收尾／時長 ▎M:SS，其後不得再拖其他段
+        if not re.search(r"(無BITE。|」|▎\d{1,3}:\d{2})\s*$", l):
+            hit(n, "行尾有多餘內容（應以 無BITE。／」／▎MM:SS 結尾）")
 
         m = re.match(rf"^{CODE}(?:\s*/\s*{CODE})*\s+\(([^)]*)\)", l)
         first_note = m.group(1) if m else ""
