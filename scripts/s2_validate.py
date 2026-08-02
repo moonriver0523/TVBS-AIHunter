@@ -25,6 +25,18 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="repla
 CODE = r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2}-\d{1,3}[A-Z]{2}|(?:CNN|NHK) \d{6})"
 LINE_RE = re.compile(rf"^{CODE}(?:\s*/\s*{CODE})*\s")
 
+# 隔夜續掃標記（2026-08-02 使用者訂案）：素材代碼前可帶一個時段符號，
+# ▲＝23:00–07:00 新增、●＝07:00–09:00 新增，無標記＝23:00 前晚班既有。
+# 一律先剝掉再做其餘比對，否則整行會兩邊都漏辨識（同 SIDE_RE 踩過的坑）。
+MARKS = {"▲": "23:00–07:00", "●": "07:00–09:00"}
+MARK_RE = re.compile(r"^([▲●])\s*")
+
+
+def strip_mark(l):
+    """回傳 (標記或空字串, 去掉標記後的行)。"""
+    m = MARK_RE.match(l)
+    return (m.group(1), l[m.end():]) if m else ("", l)
+
 # 側錄行（S2b）：{來源} {6碼}[ 小標]，格式與通訊社三段式完全不同——
 # 通訊社的畫面/BITE/150字檢查一律不適用，需分流（2026-08-02 訂正）
 # 全形括號可緊貼 TC（`CNN 160106（主播）`），不強制空白，否則整行會兩邊都漏辨識
@@ -49,10 +61,18 @@ def read(path):
         sys.exit(2)
 
 
-def material_lines(lines):
-    """通訊社三段式素材行（不含側錄行——側錄走 side_lines）。"""
-    return [(n, l) for n, l in enumerate(lines, 1)
-            if LINE_RE.match(l) and not SIDE_RE.match(l)]
+def material_lines(lines, with_mark=False):
+    """通訊社三段式素材行（不含側錄行——側錄走 side_lines）。
+
+    回傳的行**已剝掉隔夜標記**（▲／●），下游檢查與統計都當沒標記處理；
+    需要標記本身時傳 with_mark=True，回傳 (行號, 標記, 去標記後的行)。
+    """
+    out = []
+    for n, raw in enumerate(lines, 1):
+        mark, l = strip_mark(raw)
+        if LINE_RE.match(l) and not SIDE_RE.match(l):
+            out.append((n, mark, l) if with_mark else (n, l))
+    return out
 
 
 def side_lines(lines):
@@ -64,10 +84,12 @@ def side_lines(lines):
     害「側錄不該用 ▎ 分段」對著別人的 ▎ 誤命中。
     """
     out = []
-    for n, l in enumerate(lines, 1):
+    for n, raw in enumerate(lines, 1):
+        _, l = strip_mark(raw)
         if SIDE_RE.match(l):
             block = []
-            for nxt in lines[n:]:
+            for nxt_raw in lines[n:]:
+                _, nxt = strip_mark(nxt_raw)
                 s = nxt.strip()
                 if not s or s == "+" or s.startswith(("【", "=")):
                     break
@@ -81,10 +103,11 @@ def side_lines(lines):
 def yt_blocks(lines):
     """回傳 [(網址行號, 網址, 備註行或 None)]。"""
     out = []
-    for n, l in enumerate(lines, 1):
-        if YT_URL_RE.match(l.strip()):
-            nxt = lines[n].strip() if n < len(lines) else ""
-            out.append((n, l.strip(), nxt))
+    for n, raw in enumerate(lines, 1):
+        _, l = strip_mark(raw.strip())
+        if YT_URL_RE.match(l):
+            nxt = strip_mark(lines[n].strip())[1] if n < len(lines) else ""
+            out.append((n, l, nxt))
     return out
 
 
@@ -157,6 +180,21 @@ def check(path):
     for c, ns in seen_codes.items():
         if len(ns) > 1:
             hit(ns[-1], f"重複代碼 {c}（另見行 {ns[:-1]}）")
+
+    # 隔夜標記（▲／●）：只要用了就必須在檔頭寫圖例，否則編輯看不懂那些符號
+    used_marks = {m for _, m, _ in material_lines(lines, with_mark=True) if m}
+    if used_marks:
+        # 檔頭＝第一個 ====== 大分類之前；不能用「前 N 行」，素材行本身帶標記會假通過
+        head = []
+        for l in lines:
+            if l.startswith("="):
+                break
+            head.append(l)
+        head = "\n".join(head)
+        for mk in sorted(used_marks):
+            if mk not in head:
+                hit(1, f"素材行用了隔夜標記「{mk}」但檔頭沒有對照圖例"
+                       f"（應有 `標記：▲=23:00–07:00 新增　●=07:00–09:00 新增`）")
 
     # YouTube 兩行式（4c）
     seen_urls = {}
@@ -237,16 +275,37 @@ def stats(path, window, date=""):
     if mmdd:
         print(f"{mmdd} 晚班交接")
     if window:
-        try:
-            s, e = [x.strip() for x in re.split(r"[-–]", window)]
-            h = (int(e[:2]) * 60 + int(e[3:5]) - int(s[:2]) * 60 - int(s[3:5])) / 60
-            print(f"時間窗：{date + ' ' if date else ''}{s}–{e}（約{h:g}hrs）")
-        except (ValueError, IndexError):
+        # 起訖可帶日期（跨夜續掃：`2026-08-02 14:00 - 2026-08-03 09:00`），
+        # 所以只拿全形連接號或「空白-空白」當分隔，不能直接 split("-")（日期裡也有）
+        halves = re.split(r"\s*–\s*|\s+-\s+", window.strip())
+        times = [re.search(r"(\d{1,2}):(\d{2})", h) for h in halves]
+        if len(halves) == 2 and all(times):
+            s, e = [h.strip() for h in halves]
+            mins = [int(t.group(1)) * 60 + int(t.group(2)) for t in times]
+            span = mins[1] - mins[0]
+            if span < 0:          # 跨午夜（23:00→09:00）
+                span += 24 * 60
+            # 起訖任一邊自帶日期時，就不再補檔名推得的日期，避免 `2026-08-02 2026-08-02 14:00`
+            pre = "" if re.search(r"\d{4}-\d{2}-\d{2}", window) else (date + " " if date else "")
+            print(f"時間窗：{pre}{s}–{e}（約{span / 60:g}hrs）")
+        else:
             print(f"時間窗：{date + ' ' if date else ''}{window}")
     parts = [f"AP {counts['AP']}則", f"RT {counts['RT']}則", f"NS {counts['NS']}則"]
     if counts["其他"]:
         parts.append(f"其他 {counts['其他']}則")
-    print(f"收錄外電共{total}則（{'／'.join(parts)}）")
+    marked = {m: 0 for m in MARKS}
+    for _, m, _ in material_lines(lines, with_mark=True):
+        if m:
+            marked[m] += 1
+    tail = ""
+    if any(marked.values()):
+        tail = "；隔夜續掃 " + "／".join(
+            f"{m} {marked[m]}則" for m in MARKS if marked[m])
+    print(f"收錄外電共{total}則（{'／'.join(parts)}）{tail}")
+    # 第 4 行圖例：只要當份有用到隔夜標記就印，沒用到就不印（純晚班檔維持三行）
+    if any(marked.values()):
+        print("標記：" + "　".join(f"{m}={MARKS[m]} 新增" for m in MARKS
+                                   if marked[m]) + "（無標記＝23:00 前晚班既有）")
 
 
 def diff3(cur_path, snap_path):
