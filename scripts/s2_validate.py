@@ -25,6 +25,13 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="repla
 CODE = r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2}-\d{1,3}[A-Z]{2}|(?:CNN|NHK) \d{6})"
 LINE_RE = re.compile(rf"^{CODE}(?:\s*/\s*{CODE})*\s")
 
+# 側錄行（S2b）：{來源} {6碼}[ 小標]，格式與通訊社三段式完全不同——
+# 通訊社的畫面/BITE/150字檢查一律不適用，需分流（2026-08-02 訂正）
+SIDE_RE = re.compile(r"^(?:CNN|NHK) \d{6}(?:\s|$)")
+# 側錄講者行合法角色（旁白＝歐印萬轉錄誤判，新聞側錄不應出現）
+SIDE_ROLE_OK = ("主播", "記者", "受訪者", "專家")
+SIDE_ROLE_BAD = ("旁白", "廣告配音", "群眾")
+
 # YouTube 兩行式（4c）：第一行網址、第二行 ({來源} {形式} {MM:SS}) 摘要
 YT_URL_RE = re.compile(r"^(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([\w-]{6,})")
 YT_NOTE_RE = re.compile(r"^\((\S+)\s+(記者連線|SOT|主播BS)\s+(\d{1,3}:\d{2})\)\s*\S")
@@ -40,7 +47,23 @@ def read(path):
 
 
 def material_lines(lines):
-    return [(n, l) for n, l in enumerate(lines, 1) if LINE_RE.match(l)]
+    """通訊社三段式素材行（不含側錄行——側錄走 side_lines）。"""
+    return [(n, l) for n, l in enumerate(lines, 1)
+            if LINE_RE.match(l) and not SIDE_RE.match(l)]
+
+
+def side_lines(lines):
+    """側錄 TC 行（S2b）：回傳 [(行號, 該行, 後續到空行為止的區塊)]。"""
+    out = []
+    for n, l in enumerate(lines, 1):
+        if SIDE_RE.match(l):
+            block = []
+            for nxt in lines[n:]:
+                if not nxt.strip():
+                    break
+                block.append(nxt)
+            out.append((n, l, block))
+    return out
 
 
 def yt_blocks(lines):
@@ -149,6 +172,23 @@ def check(path):
         if len(ns) > 1:
             hit(ns[-1], f"重複 YouTube 影片 {v}（另見行 {ns[:-1]}）")
 
+    # 側錄行（S2b）：不套通訊社三段式規則，改查自己的格式
+    seen_side = {}
+    for n, l, block in side_lines(lines):
+        key = l.split()[0] + " " + l.split()[1]
+        seen_side.setdefault(key, []).append(n)
+        if "▎" in l or any("▎" in b for b in block):
+            hit(n, "側錄段落不該用 ▎ 分段（那是通訊社三段式，側錄走 TC行/講者行/內容行）")
+        if not block:
+            hit(n, "側錄 TC 行下方沒有內容（應接講者行與逐字內容）")
+        for bad in SIDE_ROLE_BAD:
+            for i, b in enumerate(block):
+                if b.lstrip().startswith(bad) or f"（{bad}" in b:
+                    hit(n + 1 + i, f"側錄角色標「{bad}」不合法（新聞側錄只有 主播／記者／受訪者／專家，旁白等為歐印萬轉錄誤判，需人工改正）")
+    for k, ns in seen_side.items():
+        if len(ns) > 1:
+            hit(ns[-1], f"重複側錄段落 {k}（另見行 {ns[:-1]}）")
+
     hits.sort()
     if not hits:
         print("OK 品質掃 0 命中")
@@ -171,7 +211,8 @@ def stats(path, window, date=""):
             counts["NS"] += 1
         else:
             counts["其他"] += 1
-    counts["其他"] += len(yt_blocks(lines))  # YouTube 兩行式（4c）歸「其他」
+    counts["其他"] += len(yt_blocks(lines))   # YouTube 兩行式（4c）歸「其他」
+    counts["其他"] += len(side_lines(lines))  # 側錄段落（S2b）歸「其他」
     total = sum(counts.values())
     # 檔頭三行（2026-08-02 使用者定案）：標題／時間窗（含時數）／則數統計
     mmdd = re.search(r"(\d{4})晚班交接", os.path.basename(path))
