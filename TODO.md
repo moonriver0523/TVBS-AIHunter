@@ -222,9 +222,12 @@
 
 使用者定調：AP／RT／NS 三站都還有「更省 token 的處理方式」與「更多步驟改腳本替代」的空間，當持續研究方向，不是一次性任務。優先順序原則：**API ＞ DOM 直撈 ＞ 開頁面讀**；每站逐步往上游搬。
 
-- [ ] **NS**：見上節（API 破口，最接近全解）。
-- [ ] **RT**：清單 href 直撈已上線（§1b）。下一層——detail 網址的 `id=tag:reuters.com...` 就是 newsml id，值得查 Reuters Connect 有無同款 content API（清單頁載入時 read_network_requests 看 XHR）；EARLY ACCESS→稿到的補查是否可用清單層狀態欄位自動化。
-- [ ] **AP**：GUID 直開已上線（§1b）。下一層——縮圖走 `mapi.associatedpress.com/v2/items/{GUID}`，AP 有公開的 Media API 產品線，查登入 session 能不能直接打 `/v2/items` 拿 metadata＋script（能的話連詳情頁都不用開）。
+- [x] **✅ 三站 API 全破（2026-08-03 02:45 端到端實測通過）**，完整配方見 `G:\...\自動掃帶系統\0803-三站API破解總表.txt`：
+  - **NS**：清單 API 直接含稿全文（見上節，最省）。
+  - **RT**：清單 `POST /api/search-api`（同源 cookie 重放 OK，transit 格式、cursorMark 翻頁、fragment 300 字＋early-access 訊號）；單則 `GET /api/item/{guid}` 全文 8KB 重放 OK。建議組合：清單照 §1b DOM 直撈＋詳情一次 `Promise.all` 打 API ×N——免開分頁免等 8-9 秒。
+  - **AP**：清單 `POST api.newsroom.ap.org/v1/nrsearch/search/topic`（cookie 重放 OK，`editorialid`＝AP 編號）；詳情 `POST /v1/nrsearch/search/item/details`（STORYLINE/SHOTLIST/Restrictions 全文 27KB）。ItemIds 逗號批次不支援，用 Promise.all。⚠️ 清單重放排序偏 relevance 待驗證，保險做法照抄頁面實際 request body。
+  - 每輪呼叫數估算：10 則新素材，舊流程 AP/RT 各 20-30 次、NS 40+ 次 → **API 流程每站 2-3 次**。
+- [ ] **上規則（待裁定）**：13b 新增三站 API 守門版流程（API 失敗→退回 UI 流程）；寫明 Playwright 工具組分工；AP 排序驗證、RT transit 抽取機械做法、hash/TopicId 跨 session 穩定性各驗一次。裁定前正式輪次照現行 13b。
 - [ ] **通則**：每次優化上線都要在 13b「未定回填」記一筆呼叫次數／耗時基準，跟 00:00 實驗輪（7 則 52 次 12m18s）比對，量化每一刀的實際收益。
 
 ## S4 rundown 稿單（2026-07-30 立案，**未建、無規則文件**）
