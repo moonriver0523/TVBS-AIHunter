@@ -44,6 +44,27 @@
 - shotlist：全文。
 - S2 只需要寫出三段式（摘要一句＋畫面逐項＋BITE 濃縮＋講者），**不需要逐字讀完每段 SOUNDBITE**——逐字與精確 TC 是下游 S7 的事。
 
+## 1b. AP＋RT 清單直開流程（2026-08-02 深夜上線，守門版首選路徑）
+
+**核心**：不再「開一則→讀→回清單→再開下一則」，改成**清單一次 JS 撈完 → diff → 新素材直接用網址開分頁逐頁收錄**。modal／Next ‹ › 鏈全程不用。CNN 未驗證，照舊流程。
+
+**AP**（實測 2026-08-02）：
+1. `/home` Latest 清單，一次 JS 撈每張卡的 **GUID＋標題**（GUID 在縮圖網址裡：`mapi.associatedpress.com/v2/items/{32碼hex}...`；卡片本身沒有 href）。
+2. `diff` 後，新素材直開 `https://newsroom.ap.org/detail/x/{GUID}/video`（slug 隨便填、免參數）。
+3. **直開後等約 3 秒再讀**（SPA 載入，太快讀會拿到空頁）；讀取前核對頁面 GUID／標題與預期一致。
+
+**RT**（實測 2026-08-02）：
+1. `all?media-types=vid` 大列表，一次 JS 撈 `a[href*="detail?id="]` 的 **href＋Edit No＋版次＋slug＋標題＋時長＋RAW/SCRIPT 狀態**——「EARLY ACCESS SCRIPT / Video will be available shortly」（稿到片未到）清單層直接可判。
+2. 新素材**照抄清單撈到的 href 直開**（內部碼勿自行拼湊，版次尾碼會變）；開後等約 3 秒，核對 Edit No 與預期一致才讀。
+3. **Load More 三條行為規則**（實測）：⑴ 是**換頁替換**不是累加——按下後最新那批從 DOM 消失，所以**必須先撈完目前這頁才准按**，按完再撈一次做聯集去重；⑵ 只認**真實點擊**，合成 JS click 無效；⑶ 深夜窗通常首屏 10 則就夠，不需要按。舊的 LOAD MORE 禁則是為 Next 鏈設的，本流程不走 Next 鏈故不適用；退回舊流程時禁則照舊。
+
+**分波**：一次最多開 5–8 個分頁，讀完關掉再開下一波。
+
+**守門（任一觸發＝該站當輪退回 §5 舊流程，並 `needs-review add` 記錄）**：
+- 清單 JS 撈到 0 筆或明顯少於畫面可見數。
+- 直開頁面等 3 秒後仍空白，或 GUID／Edit No 與預期**不符**（絕不寫入不符頁面的內容）。
+- 同站連續 2 頁觸發上述任一條。
+
 ## 2. 狀態檔：`s2_state.py` 代管（agent 禁止直接開 JSON）
 
 狀態檔仍是單一 JSON，但**一切讀寫都透過腳本**。
@@ -172,6 +193,8 @@ youtube.com/watch?v=AA6tRh8n-_w
 **低階 agent 判斷依據（機械優先）**：slug 前綴相同（`USA-SHOOTING/IDAHO` 家族）、代碼備註含相同專名（地名＋事件詞）→ 視為同事件。拿不準 → 維持沿用＋`needs-review add`，不要亂搬。
 
 ## 5. 防卡設計（低階 agent 必讀）
+
+> ⚠️ 2026-08-02 起 AP／RT 首選路徑是 **§1b 清單直開**；本節的 RT Next 鏈（5b）與 AP modal 相關條目**只在 §1b 守門觸發退回時使用**。其餘防卡條目（resume、跳站、半夜禁問等）不分新舊流程一律適用。
 
 1. **每輪開工第一步跑 `resume`**——context 斷掉重進時，以腳本回報的狀態為準接續，不憑記憶。
 2. **RT 卡住跳站**：連續 2 次 Next 沒反應／頁面沒變 → 記下目前 Edit No.（`needs-review add`），跳去掃 AP／CNN，回報 RT 中斷點。不准死磕（V1 已知 SPA 卡快取雷）。
