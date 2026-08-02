@@ -29,9 +29,11 @@ LINE_RE = re.compile(rf"^{CODE}(?:\s*/\s*{CODE})*\s")
 # 通訊社的畫面/BITE/150字檢查一律不適用，需分流（2026-08-02 訂正）
 # 全形括號可緊貼 TC（`CNN 160106（主播）`），不強制空白，否則整行會兩邊都漏辨識
 SIDE_RE = re.compile(r"^(?:CNN|NHK) \d{6}(?:[\s（]|$)")
-# 側錄講者行合法角色（旁白＝歐印萬轉錄誤判，新聞側錄不應出現）
-SIDE_ROLE_OK = ("主播", "記者", "受訪者", "專家")
-SIDE_ROLE_BAD = ("旁白", "廣告配音", "群眾")
+# ⚠️ 側錄 SUPER 一律照搬、不檢查、不修正（2026-08-02 使用者訂正）：
+# 貼進來的內容已經人工篩選校正過，agent 改 SUPER（含「角色標錯就改」與「缺 SUPER 就補」）
+# 都是擅自竄改。角色誤判要修，是在上游 15-歐印萬掃帶／人工那一關做，不是這裡。
+# 唯一例外：使用者當次明說「允許自行整理 SUPER」才可自行修正（見 14-S2b）。
+# 原本的 SIDE_ROLE_OK／SIDE_ROLE_BAD 白黑名單已移除。
 
 # YouTube 兩行式（4c）：第一行網址、第二行 ({來源} {形式} {MM:SS}) 摘要
 YT_URL_RE = re.compile(r"^(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([\w-]{6,})")
@@ -54,13 +56,22 @@ def material_lines(lines):
 
 
 def side_lines(lines):
-    """側錄 TC 行（S2b）：回傳 [(行號, 該行, 後續到空行為止的區塊)]。"""
+    """側錄 TC 行（S2b）：回傳 [(行號, 該行, 內容區塊)]。
+
+    區塊到下列任一情形為止（2026-08-02 修）：空行／小分題分隔 `+`／
+    大分類或中主題標題／下一段側錄 TC 行／通訊社素材行。
+    原本只看空行，會把 `+` 後面的小分題與下一則通訊社素材整段吃進來，
+    害「側錄不該用 ▎ 分段」對著別人的 ▎ 誤命中。
+    """
     out = []
     for n, l in enumerate(lines, 1):
         if SIDE_RE.match(l):
             block = []
             for nxt in lines[n:]:
-                if not nxt.strip():
+                s = nxt.strip()
+                if not s or s == "+" or s.startswith(("【", "=")):
+                    break
+                if SIDE_RE.match(nxt) or LINE_RE.match(nxt):
                     break
                 block.append(nxt)
             out.append((n, l, block))
@@ -182,16 +193,9 @@ def check(path):
             hit(n, "側錄段落不該用 ▎ 分段（那是通訊社三段式，側錄走 TC＋SUPER行/內容行）")
         if not block:
             hit(n, "側錄 TC 行下方沒有內容（第二行起應為逐字內容）")
-        # SUPER 寫在 TC 同一行的全形括號內
-        m_sup = re.search(r"（([^）]*)）", l)
-        if m_sup:
-            sup = m_sup.group(1)
-            for bad in SIDE_ROLE_BAD:
-                if sup.startswith(bad):
-                    hit(n, f"側錄 SUPER 角色「{bad}」不合法（新聞側錄只有 主播／記者／受訪者／專家；旁白等為歐印萬轉錄誤判，需改正）")
-        elif src == "CNN":
-            hit(n, "CNN 側錄 TC 行缺 SUPER（應為 `CNN 160106  （主播）` 這種全形括號講者標示，與 TC 同一行）")
-        # 舊三行式殘留：第二行整行只有講者標示、沒有內容
+        # ⚠️ SUPER 內容不檢查：角色是否「合法」、有沒有 SUPER，一律不命中。
+        # 這兩條檢查以前會逼 agent 改角色／無中生有補一個講者，已於 2026-08-02 移除。
+        # 舊三行式殘留：第二行整行只有講者標示、沒有內容（純格式歸位，不涉改字）
         if block and re.fullmatch(r"(?:CNN|NHK)(?:主播|記者|受訪者|專家)[^\s]*(?:\s+\S+)?", block[0].strip()):
             hit(n + 1, "疑似舊三行式殘留（講者獨占一行）——SUPER 應移到 TC 同一行、寫成全形括號")
     for k, ns in seen_side.items():
