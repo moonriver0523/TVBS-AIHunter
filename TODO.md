@@ -184,6 +184,27 @@
 - [ ] **分波上限**：一次開 5–8 個分頁為一波，讀完關掉再開下一波，避免記憶體／站方 session 問題。
 - [x] **13b 已上守門版（2026-08-02 深夜，AP＋RT 一起）**：§1b 清單直開流程——清單一次 JS 撈（AP 從縮圖網址挖 GUID；**RT 卡片本身就有 href**，連 Edit No／版次／RAW·SCRIPT／稿到片未到狀態都在清單層可判）→ diff → 直開分頁（每波 5–8 頁、等 3 秒、核對編號）→ batch.json 一次 `add-batch`。守門條款：撈 0 筆／頁面編號不符／連續 2 頁失敗 → 該站當輪退回 §5 舊流程。RT Load More 實測＝**換頁替換不是累加**（先撈完才准按、按完聯集去重、只認真實點擊）。00:00 實驗輪當金絲雀，CNN 未驗證照舊流程（inline modal 同構優化可日後順帶看）。
 
+## NS 掃帶卡點：API 破口已找到一半（2026-08-03 凌晨查證，**等使用者登入後續查**）
+
+出處：`G:\我的雲端硬碟\Claude共用\自動掃帶系統\0803-NS掃帶卡點報告.txt`（工作 agent 的五卡點報告）＋接手查證結果。
+
+**已查到**：
+- 清單 API 存在：`POST https://newsource-content-api-530.ns.cnn.com/api/v3/stories`，另有 `api/refdata`／`api/featuredContentCategories`；新素材更新走 **socket.io 即時推播**。拿到 request body 格式＝報告五個卡點一次全解，但 body 被三重卡住（跨域＋頁面 AdBlock extension 纏 fetch＋token 制驗證），claude-in-chrome 的網路工具只看得到 URL 看不到 body。
+- **卡點 3「JS 捲不動」已推翻**：可捲容器是一個無 class 名的內層 div（scrollHeight ~2800），JS 設 `scrollTop` 直接有效——工作 agent 當時應是捲了 window/document。實體滾輪＋截圖確認那段成本可直接砍。
+- 「BLOCKED: Cookie/query string data」＝Claude extension 隱私防護（讀 localStorage 同樣被擋），不是網站問題；規避＝只取特定區塊 innerText。
+- 卡點 ②（detail URL pattern）④（modal 前後鍵）未解：故事列 DOM 乾淨不帶 id（與 AP 縮圖帶 GUID 不同），fiber 淺層無 story 物件。
+
+- [ ] **🔔 下一步（需使用者親自做）**：在 **Playwright 瀏覽器**登入一次 NS（persistent profile，一次永久有效）→ 之後用 Playwright 的完整網路檢視（能看 POST body＋回應 JSON）真實點一次清單／modal，`/api/v3/stories` schema 到手，①②④ 大概率一次全解。登入時叫 Claude 開視窗到登入頁。
+
+## 三站省 token 持續優化研究（2026-08-03 立案，方向盤）
+
+使用者定調：AP／RT／NS 三站都還有「更省 token 的處理方式」與「更多步驟改腳本替代」的空間，當持續研究方向，不是一次性任務。優先順序原則：**API ＞ DOM 直撈 ＞ 開頁面讀**；每站逐步往上游搬。
+
+- [ ] **NS**：見上節（API 破口，最接近全解）。
+- [ ] **RT**：清單 href 直撈已上線（§1b）。下一層——detail 網址的 `id=tag:reuters.com...` 就是 newsml id，值得查 Reuters Connect 有無同款 content API（清單頁載入時 read_network_requests 看 XHR）；EARLY ACCESS→稿到的補查是否可用清單層狀態欄位自動化。
+- [ ] **AP**：GUID 直開已上線（§1b）。下一層——縮圖走 `mapi.associatedpress.com/v2/items/{GUID}`，AP 有公開的 Media API 產品線，查登入 session 能不能直接打 `/v2/items` 拿 metadata＋script（能的話連詳情頁都不用開）。
+- [ ] **通則**：每次優化上線都要在 13b「未定回填」記一筆呼叫次數／耗時基準，跟 00:00 實驗輪（7 則 52 次 12m18s）比對，量化每一刀的實際收益。
+
 ## S4 rundown 稿單（2026-07-30 立案，**未建、無規則文件**）
 
 從 S3 庫存依議題整理出「今天開哪幾則新聞、每則配哪些素材」，再接 S4b 分派給記者。**這一格原本被誤填成 `common/11`**，但 `common/11` 其實是 **S4c 補充素材搜集**（人工發動、寫稿期間缺素材才啟動），兩者只是共用同一種稿單輸出格式，觸發者與目的完全不同（2026-07-30 使用者訂正）。
