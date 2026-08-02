@@ -7,6 +7,16 @@
 > **Rollback**：刪除本檔＋`scripts/s2_state.py`＋`scripts/s2_validate.py`，並撤掉 V1 檔頭的 V2 指標行即可，V1 未被修改過。
 > **轉正**：測試穩定後，把本檔內容併回 V1、廢除雙軌。
 
+## 0. 三站入口網址（2026-08-02 補，開工前先核對）
+
+⚠️ **靠記憶打網址容易打錯**（2026-08-02 實例：CNN Newsource 被誤記成 `newsource.cnn.com`，缺了 `.ns.`，導向「隱私權設定發生錯誤」頁面，`get_page_text`／截圖都讀不到東西）。開工前照這份表核對，不要憑印象打：
+
+| 站 | 入口網址 | 備註 |
+|---|---|---|
+| AP Newsroom | `https://newsroom.ap.org/home` | Latest 分頁；空白關鍵字查詢會回空白頁 |
+| Reuters Connect | `https://www.reutersconnect.com/all?media-types=vid` | 大列表，My Subscription／Newest First |
+| CNN Newsource | `https://newsource.ns.cnn.com` | **注意中間有 `.ns.`**，少了會導向錯誤頁；不支援網址直接搜尋，見 [`cnn/01-auto-script-writing.md`](../cnn/01-auto-script-writing.md) |
+
 ## 與 V1 的差異總表
 
 | # | 項目 | V1 做法 | V2 做法 | 預估省 |
@@ -183,7 +193,7 @@ youtube.com/watch?v=AA6tRh8n-_w
    - **備援**：仍失效才回列表**逐張點卡**進詳情（首屏可見的素材不需要 Next 鏈，也不會踩 LOAD MORE 禁則）；每則同樣「進去→scroll→讀→核對 Edit No」。
    - 只有窗內素材已捲出首屏時才非用 Next 鏈不可；此時 Next 仍失效 → 照第 2 條記錄中斷點並跳站。
    - 只有在「窗內素材已捲出首屏」時才需要 Next 鏈；此時若 Next 仍失效，照第 2 條記錄中斷點並跳站。
-6. **AP `/home` 偶發跳轉 `/live`（2026-08-02 實測）**：navigate 到 AP Newsroom `/home` 或點側欄 Latest 後，偶爾會被 SPA 路由帶去 `/live`。**每次讀列表前先確認 URL 是 `/home`**；發現在 `/live` → 重新點側欄 Latest（點文字正中央），最多重試 2 次，仍失敗照第 2 條跳下一站並記錄。
+6. **AP `/home` 偶發跳轉到其他頁（2026-08-02 實測，已見兩種變體）**：navigate 到 AP Newsroom `/home` 或點側欄 Latest 後，偶爾會被 SPA 路由帶去別的頁面——已見過 `/live`（Live Feeds）與 `/home/foryou`（訂閱推薦頁），根因同樣是路由不穩，**不是特定跳去哪一頁的問題**，之後遇到別的變體（例如 `/archive`）也比照處理。**每次讀列表前先確認 URL 是 `/home`**；不是就重新點側欄 Latest（點文字正中央），最多重試 2 次，仍失敗照第 2 條跳下一站並記錄。
 
 ## 未定／實測後要回填
 
