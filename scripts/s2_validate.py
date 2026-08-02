@@ -99,6 +99,10 @@ def check(path):
                     "（script待補）", "（完整script待補）", "（early", "（待完整稿）"):
             if bad in l:
                 hit(n, f"操作/狀態備註寫進素材行：{bad}")
+        # 操作備註通式（半形或全形括號皆抓）：列表級／未開詳情／待補／待確認…
+        m_op = re.search(r"[（(][^）)]*(列表級|未開詳情|列表摘要|詳情頁待補|待補|待確認|待人工|TODO)[^（(]*?[）)]", l)
+        if m_op:
+            hit(n, f"操作備註寫進素材行：{m_op.group(0)}（給 agent 看的註記不進成品）")
         if re.search(r"▎BITE[：:]\s*「", l):
             hit(n, "▎BITE：無講者（引號前必須有講者）")
         wrap_note = "整理包" in first_note
