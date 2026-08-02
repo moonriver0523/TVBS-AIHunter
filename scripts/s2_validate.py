@@ -84,6 +84,16 @@ def check(path):
         if not re.search(r"(無BITE。|」|▎\d{1,3}:\d{2})\s*$", l):
             hit(n, "行尾有多餘內容（應以 無BITE。／」／▎MM:SS 結尾）")
 
+        m_notes = re.match(rf"^{CODE}(?:\s*/\s*{CODE})*\s+(?:\([^)]*\)\s*)+", l)
+        if m_notes:
+            rest = l[m_notes.end():]
+            if not rest.startswith("▎"):
+                hit(n, "摘要前缺 ▎ 標記（應為 (備註)[(BITE)] ▎摘要▎畫面：…）")
+            else:
+                summary = rest[1:].split("▎", 1)[0]
+                if len(summary) > 150:
+                    hit(n, f"摘要超過150字硬上限（現{len(summary)}字，WRAP等長文不例外，需分句或移入畫面段）")
+
         m = re.match(rf"^{CODE}(?:\s*/\s*{CODE})*\s+\(([^)]*)\)", l)
         first_note = m.group(1) if m else ""
         if re.search(r"(?<![A-Za-z])BITE(?![A-Za-z])", first_note):
