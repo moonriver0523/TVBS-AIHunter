@@ -32,7 +32,9 @@ def load(path):
 
 
 def save(state, path):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    d = os.path.dirname(path)
+    if d:
+        os.makedirs(d, exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=1)
