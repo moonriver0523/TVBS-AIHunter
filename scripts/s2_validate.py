@@ -27,7 +27,8 @@ LINE_RE = re.compile(rf"^{CODE}(?:\s*/\s*{CODE})*\s")
 
 # 側錄行（S2b）：{來源} {6碼}[ 小標]，格式與通訊社三段式完全不同——
 # 通訊社的畫面/BITE/150字檢查一律不適用，需分流（2026-08-02 訂正）
-SIDE_RE = re.compile(r"^(?:CNN|NHK) \d{6}(?:\s|$)")
+# 全形括號可緊貼 TC（`CNN 160106（主播）`），不強制空白，否則整行會兩邊都漏辨識
+SIDE_RE = re.compile(r"^(?:CNN|NHK) \d{6}(?:[\s（]|$)")
 # 側錄講者行合法角色（旁白＝歐印萬轉錄誤判，新聞側錄不應出現）
 SIDE_ROLE_OK = ("主播", "記者", "受訪者", "專家")
 SIDE_ROLE_BAD = ("旁白", "廣告配音", "群眾")
@@ -175,7 +176,7 @@ def check(path):
     # 側錄行（S2b 兩行式）：TC行＝{來源} {6碼}[ （SUPER）]，下一行起為內容
     seen_side = {}
     for n, l, block in side_lines(lines):
-        src, tc = l.split()[0], l.split()[1]
+        src, tc = re.match(r"^(CNN|NHK) (\d{6})", l).groups()
         seen_side.setdefault(f"{src} {tc}", []).append(n)
         if "▎" in l or any("▎" in b for b in block):
             hit(n, "側錄段落不該用 ▎ 分段（那是通訊社三段式，側錄走 TC＋SUPER行/內容行）")
@@ -220,7 +221,9 @@ def stats(path, window, date=""):
         else:
             counts["其他"] += 1
     counts["其他"] += len(yt_blocks(lines))   # YouTube 兩行式（4c）歸「其他」
-    counts["其他"] += len(side_lines(lines))  # 側錄段落（S2b）歸「其他」
+    # ⚠️ 側錄段落（S2b／CNN‧NHK）一律不計入檔頭則數（2026-08-02 使用者訂正）：
+    # 側錄一段連線常被切成十幾個 TC，計進去會把「收錄外電共X則」灌爆、失去掃視價值。
+    # 檔頭統計的是「通訊社素材則數」，側錄是另一條料源，完全不納入。
     total = sum(counts.values())
     # 檔頭三行（2026-08-02 使用者定案）：標題／時間窗（含時數）／則數統計
     mmdd = re.search(r"(\d{4})晚班交接", os.path.basename(path))
