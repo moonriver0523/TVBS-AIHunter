@@ -23,6 +23,10 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="repla
 CODE = r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2}-\d{1,3}[A-Z]{2}|(?:CNN|NHK) \d{6})"
 LINE_RE = re.compile(rf"^{CODE}(?:\s*/\s*{CODE})*\s")
 
+# YouTube 兩行式（4c）：第一行網址、第二行 ({來源} {形式} {MM:SS}) 摘要
+YT_URL_RE = re.compile(r"^(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([\w-]{6,})")
+YT_NOTE_RE = re.compile(r"^\((\S+)\s+(記者連線|SOT|主播BS)\s+(\d{1,3}:\d{2})\)\s*\S")
+
 
 def read(path):
     try:
@@ -35,6 +39,16 @@ def read(path):
 
 def material_lines(lines):
     return [(n, l) for n, l in enumerate(lines, 1) if LINE_RE.match(l)]
+
+
+def yt_blocks(lines):
+    """回傳 [(網址行號, 網址, 備註行或 None)]。"""
+    out = []
+    for n, l in enumerate(lines, 1):
+        if YT_URL_RE.match(l.strip()):
+            nxt = lines[n].strip() if n < len(lines) else ""
+            out.append((n, l.strip(), nxt))
+    return out
 
 
 def check(path):
@@ -93,6 +107,30 @@ def check(path):
         if len(ns) > 1:
             hit(ns[-1], f"重複代碼 {c}（另見行 {ns[:-1]}）")
 
+    # YouTube 兩行式（4c）
+    seen_urls = {}
+    for n, url, note in yt_blocks(lines):
+        vid = YT_URL_RE.match(url).group(1)  # 以 video ID 去重（watch?v= 與 youtu.be 視為同一支）
+        seen_urls.setdefault(vid, []).append(n)
+        if not note:
+            hit(n, "YouTube 網址下方缺備註行 ({來源} {形式} {MM:SS}) ＋摘要")
+            continue
+        m = YT_NOTE_RE.match(note)
+        if not m:
+            if YT_URL_RE.match(note):
+                hit(n, "YouTube 網址下方直接接另一個網址（缺備註行）")
+            else:
+                hit(n + 1, "YouTube 備註行格式錯（應為 ({來源} {形式} {MM:SS}) ＋200字摘要，形式限 記者連線／SOT／主播BS）")
+            continue
+        summary = note[m.end(3) + 1:].strip()
+        if len(summary) < 60:
+            hit(n + 1, f"YouTube 摘要過短（{len(summary)}字，應約200字）")
+        if "▎" in note:
+            hit(n + 1, "YouTube 兩行式不應使用 ▎畫面／BITE 分段（那是通訊社單行式）")
+    for v, ns in seen_urls.items():
+        if len(ns) > 1:
+            hit(ns[-1], f"重複 YouTube 影片 {v}（另見行 {ns[:-1]}）")
+
     hits.sort()
     if not hits:
         print("OK 品質掃 0 命中")
@@ -115,6 +153,7 @@ def stats(path, window):
             counts["NS"] += 1
         else:
             counts["其他"] += 1
+    counts["其他"] += len(yt_blocks(lines))  # YouTube 兩行式（4c）歸「其他」
     total = sum(counts.values())
     if window:
         try:
