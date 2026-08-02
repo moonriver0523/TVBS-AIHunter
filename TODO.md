@@ -194,7 +194,8 @@
 - 「BLOCKED: Cookie/query string data」＝Claude extension 隱私防護（讀 localStorage 同樣被擋），不是網站問題；規避＝只取特定區塊 innerText。
 - 卡點 ②（detail URL pattern）④（modal 前後鍵）未解：故事列 DOM 乾淨不帶 id（與 AP 縮圖帶 GUID 不同），fiber 淺層無 story 物件。
 
-- [ ] **🔔 下一步（需使用者親自做）**：在 **Playwright 瀏覽器**登入一次 NS（persistent profile，一次永久有效）→ 之後用 Playwright 的完整網路檢視（能看 POST body＋回應 JSON）真實點一次清單／modal，`/api/v3/stories` schema 到手，①②④ 大概率一次全解。登入時叫 Claude 開視窗到登入頁。
+- [x] **✅ 全解（2026-08-03 02:30，使用者登入 Playwright 後端到端實測通過）**：`POST /api/v3/stories` 一次回傳 **NS 編號（alternateIds.bitcentralId）＋形式（footageType）＋時長＋description 摘要＋稿件全文（content.bitcentral.script，含 LEAD IN/VO SCRIPT 標記）＋embargo**。body 有 `from/size` 分頁、**`scriptOnly`（＝UI 點不動的 Has Script）**、`term` 搜尋。token 在 `localStorage.newsourceSession.token`（1hr 自動續）。回應是 NDJSON 多行，取含 `"stories"` 那行 parse。**一輪 NS 從 40+ 次呼叫壓到 2 次**。完整配方（可直接抄的 JS）：`G:\...\自動掃帶系統\0803-NS掃帶卡點報告-回覆.txt`。⚠️ 僅 Playwright 瀏覽器可用（claude-in-chrome 被 extension 隱私防護＋AdBlock 擋死）。
+- [ ] **待裁定後上規則**：13b 新增「§1c NS API 直查」守門版（API 失敗→退回 UI 舊流程）；NS 段改用 Playwright 工具組要寫明；size 上限與 date/from 翻頁規則；embargo 要不要進備註。裁定前正式輪次照現行流程。
 
 ## 🔔 大分類歸位規則未定義：越前面優先層級越高（2026-08-03 立案，**使用者要求提醒解決**）
 
