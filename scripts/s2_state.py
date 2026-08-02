@@ -20,24 +20,39 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="repla
 DEFAULT_FILE = r"G:\我的雲端硬碟\Claude共用\自動掃帶系統\s2-state.json"
 
 
+TOP_FIELDS = ("checkpoint", "updated_at", "window_local",
+              "rt_status", "ap_status", "cnn_status", "notes")
+
+
 def load(path):
+    """讀取正式 schema（items 為陣列）並在記憶體中轉成 dict 方便索引。"""
     if not os.path.exists(path):
-        return {"date": datetime.now().strftime("%m%d"), "items": {}}
+        return {"date": datetime.now().strftime("%m%d"), "_top": {}, "items": {}}
     try:
         with open(path, encoding="utf-8-sig") as f:
-            return json.load(f)
+            raw = json.load(f)
     except (json.JSONDecodeError, OSError) as e:
         print(f"ERROR: 狀態檔讀取失敗（{e}）。請確認檔案未損壞後重跑；不要手動改 JSON。")
         sys.exit(2)
+    top = {k: raw[k] for k in TOP_FIELDS if k in raw}
+    items = raw.get("items", [])
+    if isinstance(items, list):  # 正式 schema
+        items = {it["id"]: {k: v for k, v in it.items() if k != "id"} for it in items}
+    return {"date": raw.get("date", datetime.now().strftime("%m%d")),
+            "_top": top, "items": items}
 
 
 def save(state, path):
+    """寫回正式 schema：items 還原成陣列、每筆帶回 id。"""
     d = os.path.dirname(path)
     if d:
         os.makedirs(d, exist_ok=True)
+    out = dict(state.get("_top", {}))
+    out["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S+08:00")
+    out["items"] = [dict(id=i, **v) for i, v in state["items"].items()]
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(state, f, ensure_ascii=False, indent=1)
+        json.dump(out, f, ensure_ascii=False, indent=1)
     os.replace(tmp, path)
 
 
@@ -130,7 +145,8 @@ def cmd_to_compile(state, args):
     out = []
     for i, v in sorted(state["items"].items()):
         if v.get("compiled") is None or v.get("entry_updated", "") > (v.get("compiled") or ""):
-            cat = v.get("category") or "(未分類)"
+            c = v.get("category")
+            cat = f"{c['大分類']}/{c['中主題']}" if isinstance(c, dict) else (c or "(未分類)")
             out.append(f"### {i} [{cat}] {v.get('script_status')}\n{v.get('raw_entry','')}")
     print("\n\n".join(out) if out else "(無待整併項目)")
 
@@ -152,9 +168,23 @@ def cmd_set_category(state, args):
     if i not in state["items"]:
         print(f"ERROR: {i} 不存在")
         sys.exit(2)
-    state["items"][i]["category"] = args.cat
+    if "/" not in args.cat:
+        print("ERROR: --cat 需為「大分類/中主題」（例：社會/休達移民）")
+        sys.exit(2)
+    big, mid = args.cat.split("/", 1)
+    state["items"][i]["category"] = {"大分類": big.strip(), "中主題": mid.strip()}
     save(state, args.file)
-    print(f"OK {i} category={args.cat}")
+    print(f"OK {i} category={big.strip()}／{mid.strip()}")
+
+
+def cmd_set_top(state, args):
+    """設定頂層欄位（window_local／rt_status／ap_status／cnn_status／notes／checkpoint）。"""
+    if args.field not in TOP_FIELDS:
+        print(f"ERROR: 欄位須為 {'／'.join(TOP_FIELDS)}")
+        sys.exit(2)
+    state.setdefault("_top", {})[args.field] = args.value
+    save(state, args.file)
+    print(f"OK {args.field}={args.value}")
 
 
 def cmd_get(state, args):
@@ -206,7 +236,10 @@ def main():
     m.add_argument("--ids", required=True)
     c = sub.add_parser("set-category")
     c.add_argument("--id", required=True)
-    c.add_argument("--cat", required=True)
+    c.add_argument("--cat", required=True, help="大分類/中主題")
+    st = sub.add_parser("set-top")
+    st.add_argument("field")
+    st.add_argument("value")
     g = sub.add_parser("get")
     g.add_argument("--id", required=True)
     r = sub.add_parser("needs-review")
@@ -221,7 +254,7 @@ def main():
         "update-entry": cmd_update_entry, "pending": cmd_pending,
         "to-compile": cmd_to_compile, "mark-compiled": cmd_mark_compiled,
         "set-category": cmd_set_category, "get": cmd_get,
-        "needs-review": cmd_needs_review,
+        "needs-review": cmd_needs_review, "set-top": cmd_set_top,
     }[args.cmd](state, args)
 
 
