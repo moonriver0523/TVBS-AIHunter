@@ -127,6 +127,8 @@ def check(path):
             hit(n + 1, f"YouTube 摘要過短（{len(summary)}字，應約200字）")
         if "▎" in note:
             hit(n + 1, "YouTube 兩行式不應使用 ▎畫面／BITE 分段（那是通訊社單行式）")
+        if re.search(r"[（(](?:約?\s*\d+\s*字(?:摘要)?|AI摘要|摘要待補|待補摘要)[）)]", note):
+            hit(n + 1, "YouTube 摘要出現佔位／字數字樣（如（200字摘要）），應直接寫內容")
     for v, ns in seen_urls.items():
         if len(ns) > 1:
             hit(ns[-1], f"重複 YouTube 影片 {v}（另見行 {ns[:-1]}）")
