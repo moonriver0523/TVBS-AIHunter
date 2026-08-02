@@ -172,19 +172,27 @@ def check(path):
         if len(ns) > 1:
             hit(ns[-1], f"重複 YouTube 影片 {v}（另見行 {ns[:-1]}）")
 
-    # 側錄行（S2b）：不套通訊社三段式規則，改查自己的格式
+    # 側錄行（S2b 兩行式）：TC行＝{來源} {6碼}[ （SUPER）]，下一行起為內容
     seen_side = {}
     for n, l, block in side_lines(lines):
-        key = l.split()[0] + " " + l.split()[1]
-        seen_side.setdefault(key, []).append(n)
+        src, tc = l.split()[0], l.split()[1]
+        seen_side.setdefault(f"{src} {tc}", []).append(n)
         if "▎" in l or any("▎" in b for b in block):
-            hit(n, "側錄段落不該用 ▎ 分段（那是通訊社三段式，側錄走 TC行/講者行/內容行）")
+            hit(n, "側錄段落不該用 ▎ 分段（那是通訊社三段式，側錄走 TC＋SUPER行/內容行）")
         if not block:
-            hit(n, "側錄 TC 行下方沒有內容（應接講者行與逐字內容）")
-        for bad in SIDE_ROLE_BAD:
-            for i, b in enumerate(block):
-                if b.lstrip().startswith(bad) or f"（{bad}" in b:
-                    hit(n + 1 + i, f"側錄角色標「{bad}」不合法（新聞側錄只有 主播／記者／受訪者／專家，旁白等為歐印萬轉錄誤判，需人工改正）")
+            hit(n, "側錄 TC 行下方沒有內容（第二行起應為逐字內容）")
+        # SUPER 寫在 TC 同一行的全形括號內
+        m_sup = re.search(r"（([^）]*)）", l)
+        if m_sup:
+            sup = m_sup.group(1)
+            for bad in SIDE_ROLE_BAD:
+                if sup.startswith(bad):
+                    hit(n, f"側錄 SUPER 角色「{bad}」不合法（新聞側錄只有 主播／記者／受訪者／專家；旁白等為歐印萬轉錄誤判，需改正）")
+        elif src == "CNN":
+            hit(n, "CNN 側錄 TC 行缺 SUPER（應為 `CNN 160106  （主播）` 這種全形括號講者標示，與 TC 同一行）")
+        # 舊三行式殘留：第二行整行只有講者標示、沒有內容
+        if block and re.fullmatch(r"(?:CNN|NHK)(?:主播|記者|受訪者|專家)[^\s]*(?:\s+\S+)?", block[0].strip()):
+            hit(n + 1, "疑似舊三行式殘留（講者獨占一行）——SUPER 應移到 TC 同一行、寫成全形括號")
     for k, ns in seen_side.items():
         if len(ns) > 1:
             hit(ns[-1], f"重複側錄段落 {k}（另見行 {ns[:-1]}）")
