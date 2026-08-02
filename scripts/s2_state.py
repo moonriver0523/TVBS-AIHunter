@@ -96,11 +96,29 @@ def cmd_diff(state, args):
 
 
 def read_entry(args):
+    if args.entry is not None and args.entry_file:
+        print("ERROR: --entry 與 --entry-file 擇一，不可同時給")
+        sys.exit(2)
+    if args.entry is not None:
+        return args.entry.strip()
     if args.entry_file:
         with open(args.entry_file, encoding="utf-8-sig") as f:
             return f.read().strip()
-    print("ERROR: 需要 --entry-file")
+    print("ERROR: 需要 --entry（行內短內容）或 --entry-file（長內容）")
     sys.exit(2)
+
+
+def new_item(source, checkpoint, status, entry):
+    return {
+        "source": source,
+        "first_seen_checkpoint": checkpoint,
+        "last_checked_checkpoint": checkpoint,
+        "script_status": status,
+        "raw_entry": entry,
+        "entry_updated": checkpoint,
+        "compiled": None,
+        "category": None,
+    }
 
 
 def cmd_add(state, args):
@@ -108,18 +126,51 @@ def cmd_add(state, args):
     if i in state["items"]:
         print(f"ERROR: {i} 已存在，要更新內容請用 update-entry")
         sys.exit(2)
-    state["items"][i] = {
-        "source": args.source,
-        "first_seen_checkpoint": args.checkpoint,
-        "last_checked_checkpoint": args.checkpoint,
-        "script_status": args.status,
-        "raw_entry": read_entry(args),
-        "entry_updated": args.checkpoint,
-        "compiled": None,
-        "category": None,
-    }
+    state["items"][i] = new_item(args.source, args.checkpoint, args.status, read_entry(args))
     save(state, args.file)
     print(f"OK 已新增 {i}（{args.status}）")
+
+
+def cmd_add_batch(state, args):
+    """整批新增。撞已存在 id 或格式錯的單筆一律跳過並回報，不中斷；只在結尾 save 一次。"""
+    try:
+        with open(args.entries, encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"ERROR: --entries 檔讀取失敗（{e}）")
+        sys.exit(2)
+    if isinstance(data, dict):
+        data = data.get("entries")
+    if not isinstance(data, list):
+        print("ERROR: --entries 需為 JSON 陣列（或含 entries 陣列的物件）")
+        sys.exit(2)
+    added, skipped = [], []
+    for n, e in enumerate(data, 1):
+        if not isinstance(e, dict):
+            skipped.append(f"第{n}筆: 不是物件")
+            continue
+        missing = [k for k in ("id", "source", "checkpoint", "status", "entry") if not e.get(k)]
+        if missing:
+            skipped.append(f"第{n}筆({e.get('id','?')}): 缺 {','.join(missing)}")
+            continue
+        if e["status"] not in ("has_script", "pending"):
+            skipped.append(f"{e['id']}: status 須為 has_script/pending")
+            continue
+        if not isinstance(e["entry"], str):
+            skipped.append(f"{e['id']}: entry 須為字串")
+            continue
+        i = norm_id(str(e["id"]))
+        if i in state["items"]:
+            skipped.append(f"{i}: 已存在（要更新請用 update-entry）")
+            continue
+        state["items"][i] = new_item(e["source"], e["checkpoint"], e["status"], e["entry"].strip())
+        added.append(i)
+    if added:
+        save(state, args.file)
+    print(f"OK 新增 {len(added)} 則" + (f"：{','.join(added)}" if added else ""))
+    if skipped:
+        print(f"跳過 {len(skipped)} 則：")
+        print("\n".join("  " + s for s in skipped))
 
 
 def cmd_update_entry(state, args):
@@ -164,17 +215,52 @@ def cmd_mark_compiled(state, args):
 
 
 def cmd_set_category(state, args):
-    i = norm_id(args.id)
+    if args.pairs and (args.id or args.cat):
+        print("ERROR: --pairs 與 --id/--cat 擇一，不可混用")
+        sys.exit(2)
+    if not args.pairs:
+        if not (args.id and args.cat):
+            print("ERROR: 單筆需 --id 與 --cat；批次用 --pairs \"id=大分類/中主題;...\"")
+            sys.exit(2)
+        _set_one_category(state, args.id, args.cat, strict=True)
+        save(state, args.file)
+        return
+    # 批次：分隔符優先用「;」；沒有分號才退回逗號（中主題含逗號時務必用分號）
+    sep = ";" if ";" in args.pairs else ","
+    done, skipped = [], []
+    for tok in (t.strip() for t in args.pairs.split(sep)):
+        if not tok:
+            continue
+        if "=" not in tok:
+            skipped.append(f"「{tok}」: 缺 =（格式 id=大分類/中主題）")
+            continue
+        i, cat = tok.split("=", 1)
+        err = _set_one_category(state, i, cat, strict=False)
+        (skipped if err else done).append(err or norm_id(i))
+    if done:
+        save(state, args.file)
+    print(f"OK 設定 {len(done)} 則" + (f"：{','.join(done)}" if done else ""))
+    if skipped:
+        print(f"跳過 {len(skipped)} 則：")
+        print("\n".join("  " + s for s in skipped))
+
+
+def _set_one_category(state, raw_id, cat, strict):
+    """設定單筆 category。strict=True 出錯直接 exit；否則回傳錯誤訊息字串。"""
+    i = norm_id(raw_id)
     if i not in state["items"]:
-        print(f"ERROR: {i} 不存在")
+        msg = f"{i}: 不存在"
+    elif "/" not in cat:
+        msg = f"{i}: cat 需為「大分類/中主題」（例：社會/休達移民）"
+    else:
+        big, mid = cat.split("/", 1)
+        state["items"][i]["category"] = {"大分類": big.strip(), "中主題": mid.strip()}
+        print(f"OK {i} category={big.strip()}／{mid.strip()}")
+        return None
+    if strict:
+        print("ERROR: " + msg)
         sys.exit(2)
-    if "/" not in args.cat:
-        print("ERROR: --cat 需為「大分類/中主題」（例：社會/休達移民）")
-        sys.exit(2)
-    big, mid = args.cat.split("/", 1)
-    state["items"][i]["category"] = {"大分類": big.strip(), "中主題": mid.strip()}
-    save(state, args.file)
-    print(f"OK {i} category={big.strip()}／{mid.strip()}")
+    return msg
 
 
 def cmd_set_top(state, args):
@@ -223,20 +309,26 @@ def main():
     a.add_argument("--source", required=True)
     a.add_argument("--checkpoint", required=True)
     a.add_argument("--status", required=True, choices=["has_script", "pending"])
-    a.add_argument("--entry-file", required=True)
+    a.add_argument("--entry", help="行內短內容（與 --entry-file 擇一）")
+    a.add_argument("--entry-file", help="長內容檔案路徑（與 --entry 擇一）")
+    ab = sub.add_parser("add-batch")
+    ab.add_argument("--entries", required=True,
+                    help="JSON 陣列檔，每筆含 id/source/checkpoint/status/entry")
     u = sub.add_parser("update-entry")
     u.add_argument("--id", required=True)
     u.add_argument("--status", choices=["has_script", "pending"])
     u.add_argument("--checkpoint")
-    u.add_argument("--entry-file", required=True)
+    u.add_argument("--entry", help="行內短內容（與 --entry-file 擇一）")
+    u.add_argument("--entry-file", help="長內容檔案路徑（與 --entry 擇一）")
     sub.add_parser("pending")
     sub.add_parser("to-compile")
     m = sub.add_parser("mark-compiled")
     m.add_argument("--checkpoint", required=True)
     m.add_argument("--ids", required=True)
     c = sub.add_parser("set-category")
-    c.add_argument("--id", required=True)
-    c.add_argument("--cat", required=True, help="大分類/中主題")
+    c.add_argument("--id")
+    c.add_argument("--cat", help="大分類/中主題")
+    c.add_argument("--pairs", help='批次："id=大分類/中主題;id2=..."（分隔符優先認分號）')
     st = sub.add_parser("set-top")
     st.add_argument("field")
     st.add_argument("value")
@@ -251,6 +343,7 @@ def main():
     state = load(args.file)
     {
         "resume": cmd_resume, "diff": cmd_diff, "add": cmd_add,
+        "add-batch": cmd_add_batch,
         "update-entry": cmd_update_entry, "pending": cmd_pending,
         "to-compile": cmd_to_compile, "mark-compiled": cmd_mark_compiled,
         "set-category": cmd_set_category, "get": cmd_get,

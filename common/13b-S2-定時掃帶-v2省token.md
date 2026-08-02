@@ -60,20 +60,24 @@
 python scripts/s2_state.py --file "…/{MMDD}-s2-state.json" resume   # 開工必跑：現在幾點段、已收幾則、pending幾則、待整併幾則
 python scripts/s2_state.py diff --checkpoint 16:00 --ids RT2333,AP4675135,IN-02TU
                                                            # 回傳哪些是新的；已在庫的自動更新 last_checked
-python scripts/s2_state.py add --id RT2333 --source RT --checkpoint 16:00 --status pending --entry-file tmp.txt
-python scripts/s2_state.py update-entry --id RT2333 --status has_script --entry-file tmp.txt
+python scripts/s2_state.py add-batch --entries batch.json  # ⭐ 批次新增（預設路徑，見下方批次規則）
+python scripts/s2_state.py add --id RT2333 --source RT --checkpoint 16:00 --status pending --entry "RT2333 ▎一句話摘要▎畫面：…"
+python scripts/s2_state.py update-entry --id RT2333 --status has_script --entry "改寫後內容"
                                                            # pending→has_script 覆寫 raw_entry
+                                                           # add／update-entry 短內容用 --entry 行內；長內容（如CNN連線全文）才用 --entry-file
 python scripts/s2_state.py pending                         # 稿未到清單（最終整併清查用）
 python scripts/s2_state.py to-compile                      # 增量整併輸入：新增＋變動，含 raw_entry 全文
 python scripts/s2_state.py mark-compiled --checkpoint 18:00 --ids RT2333,RT2360
-python scripts/s2_state.py set-category --id RT2333 --cat "社會/休達移民"
+python scripts/s2_state.py set-category --pairs "RT2333=社會/休達移民;RT2360=國際/野火"
+                                                           # ⭐ 批次設分類（預設路徑）；單筆仍可 --id RT2333 --cat "社會/休達移民"
 python scripts/s2_state.py get --id RT2333                 # 單則全文
 python scripts/s2_state.py needs-review add --id RT2333 --note "疑似UGC，待人工"
 python scripts/s2_state.py needs-review list
 ```
 
-- 批次擷取流程 ＝ 收集本輪列表 ID → `diff` → 只對「新的」開詳情 → 每則 `add`。**全程不載入 70 則 raw_entry。**
-- 整併流程 ＝ `to-compile` 拿增量 → 判斷分類（`set-category`）→ 改寫 txt → `mark-compiled`。
+- 批次擷取流程 ＝ 收集本輪列表 ID → `diff` → 只對「新的」開詳情 → **邊看邊把每則累積進一份 `batch.json`，全部看完後一次 `add-batch`**。不要一則一次 `add`（2026-08-02 起：呼叫次數是 V2 變慢主因，一輪 25 則從約 52 次呼叫降到約 4 次）。**全程不載入 70 則 raw_entry。**
+- **批次規則**：`batch.json` 是 JSON 陣列，每筆 `{"id","source","checkpoint","status","entry"}`（`entry` 直接放字串，含換行）。撞已存在 id 或格式錯的單筆會**自動跳過並回報原因、不中斷**——回報裡有跳過清單時，逐筆判斷：已存在→改用 `update-entry`，格式錯→修正後單筆補。`--pairs` 的分隔符**優先用分號 `;`**（中主題含逗號時逗號會切錯）。
+- 整併流程 ＝ `to-compile` 拿增量 → 批次設分類（`set-category --pairs`）→ 改寫 txt → `mark-compiled`。
 - **腳本連續失敗 2 次**：把錯誤訊息原文記進回報，**當輪改用 V1 直讀 JSON 的做法繼續**（degraded mode），不得卡住不動。
 
 ## 3. 品質掃／統計／比對：`s2_validate.py`
@@ -201,3 +205,4 @@ youtube.com/watch?v=AA6tRh8n-_w
 - [ ] `s2_state.py` degraded mode 實際觸發率
 - [ ] SNTV 列表級的資訊量晚班夠不夠用
 - [ ] 實測一晚總 token，對照 V1 估算 30.8 萬
+- [ ] **時間／呼叫次數**（2026-08-02 補，batch 熱修後量）：批次擷取段與整併段各自耗時、工具呼叫總數。原差異總表只估 token 沒估呼叫次數，這正是 V2 變慢沒被預見的原因；此數據也是 txt 渲染案（`common/plans/2026-08-02-S2提速計劃.md` WP1）的 go/no-go 依據
