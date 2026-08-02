@@ -4,7 +4,9 @@
 用法：
   python s2_validate.py check <晚班交接.txt>       格式異常掃描
   python s2_validate.py stats <晚班交接.txt> [--window "16:00 - 23:00"]
-                                                   輸出檔頭兩行
+                             [--alert "▲ IN-23SU 希臘消防直升機空中相撞…"] [--clear-alerts]
+                                                   輸出檔頭三／四行＋重大提醒行
+                                                   （--alert 省略時沿用檔內既有重大行）
   python s2_validate.py diff3 <現行.txt> <機器版快照.txt>
                                                    列出人工編輯過的行
 
@@ -36,6 +38,28 @@ def strip_mark(l):
     """回傳 (標記或空字串, 去掉標記後的行)。"""
     m = MARK_RE.match(l)
     return (m.group(1), l[m.end():]) if m else ("", l)
+
+
+# 檔頭重大提醒行（2026-08-03 使用者訂案）：`🔴 重大：{標記}{代碼} {一句話}`
+# 放在檔頭最後（圖例行之後）、最多 3 行。編輯開檔第一眼就要看到今天最該處理的素材，
+# 不必自己在近百行素材裡找。stats 預設「沿用檔內既有重大行」，避免每次重算檔頭把它洗掉。
+ALERT_RE = re.compile(r"^\s*🔴\s*重大：")
+ALERT_MAX = 3
+
+
+def header_lines(lines):
+    """檔頭＝第一個 `======` 大分類之前的所有行。"""
+    out = []
+    for l in lines:
+        if l.startswith("="):
+            break
+        out.append(l)
+    return out
+
+
+def alert_lines(lines):
+    """回傳 [(行號, 原文)]，行號 1-based。"""
+    return [(n, l) for n, l in enumerate(lines, 1) if ALERT_RE.match(l)]
 
 # 側錄行（S2b）：{來源} {6碼}[ 小標]，格式與通訊社三段式完全不同——
 # 通訊社的畫面/BITE/150字檢查一律不適用，需分流（2026-08-02 訂正）
@@ -181,16 +205,28 @@ def check(path):
         if len(ns) > 1:
             hit(ns[-1], f"重複代碼 {c}（另見行 {ns[:-1]}）")
 
+    # 檔頭重大提醒行：代碼必須在正文找得到，且只能待在檔頭
+    head_n = len(header_lines(lines))
+    alerts = alert_lines(lines)
+    if len(alerts) > ALERT_MAX:
+        hit(alerts[ALERT_MAX][0],
+            f"重大提醒行 {len(alerts)} 行超過上限 {ALERT_MAX} 行"
+            f"（全都重大＝都不重大，只留當班最該先處理的）")
+    for n, l in alerts:
+        if n > head_n:
+            hit(n, "重大提醒行不在檔頭（應放在檔頭最後、圖例行之後，不可落在大分類區塊裡）")
+        codes = re.findall(CODE, l)
+        if not codes:
+            hit(n, "重大提醒行未寫素材代碼（格式：`🔴 重大：{標記}{代碼} {一句話}`）")
+        for c in codes:
+            if c not in seen_codes:
+                hit(n, f"重大提醒行的代碼 {c} 在正文找不到對應素材行（漏寫或已被刪）")
+
     # 隔夜標記（▲／●）：只要用了就必須在檔頭寫圖例，否則編輯看不懂那些符號
     used_marks = {m for _, m, _ in material_lines(lines, with_mark=True) if m}
     if used_marks:
         # 檔頭＝第一個 ====== 大分類之前；不能用「前 N 行」，素材行本身帶標記會假通過
-        head = []
-        for l in lines:
-            if l.startswith("="):
-                break
-            head.append(l)
-        head = "\n".join(head)
+        head = "\n".join(header_lines(lines))
         for mk in sorted(used_marks):
             if mk not in head:
                 hit(1, f"素材行用了隔夜標記「{mk}」但檔頭沒有對照圖例"
@@ -249,7 +285,7 @@ def check(path):
             print(f"  行{n}: {r}")
 
 
-def stats(path, window, date=""):
+def stats(path, window, date="", alerts=None, clear_alerts=False):
     lines = read(path)
     counts = {"AP": 0, "RT": 0, "NS": 0, "其他": 0}
     for _, l in material_lines(lines):
@@ -306,6 +342,20 @@ def stats(path, window, date=""):
     if any(marked.values()):
         print("標記：" + "　".join(f"{m}={MARKS[m]} 新增" for m in MARKS
                                    if marked[m]) + "（無標記＝23:00 前晚班既有）")
+    # 最後才是重大提醒行。⚠️ 預設沿用檔內既有的，不是每次重生——
+    # 檔頭每輪整併都要重算覆寫，若不沿用，一次例行 stats 就會把上一輪標的重大洗掉。
+    # 要改內容才傳 --alert（可重複，會整組取代）；要撤掉傳 --clear-alerts。
+    if clear_alerts:
+        out = []
+    elif alerts:
+        out = [a if ALERT_RE.match(a) else f"🔴 重大：{a}" for a in alerts]
+    else:
+        out = [l for l in header_lines(lines) if ALERT_RE.match(l)]
+    for a in out[:ALERT_MAX]:
+        print(a)
+    if len(out) > ALERT_MAX:
+        print(f"(略過 {len(out) - ALERT_MAX} 行：重大提醒上限 {ALERT_MAX} 行)",
+              file=sys.stderr)
 
 
 def diff3(cur_path, snap_path):
@@ -329,6 +379,11 @@ def main():
     s.add_argument("path")
     s.add_argument("--window", default="")
     s.add_argument("--date", default="", help="YYYY-MM-DD；預設由檔名 MMDD 推得")
+    s.add_argument("--alert", action="append", default=[],
+                   help="重大提醒行內容（可重複，最多3則；會整組取代舊的）。"
+                        "省略＝沿用檔內既有重大行")
+    s.add_argument("--clear-alerts", action="store_true",
+                   help="撤掉全部重大提醒行（事件退燒／隔日換檔時用）")
     d = sub.add_parser("diff3")
     d.add_argument("current")
     d.add_argument("snapshot")
@@ -336,7 +391,7 @@ def main():
     if args.cmd == "check":
         check(args.path)
     elif args.cmd == "stats":
-        stats(args.path, args.window, args.date)
+        stats(args.path, args.window, args.date, args.alert, args.clear_alerts)
     else:
         diff3(args.current, args.snapshot)
 
