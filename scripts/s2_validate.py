@@ -13,8 +13,10 @@
 import argparse
 import difflib
 import io
+import os
 import re
 import sys
+from datetime import datetime
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
@@ -142,7 +144,7 @@ def check(path):
             print(f"  行{n}: {r}")
 
 
-def stats(path, window):
+def stats(path, window, date=""):
     lines = read(path)
     counts = {"AP": 0, "RT": 0, "NS": 0, "其他": 0}
     for _, l in material_lines(lines):
@@ -157,13 +159,20 @@ def stats(path, window):
             counts["其他"] += 1
     counts["其他"] += len(yt_blocks(lines))  # YouTube 兩行式（4c）歸「其他」
     total = sum(counts.values())
+    # 檔頭三行（2026-08-02 使用者定案）：標題／時間窗（含時數）／則數統計
+    mmdd = re.search(r"(\d{4})晚班交接", os.path.basename(path))
+    mmdd = mmdd.group(1) if mmdd else ""
+    if not date and mmdd:
+        date = f"{datetime.now().year}-{mmdd[:2]}-{mmdd[2:]}"
+    if mmdd:
+        print(f"{mmdd} 晚班交接")
     if window:
         try:
-            s, e = [x.strip() for x in window.split("-")]
+            s, e = [x.strip() for x in re.split(r"[-–]", window)]
             h = (int(e[:2]) * 60 + int(e[3:5]) - int(s[:2]) * 60 - int(s[3:5])) / 60
-            print(f"已完成掃帶時段 {s} - {e}（約{h:g}hrs）")
+            print(f"時間窗：{date + ' ' if date else ''}{s}–{e}（約{h:g}hrs）")
         except (ValueError, IndexError):
-            print(f"已完成掃帶時段 {window}")
+            print(f"時間窗：{date + ' ' if date else ''}{window}")
     parts = [f"AP {counts['AP']}則", f"RT {counts['RT']}則", f"NS {counts['NS']}則"]
     if counts["其他"]:
         parts.append(f"其他 {counts['其他']}則")
@@ -190,6 +199,7 @@ def main():
     s = sub.add_parser("stats")
     s.add_argument("path")
     s.add_argument("--window", default="")
+    s.add_argument("--date", default="", help="YYYY-MM-DD；預設由檔名 MMDD 推得")
     d = sub.add_parser("diff3")
     d.add_argument("current")
     d.add_argument("snapshot")
@@ -197,7 +207,7 @@ def main():
     if args.cmd == "check":
         check(args.path)
     elif args.cmd == "stats":
-        stats(args.path, args.window)
+        stats(args.path, args.window, args.date)
     else:
         diff3(args.current, args.snapshot)
 

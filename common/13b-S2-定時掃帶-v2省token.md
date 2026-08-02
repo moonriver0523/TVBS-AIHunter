@@ -14,6 +14,7 @@
 | 1 | 詳情頁讀取 | 整頁 text／截圖 | **fallback 階梯＋硬字元上限** | ~60–80k/晚 |
 | 2 | 狀態 JSON | agent 直接讀寫整份 | **`s2_state.py` 代管，agent 禁直讀寫** | ~70k/晚 |
 | 3 | 品質掃／檔頭統計／三方比對 | agent 逐行掃 | **`s2_validate.py` 機器掃，只處理命中** | ~15–20k/晚 |
+| 6 | RT 連掃讀取 | 每則回列表重點 | **單分頁 Next 鏈＋換頁後 scroll 再讀**（見防卡設計 5） | 省一次頁載入/則 |
 | 4 | SNTV 體育 | 開詳情寫完整三段式 | **`AP5` 白名單列表級收錄** | ~10–15k/晚 |
 | 5 | 防卡設計 | — | resume／RT 斷點跳站／半夜禁問 | （穩定性） |
 
@@ -35,10 +36,18 @@
 
 ## 2. 狀態檔：`s2_state.py` 代管（agent 禁止直接開 JSON）
 
-狀態檔仍是單一 JSON（`自動掃帶系統/s2-state.json`，欄位同 V1），但**一切讀寫都透過腳本**：
+狀態檔仍是單一 JSON，但**一切讀寫都透過腳本**。
+
+⚠️ **檔名與 schema（2026-08-02 實跑訂正，務必照做）**：
+- **檔名＝`{MMDD}-s2-state.json`**（例 `0802-s2-state.json`），與 `{MMDD}晚班交接.txt` 同資料夾、**一天一檔**。不是固定的 `s2-state.json`。
+- **正式 schema**：頂層有 `checkpoint`／`updated_at`／`window_local`／`rt_status`／`ap_status`／`cnn_status`／`notes`／`items`；**`items` 是陣列**（每筆含 `id`）；**`category` 是 `{"大分類": …, "中主題": …}` 物件**，不是字串。`s2_state.py` 已對齊此格式，`set-category --cat "大分類/中主題"` 會自動轉成物件。
+- 頂層欄位用 `set-top {欄位} {值}` 設定（開工先設 `window_local` 與 `checkpoint`）。
+- **整併後另存機器版快照** `{MMDD}晚班交接.snapshot.txt`（同資料夾），供下一輪 `diff3` 三方比對用。
+
+指令：
 
 ```
-python scripts/s2_state.py resume                          # 開工必跑：現在幾點段、已收幾則、pending幾則、待整併幾則
+python scripts/s2_state.py --file "…/{MMDD}-s2-state.json" resume   # 開工必跑：現在幾點段、已收幾則、pending幾則、待整併幾則
 python scripts/s2_state.py diff --checkpoint 16:00 --ids RT2333,AP4675135,IN-02TU
                                                            # 回傳哪些是新的；已在庫的自動更新 last_checked
 python scripts/s2_state.py add --id RT2333 --source RT --checkpoint 16:00 --status pending --entry-file tmp.txt
@@ -67,7 +76,7 @@ python scripts/s2_validate.py diff3 current.txt snapshot.txt    # 三方比對�
 
 - `check` 涵蓋 V1「格式異常」表全部可 regex 的項目：BITE 矛盾、缺 `▎畫面：`、缺講者、備註重標、GMT 洩漏、`FILE`／`檔案`、操作備註全形括號、重複代碼、第二括號非 `(BITE)` 等。
 - **LLM 只處理命中清單**（回站核對、修 raw_entry＋txt），不再整份逐行讀。`明顯可疑`（數字矛盾等語意類）維持 LLM 抽查，但只在機器掃結果之外補充，不重複掃格式。
-- `stats` 產出的兩行直接貼進檔頭（[V1 檔頭備註規則](13-S2-定時掃帶.md#晚班交接檔頭備註2026-08-01-定案)）。
+- `stats` 產出的**三行**直接貼進檔頭（見 V1 `13`「晚班交接檔頭」）。
 - `diff3` 只把「與機器版快照不同的行」列出來，LLM 只裁決這些行保不保留。
 - **腳本失敗行為**：連續失敗 2 次 → 品質掃記為「未執行（腳本錯誤）」寫進回報，**禁止 agent 自行逐行手掃替代**。
 
@@ -126,6 +135,7 @@ youtube.com/watch?v=AA6tRh8n-_w
 
 ### 狀態 JSON 與統計
 
+- **檔頭統計**用 `s2_validate.py stats --window "14:00 - 15:00"` 產生三行（見 V1 `13` 檔頭章節）。
 - `--id` 一律**正規化成 `YT:{video id}`**（`YT:AA6tRh8n-_w`）——同一支影片可能被貼成 `youtube.com/watch?v=…`／`youtu.be/…`／帶 `&t=`／帶 `?si=` 追蹤參數等多種寫法，用原始網址當 id 會**重複收錄同一支片**。`video id` 全域唯一，天然不會與通訊社代碼撞號。txt 裡的第一行仍寫使用者給的完整網址（方便點開），去重靠 id。
 - `--source YT`。
 - **檔頭統計歸「其他」**（依 V1 `13` 檔頭備註規則：非 AP／RT／NS 一律併入其他）。
@@ -146,12 +156,26 @@ youtube.com/watch?v=AA6tRh8n-_w
 2. **RT 卡住跳站**：連續 2 次 Next 沒反應／頁面沒變 → 記下目前 Edit No.（`needs-review add`），跳去掃 AP／CNN，回報 RT 中斷點。不准死磕（V1 已知 SPA 卡快取雷）。
 3. **半夜禁問**：無人值守時段遇到需使用者確認的事項（可疑素材、分類拿不準、腳本壞掉）→ `needs-review add` 記錄＋寫進交接檔備註，**繼續往下跑**。不得 `AskUserQuestion` 等回應、不得停住。
 4. **fallback 全部單向**：階梯只往下走（選擇器→整頁→截圖），不回頭重試上一步。
-5. ⚠️ **RT 連掃改「雙分頁」法（2026-08-02 定案，使用者提出並實測驗證）**：Next 換頁後同分頁 `get_page_text` 會**無聲回傳上一則完整內容**（實測 5/5 重現；URL 與畫面都對、文字是舊的）。**標準做法**：
-   - **分頁 A＝目錄**：照 V1 五步進 Next 鏈，**只**負責按 Next（›）與提供當前 URL，**永遠不在 A 讀文字**。
-   - **分頁 B＝閱讀器**：把 A 的當前 URL `navigate` 冷開 → 等 2-3 秒 → `get_page_text`。冷載入 DOM 乾淨，實測完整正確。
-   - **B 的已知小雷**：第一次讀可能抓到底層空列表（特徵：`Source element: <main>`＋`0 items`）→ 等 1-2 秒**重讀一次**即得 `<article>` 完整內容。
-   - **保險絲**：讀到的文中 Edit No 仍須與 URL 編號一致才可寫入；不一致照第 2 條記錄跳站（實務上冷開不會發生，屬最後防線）。
-   - 舊法（同分頁核對→重讀→截圖）**廢除**：實測殘留率 100%，每則浪費一次全文白讀＋多張截圖，內容還不完整。
+5. ⚠️ **RT 連掃＝單分頁 Next 鏈＋「換頁後必須刷新再讀」（2026-08-02 三輪實測定案，取代先前雙分頁法）**
+
+   **根因**：`get_page_text`／`find`／`read_page` 讀的是**擷取快照**，SPA 換頁（Next／Previous）**不會**刷新它——換頁後立刻讀，會**無聲拿到上一則的完整內容**（URL 與畫面都已是新的，只有文字是舊的）。**純 `wait` 無效、連讀兩次也無效**；只有**會回傳畫面的互動動作**（`screenshot` 或 `scroll`）能強制刷新。
+
+   **標準流程（每則固定四步，不可省第 2 步）**：
+   1. 從 **`https://www.reutersconnect.com/all?media-types=vid` 大列表**、頁面**在最頂**、點**最新那則**卡片進詳情（首次進入）。
+   2. 按 **Next（›）** 往時間更早。
+   3. **做一次 `scroll`（往下 3–5 格）**——強制刷新擷取快照，順帶把 shotlist／script 捲進視野。
+   4. `get_page_text` 讀取 → **核對文中 Edit No 與 URL 編號一致**才寫入。
+
+   - 用 `scroll` 不用 `screenshot`：兩者都能刷新，但 `scroll` 同時達成「捲到正文」的目的，一個動作兩用。
+   - **保險絲**：Edit No 與 URL 不符 → 再 `scroll` 一次重讀；仍不符 → 照第 2 條記錄跳站。
+   - 📌 **雙分頁法（A 目錄／B 冷開）降級為備援**：只在 Next 鏈整段失效時使用（B 分頁冷開後同樣要**先 scroll 再讀**，原因相同）。單分頁 Next 鏈**省一次完整頁面載入／則**，是預設路徑。
+
+5b. ⚠️ **Next（›）灰掉按不動時（2026-08-02 實測，使用者指出主因）**：
+   - **主因＝進入路徑不對**：必須從 **`all?media-types=vid` 大列表**、**頁面在最頂**、點**最新那則**進去，結果集才會綁好、‹ › 才會生效。從搜尋結果、篩選後清單、深連結、或捲動過的列表點進去，都可能讓 ‹ › 失效。
+   - **處置**：Next 灰掉 → **回大列表重新照上述路徑進入**（不是改用別的方法硬幹）。
+   - **備援**：仍失效才回列表**逐張點卡**進詳情（首屏可見的素材不需要 Next 鏈，也不會踩 LOAD MORE 禁則）；每則同樣「進去→scroll→讀→核對 Edit No」。
+   - 只有窗內素材已捲出首屏時才非用 Next 鏈不可；此時 Next 仍失效 → 照第 2 條記錄中斷點並跳站。
+   - 只有在「窗內素材已捲出首屏」時才需要 Next 鏈；此時若 Next 仍失效，照第 2 條記錄中斷點並跳站。
 6. **AP `/home` 偶發跳轉 `/live`（2026-08-02 實測）**：navigate 到 AP Newsroom `/home` 或點側欄 Latest 後，偶爾會被 SPA 路由帶去 `/live`。**每次讀列表前先確認 URL 是 `/home`**；發現在 `/live` → 重新點側欄 Latest（點文字正中央），最多重試 2 次，仍失敗照第 2 條跳下一站並記錄。
 
 ## 未定／實測後要回填
