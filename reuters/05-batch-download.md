@@ -40,7 +40,7 @@
 
 ## API 直取（2026-08-03 訂案，AP／RT／NS 首選路徑）
 
-**核心**：定位、文稿、（AP／RT 的）影片下載**全部走 API，不點 UI**。三站端到端實測完成。**API 失敗兩次就退回下一節的 UI 舊做法**，不要死磕。
+**核心**：定位、文稿全走 API；**影片下載＝AP 可 API 直連、RT 只能真點按鈕、NS 走 UI**（見各站）。**API 失敗兩次就退回下一節的 UI 舊做法**，不要死磕。**每筆下載後必查檔案大小**（見「下載驗證」）——「Downloaded」事件會騙人。
 
 **共同前提**
 - **一律用 Playwright 工具組**（`mcp__browser__*`），不是 claude-in-chrome（NS 的 localStorage 在 claude-in-chrome 會被 extension 隱私防護擋死）。
@@ -50,15 +50,18 @@
 - **費用：不必事前把關、不必為此停下來**（2026-08-03 使用者訂正）——**使用者提交清單時已人工確認過都是免費素材**，本流程照單全收即可，不要因為費用欄位而卡住或反覆確認。
   - 但**看到就順手回報**：費用欄位本來就在你已經取回的回應裡（RT 的 `points`／`free` 就在文稿那份 item 回應；AP 的 `Term` 在 `downloadnr/check`，而 check 本來就是拿 `ContentId` 的必要步驟），**零額外呼叫**。若發現某筆不是免費（RT `points` 非 0，或 AP `AppliedPrice` 非 0／`IsAlaCarte: true`），**照樣下載**，但在回報裡列出該筆與數值，當人工核對的備援。
 
-### RT（文稿＋影片都可 API）
+### RT（文稿走 API，**影片只能真點按鈕下載**）
 
 1. **定位**：照 `13b` §1b DOM 直撈 `a[href*="detail?id="]` 拿 guid。Edit No 可從 guid 的 `newsml_RW{4碼}` 推出、與清單值互相校驗。
 2. **文稿**：`GET /api/item/{guid}?hash={hash}&live=false`（同源 fetch＋`credentials:'include'`）→ SCRIPT＋SHOTLIST＋Restrictions 一次到手。`hash` **照抄當下頁面請求**（實測 `klwn20`，但那是前端 build hash、改版會變，不要硬編）。
 3. **費用（只記錄不擋）**：同一份 item 回應裡的 `~:points`／`~:free` 順手看一眼；非 0 照樣下載，但列進回報。
-4. **影片**：從 renditions 取 **`...-STREAM:{n}:16X9:HD1080I60:MP4`**（＝UI 預設 HD 60fps；沒有就退 `HD1080I50`），組
-   `https://www.reutersconnect.com/api/download/video/{guid}/{binaryId}?filename={檔名}&hash={hash}&purchase-type=ayce`
-   在頁面內 `a.href=url; a.download=檔名; a.click()` 觸發（`purchase-type=ayce`＝訂閱吃到飽）。
-   ✅ **`filename` 可直接指定成目標檔名**（如 `西國不敗1200 #01 RT.mp4`），省掉事後改名。
+4. **影片下載**：⚠️ **不能用 `a.click()` 合成觸發下載**（2026-08-03 工作 agent 端到端實測抓到、經根因驗證）——
+   - **現象**：在 `browser_evaluate` 內 `a.href={download-url}; a.click()`，Playwright 照樣回報「Downloaded file X」**沒有任何錯誤**，但落地的其實是 **~8KB 的帳號 JSON**（`application/transit+json`），不是影片。**22 筆全中招**。
+   - **根因**：合成點擊是 untrusted click、缺 `Sec-Fetch-User: ?1`，RT 的 `/api/download/video` 端點對「真人手勢觸發」與「腳本觸發」做內容協商——URL 完全相同（同 guid／binaryId／hash／`purchase-type=ayce`），真點按鈕回真影片、腳本點回帳號資料。這是瀏覽器規格層行為，不是 Reuters 的 bug，**這個端點就是不吃合成點擊**。
+   - **正確做法**：定位／文稿／費用全走 API 不變（guid 已確定，省掉開新分頁看 Restrictions／捲動找 Transcript），**只有下載這步**回到 detail 頁 → `browser_find` 找 label 恰為 `Download` 的按鈕 → **`browser_click` 真點**（不是 JS click）。
+   - ⚠️ **`filename` 自訂優化失效**：按鈕觸發的下載套不上自訂 query-string 檔名，會用 Reuters 原始檔名，**下載完仍要照原 UI 流程手動改名**。
+   - 為什麼不再嘗試純 API：download 端點回的 transit JSON 裡 `download-url`／`status-url` 兩欄都是 `null`，看不出兩段式流程的下一步；深挖 CP 值低，先用真點按鈕。
+   - ✅ **下載後必查檔案大小**（見本節末「下載驗證」硬規則）——這正是這次踩雷的教訓。
 
 ### AP（文稿＋影片都可 API）
 
@@ -70,6 +73,20 @@
    `{"Ticks":[{"ItemId":"{itemid}","MediaType":"video","Role":"Main","Title":"{slug}","ContentId":"{ContentId}","StoryNumber":"{editorialid}","ContentRenditionId":{ContentRenditionId},"RecordSequenceNumber":1}],"StoryItemID":null}`
    → 回應的 **`ClientMediaUrl`** 就是簽章直連（CloudFront，**約 15 分鐘到期**），`a.click()` 下載即可，`FileName` 也一併給。
    ⚠️ `tick` 是 AP 的下載計數／授權登錄，**不可為了省一步跳過**——沒有它也拿不到 `ClientMediaUrl`。
+   ✅ **AP 的 `a.click()` 可以用**（與 RT 不同）：`ClientMediaUrl` 是 CloudFront 純簽章直連，沒有登入態／信任觸發的內容協商，合成點擊正常。2026-08-03 實測 3 筆全對（96–188MB）。**但仍要照下方驗檔案大小**。
+
+### ⚠️ 下載驗證（三站共同硬規則，2026-08-03 訂）
+
+**「Downloaded file」事件文字不代表下載成功**——RT 的假檔就是靜默失敗、事件照樣回報成功。每筆下載後**必查落地檔案的大小與型別**：
+
+```powershell
+Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
+  Select -First 5 Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}, LastWriteTime
+```
+
+- **影片正常範圍**：數十 MB 到數百 MB（實測 RT 54–713MB、AP 96–188MB）。
+- **⚠️ 8KB 級（<1MB）＝假檔**（帳號 JSON／錯誤頁），該筆判定失敗、重下（RT 改真點按鈕）。
+- 不能只憑事件文字或檔名存在就打勾；大小不合理就是沒下到。
 
 ### CNN Newsource（NS）：文稿走 API，**影片只能走 UI**
 
