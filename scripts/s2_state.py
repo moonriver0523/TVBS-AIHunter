@@ -554,6 +554,21 @@ def cmd_get(state, args):
     print(json.dumps(v, ensure_ascii=False, indent=1))
 
 
+def cmd_remove(state, args):
+    """整則刪除（誤收、排除白名單命中等）——與 needs-review 不同：這裡是真的不要，
+    不是留著待人工。刪除後 render 那則就不會再出現，不留殼。
+    """
+    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    missing = [i for i in ids if i not in state["items"]]
+    if missing:
+        print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未刪除，請修正後重跑）")
+        sys.exit(2)
+    for i in ids:
+        del state["items"][i]
+    save(state, args.file)
+    print(f"OK 已刪除 {len(ids)} 則：{','.join(ids)}")
+
+
 def cmd_needs_review(state, args):
     if args.action == "add":
         i = norm_id(args.id)
@@ -628,6 +643,8 @@ def main():
     st.add_argument("value")
     g = sub.add_parser("get")
     g.add_argument("--id", required=True)
+    rm = sub.add_parser("remove", help="整則刪除（誤收、排除白名單命中等），不是留待人工")
+    rm.add_argument("--ids", required=True)
     r = sub.add_parser("needs-review")
     r.add_argument("action", choices=["add", "list"])
     r.add_argument("--id")
@@ -641,7 +658,7 @@ def main():
         "update-entry": cmd_update_entry, "pending": cmd_pending,
         "add-side": cmd_add_side, "set-alert": cmd_set_alert,
         "set-mark": cmd_set_mark,
-        "set-category": cmd_set_category, "get": cmd_get,
+        "set-category": cmd_set_category, "get": cmd_get, "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,
     }[args.cmd](state, args)
 
