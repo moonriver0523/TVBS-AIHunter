@@ -8,20 +8,31 @@ agent 一律透過本腳本讀寫狀態，不直接開 JSON。
 （可用 --file 覆蓋；找不到時自動建立空狀態。）
 """
 import argparse
-import io
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+# ⚠️ 用 reconfigure 不用 TextIOWrapper：包第二層時（例如 s2_state 匯入 s2_validate）
+# 舊寫法會讓其中一個 wrapper 被回收時關掉底層 buffer，整支腳本以 "I/O operation on
+# closed file" 掛掉（2026-08-03 WP1 實錯）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:  # py<3.7
+        pass
 
 DEFAULT_FILE = r"G:\我的雲端硬碟\Claude共用\自動掃帶系統\s2-state.json"
 
 
 TOP_FIELDS = ("checkpoint", "updated_at", "window_local",
-              "rt_status", "ap_status", "cnn_status", "notes")
+              "rt_status", "ap_status", "cnn_status", "notes",
+              # WP1（2026-08-03）：render 全量重生成 txt，這三個只能存在狀態檔裡——
+              # alerts＝檔頭 🔴 重大提醒行（沒有舊 txt 可沿用了）；
+              # special_category＝第一格機動大分類的顯示名（如「熊本地震」）；
+              # last_render_ts＝上次 render 時間，resume 用來算「距上次 render 有變動」。
+              "alerts", "special_category", "last_render_ts")
 
 
 def load(path):
@@ -34,7 +45,9 @@ def load(path):
     except (json.JSONDecodeError, OSError) as e:
         print(f"ERROR: 狀態檔讀取失敗（{e}）。請確認檔案未損壞後重跑；不要手動改 JSON。")
         sys.exit(2)
-    top = {k: raw[k] for k in TOP_FIELDS if k in raw}
+    # 頂層一律全收（不只白名單）：白名單漏掉的欄位會在下一次 save 靜默消失，
+    # 未來新增欄位若忘了加進 TOP_FIELDS 就會掉資料。TOP_FIELDS 只管 set-top 能改哪些。
+    top = {k: v for k, v in raw.items() if k not in ("items", "date")}
     items = raw.get("items", [])
     if isinstance(items, list):  # 正式 schema
         items = {it["id"]: {k: v for k, v in it.items() if k != "id"} for it in items}
@@ -65,39 +78,37 @@ def now_ts():
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
 
 
-def is_todo(v):
-    """是否待整併。
+def changed_since_render(v, last_render_ts):
+    """距上次 render 後有變動？（WP1 取代原本的「待整併」）
 
-    ⚠️ 比較一律用腳本自己寫的時間戳（`entry_updated_ts` / `compiled_ts`），
-    不要用 checkpoint 標籤——標籤是 agent 自由命名的字串，字串比較會出錯：
-    `"r10" < "r8"`（'1'<'8'），所以第 10 輪之後的更新對上第 1–9 輪的 compiled
-    會被判成「沒變動」而靜默漏掉（0803 實錯，50 則更新沒進 txt）。
-    舊資料沒有 ts 欄位：兩邊都缺→視為未變動（那批已整併且已人工修正），
-    有新更新時才會寫入 ts，之後比較就正確。
-    note（needs-review 的純備註殼）永不待整併——它沒有內容可整併。
+    render 每輪全量重生成 txt，「哪些還沒整併」不再影響產出——這個數字只剩
+    「上次 render 之後動過幾則」的參考值。比較一律用腳本自己寫的 `entry_updated_ts`，
+    不要用 checkpoint 標籤：標籤是 agent 自由命名的字串，字串比較會出錯
+    （`"r10" < "r8"`，0803 實錯漏掉 50 則）。
+    note（needs-review 的純備註殼）不算——它沒有內容可整併。
     """
     if v.get("script_status") == "note":
         return False
-    if v.get("compiled") is None:
-        return True
-    return v.get("entry_updated_ts", "") > (v.get("compiled_ts") or "")
+    if not last_render_ts:
+        return True                      # 還沒 render 過＝全部都待 render
+    return (v.get("entry_updated_ts") or "") > last_render_ts
 
 
 def cmd_resume(state, args):
     items = state["items"]
+    last_render = state.get("_top", {}).get("last_render_ts") or ""
     pend = [i for i, v in items.items() if v.get("script_status") == "pending"]
-    todo = [i for i, v in items.items() if is_todo(v)]
+    todo = [i for i, v in items.items() if changed_since_render(v, last_render)]
     review = [i for i, v in items.items() if v.get("needs_review")]
     cps = sorted({v.get("last_checked_checkpoint", "") for v in items.values() if v.get("last_checked_checkpoint")})
-    print(f"日期:{state.get('date','?')} 共{len(items)}則 pending:{len(pend)} 待整併:{len(todo)} 待人工:{len(review)}")
-    print(f"最近檢查點:{cps[-1] if cps else '無'}")
+    print(f"日期:{state.get('date','?')} 共{len(items)}則 pending:{len(pend)} "
+          f"上次render後有變動:{len(todo)} 待人工:{len(review)}")
+    print(f"最近檢查點:{cps[-1] if cps else '無'}｜上次render:{last_render or '（尚未）'}")
     if pend:
         print("pending: " + ",".join(sorted(pend)))
-    if todo:
-        print("待整併: " + ",".join(sorted(todo)))
     if review:
         print("待人工: " + ",".join(sorted(review)))
-    print("下一步：批次擷取用 diff 找新素材；整併用 to-compile。")
+    print("下一步：批次擷取用 diff 找新素材；整併用 set-category --pairs 後跑 s2_render.py。")
 
 
 def cmd_diff(state, args):
@@ -216,30 +227,6 @@ def cmd_pending(state, args):
     print("\n".join(pend) if pend else "(無 pending)")
 
 
-def cmd_to_compile(state, args):
-    out = []
-    for i, v in sorted(state["items"].items()):
-        if is_todo(v):
-            c = v.get("category")
-            cat = f"{c['大分類']}/{c['中主題']}" if isinstance(c, dict) else (c or "(未分類)")
-            out.append(f"### {i} [{cat}] {v.get('script_status')}\n{v.get('raw_entry','')}")
-    print("\n\n".join(out) if out else "(無待整併項目)")
-
-
-def cmd_mark_compiled(state, args):
-    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
-    missing = [i for i in ids if i not in state["items"]]
-    if missing:
-        print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未標記，請修正後重跑）")
-        sys.exit(2)
-    ts = now_ts()
-    for i in ids:
-        state["items"][i]["compiled"] = args.checkpoint
-        state["items"][i]["compiled_ts"] = ts
-    save(state, args.file)
-    print(f"OK 已標記 {len(ids)} 則 compiled={args.checkpoint}")
-
-
 def cmd_set_category(state, args):
     if args.pairs and (args.id or args.cat):
         print("ERROR: --pairs 與 --id/--cat 擇一，不可混用")
@@ -272,21 +259,199 @@ def cmd_set_category(state, args):
 
 
 def _set_one_category(state, raw_id, cat, strict):
-    """設定單筆 category。strict=True 出錯直接 exit；否則回傳錯誤訊息字串。"""
+    """設定單筆 category。strict=True 出錯直接 exit；否則回傳錯誤訊息字串。
+
+    cat 格式：`大分類/中主題` 或 `大分類/中主題/小分題`（小分題選填）。
+    小分題是 WP1 加的第三層——render 全生三層結構（裸行標題＋`+` 分隔），
+    舊資料沒這欄位時該層省略，屬正常（見 13「三層骨架」）。
+    """
     i = norm_id(raw_id)
     if i not in state["items"]:
         msg = f"{i}: 不存在"
     elif "/" not in cat:
-        msg = f"{i}: cat 需為「大分類/中主題」（例：社會/休達移民）"
+        msg = f"{i}: cat 需為「大分類/中主題[/小分題]」（例：社會/休達移民/岸際動態）"
     else:
-        big, mid = cat.split("/", 1)
-        state["items"][i]["category"] = {"大分類": big.strip(), "中主題": mid.strip()}
-        print(f"OK {i} category={big.strip()}／{mid.strip()}")
+        parts = [p.strip() for p in cat.split("/", 2)]
+        big, mid = parts[0], parts[1]
+        sub = parts[2] if len(parts) > 2 else ""
+        c = {"大分類": big, "中主題": mid}
+        if sub:
+            c["小分題"] = sub
+        state["items"][i]["category"] = c
+        print(f"OK {i} category={big}／{mid}" + (f"／{sub}" if sub else ""))
         return None
     if strict:
         print("ERROR: " + msg)
         sys.exit(2)
     return msg
+
+
+def load_validate():
+    """載入同目錄的 s2_validate（共用行辨識 regex，不重寫一套）。"""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import s2_validate
+    return s2_validate
+
+
+def parse_side_txt(text):
+    """把側錄 TXT 解析成狀態檔項目。
+
+    吃兩種寫法（都用同一套三層結構辨識）：
+      1. 直接沿用晚班交接 txt 的排版：`======大分類======` / `【中主題】` /
+         小分題裸行 / `+` 分隔 / 側錄兩行式區塊。
+      2. 篩選 agent 的候選 TXT：每則前面帶
+         `擬歸位：======大分類====== → 【中主題】 → 小分題`（見 14-S2b）。
+
+    回傳 [(id, source, category, raw_entry)]；raw_entry 是**去掉時段標記後的原文**
+    （TC 行＋內容行），時段標記由 render 依 first_seen_checkpoint 自動補。
+    """
+    sv = load_validate()
+    lines = text.replace("\r\n", "\n").split("\n")
+    big = mid = sub = ""
+    out, cur = [], None
+
+    def flush():
+        if cur:
+            out.append(cur)
+
+    for raw in lines:
+        _, l = sv.strip_mark(raw)
+        s = l.strip()
+        m_home = re.match(r"^擬歸位[：:]\s*(.+)$", s)
+        if m_home:
+            flush()
+            cur = None
+            segs = [x.strip() for x in re.split(r"→|->", m_home.group(1))]
+            big = segs[0].strip("= ") if segs else big
+            mid = segs[1].strip("【】 ") if len(segs) > 1 else ""
+            sub = segs[2].strip() if len(segs) > 2 else ""
+            continue
+        if s.startswith("======") or (s.startswith("=") and s.endswith("=")):
+            flush()
+            cur = None
+            big, mid, sub = s.strip("= "), "", ""
+            continue
+        if s.startswith("【") and s.endswith("】"):
+            flush()
+            cur = None
+            mid, sub = s.strip("【】"), ""
+            continue
+        if s == "+":
+            flush()
+            cur = None
+            sub = ""            # 下一個裸行＝新的小分題
+            continue
+        if not s:
+            flush()
+            cur = None
+            continue
+        if sv.SIDE_RE.match(l):
+            flush()
+            src, tc = re.match(rf"^(CNN|NHK) ({sv._TC})", l).groups()
+            cat = {"大分類": big, "中主題": mid}
+            if sub:
+                cat["小分題"] = sub
+            cur = (f"{src} {tc}", f"SIDE_{src}", cat, l.rstrip())
+            continue
+        if sv.LINE_RE.match(l):   # 通訊社素材行：不是側錄，跳過（供混排 txt 直接餵）
+            flush()
+            cur = None
+            continue
+        if cur:                   # 內容行：接在 TC 行底下
+            cur = (cur[0], cur[1], cur[2], cur[3] + "\n" + l.rstrip())
+        else:                     # 裸行且不在區塊內＝小分題標題
+            sub = s
+    flush()
+    return out
+
+
+def cmd_add_side(state, args):
+    """把側錄 TXT 收進狀態檔（WP1 前提二：不入狀態檔，隔夜 render 會把它刪掉）。"""
+    try:
+        with open(args.txt, encoding="utf-8-sig") as f:
+            text = f.read()
+    except OSError as e:
+        print(f"ERROR: 側錄檔讀取失敗（{e}）")
+        sys.exit(2)
+    parsed = parse_side_txt(text)
+    if not parsed:
+        print("ERROR: 沒解析到任何側錄段落（TC 行格式須為 `CNN 160106（主播）`）")
+        sys.exit(2)
+    added, updated, bad = [], [], []
+    for i, src, cat, entry in parsed:
+        if not cat.get("大分類"):
+            bad.append(f"{i}: 沒有大分類（候選 TXT 需標擬歸位，或沿用 txt 三層排版）")
+            continue
+        if i in state["items"] and not args.overwrite:
+            updated.append(i)      # 已在庫＝往輪次重跑，內容照舊不動（側錄人工定稿）
+            continue
+        it = state["items"].get(i) or new_item(src, args.checkpoint, "has_script", entry)
+        it["source"] = src
+        it["raw_entry"] = entry
+        it["category"] = cat
+        it["entry_updated"] = args.checkpoint
+        it["entry_updated_ts"] = now_ts()
+        state["items"][i] = it
+        added.append(i)
+    if args.dry_run:
+        print(f"DRY-RUN 解析 {len(parsed)} 段：新增/覆寫 {len(added)}、已在庫略過 {len(updated)}")
+    else:
+        if added:
+            save(state, args.file)
+        print(f"OK 收錄側錄 {len(added)} 段" + (f"：{','.join(added[:8])}…" if len(added) > 8
+                                            else (f"：{','.join(added)}" if added else "")))
+        if updated:
+            print(f"已在庫略過 {len(updated)} 段（要覆蓋加 --overwrite）")
+    if bad:
+        print(f"跳過 {len(bad)} 段：")
+        print("\n".join("  " + b for b in bad))
+
+
+def cmd_set_mark(state, args):
+    """寫死某幾則的時段標記（render 預設由 first_seen_checkpoint 推）。
+
+    用在 checkpoint 判不準的輪次——最典型是**補掃輪**：09:10 的 `r13-…-RT補掃`
+    撈回的是稍早該收而漏掉的素材，照 checkpoint 會標成 `●`（07:00–09:00 新增），
+    但它們實際屬 `▲` 那個時段。標記寫進該則的 `mark` 欄位，render 一律優先採用。
+    """
+    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    missing = [i for i in ids if i not in state["items"]]
+    if missing:
+        print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未變更，請修正後重跑）")
+        sys.exit(2)
+    for i in ids:
+        if args.clear:
+            state["items"][i].pop("mark", None)
+        else:
+            state["items"][i]["mark"] = args.mark
+    save(state, args.file)
+    print(f"OK {len(ids)} 則標記" + ("已清除（改回自動推算）" if args.clear else f"寫死為 {args.mark}"))
+
+
+def cmd_set_alert(state, args):
+    """檔頭 🔴 重大提醒行（WP1 前提四）。
+
+    render 全量覆蓋 txt，舊 txt 檔頭讀不到了——重大提醒行必須存在狀態檔頂層，
+    每輪 render 從這裡取。最多 3 行（全都重大＝都不重大）。
+    """
+    top = state.setdefault("_top", {})
+    cur = list(top.get("alerts") or [])
+    if args.clear:
+        top["alerts"] = []
+    elif args.set:
+        # 一次整組取代（與 s2_validate stats --alert 語意一致）
+        top["alerts"] = [re.sub(r"^\s*🔴\s*重大[：:]\s*", "", a).strip() for a in args.set][:3]
+        if len(args.set) > 3:
+            print("(略過超過 3 則的部分：重大提醒上限 3 行)")
+    elif args.add:
+        cur.append(re.sub(r"^\s*🔴\s*重大[：:]\s*", "", args.add).strip())
+        top["alerts"] = cur[-3:]
+    else:
+        print("\n".join(f"🔴 重大：{a}" for a in cur) if cur else "(無重大提醒行)")
+        return
+    save(state, args.file)
+    print("目前重大提醒：")
+    print("\n".join(f"  🔴 重大：{a}" for a in top["alerts"]) or "  (無)")
 
 
 def cmd_set_top(state, args):
@@ -350,14 +515,26 @@ def main():
     u.add_argument("--entry", help="行內短內容（與 --entry-file 擇一）")
     u.add_argument("--entry-file", help="長內容檔案路徑（與 --entry 擇一）")
     sub.add_parser("pending")
-    sub.add_parser("to-compile")
-    m = sub.add_parser("mark-compiled")
-    m.add_argument("--checkpoint", required=True)
-    m.add_argument("--ids", required=True)
+    # ⚠️ WP1（2026-08-03）廢除 to-compile／mark-compiled／compiled 欄位：
+    # 它們存在的唯一理由是「讓 agent 不用每輪重寫整份 txt」，改用 s2_render.py
+    # 全量渲染後重寫是免費的，增量機制反而多一次呼叫又會漏（0803 標籤比較實錯）。
+    sd = sub.add_parser("add-side", help="側錄 TXT 入狀態檔（SIDE_CNN／SIDE_NHK）")
+    sd.add_argument("--txt", required=True, help="側錄候選 TXT（或直接餵晚班交接 txt）")
+    sd.add_argument("--checkpoint", required=True)
+    sd.add_argument("--overwrite", action="store_true", help="已在庫的段落也覆寫")
+    sd.add_argument("--dry-run", action="store_true", help="只解析不寫檔")
+    sm = sub.add_parser("set-mark", help="寫死時段標記（補掃輪等 checkpoint 判不準時）")
+    sm.add_argument("--ids", required=True)
+    sm.add_argument("--mark", choices=["△", "▲", "●"])
+    sm.add_argument("--clear", action="store_true", help="清除寫死值，改回自動推算")
+    sa = sub.add_parser("set-alert", help="檔頭 🔴 重大提醒行（存狀態檔，render 每輪取用）")
+    sa.add_argument("--set", action="append", help="整組取代（可重複，最多3則）")
+    sa.add_argument("--add", help="追加一則（超過3則丟最舊的）")
+    sa.add_argument("--clear", action="store_true", help="全部撤掉")
     c = sub.add_parser("set-category")
     c.add_argument("--id")
-    c.add_argument("--cat", help="大分類/中主題")
-    c.add_argument("--pairs", help='批次："id=大分類/中主題;id2=..."（分隔符優先認分號）')
+    c.add_argument("--cat", help="大分類/中主題[/小分題]")
+    c.add_argument("--pairs", help='批次："id=大分類/中主題[/小分題];id2=..."（分隔符優先認分號）')
     st = sub.add_parser("set-top")
     st.add_argument("field")
     st.add_argument("value")
@@ -374,7 +551,8 @@ def main():
         "resume": cmd_resume, "diff": cmd_diff, "add": cmd_add,
         "add-batch": cmd_add_batch,
         "update-entry": cmd_update_entry, "pending": cmd_pending,
-        "to-compile": cmd_to_compile, "mark-compiled": cmd_mark_compiled,
+        "add-side": cmd_add_side, "set-alert": cmd_set_alert,
+        "set-mark": cmd_set_mark,
         "set-category": cmd_set_category, "get": cmd_get,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,
     }[args.cmd](state, args)
