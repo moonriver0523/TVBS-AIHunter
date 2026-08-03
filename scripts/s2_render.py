@@ -132,18 +132,19 @@ def render_item(it, base_mmdd):
 
     raw_entry **零加工**輸出（側錄逐字不壓縮、不加 `▎`、TC 冒號格式照留，見 14-S2b）；
     側錄是多行的，標記只加在第一行（TC 行）行首。
-    YouTube 兩行式（13b §4c）例外：網址行原樣輸出、不加時段標記（定版慣例）。
+    YouTube 兩行式（13b §4c）的網址行**照樣帶時段標記**，但標記與網址之間
+    一定要有半形空格——`△https://…` 會黏成一串、網址點不開（2026-08-03 使用者訂正）。
     """
     red, body = strip_marks(it.get("raw_entry", "") or "")
-    if sv.YT_URL_RE.match(body.split("\n")[0].strip()):
-        return body.split("\n")
     # 該則若有寫死的 `mark`（補掃輪等 checkpoint 判不準的情形，見 set-mark）優先用它
     mk = it.get("mark") if it.get("mark") in ("△", "▲", "●") else         mark_for(it.get("first_seen_checkpoint"), base_mmdd)
     prefix = mk + " "
     if red:
         prefix += "🔴 "
     lines = body.split("\n")
-    lines[0] = prefix + lines[0]
+    # lstrip：raw_entry 首行若自帶前導空白，補上標記後會變成「△  內容」或讓網址位移；
+    # prefix 固定以一個半形空格收尾，確保 `△ https://…` 不會黏在一起
+    lines[0] = prefix + lines[0].lstrip()
     return lines
 
 
