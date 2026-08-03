@@ -132,8 +132,11 @@ def render_item(it, base_mmdd):
 
     raw_entry **零加工**輸出（側錄逐字不壓縮、不加 `▎`、TC 冒號格式照留，見 14-S2b）；
     側錄是多行的，標記只加在第一行（TC 行）行首。
+    YouTube 兩行式（13b §4c）例外：網址行原樣輸出、不加時段標記（定版慣例）。
     """
     red, body = strip_marks(it.get("raw_entry", "") or "")
+    if sv.YT_URL_RE.match(body.split("\n")[0].strip()):
+        return body.split("\n")
     # 該則若有寫死的 `mark`（補掃輪等 checkpoint 判不準的情形，見 set-mark）優先用它
     mk = it.get("mark") if it.get("mark") in ("△", "▲", "●") else         mark_for(it.get("first_seen_checkpoint"), base_mmdd)
     prefix = mk + " "
