@@ -243,8 +243,11 @@ def check(path):
             if c not in seen_codes:
                 hit(n, f"重大提醒行的代碼 {c} 在正文找不到對應素材行（漏寫或已被刪）")
 
-    # 檔頭 🔴 與正文 🔴 要雙向一致（2026-08-03 訂案）：檔頭點名的，正文那行也要標 🔴，
-    # 反之正文標了 🔴 卻沒進檔頭也是漏。兩邊對不上時編輯就找不到那則素材。
+    # 檔頭 🔴 → 正文 🔴 單向檢查（2026-08-03 訂案）：檔頭點名的，正文那行必須也標 🔴，
+    # 否則編輯得自己在近百則裡找。
+    # ⚠️ **反向不檢查**（2026-08-03 使用者訂正）：素材行的 🔴 **標過就永久保留**，
+    # 檔頭的重大提醒行則每輪汰換——所以「正文有 🔴、檔頭沒有」是輪替後的正常狀態，
+    # 不是錯。曾短暫把它當錯誤命中，那會逼 agent 去刪掉不該刪的 🔴。
     alert_codes = {c for _, l in alerts for c in re.findall(CODE, l)}
     red_body = {}
     for n, raw in enumerate(lines, 1):
@@ -256,9 +259,6 @@ def check(path):
         if c in seen_codes and c not in red_body:
             hit(seen_codes[c][0],
                 f"檔頭標了 🔴 重大：{c}，但正文該行沒有 🔴（應寫成「{{時段標記}} 🔴 {c} …」）")
-    for c, n in red_body.items():
-        if c not in alert_codes:
-            hit(n, f"正文 {c} 標了 🔴 但檔頭沒有對應的「🔴 重大：」行（要嘛補檔頭、要嘛拿掉）")
 
     # 隔夜標記（▲／●）：只要用了就必須在檔頭寫圖例，否則編輯看不懂那些符號
     used_marks = {m for _, m, _ in material_lines(lines, with_mark=True) if m}
