@@ -227,7 +227,10 @@
   - **RT**：清單 `POST /api/search-api`（同源 cookie 重放 OK，transit 格式、cursorMark 翻頁、fragment 300 字＋early-access 訊號）；單則 `GET /api/item/{guid}` 全文 8KB 重放 OK。建議組合：清單照 §1b DOM 直撈＋詳情一次 `Promise.all` 打 API ×N——免開分頁免等 8-9 秒。
   - **AP**：清單 `POST api.newsroom.ap.org/v1/nrsearch/search/topic`（cookie 重放 OK，`editorialid`＝AP 編號）；詳情 `POST /v1/nrsearch/search/item/details`（STORYLINE/SHOTLIST/Restrictions 全文 27KB）。ItemIds 逗號批次不支援，用 Promise.all。⚠️ 清單重放排序偏 relevance 待驗證，保險做法照抄頁面實際 request body。
   - 每輪呼叫數估算：10 則新素材，舊流程 AP/RT 各 20-30 次、NS 40+ 次 → **API 流程每站 2-3 次**。
-- [ ] **上規則（待裁定）**：13b 新增三站 API 守門版流程（API 失敗→退回 UI 流程）；寫明 Playwright 工具組分工；AP 排序驗證、RT transit 抽取機械做法、hash/TopicId 跨 session 穩定性各驗一次。裁定前正式輪次照現行 13b。
+- [ ] **🔔 上規則（待裁定，使用者要求提醒；與下面 profile 防呆**同一批**寫進 13b）**：13b 新增三站 API 守門版流程（API 失敗→退回 UI 流程）；寫明 Playwright 工具組分工；AP 排序驗證、RT transit 抽取機械做法、hash/TopicId 跨 session 穩定性各驗一次。裁定前正式輪次照現行 13b。
+- [ ] **🔔 Playwright profile 佔用防呆（要寫進 13b，與上一項同一批）**——**已造成實害**：0803 RT 連續三輪（04:40／06:40／08:40）回報「全站 0 items」，實測是**帳號正常、profile 被殘留 Chrome 鎖住**（01:28 的殘留鎖掉前兩輪，NS agent 08:22 開的 Chrome 鎖掉第三輪），RT 素材因此空窗 01:00–09:00。同一天 NS agent 也被 01:28 那個殘留擋過。根因：Playwright 只有**一個** persistent profile，多 agent 並行時互相鎖死，且 agent 收工不關瀏覽器。
+  - 規則要寫：①**開工前檢查殘留**（`Get-CimInstance Win32_Process` 篩 `playwright-mcp-profile`，看 `MainWindowTitle`／CPU／存活時間判斷閒置，閒置就 `Stop-Process -Force`）②**收工必關瀏覽器**③**navigate 失敗或清單回 0 筆時，先懷疑 profile 鎖，不要直接判定「站方無素材」或「帳號失效」**（這正是 0803 誤判的形狀）。
+  - [ ] 另評估治本解：多 agent 並行時改用 `--isolated`，或每個 agent 分配獨立 profile 目錄——但要先確認**登入狀態是否跟著 profile 走**（isolated 會不會每次都要重登，那就得不償失）。
 - [ ] **通則**：每次優化上線都要在 13b「未定回填」記一筆呼叫次數／耗時基準，跟 00:00 實驗輪（7 則 52 次 12m18s）比對，量化每一刀的實際收益。
 
 ## S4 rundown 稿單（2026-07-30 立案，**未建、無規則文件**）
