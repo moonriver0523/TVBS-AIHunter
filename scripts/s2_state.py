@@ -74,7 +74,10 @@ def is_todo(v):
     會被判成「沒變動」而靜默漏掉（0803 實錯，50 則更新沒進 txt）。
     舊資料沒有 ts 欄位：兩邊都缺→視為未變動（那批已整併且已人工修正），
     有新更新時才會寫入 ts，之後比較就正確。
+    note（needs-review 的純備註殼）永不待整併——它沒有內容可整併。
     """
+    if v.get("script_status") == "note":
+        return False
     if v.get("compiled") is None:
         return True
     return v.get("entry_updated_ts", "") > (v.get("compiled_ts") or "")
@@ -308,7 +311,10 @@ def cmd_get(state, args):
 def cmd_needs_review(state, args):
     if args.action == "add":
         i = norm_id(args.id)
-        state["items"].setdefault(i, {"source": "?", "script_status": "pending",
+        # 對不存在的 id（純備註，如「RT-r9-空白」）建 status="note" 的殼，
+        # 不是 pending——0803 實錯：7 筆備註殼灌水 pending 計數（60 裡有 7 假的），
+        # 且永遠不會被清掉。note 不計入 pending／待整併，只出現在 needs-review list。
+        state["items"].setdefault(i, {"source": "?", "script_status": "note",
                                       "raw_entry": "", "compiled": None, "category": None})
         state["items"][i]["needs_review"] = args.note or "待人工"
         save(state, args.file)

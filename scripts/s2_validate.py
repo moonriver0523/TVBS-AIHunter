@@ -253,7 +253,12 @@ def check(path):
     for n, raw in enumerate(lines, 1):
         _, l = strip_mark(raw)
         if LINE_RE.match(l) and not SIDE_RE.match(l) and is_red(raw):
-            for c in re.findall(CODE, l.split("▎")[0]):
+            # 只取行首的代碼（LINE_RE 已保證在行首，含 A/B 並列）。
+            # ⚠️ 不可對整個備註段 findall——備註文字順帶提到的其他代碼
+            # （如「另有前版AP4676258」）會被誤認成「該則有標 🔴」，
+            # 讓檔頭點名它時誤判已標（0803 工作 agent 實抓）。
+            m = re.match(rf"{CODE}(?:\s*/\s*{CODE})*", l)
+            for c in re.findall(CODE, m.group(0) if m else ""):
                 red_body.setdefault(c, n)
     for c in alert_codes:
         if c in seen_codes and c not in red_body:
