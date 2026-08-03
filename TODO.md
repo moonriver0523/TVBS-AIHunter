@@ -274,9 +274,17 @@
   - ✅ **初步研究結論（2026-08-03，未開瀏覽器、用手上現成資料判斷）**：**方向可行，且解法已現成**——今天修 NS auto mode 卡點時用的寫法（`page.evaluate()` 內「讀→抽取→只回傳白名單欄位」）本來就是這條要的東西，不必另外發明，直接把同一套 pattern 套到 AP／RT。
     - **證據一（舊樣本，證實雜訊確實存在）**：0731 DOM 擷取樣本 `Archive/_s2_raw_0731/rt_walk_1925.json`（21 則，59KB）拆開看，`script` 欄位佔整份 JSON 79.9%，但欄位內文本身混了跟新聞無關的下載價位表（`HD 60fps (MP4) - Included`／`Download Audio (WAV split) - 3pts`）、UI 選單文字（`Video Transcript / Hide / Show Scene List`）、機器學習免責聲明，每則幾乎逐字重複、機械可辨識可切除。⚠️ 這是**舊版 DOM 整段擷取**的樣本，新版 API 是結構化 JSON，這塊雜訊很可能已經因為改走 API 而消失，**不能直接套用到新版**，只能證明「這類供稿網站原始內容習慣混雜訊」的前提成立。
     - **證據二（現行規則文件本身的欄位表，不需要實測就能確定的浪費）**：`13b` §1a-3「2) AP」清單回應欄位表列了 `renditions`（媒體檔案各畫質／格式變體陣列，這類供稿 API 的典型肥大來源），規則沒寫「這欄位要丟掉」，代表**目前很可能原樣跟著清單一起被讀進 AI context**，而它對「收不收、怎麼摘要」完全沒用——這條不需要開瀏覽器驗證，看欄位表就確定。
-    - ⚠️ **沒辦法量化的部分**：新版 API（AP 27KB 詳情／RT 8-19KB 單則）实際的可省比例，需要**開一次瀏覽器**、AP／RT 各打一次詳情 API、比對砍前砍後字元數才能給精確數字。**下次開瀏覽器時測**（原本要今天測，因另一 agent 使用瀏覽器中，改到有空檔再測）。
-  - 待確認：現在 `browser_evaluate` 裡的欄位抽取（NS 已有白名單、AP/RT 目前只在文件裡寫「regex 可靠」，沒有像 NS 那樣的白名單抽取程式碼範例）是不是已經做到位，還是仍有「AI 讀到完整回應內文才摘要」的段落——**這是待實測要順便確認的**。
-  - 待確認：`content.bitcentral.script`（NS）／STORYLINE／SHOTLIST 這類長文字欄位本身就是要交給 AI 摘要的素材本體，瘦身能做的是拿掉不相干的 metadata／HTML tag，不是砍掉這些內容。
+  - ✅✅ **實測完成（2026-08-03 18:3x，Playwright 實打 AP／RT API，數字如下）**：**確認可行，省幅遠大於預期**。
+    - **AP 清單**（`search/topic`，10 則）：**102,751 → 1,689 字元，省 98.4%**。最大宗雜訊 `renditions`（單則就 6,193 字元＝媒體檔案各畫質變體），10 則約 62KB 全是廢的。白名單只留 `editorialid`／`itemid`／`title`／`dateline`／`friendlykey` 就足以做 diff 與判斷。
+    - **AP 詳情**（`item/details`，單則）：**24,237 → 5,051 字元，省 79.2%**（**已保留 `script` 稿件全文 4,528 字元**）。純雜訊：`filings` 8,719（產品發布清單，一長串 product id）＋`renditions` 6,193 ＝ **61.5%**。
+    - **RT 詳情**（`/api/item/{guid}`）：實測兩則 5,952／15,423 字元。雜訊是**整套授權計價規則**（`transactional-rules`／`rendition-rules`／`points`／`price-per-point`／`currency`／`ayce`／`rule-type-id`／`overview-rule`）＋**各種檔案 URL**（`image-url`／`screener-url`／`xml-url`／`video-shotlist-url`／`audio-file`／`rendition`／`filename`），佔絕大部分。
+    - **NS** 已經有白名單抽取（今天修 auto mode 時寫的），**這站不用再動**。
+  - ⚠️ **實測中發現的三個坑（寫規則時必須避開）**：
+    1. **欄位名不能猜**：AP 詳情的稿件全文在 **`script.nitf`**（HTML 字串），不是 `storyline`／`shotlist`——我第一次照文件描述的名稱抓，結果抓到空字串、還誤以為省了 98.9%。**每個欄位都要先實際 dump 確認名稱與型別**。
+    2. **欄位型別也不能猜**：RT 的 `duration` 是**字串** `"00:03:59"` 不是數字，用 `(\d+)` 抓不到。
+    3. ⚠️ **RT 清單再次實證不能用 regex 解**：limit=10 的回應 57,787 字元，regex 只抓得到 **2 個 guid**（transit `^N` 參照所致）——與既有規則「清單走 DOM 直撈」的結論一致，**不要因為看到「省 99%」的假數字就以為清單也能 regex 瘦身**。
+  - **AP `script.nitf` 是 HTML**（`<p>SHOTLIST:</p><p>SOUNDBITE...`），去掉 tag 還能再省一小截，但**內文一個字都不能動**（同側錄逐字規則）。
+  - **下一步**：把上述白名單寫進 `13b` §1a-3 的 AP／RT 段（比照 NS 那段的程式碼範例格式），並在寫之前**逐欄 dump 確認名稱／型別**，不要照抄本 TODO 的欄位名當結論。
 
 ## S4 rundown 稿單（2026-07-30 立案，**未建、無規則文件**）
 
