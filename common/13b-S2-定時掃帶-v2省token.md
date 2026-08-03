@@ -183,7 +183,10 @@ python scripts/s2_render.py --file "G:\...\0802-s2-state.json" --base-date 0802 
 - **時段標記由 render 依 `first_seen_checkpoint` 自動補**：23:00 前＝`△`、23:00–07:00＝`▲`、07:00–09:00＝`●`（23:00 那輪算 `▲`）。**補掃輪**（例如 09:10 撈回稍早漏掉的素材）checkpoint 判不準，用 `s2_state.py set-mark` 逐則寫死。
 - `raw_entry` **零加工輸出**；側錄照 `14-S2b` 兩行式原樣帶出（不壓縮、不加 `▎`、TC 冒號格式保留）。
 - **YouTube 兩行式（§4c）的網址行照樣帶時段標記**，但標記與網址之間**一定要有半形空格**——`△https://…` 會黏成一串、網址點不開（2026-08-03 使用者訂正）。render 的 prefix 固定以一個半形空格收尾，並對首行 lstrip，不會出現雙空格或漏空格。⚠️ 存進狀態檔時**小分題不要塞進 `raw_entry` 第一行**——那是 `category.小分題` 的位子，`raw_entry` 只放「網址行＋備註行」兩行（0802 有 8 則存成三行，render 會把小分題當內容輸出）。
-- 寫檔走 tmp+rename（原子），寫完在狀態檔記 `last_render_ts`（`--no-touch-state` 可略）。分類不在 16 格樣板內的會附在檔尾並在 stderr 警告——看到就去修 `set-category`。
+- 寫檔走 tmp+rename（原子），寫完在狀態檔記 `last_render_ts`／`last_render_sha`（`--no-touch-state` 可略）。分類不在 16 格樣板內的會附在檔尾並在 stderr 警告——看到就去修 `set-category`。
+- ⛔ **手改偵測（2026-08-03 加）**：覆蓋前比對現行 txt 的 sha 與 `last_render_sha`，對不上就**拒絕覆蓋並 exit 3**。這是防「手改 txt／側錄只貼 txt 沒 add-side」被無聲洗掉——看到這個錯誤，先把 txt 上那些內容寫回狀態檔，確認可丟棄才加 `--force`。
+- 📊 **每輪必看的對帳三行**：render 完會印「素材 N 則（±X）／側錄 M 段（±X）／YouTube K 支（±X）」，並點名「現行 txt 有、本次 render 沒有」的代碼。**出現點名就是漏了 `add-side`／`update-entry`**，不要當成正常。回報時要把這三行貼上來。
+- ✅ render 完會**自動跑一次 `check`**（`--no-check` 可略），不必另外呼叫。
 - ⚠️ **重大提醒行（`🔴 重大：…`）**：本輪掃到重大素材時，用 **`s2_state.py set-alert`** 存進狀態檔（render 每輪從那裡取；`stats --alert` 只剩不走 render 的舊路徑用）（最多 3 則），判準與撤除時機見 V1 `13`「重大提醒行」。**不給 `--alert` 時 `stats` 會自動沿用檔內既有的重大行**，所以例行重算檔頭不會把它洗掉；要撤才傳 `--clear-alerts`。`check` 會抓「代碼正文找不到／沒寫代碼／超過 3 行／不在檔頭」。
 - **腳本失敗行為**：連續失敗 2 次 → 品質掃記為「未執行（腳本錯誤）」寫進回報，**禁止 agent 自行逐行手掃替代**。
 

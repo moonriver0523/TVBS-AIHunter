@@ -67,7 +67,7 @@ report("③ 側錄 byte 級一致", not miss and not diff,
 # 3b) 隔夜再 render 一次：側錄不消失，且產物冪等
 subprocess.run([sys.executable, os.path.join(HERE, "s2_render.py"), "--file", state_p, "--out", out_p + ".2",
                 "--window", "2026-08-02 14:00 - 2026-08-03 09:00", "--base-date", "0802",
-                "--no-touch-state"], check=True, capture_output=True)
+                "--no-touch-state", "--force", "--no-check"], check=True, capture_output=True)
 s2 = sides(out_p + ".2")
 same = open(out_p, encoding="utf-8").read() == open(out_p + ".2", encoding="utf-8").read()
 report("③b 隔夜再 render 側錄不消失且冪等", len(s2) == len(sa) and same,

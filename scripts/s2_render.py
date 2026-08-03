@@ -20,6 +20,7 @@ render 是它的單向投影——**狀態檔裡沒有的東西，下一輪 rend
   （不給 --out ＝ 印到 stdout 預覽，不寫檔、不動狀態檔）
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -223,12 +224,73 @@ def write_atomic(path, text):
     os.replace(tmp, path)
 
 
-def touch_last_render(state_path):
-    """在狀態檔記下這次 render 時間（resume 的「上次render後有變動」靠它）。"""
+def sha(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def read_text(path):
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def guard_manual_edit(out_path, state, force):
+    """擋掉「手改 txt 被 render 無聲覆蓋」與「側錄只貼 txt 沒入狀態檔」。
+
+    render 是狀態檔的單向投影，覆蓋是全量的——txt 上任何沒進狀態檔的東西，
+    這一寫就永久消失且不會有任何錯誤訊息。所以覆蓋前先驗指紋：
+    現行 txt 的 sha 對不上上次 render 存的 `last_render_sha` ＝ 有人動過，
+    停下來要人確認（`--force` 才覆蓋）。
+    """
+    cur = read_text(out_path)
+    if cur is None:
+        return True                      # 檔案還不存在，直接寫
+    want = state.get("last_render_sha")
+    if want and sha(cur) == want:
+        return True                      # 就是上一輪 render 的產物，沒被動過
+    why = ("這份 txt 不是上一輪 render 的產物（sha 對不上）"
+           if want else "狀態檔沒有 last_render_sha（這份 txt 可能是手寫的舊版）")
+    if force:
+        print(f"⚠️ {why}——依 --force 仍覆蓋（下方對帳會列出因此掉了什麼）。", file=sys.stderr)
+        return True
+    print(f"⛔ 拒絕覆蓋：{why}。", file=sys.stderr)
+    print("   txt 上沒進狀態檔的內容一覆蓋就永久消失（最常見：手改 txt、側錄只貼 txt "
+          "沒跑 add-side）。先把那些內容寫回狀態檔，或確認可以丟棄後加 --force。",
+          file=sys.stderr)
+    return False
+
+
+def reconcile(old_text, new_text):
+    """對帳：列出這次 render 相對現行 txt 的增減，掉東西當場看得見。"""
+    def index(t):
+        lines = (t or "").split("\n")
+        mats = {re.match(sv.CODE, l).group(0) for _, l in sv.material_lines(lines)}
+        sides = {re.match(rf"^(?:CNN|NHK) {sv._TC}", l).group(0)
+                 for _, l, _ in sv.side_lines(lines)}
+        yts = {sv.YT_URL_RE.match(u).group(1) for _, u, _ in sv.yt_blocks(lines)}
+        return mats, sides, yts
+    (om, os_, oy), (nm, ns, ny) = index(old_text), index(new_text)
+    print(f"對帳：素材 {len(nm)} 則（{len(nm) - len(om):+d}）／"
+          f"側錄 {len(ns)} 段（{len(ns) - len(os_):+d}）／"
+          f"YouTube {len(ny)} 支（{len(ny) - len(oy):+d}）")
+    lost = [("素材", sorted(om - nm)), ("側錄", sorted(os_ - ns)), ("YouTube", sorted(oy - ny))]
+    for name, ids in lost:
+        if ids:
+            print(f"⚠️ 現行 txt 有、本次 render 沒有的{name} {len(ids)} 筆："
+                  f"{'／'.join(ids[:8])}{' …' if len(ids) > 8 else ''}", file=sys.stderr)
+            print(f"   →（多半是沒進狀態檔）確認是不是漏了 add-side／update-entry",
+                  file=sys.stderr)
+
+
+def touch_last_render(state_path, text):
+    """在狀態檔記下這次 render 的時間與指紋（resume 計數與手改偵測靠它）。"""
     try:
         with open(state_path, encoding="utf-8-sig") as f:
             raw = json.load(f)
         raw["last_render_ts"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+        raw["last_render_sha"] = sha(text)
         tmp = state_path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(raw, f, ensure_ascii=False, indent=1)
@@ -246,6 +308,9 @@ def main():
     p.add_argument("--base-date", default="", help="晚班當天 MMDD；省略由 --out 檔名或狀態檔推得")
     p.add_argument("--date", default="", help="YYYY-MM-DD，檔頭時間窗前綴用")
     p.add_argument("--no-touch-state", action="store_true", help="不回寫 last_render_ts")
+    p.add_argument("--force", action="store_true",
+                   help="現行 txt 被手改過也照樣覆蓋（會永久丟掉那些沒進狀態檔的內容）")
+    p.add_argument("--no-check", action="store_true", help="render 後不自動跑品質掃")
     args = p.parse_args()
 
     state = load_state(args.file)
@@ -260,10 +325,16 @@ def main():
     if not args.out:
         sys.stdout.write(text)
         return
+    old = read_text(args.out)
+    if not guard_manual_edit(args.out, state, args.force):
+        sys.exit(3)
     write_atomic(args.out, text)
     if not args.no_touch_state:
-        touch_last_render(args.file)
+        touch_last_render(args.file, text)
     print(f"OK 已渲染 {args.out}（{len(text.splitlines())} 行 / {len(text)} 字元）")
+    reconcile(old, text)
+    if not args.no_check:
+        sv.check(args.out)
 
 
 if __name__ == "__main__":
