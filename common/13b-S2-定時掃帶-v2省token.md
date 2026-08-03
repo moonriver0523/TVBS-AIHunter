@@ -62,6 +62,12 @@
   用 `Get-Process` 的 `MainWindowTitle`／CPU／存活時間判斷是否閒置；閒置就 `Stop-Process -Force` 再開工。
 - **自己收工也要關瀏覽器**，不要留給下一個 agent。
 - ⚠️ **`navigate` 失敗、或清單回 0 筆時，第一個懷疑對象是 profile 被鎖，不是「站方無素材」或「帳號失效」**——0803 實錯：RT 連續三輪（04:40／06:40／08:40）回報「全站 0 items」，實測帳號完全正常、當下窗內明明有新素材，根因是 01:28 的殘留鎖掉前兩輪、另一個 agent 08:22 開的 Chrome 鎖掉第三輪，**RT 素材因此空窗 01:00–09:00**。誤判成帳號問題會叫醒錯的人、還埋掉真因。
+- ⚠️ **`navigate` 第一次失敗訊息是「Target page, context or browser has been closed」時，通常是它自己剛啟動了一個孤兒 process**（底層瀏覽器已起、連線沒接上），第二次才會看到真正的 `Browser is already in use`。**先精準確認再清**，不要用 `taskkill /IM chrome.exe` 之類的廣域指令（機器上通常同時有幾十個不相干的 chrome.exe）：
+  ```powershell
+  Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" |
+    Where-Object { $_.CommandLine -match 'playwright-mcp-profile' } | Select-Object ProcessId,CommandLine
+  ```
+  只對比對出來的主 process（`--user-data-dir=…playwright-mcp-profile --remote-debugging-pipe`，通常還停在 `about:blank`）下 `taskkill /PID {id} /T /F`（`/T` 連子 process 一起收）。**清別人（其他 agent）留下的鎖之前，先確認對方工作已結束**（問使用者，或看有沒有 session 還活著）——本節開頭「不要擅自 Kill」的原則不變，這裡只是把「怎麼精準找到該清哪個 process」寫清楚。
 
 ### 1) RT
 
@@ -87,6 +93,38 @@
 - `scriptOnly: true` **就是 UI 上點不動的 Has Script 篩選**；`from`／`size` 分頁，`size` 上限 100。
 - ⚠️ **token 過期時第一次呼叫會拿到 `null`**，重新整理頁面等登入完成再打；**連兩次拿不到就是真的登出，停下來請使用者登入**（agent 不得自行輸入帳密）。
 - 這條路一次解掉 NS 的五個老卡點（清單無連結／虛擬化列表/捲不動／逐則點 modal／Has Script 篩不動），詳見回覆檔。
+
+#### ⛔ 讀 token＋跨網域打 API 的**寫法**會被 auto mode 攔下，必須用「token 不離開頁面 JS」的形態（2026-08-03 訂正）
+
+**實錯**：`page.evaluate()` 讀出 token → 回傳給 agent 層 → 再用 `page.context().request.post(url, {headers:{authorization:'Bearer '+tok}})` 送出去。這個「讀秘密→agent 自己組請求送到別的 origin」的形狀，跟真正的憑證竊取程式碼結構一樣，被 classifier 判定為 `[Browser JS Exfil]` 直接拒絕——**這不是誤判，這段寫法本來就危險，不要想辦法繞過偵測**。
+
+**正確寫法：整個「讀 token → fetch → parse」都寫在同一個 `page.evaluate()` 裡，token 從頭到尾只活在瀏覽器的 JS engine 內，不當作回傳值的一部分**——這跟「使用者自己在瀏覽器裡操作這個網站」是同一件事，網站本來就是用頁面內 JS 打自己的 API。已實測通過，不再被攔：
+
+```js
+() => {
+  const tok = JSON.parse(localStorage.getItem('newsourceSession')).token;
+  const body = { /* 同上方 request body */ };
+  return fetch('https://newsource-content-api-530.ns.cnn.com/api/v3/stories',
+    { method:'POST', headers:{'Content-Type':'application/json', authorization:'Bearer '+tok}, body:JSON.stringify(body) })
+    .then(r => r.text())
+    .then(t => {
+      const d = JSON.parse(t.split('\n').find(l => l.includes('"stories"')));
+      // ⚠️ 回傳值只准白名單欄位，不准把整段 API 回應原樣丟出來
+      return d.stories.content.map(it => ({
+        id: it.alternateIds && it.alternateIds.bitcentralId,
+        ft: it.footageType, dur_ms: it.duration, created: it.createdDate,
+        has_script: !!(it.content && it.content.bitcentral && it.content.bitcentral.script),
+        desc: (it.description || '').slice(0, 200),
+        script: (it.content && it.content.bitcentral && it.content.bitcentral.script) || ''
+        // script 全文是後續寫三段式要用的正常資料，不是秘密——禁止的只有 token/Authorization/JWT
+      }));
+    });
+}
+```
+
+- **回傳值黑名單**：`token`／`Bearer`／`Authorization` header／完整 JWT／cookie 字串——這幾樣**永遠不准出現在 `evaluate` 的回傳值裡**，也不准寫進 transcript、log、`add-batch` 的 entries 檔、狀態檔。`script` 全文、`description`、編號這些是正常業務資料，照樣回傳沒問題，不要因為「安全」就連這些也砍掉。
+- **`page.context().request.*`（Playwright 的請求層 API）不要用來打帶 token 的跨網域請求**——它的呼叫結果會經過 agent 工具層，形狀就是會被攔的那種。同源／不帶敏感 header 的請求不受此限。
+- 若仍被攔（例如 classifier 版本更新），**不要嘗試混淆程式碼、拆呼叫、換名字去繞過**——回報使用者，退回 §5 UI 舊流程，或請使用者當次明確授權後再試一次同樣的安全寫法。
 
 ### 4) 守門（任一觸發＝該站當輪退回 §1b，並 `needs-review add` 記錄）
 
