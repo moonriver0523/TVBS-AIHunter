@@ -51,6 +51,36 @@
 
 > 📄 **完整配方（可直接抄的 JS、body 範例、欄位表）**：`G:\我的雲端硬碟\Claude共用\自動掃帶系統\0803-三站API破解總表.txt` ＋ NS 專篇 `0803-NS掃帶卡點報告-回覆.txt`。本節只寫規則與地雷，不重複貼程式碼。
 
+### 0-1) ⭐ 抽取白名單：`page.evaluate()` 裡先瘦身，只回傳需要的欄位（2026-08-03 上線）
+
+**原始 API 回應有 6–9 成是雜訊**（媒體檔案變體、產品發布清單、授權計價規則、向量嵌入…），對「這則收不收、怎麼寫三段式」完全沒用，卻會整包進 agent 的 context。**在同一個 `browser_evaluate` 裡抽完再回傳**，實測省下：
+
+| 端點 | 原始 | 抽取後 | 省 |
+|---|---|---|---|
+| AP 清單（5 則） | 53,461 | 2,190 | **95.9%** |
+| AP 詳情（5 則） | 262,274 | 23,255 | **91.1%** |
+| RT 單則（一般） | 7,207／23,049 | 1,486／1,820 | **79–92%** |
+| RT 單則（超長整理包） | 74,145 | 55,530 | 25%（**內容本身就長，不是沒抽好**） |
+
+⛔ **不准砍的東西**（砍了就寫不出三段式）：稿件全文（AP `script.nitf`／RT `story`）、**SHOTLIST 段**、**SOUNDBITE 段與講者**、限制語、來源、形式、時長、素材代碼。瘦身砍的只有 metadata／檔案 URL／計價規則，**內容本體一個字都不能動**（同側錄逐字規則）。
+
+✅ **保真驗證做法（改抽取邏輯後都要重跑一次）**：把「原始欄位只去 HTML tag」與「抽取結果」都正規化成純文字（`replace(/[^\p{L}\p{N}]/gu,'')`）後**逐字元比對**。2026-08-03 實測：AP 6/6 逐字相同（字元數一致）；RT 6/6 僅差 `&nbsp;` 被正確轉成空格，**文字零遺失**。
+
+⚠️ **驗證時別用「原始 raw 裡有沒有 SHOTLIST 字樣」當基準**——會假陽性：RT 回應裡的 `video-shotlist-url`／`stream:shotlist:json`／檔名 `..._STREAM-SHOTLIST-JSON_....JSON` 都含該字樣，但**不是**畫面清單內容（RT 的 shotlist 是獨立資源，item API 不含它；有些則的畫面描述寫在 `story` 開頭的 `VIDEO SHOWS:` 段）。要比就比**欄位內容本身**。
+
+**共用的去 tag 函式**（AP `script.nitf` 與 RT `story` 都是 HTML）：
+
+```js
+const stripTag = (h) => String(h||'')
+  .replace(/<\/p>\s*<p>/gi,'\n').replace(/<[^>]+>/g,'')
+  .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"')
+  .replace(/&#39;|&apos;/gi,"'").replace(/\n{3,}/g,'\n\n').trim();
+```
+
+⚠️ **RT 還要多一層 unescape**（transit 字串裡的 `\"` 會殘留）：`.replace(/\\"/g,'"').replace(/\\n/g,'\n')`，否則標題會變成 `Gladiatoren - \"Römische Tage\"`。
+
+⚠️ **超長整理包**（RT TIMELINE／WRAP，實測單則 `story` 可達 **5.5 萬字元**）：抽取幫不上忙，因為那是內容本體。晚班交接只需要一句話摘要＋畫面段，**這類可只取前 3,000 字元＋標記 `(整理包 內容過長已截斷)`**，需要全文再回頭單獨取。
+
 ### 0) 開工前：Playwright 環境衛生（**每次都要做，不是可選**）
 
 - **一律用 Playwright 工具組**（`mcp__browser__*`），**不是 claude-in-chrome**——NS 的 localStorage 在 claude-in-chrome 會被 extension 隱私防護擋死（回 `[BLOCKED: Cookie/query string data]`），AP／RT 的跨網域 fetch 也會被頁面 AdBlock 纏住。
@@ -75,15 +105,67 @@
 - ⚠️ **回應是 transit 壓縮格式**（欄位名只出現一次、後續用 `^N` 參照）——**不要用 regex 解清單**，只會抓到第一則。清單改用 §1b 的 DOM 直撈拿 Edit No／href（順序有保證），API 清單當備援。
 - **文稿**：`GET /api/item/{guid}?hash={hash}&live=false`，**單則回應每個欄位只出現一次、必為字面值，regex 可靠**。新素材的 guid 一次 `Promise.all` 打 N 則——**免開分頁、免等 8–9 秒**。
 - Edit No 可從 guid 的 `newsml_RW{4碼}` 機械推出，與清單值互相校驗。⚠️ **不要從 item 回應抓 `editnumber`**（結構深、regex 不穩，實測回 undefined）。
-- `hash` **照抄當下頁面實際請求**（實測 `klwn20`，但那像前端 build hash、改版會變，不可硬編）。
+- `hash` **照抄當下頁面實際請求**（實測 `klwn20`，跨 session 穩定但那像前端 build hash、改版會變，不可硬編）。
+- ⭐ **抽取白名單（實測定版，欄位名與型別都已逐一 dump 確認）**：
+
+  ```js
+  const pick = (t,k) => { const m = t.match(new RegExp('"~:'+k+'","((?:[^"\\\\]|\\\\.)*)"')); return m?m[1]:''; };
+  const slimRT = (t, guid) => ({
+    edit:  (guid.match(/RW(\d{4})/)||[])[1] || '',   // Edit No 由 guid 推，不從內文抓
+    head:  unesc(pick(t,'headline')),
+    slug:  unesc(pick(t,'slug')),
+    dur:   pick(t,'duration'),        // ⚠️ 字串 "00:02:34" 不是數字，別用 \d+ 抓
+    src:   unesc(pick(t,'source')),   // CCTV／SKAI TV／第三方判定用
+    restr: unesc(pick(t,'restrictions')),  // ⚠️ 純字串不是陣列
+    early: t.includes('early-access-script'),  // true＝稿未到（pending 判定）
+    story: stripTag(pick(t,'story'))  // ⚠️ 稿件全文在 `~:story`，不是 body／script
+  });
+  ```
+
+- ⚠️ **欄位名容易猜錯的三個**：稿全文是 **`~:story`**（不是 `body`／`script`）；`duration` 是**字串**；`restrictions` 是**純字串**（`"Broadcast: None. Digital: None.."`／`"Broadcast: No Use Greece…"`），不是陣列。
+- `early-access-script` 出現＝該則只有早期版、**稿未到**，對應 `script_status: pending`（判準仍以 `13`「有稿判準」為準）。
 
 ### 2) AP
 
 - **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`（cookie 驗證）。**照抄頁面實際發出的 request body**——自己拼的 body 排序會偏 relevance 抓到舊素材；照抄則順序與畫面完全一致（實測 16 則逐一比對相符）。
-- ⚠️ **`PageNumber` 不可靠**：實測 `PageNumber=2`＋`PageSize=16` 回了 100 筆、與第 1 頁零重疊，回應卻自稱 Page=2。**要多筆一律固定 `PageNumber=1` 加大 `PageSize`**（16／50／100／200 實測都精準）。
+- ⚠️ **`PageNumber` 不可靠**：實測 `PageNumber=2`＋`PageSize=16` 回了 100 筆、與第 1 頁零重疊，回應卻自稱 Page=2。**要多筆一律固定 `PageNumber=1` 加大 `PageSize`**。
+- 🔴 **`PageSize` 絕對不可以「調小」（2026-08-03 18:50 實測訂正，推翻同日早上「16/50/100/200 都精準」的結論）**：同一個 body 只把 `PageSize` 從 **16 改成 5**，回傳的就從「當下最新素材」（`2026-08-03T10:46`／`10:45`…）變成 **2024–2025 年的舊素材**（`Afghanistan Earthquake Bereaved` 2025-09、`HZ US CES BOSCH` 2024-01），**排序整個換掉且毫無錯誤訊息**。
+  - **照抄頁面的 `PageSize=16`**，需要更多就往上加（50／100／200 已驗過）；**永遠不要為了「只想看幾則」而調小**——會靜默抓到兩年前的舊素材，diff 之後全部當成「新素材」收進庫存。
+  - 這也是為什麼規則一直寫「**照抄頁面實際發出的 request body**」：照抄就不會踩到。
 - 欄位：`_source.itemid`＝32 碼 GUID、`_source.editorialid`＝**AP 編號**、`friendlykey`／`title`／`headline`／`dateline`。
 - **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。**逗號串多則不支援**（回空），一則一次；但可在同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則，**工具呼叫仍只算 1 次**。
 - `TopicId` 實測跨 session 穩定（`116e9ab7…`），仍建議每輪從頁面請求照抄。
+- ⭐ **抽取白名單（實測定版，欄位名與型別都已逐一 dump 確認）**：
+
+  ```js
+  // 清單：diff 與初判用（不必開詳情就能判斷收不收、是不是 SNTV）
+  const slimList = (s) => ({
+    id: s.editorialid, itemid: s.itemid,          // editorialid＝AP 編號、itemid＝詳情要用的 32 碼
+    title: s.title, head: s.headline,
+    cap:  stripTag(s.caption && s.caption.nitf),  // ⭐ 清單就有一句話摘要
+    role: s.editorialrole,                        // ⭐ 形式：VO／VOSOT／SOT／Package
+    src:  (s.sources||[]).map(x=>x.name).join('/'),  // ⭐ SNTV 判定（本則的 sources，不是列表黏標）
+    sig:  (s.signals||[]).filter(x=>/Ready|SNTV/i.test(x)).join(','),  // NewsroomReady＝稿齊
+    line: s.dateline, ts: s.firstcreated, comp: s.compositiontype
+  });
+  // 詳情：寫三段式用
+  const slimDetail = (s) => ({
+    id: s.editorialid, title: s.title, head: s.headline,
+    cap:    stripTag(s.caption && s.caption.nitf),
+    script: stripTag(s.script && s.script.nitf),  // ⚠️ 稿全文在 `script.nitf`（HTML）
+    role: s.editorialrole, src: (s.sources||[]).map(x=>x.name).join('/'),
+    rights: s.rightsline, line: s.dateline || s.locationline,
+    dur:  (s.shots && s.shots[0] && s.shots[0].end) || '',  // ⚠️ 沒有 duration 欄位，時長由 shots[0].end 推
+    comp: s.compositiontype
+  });
+  ```
+
+- ⚠️ **欄位名容易猜錯的三個**：稿全文是 **`script.nitf`**（HTML 字串，不是 `storyline`／`shotlist`——照那兩個名字抓會拿到空字串，還會算出「省 98%」的假數字）；**沒有 `duration` 欄位**，時長要用 `shots[0].end`（格式 `00:02:16.720`）換算成 `MM:SS`；`caption`／`script` 都是**物件**，內容在 `.nitf`。
+- **雜訊大戶**：`renditions`（7,920）＋`filings`（7,373）＝ 單則詳情的 63%；另有 `embeddings`／`pooled_embedding`／`searchembedding`（向量嵌入）、`subjects`／`audiences`／`services`（分類代碼）。這些**一律不取**。
+- **`signals` 含 `NewsroomReady`** 可當「稿齊」訊號。
+- ⭐ **SNTV 判定改用 `signals` 最可靠（2026-08-03 實測）**：`signals` 陣列裡會直接出現 `sntv`／`sntvGlobalCleared`／`sntvMENAcleared`。實例 `AP5466730` 的 `sources[].name` 是 **`World Surf League`**（供片方），光看 source 判不出是 SNTV，但 `signals` 有 `sntv`。
+  - **判準優先序**：`signals` 含 `sntv` ＞ `sources[].name` 為 `SNTV` ＞ 代碼 `AP5` 開頭。三者都是**本則自己的欄位**，**不會踩到列表扁平文字把下一則徽章黏上來的坑**（見 `13`「列表文字黏標」）。
+- **一輪實測（2026-08-03 18:5x，PageSize=16 清單＋前 3 則詳情）**：清單 146,732 → 7,390、詳情 100,073 → 14,696，**總省 91.1%**；寫三段式的每個元素（代碼／限制語／來源／形式／時長／SHOTLIST／SOUNDBITE／摘要）**全數保留**。
 
 ### 3) NS（CNN Newsource）——**收益最大的一站**
 
