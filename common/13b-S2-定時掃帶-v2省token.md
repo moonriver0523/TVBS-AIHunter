@@ -27,6 +27,7 @@
 | 4 | SNTV 體育 | 開詳情寫完整三段式 | **`AP5` 白名單列表級收錄** | ~10–15k/晚 |
 | 5 | 防卡設計 | — | resume／RT 斷點跳站／半夜禁問 | （穩定性） |
 | 6 | RT 連掃讀取 | 每則回列表重點 | **單分頁 Next 鏈＋換頁後 scroll 再讀**（見防卡設計 5） | 省一次頁載入/則 |
+| 7 | **三站清單／文稿取得**（2026-08-03 新增，**首選路徑**） | 逐則開詳情頁讀 | **API 直查（§1a）**：AP／RT／NS 都不開詳情頁 | 呼叫數：AP/RT 各 20–30 次、NS 40+ 次 → **每站 2–3 次** |
 
 ---
 
@@ -44,9 +45,60 @@
 - shotlist：全文。
 - S2 只需要寫出三段式（摘要一句＋畫面逐項＋BITE 濃縮＋講者），**不需要逐字讀完每段 SOUNDBITE**——逐字與精確 TC 是下游 S7 的事。
 
-## 1b. AP＋RT 清單直開流程（2026-08-02 深夜上線，守門版首選路徑）
+## 1a. 三站 API 直查（2026-08-03 上線，**掃帶首選路徑**）
+
+**核心**：清單與文稿**全部走 API，完全不開詳情頁**。實測一輪每站 **2–3 次工具呼叫**（舊 UI 做法 AP／RT 各 20–30 次、NS 40+ 次）。**任一步失敗兩次 → 該站當輪退回 §1b DOM 直撈；§1b 再失敗才退 §5 舊流程。**
+
+> 📄 **完整配方（可直接抄的 JS、body 範例、欄位表）**：`G:\我的雲端硬碟\Claude共用\自動掃帶系統\0803-三站API破解總表.txt` ＋ NS 專篇 `0803-NS掃帶卡點報告-回覆.txt`。本節只寫規則與地雷，不重複貼程式碼。
+
+### 0) 開工前：Playwright 環境衛生（**每次都要做，不是可選**）
+
+- **一律用 Playwright 工具組**（`mcp__browser__*`），**不是 claude-in-chrome**——NS 的 localStorage 在 claude-in-chrome 會被 extension 隱私防護擋死（回 `[BLOCKED: Cookie/query string data]`），AP／RT 的跨網域 fetch 也會被頁面 AdBlock 纏住。
+- **檢查並清掉殘留 Chrome**：
+  ```powershell
+  Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ? { $_.CommandLine -like "*playwright-mcp-profile*" } |
+    Select ProcessId, CreationDate, @{n='Age';e={[int]((Get-Date)-$_.CreationDate).TotalMinutes}}
+  ```
+  用 `Get-Process` 的 `MainWindowTitle`／CPU／存活時間判斷是否閒置；閒置就 `Stop-Process -Force` 再開工。
+- **自己收工也要關瀏覽器**，不要留給下一個 agent。
+- ⚠️ **`navigate` 失敗、或清單回 0 筆時，第一個懷疑對象是 profile 被鎖，不是「站方無素材」或「帳號失效」**——0803 實錯：RT 連續三輪（04:40／06:40／08:40）回報「全站 0 items」，實測帳號完全正常、當下窗內明明有新素材，根因是 01:28 的殘留鎖掉前兩輪、另一個 agent 08:22 開的 Chrome 鎖掉第三輪，**RT 素材因此空窗 01:00–09:00**。誤判成帳號問題會叫醒錯的人、還埋掉真因。
+
+### 1) RT
+
+- **清單**：`POST https://www.reutersconnect.com/api/search-api?hash={hash}`（同源 cookie，`browser_evaluate` 內 fetch）。`cursorMark=*` 起手、用回應的 `nextCursorMark` 翻頁；`limit=60`。
+- ⚠️ **回應是 transit 壓縮格式**（欄位名只出現一次、後續用 `^N` 參照）——**不要用 regex 解清單**，只會抓到第一則。清單改用 §1b 的 DOM 直撈拿 Edit No／href（順序有保證），API 清單當備援。
+- **文稿**：`GET /api/item/{guid}?hash={hash}&live=false`，**單則回應每個欄位只出現一次、必為字面值，regex 可靠**。新素材的 guid 一次 `Promise.all` 打 N 則——**免開分頁、免等 8–9 秒**。
+- Edit No 可從 guid 的 `newsml_RW{4碼}` 機械推出，與清單值互相校驗。⚠️ **不要從 item 回應抓 `editnumber`**（結構深、regex 不穩，實測回 undefined）。
+- `hash` **照抄當下頁面實際請求**（實測 `klwn20`，但那像前端 build hash、改版會變，不可硬編）。
+
+### 2) AP
+
+- **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`（cookie 驗證）。**照抄頁面實際發出的 request body**——自己拼的 body 排序會偏 relevance 抓到舊素材；照抄則順序與畫面完全一致（實測 16 則逐一比對相符）。
+- ⚠️ **`PageNumber` 不可靠**：實測 `PageNumber=2`＋`PageSize=16` 回了 100 筆、與第 1 頁零重疊，回應卻自稱 Page=2。**要多筆一律固定 `PageNumber=1` 加大 `PageSize`**（16／50／100／200 實測都精準）。
+- 欄位：`_source.itemid`＝32 碼 GUID、`_source.editorialid`＝**AP 編號**、`friendlykey`／`title`／`headline`／`dateline`。
+- **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。**逗號串多則不支援**（回空），一則一次；但可在同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則，**工具呼叫仍只算 1 次**。
+- `TopicId` 實測跨 session 穩定（`116e9ab7…`），仍建議每輪從頁面請求照抄。
+
+### 3) NS（CNN Newsource）——**收益最大的一站**
+
+- **清單即文稿**：`POST https://newsource-content-api-530.ns.cnn.com/api/v3/stories`，一次回傳 **`alternateIds.bitcentralId`（＝NS 編號）＋`footageType`（PKG/SOT/VO 等形式）＋`duration`＋`description`（現成一句摘要）＋`content.bitcentral.script`（稿件全文，含 `--LEAD IN--`／`--VO SCRIPT--` 標記）＋`embargo`**。**完全不必開詳情頁或 Preview modal。**
+- Bearer token 在 `localStorage.newsourceSession.token`（1 小時效期，頁面開著會自動續）。
+- ⚠️ **回應是多行 JSON（NDJSON）**，不能 `r.json()`——取含 `"stories"` 的那一行再 parse。
+- `scriptOnly: true` **就是 UI 上點不動的 Has Script 篩選**；`from`／`size` 分頁，`size` 上限 100。
+- ⚠️ **token 過期時第一次呼叫會拿到 `null`**，重新整理頁面等登入完成再打；**連兩次拿不到就是真的登出，停下來請使用者登入**（agent 不得自行輸入帳密）。
+- 這條路一次解掉 NS 的五個老卡點（清單無連結／虛擬化列表/捲不動／逐則點 modal／Has Script 篩不動），詳見回覆檔。
+
+### 4) 守門（任一觸發＝該站當輪退回 §1b，並 `needs-review add` 記錄）
+
+- API 回 401／403／空清單，重試一次仍失敗。
+- 回應欄位對不上（缺 `script`／`itemid`／`editnumber`），連 2 則皆然。
+- **同站累計失敗 2 次**即退，不要死磕。退回後照 §1b 的守門條款走，§1b 再失敗才退 §5。
+
+## 1b. AP＋RT 清單直開流程（2026-08-02 上線，**§1a 失敗時的第一層退路**）
 
 **核心**：不再「開一則→讀→回清單→再開下一則」，改成**清單一次 JS 撈完 → diff → 新素材直接用網址開分頁逐頁收錄**。modal／Next ‹ › 鏈全程不用。CNN 未驗證，照舊流程。
+
+> ⚠️ 2026-08-03 起這是**第二順位**：先試 §1a API 直查，失敗兩次才用本節。RT 的清單 DOM 直撈仍是 §1a 的一部分（transit 格式不適合 regex 解清單），不受此降級影響。
 
 **AP**（實測 2026-08-02）：
 1. `/home` Latest 清單，一次 JS 撈每張卡的 **GUID＋標題**（GUID 在縮圖網址裡：`mapi.associatedpress.com/v2/items/{32碼hex}...`；卡片本身沒有 href）。
@@ -98,7 +150,7 @@ python scripts/s2_state.py needs-review add --id RT2333 --note "疑似UGC，待�
 python scripts/s2_state.py needs-review list
 ```
 
-- 批次擷取流程 ＝ 收集本輪列表 ID → `diff` → 只對「新的」開詳情 → **邊看邊把每則累積進一份 `batch.json`，全部看完後一次 `add-batch`**。不要一則一次 `add`（2026-08-02 起：呼叫次數是 V2 變慢主因，一輪 25 則從約 52 次呼叫降到約 4 次）。**全程不載入 70 則 raw_entry。**
+- 批次擷取流程 ＝ 收集本輪列表 ID → `diff` → 只對「新的」取文稿（**§1a API 直查，不開詳情頁**；失敗才退 §1b） → **邊看邊把每則累積進一份 `batch.json`，全部看完後一次 `add-batch`**。不要一則一次 `add`（2026-08-02 起：呼叫次數是 V2 變慢主因，一輪 25 則從約 52 次呼叫降到約 4 次）。**全程不載入 70 則 raw_entry。**
 - **批次規則**：`batch.json` 是 JSON 陣列，每筆 `{"id","source","checkpoint","status","entry"}`（`entry` 直接放字串，含換行）。撞已存在 id 或格式錯的單筆會**自動跳過並回報原因、不中斷**——回報裡有跳過清單時，逐筆判斷：已存在→改用 `update-entry`，格式錯→修正後單筆補。`--pairs` 的分隔符**優先用分號 `;`**（中主題含逗號時逗號會切錯）。
 - 整併流程 ＝ `to-compile` 拿增量 → 批次設分類（`set-category --pairs`）→ 改寫 txt → `mark-compiled`。
 - **腳本連續失敗 2 次**：把錯誤訊息原文記進回報，**當輪改用 V1 直讀 JSON 的做法繼續**（degraded mode），不得卡住不動。
@@ -197,7 +249,8 @@ youtube.com/watch?v=AA6tRh8n-_w
 
 ## 5. 防卡設計（低階 agent 必讀）
 
-> ⚠️ 2026-08-02 起 AP／RT 首選路徑是 **§1b 清單直開**；本節的 RT Next 鏈（5b）與 AP modal 相關條目**只在 §1b 守門觸發退回時使用**。其餘防卡條目（resume、跳站、半夜禁問等）不分新舊流程一律適用。
+> ⚠️ **路徑順序（2026-08-03 更新）：§1a API 直查（首選）→ §1b 清單直開（第一層退路）→ 本節 UI 舊做法（最後退路）。** 本節的 RT Next 鏈（5b）與 AP modal 相關條目**只在 §1b 也失敗時才使用**。其餘防卡條目（resume、跳站、半夜禁問等）不分路徑一律適用。
+> ⚠️ **開工前的 Playwright profile 檢查是每輪必做**（見 §1a-0）——多 agent 並行會互鎖，0803 曾害 RT 三輪誤判「全站 0 素材」、素材空窗八小時。
 
 1. **每輪開工第一步跑 `resume`**——context 斷掉重進時，以腳本回報的狀態為準接續，不憑記憶。
 2. **RT 卡住跳站**：連續 2 次 Next 沒反應／頁面沒變 → 記下目前 Edit No.（`needs-review add`），跳去掃 AP／CNN，回報 RT 中斷點。不准死磕（V1 已知 SPA 卡快取雷）。
