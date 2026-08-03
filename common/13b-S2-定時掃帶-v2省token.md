@@ -188,6 +188,22 @@ const clean = (h) => decodeEnt(
 - Bearer token 在 `localStorage.newsourceSession.token`（1 小時效期，頁面開著會自動續）。
 - ⚠️ **回應是多行 JSON（NDJSON）**，不能 `r.json()`——取含 `"stories"` 的那一行再 parse。
 - `scriptOnly: true` **就是 UI 上點不動的 Has Script 篩選**；`from`／`size` 分頁，`size` 上限 100。
+- ⛔ **兩類直接排除，用 `footageType` 機械判斷（2026-08-03 晚實測定版，不要用關鍵字猜）**：判準與理由見 `13`「NS 兩類素材不採納」。抽取階段就濾掉，不進 `batch.json`：
+
+  ```js
+  const SKIP = (it) => {
+    const ft = it.footageType || '';
+    const sc = (it.content && it.content.bitcentral && it.content.bitcentral.script) || '';
+    if (ft === 'AUDIO TRACK') return 'audio';              // 純音軌，無畫面
+    if (ft === 'GRAPHIC' && /THIS IS NOT THE FINAL SCRIPT/i.test(sc)) return 'prelim';  // 初稿佔位公告
+    return '';
+  };
+  // 初稿公告會點名最終版 ID，撈出來寫進回報（那則才是要收的）
+  const finalId = (sc) => (sc.match(/WILL BE IN ITEM\s*<?[^>]*>?\s*([A-Z]{2}-\d{2,3}[A-Z]{2})/i)||[])[1] || '';
+  ```
+
+- **`footageType` 實測全集**（0803 晚 100 則樣本）：`PKG`／`NAT PKG`／`DONUT`／`LOOK LIVE`／`VO/NAT`／`VO/STILL`／`VO/SIL`／`VO/RAW`／`SOT`／`BUTTED SOTS`／`ISO`／`CLIP`／`BEEPER`／`GRAPHIC`／`AUDIO TRACK`／`""`（空字串多為 `VERTICAL:` 直式素材）。前面那些是正常內容型態；要排除的只有 `AUDIO TRACK` 與「`GRAPHIC` ＋初稿字樣」兩種。
+- ⚠️ **`hideScript` 與初稿無關**（實測排除的誤判線索）：`hideScript: true` 的那幾則稿件一樣完整（含 `--LEAD IN--`／`--VO SCRIPT--`），只是站方的顯示設定，**不可拿來判斷稿件狀態**。
 - ⚠️ **token 過期時第一次呼叫會拿到 `null`**，重新整理頁面等登入完成再打；**連兩次拿不到就是真的登出，停下來請使用者登入**（agent 不得自行輸入帳密）。
 - 這條路一次解掉 NS 的五個老卡點（清單無連結／虛擬化列表/捲不動／逐則點 modal／Has Script 篩不動），詳見回覆檔。
 
