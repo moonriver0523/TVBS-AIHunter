@@ -251,6 +251,10 @@
   - [ ] 未探索：socket.io 長連監聽（免輪詢）、calendar-event／account-alert 兩型內容、分頁與時間區間參數。
 - [ ] **AP 也有快訊區（2026-08-03 使用者指出，待探索）**：AP Newsroom **首頁右上角有一塊快訊區域**，昨天就是在那裡看到快訊的。比照 RT 的做法探索——先看網路請求有沒有對應端點（`api.newsroom.ap.org` 底下已知有 `nrsubscription/alerts/nr_breaking_news`，很可能就是它），確認欄位、保留時限、能否重放。若可行，與 RT 快訊合併成同一條「突發示警」料源。
 - [ ] **通則**：每次優化上線都要在 13b「未定回填」記一筆呼叫次數／耗時基準，跟 00:00 實驗輪（7 則 52 次 12m18s）比對，量化每一刀的實際收益。
+- [ ] **清單能否三站都直接用 API 拿，不必再退回 DOM 直撈**（2026-08-03 使用者立案）：目前現況——**NS** 清單即文稿，全走 API，已是最佳狀態；**AP** 清單 API 已可用（照抄頁面 body 重放順序與 DOM 一致）；**RT** 清單 API 技術上存在（`POST /api/search-api`），但回應是 **transit 壓縮格式**（欄位名只出現一次、後續用 `^N` 參照），現行規則因此放棄 API 清單、改走 §1b DOM 直撈（見上方「RT transit 抽取定案」）。**待研究**：這個 transit 格式能不能用**正確的 transit 解碼**（不是 regex）穩定解開？若可行，RT 清單也能併入純 API 流程，省掉 §1b 那層。
+- [ ] **API 回應文字量仍偏大，能否先讓腳本瘦身、AI 只看瘦身後結果**（2026-08-03 使用者立案）：三站回應格式固定（AP 詳情 27KB、RT 全文 8KB、NS NDJSON），代表**抽取所需欄位是機械可判斷的**，不必讓 AI 自己讀整包 JSON 邊解析邊摘要。可比照 WP1 render 的思路——腳本先做結構化抽取（拿掉 HTML 標記、無關 metadata，只留 title／description／script 全文／時長／編號等），AI 只處理「摘要與判斷」那一層。
+  - 待確認：現在 `browser_evaluate` 裡的欄位抽取（NS 白名單欄位、AP/RT regex 抓欄位）是不是已經做到位，還是仍有「AI 讀到完整回應內文才摘要」的段落。
+  - 待確認：`content.bitcentral.script`（NS）／STORYLINE／SHOTLIST 這類長文字欄位本身就是要交給 AI 摘要的素材本體，瘦身能做的是拿掉不相干的 metadata／HTML tag，不是砍掉這些內容。
 
 ## S4 rundown 稿單（2026-07-30 立案，**未建、無規則文件**）
 
