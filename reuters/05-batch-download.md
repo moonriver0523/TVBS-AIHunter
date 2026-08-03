@@ -47,13 +47,14 @@
 - **開工前檢查 profile 殘留**（多 agent 並行會互鎖；0803 曾害 RT 三輪誤判「全站 0 素材」）：
   `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ? { $_.CommandLine -like "*playwright-mcp-profile*" }`，閒置就 `Stop-Process -Force`；**自己收工也要關**。
 - ⚠️ **下載落點是 `D:\Downloads\PlaywrightMCP\`，不是 `D:\Downloads\`**（2026-08-03 實測）。改名時從這裡取檔；Playwright 會把檔名裡的 `_`／空格換成 `-`，**別假設檔名原樣保留**。
-- ⚠️ **費用閘門（使用者硬規則）**：**只下載免費／訂閱內的素材；要扣點數或 credit 的一律停下來問使用者**，不准自行下載。兩站的判斷欄位見下。
+- **費用：不必事前把關、不必為此停下來**（2026-08-03 使用者訂正）——**使用者提交清單時已人工確認過都是免費素材**，本流程照單全收即可，不要因為費用欄位而卡住或反覆確認。
+  - 但**看到就順手回報**：費用欄位本來就在你已經取回的回應裡（RT 的 `points`／`free` 就在文稿那份 item 回應；AP 的 `Term` 在 `downloadnr/check`，而 check 本來就是拿 `ContentId` 的必要步驟），**零額外呼叫**。若發現某筆不是免費（RT `points` 非 0，或 AP `AppliedPrice` 非 0／`IsAlaCarte: true`），**照樣下載**，但在回報裡列出該筆與數值，當人工核對的備援。
 
 ### RT（文稿＋影片都可 API）
 
 1. **定位**：照 `13b` §1b DOM 直撈 `a[href*="detail?id="]` 拿 guid。Edit No 可從 guid 的 `newsml_RW{4碼}` 推出、與清單值互相校驗。
 2. **文稿**：`GET /api/item/{guid}?hash={hash}&live=false`（同源 fetch＋`credentials:'include'`）→ SCRIPT＋SHOTLIST＋Restrictions 一次到手。`hash` **照抄當下頁面請求**（實測 `klwn20`，但那是前端 build hash、改版會變，不要硬編）。
-3. **🚦 費用閘門**：同一份 item 回應要有 `~:points",0` 且出現 `~:free`。不是 0 就停下來問。
+3. **費用（只記錄不擋）**：同一份 item 回應裡的 `~:points`／`~:free` 順手看一眼；非 0 照樣下載，但列進回報。
 4. **影片**：從 renditions 取 **`...-STREAM:{n}:16X9:HD1080I60:MP4`**（＝UI 預設 HD 60fps；沒有就退 `HD1080I50`），組
    `https://www.reutersconnect.com/api/download/video/{guid}/{binaryId}?filename={檔名}&hash={hash}&purchase-type=ayce`
    在頁面內 `a.href=url; a.download=檔名; a.click()` 觸發（`purchase-type=ayce`＝訂閱吃到飽）。
@@ -63,7 +64,7 @@
 
 1. **定位**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`（cookie 驗證）。**照抄頁面實際發出的 request body**（順序才與畫面一致）；⚠️ **`PageNumber` 不可靠**（實測 Page 2 回 100 筆、與 Page 1 零重疊），要多筆就**固定 `PageNumber=1` 加大 `PageSize`**（16／50／100／200 實測精準）。`_source.itemid`＝32 碼 GUID，`_source.editorialid`＝AP 編號。
 2. **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。**逗號串多則不支援**，一則一次；但可在同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則（工具呼叫仍只算 1 次）。
-3. **🚦 費用閘門**：`POST /v1/downloadnr/check`，body `{"ItemIds":["{itemid}"],"IsClip":false,"IsNonSalable":false}`。回應 `Term` 必須是 **`AppliedPrice: 0.0`、`MeteredType: "None"`、`IsAlaCarte: false`**（訂閱內會顯示 `DownloadActionTypeText: "WithinAge_Download"`）。任一不符→停下來問。
+3. **`check`（拿 rendition 用，順帶看費用）**：`POST /v1/downloadnr/check`，body `{"ItemIds":["{itemid}"],"IsClip":false,"IsNonSalable":false}`。**這步不能省**——第 4 步要用它回傳的 `ContentId`／`ContentRenditionId`。回應的 `Term`（`AppliedPrice`／`MeteredType`／`IsAlaCarte`）順手看一眼，非免費照樣下載但列進回報。
 4. **影片**：同一份 check 回應的 `Renditions` 挑 `Duid: "vid-1080i-main-60-slate"`（HD 1080i60 MP4），取其 `ContentId` 與 `ContentRenditionId`，再打
    `POST /v1/downloadnr/tick`，body
    `{"Ticks":[{"ItemId":"{itemid}","MediaType":"video","Role":"Main","Title":"{slug}","ContentId":"{ContentId}","StoryNumber":"{editorialid}","ContentRenditionId":{ContentRenditionId},"RecordSequenceNumber":1}],"StoryItemID":null}`
