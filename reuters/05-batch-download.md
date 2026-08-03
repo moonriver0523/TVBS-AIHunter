@@ -38,7 +38,45 @@
 | X 照片貼文（**圖片編號** `圖#XX`） | X | 取 `pbs.twimg.com` 原圖網址下載 | `X`（檔名用 `圖#XX`） |
 | Facebook URL（社群轉發連結） | Facebook | `yt-dlp` 下載到 `D:\Downloads`，做法同 YouTube；清單摘要簡短時先抽樣看完整支片再下判斷 | `FB` |
 
-## 各來源處理細節
+## API 直取（2026-08-03 訂案，AP／RT／NS 首選路徑）
+
+**核心**：定位、文稿、（AP／RT 的）影片下載**全部走 API，不點 UI**。三站端到端實測完成。**API 失敗兩次就退回下一節的 UI 舊做法**，不要死磕。
+
+**共同前提**
+- **一律用 Playwright 工具組**（`mcp__browser__*`），不是 claude-in-chrome（NS 的 localStorage 在 claude-in-chrome 會被 extension 隱私防護擋死）。
+- **開工前檢查 profile 殘留**（多 agent 並行會互鎖；0803 曾害 RT 三輪誤判「全站 0 素材」）：
+  `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ? { $_.CommandLine -like "*playwright-mcp-profile*" }`，閒置就 `Stop-Process -Force`；**自己收工也要關**。
+- ⚠️ **下載落點是 `D:\Downloads\PlaywrightMCP\`，不是 `D:\Downloads\`**（2026-08-03 實測）。改名時從這裡取檔；Playwright 會把檔名裡的 `_`／空格換成 `-`，**別假設檔名原樣保留**。
+- ⚠️ **費用閘門（使用者硬規則）**：**只下載免費／訂閱內的素材；要扣點數或 credit 的一律停下來問使用者**，不准自行下載。兩站的判斷欄位見下。
+
+### RT（文稿＋影片都可 API）
+
+1. **定位**：照 `13b` §1b DOM 直撈 `a[href*="detail?id="]` 拿 guid。Edit No 可從 guid 的 `newsml_RW{4碼}` 推出、與清單值互相校驗。
+2. **文稿**：`GET /api/item/{guid}?hash={hash}&live=false`（同源 fetch＋`credentials:'include'`）→ SCRIPT＋SHOTLIST＋Restrictions 一次到手。`hash` **照抄當下頁面請求**（實測 `klwn20`，但那是前端 build hash、改版會變，不要硬編）。
+3. **🚦 費用閘門**：同一份 item 回應要有 `~:points",0` 且出現 `~:free`。不是 0 就停下來問。
+4. **影片**：從 renditions 取 **`...-STREAM:{n}:16X9:HD1080I60:MP4`**（＝UI 預設 HD 60fps；沒有就退 `HD1080I50`），組
+   `https://www.reutersconnect.com/api/download/video/{guid}/{binaryId}?filename={檔名}&hash={hash}&purchase-type=ayce`
+   在頁面內 `a.href=url; a.download=檔名; a.click()` 觸發（`purchase-type=ayce`＝訂閱吃到飽）。
+   ✅ **`filename` 可直接指定成目標檔名**（如 `西國不敗1200 #01 RT.mp4`），省掉事後改名。
+
+### AP（文稿＋影片都可 API）
+
+1. **定位**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`（cookie 驗證）。**照抄頁面實際發出的 request body**（順序才與畫面一致）；⚠️ **`PageNumber` 不可靠**（實測 Page 2 回 100 筆、與 Page 1 零重疊），要多筆就**固定 `PageNumber=1` 加大 `PageSize`**（16／50／100／200 實測精準）。`_source.itemid`＝32 碼 GUID，`_source.editorialid`＝AP 編號。
+2. **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。**逗號串多則不支援**，一則一次；但可在同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則（工具呼叫仍只算 1 次）。
+3. **🚦 費用閘門**：`POST /v1/downloadnr/check`，body `{"ItemIds":["{itemid}"],"IsClip":false,"IsNonSalable":false}`。回應 `Term` 必須是 **`AppliedPrice: 0.0`、`MeteredType: "None"`、`IsAlaCarte: false`**（訂閱內會顯示 `DownloadActionTypeText: "WithinAge_Download"`）。任一不符→停下來問。
+4. **影片**：同一份 check 回應的 `Renditions` 挑 `Duid: "vid-1080i-main-60-slate"`（HD 1080i60 MP4），取其 `ContentId` 與 `ContentRenditionId`，再打
+   `POST /v1/downloadnr/tick`，body
+   `{"Ticks":[{"ItemId":"{itemid}","MediaType":"video","Role":"Main","Title":"{slug}","ContentId":"{ContentId}","StoryNumber":"{editorialid}","ContentRenditionId":{ContentRenditionId},"RecordSequenceNumber":1}],"StoryItemID":null}`
+   → 回應的 **`ClientMediaUrl`** 就是簽章直連（CloudFront，**約 15 分鐘到期**），`a.click()` 下載即可，`FileName` 也一併給。
+   ⚠️ `tick` 是 AP 的下載計數／授權登錄，**不可為了省一步跳過**——沒有它也拿不到 `ClientMediaUrl`。
+
+### CNN Newsource（NS）：文稿走 API，**影片只能走 UI**
+
+- **文稿（大幅省成本）**：`POST https://newsource-content-api-530.ns.cnn.com/api/v3/stories`（Bearer token 在 `localStorage.newsourceSession.token`）——**清單回應直接含 `content.bitcentral.script` 全文**，不必開任何詳情頁或 Preview modal。完整配方見 `G:\...\自動掃帶系統\0803-NS掃帶卡點報告-回覆.txt`。
+- ⚠️ **影片下載不能 API 直取**（2026-08-03 實測結論）：NS 走 **Signiant 傳輸服務**（`POST /api/v2/download` → `downloadIds` → `/api/v2/download/config/{id}` 回的是 `sig://` 路徑＋Signiant 伺服器與憑證，前端載入 `transferapi.min.js` 由 Signiant 客戶端搬檔），**沒有 HTTP 直鏈可取**。NS 影片一律照下一節 UI 做法點 Download。
+- ⚠️ NS token 會過期，第一次呼叫拿到 `null` 是常態——重新整理頁面等登入完成再打；**連兩次拿不到就是真的登出，停下來請使用者登入**（agent 不得自行輸入帳密）。
+
+## 各來源處理細節（UI 舊做法：API 失敗兩次時的退路，NS 影片則一律用這套）
 
 **RT（含來源端寫成 `RTV` 者，一律當 `RT` 處理）：**
 1. reutersconnect.com，Video 分頁，搜尋 Edit No.——搜尋方式（優先直接帶網址、My Subscription 維持預設 **ON**）一律依 [`搜尋外電素材(RT)`](01-search-workflow.md)，本文件不另訂。
@@ -81,7 +119,8 @@
 
 ## 下載確認與卡住處理
 
-用 PowerShell 輪詢 `D:\Downloads`（`Get-ChildItem -File | Where-Object {LastWriteTime -gt (Get-Date).AddMinutes(-2)}`），確認檔案（.crdownload 或臨時檔）已完成、大小穩定。
+用 PowerShell 輪詢下載夾（`Get-ChildItem -File | Where-Object {LastWriteTime -gt (Get-Date).AddMinutes(-2)}`），確認檔案（.crdownload 或臨時檔）已完成、大小穩定。
+⚠️ **兩個落點不一樣**：`yt-dlp` 系（YouTube／X／FB／DVIDS）落在 **`D:\Downloads`**；**瀏覽器下載（AP／RT／NS，含 API 直取）落在 `D:\Downloads\PlaywrightMCP`**（2026-08-03 實測）。找不到檔案時先確認自己在看哪一個資料夾。
 
 RT 詳情頁點連結後畫面還停在列表摘要、或 Download 點了 `D:\Downloads` 沒有新檔案等症狀，先查 [`common/09-known-issues.md`](../common/09-known-issues.md#瀏覽器自動化) 有沒有對應解法（通常是「再點一次」或「頁面要維持在最上方再點 Download」），再進入下方重試階梯。
 
