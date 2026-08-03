@@ -64,18 +64,33 @@
 
 ⛔ **不准砍的東西**（砍了就寫不出三段式）：稿件全文（AP `script.nitf`／RT `story`）、**SHOTLIST 段**、**SOUNDBITE 段與講者**、限制語、來源、形式、時長、素材代碼。瘦身砍的只有 metadata／檔案 URL／計價規則，**內容本體一個字都不能動**（同側錄逐字規則）。
 
-✅ **保真驗證做法（改抽取邏輯後都要重跑一次）**：把「原始欄位只去 HTML tag」與「抽取結果」都正規化成純文字（`replace(/[^\p{L}\p{N}]/gu,'')`）後**逐字元比對**。2026-08-03 實測：AP 6/6 逐字相同（字元數一致）；RT 6/6 僅差 `&nbsp;` 被正確轉成空格，**文字零遺失**。
+✅ **保真驗證做法（改抽取邏輯後都要重跑一次，兩項都要驗）**：
+1. **逐字比對**：把「原始欄位只去 HTML tag」與「抽取結果」都正規化成純文字（`replace(/[^\p{L}\p{N}]/gu,'')`）後逐字元比對。⚠️ 比對基準要**先扣掉實體名**（`nbsp`／`amp` 等），否則會誤判成失敗——`&amp;`→`&` 後被正規化移除，看起來像少了 3 個字元，其實是正確解碼。
+2. **殘留掃描**：抽取結果裡 `/&[a-zA-Z#0-9]{2,8};/`（未解碼實體）與 `/<[^>]+>/`（未去乾淨的 tag）都必須是 **0 命中**。第 1 項單獨看不出實體殘留，一定要配第 2 項。
+
+**實測記錄**：2026-08-03 共跑 4 輪——AP 6/6＋8/8＋10/10 逐字相同、RT 6/6＋4/4；最終版 **殘留實體 0、殘留 tag 0**。
 
 ⚠️ **驗證時別用「原始 raw 裡有沒有 SHOTLIST 字樣」當基準**——會假陽性：RT 回應裡的 `video-shotlist-url`／`stream:shotlist:json`／檔名 `..._STREAM-SHOTLIST-JSON_....JSON` 都含該字樣，但**不是**畫面清單內容（RT 的 shotlist 是獨立資源，item API 不含它；有些則的畫面描述寫在 `story` 開頭的 `VIDEO SHOWS:` 段）。要比就比**欄位內容本身**。
 
-**共用的去 tag 函式**（AP `script.nitf` 與 RT `story` 都是 HTML）：
+**共用的去 tag ＋ 實體解碼函式**（AP `script.nitf` 與 RT `story` 都是 HTML）：
 
 ```js
-const stripTag = (h) => String(h||'')
-  .replace(/<\/p>\s*<p>/gi,'\n').replace(/<[^>]+>/g,'')
-  .replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"')
-  .replace(/&#39;|&apos;/gi,"'").replace(/\n{3,}/g,'\n\n').trim();
+const ENT = {nbsp:' ',amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',
+  rsquo:'’',lsquo:'‘',ldquo:'“',rdquo:'”',ndash:'–',mdash:'—',hellip:'…',bull:'•',
+  eacute:'é',egrave:'è',agrave:'à',ccedil:'ç',uuml:'ü',ouml:'ö',auml:'ä',szlig:'ß',
+  ntilde:'ñ',deg:'°',euro:'€',pound:'£',copy:'©',reg:'®'};
+const decodeEnt = (s) => String(s||'')
+  .replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16)))   // 十六進位
+  .replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(+d))                          // 十進位
+  .replace(/&([a-zA-Z]+);/g,(m,n)=>(n.toLowerCase() in ENT)?ENT[n.toLowerCase()]:m);
+const clean = (h) => decodeEnt(
+    String(h||'').replace(/<\/p>\s*<p>/gi,'\n').replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'')
+  ).replace(/\n{3,}/g,'\n\n').trim();
 ```
+
+🔴 **實體一定要解碼，只列 `&nbsp;&amp;&quot;` 是不夠的（2026-08-03 多測兩輪才抓到）**：只處理那三個時，`&rsquo;`／`&ldquo;`／`&rdquo;`／`&ndash;` 會**原樣殘留在稿件裡**——`Iran&rsquo;s Foreign Minister` 就這樣進了素材行。上面的 `decodeEnt` 連**數字實體**（`&#8217;`／`&#x2019;`）一起處理，實測 RT 4/4、AP 10/10 **殘留實體 0、殘留 tag 0**。
+
+⚠️ **不要改用 `DOMParser`／`textarea.innerHTML` 解碼**：看似更通用，但 Reuters 頁面的 CSP／Trusted Types 會讓 `DOMParser.parseFromString` **回傳空字串**（實測 v3 長度 0），而且失敗時**不報錯**，會靜默吐出空稿。純字串處理才跨站穩定。
 
 ⚠️ **RT 還要多一層 unescape**（transit 字串裡的 `\"` 會殘留）：`.replace(/\\"/g,'"').replace(/\\n/g,'\n')`，否則標題會變成 `Gladiatoren - \"Römische Tage\"`。
 
@@ -118,7 +133,7 @@ const stripTag = (h) => String(h||'')
     src:   unesc(pick(t,'source')),   // CCTV／SKAI TV／第三方判定用
     restr: unesc(pick(t,'restrictions')),  // ⚠️ 純字串不是陣列
     early: t.includes('early-access-script'),  // true＝稿未到（pending 判定）
-    story: stripTag(pick(t,'story'))  // ⚠️ 稿件全文在 `~:story`，不是 body／script
+    story: clean(pick(t,'story'))  // ⚠️ 稿件全文在 `~:story`，不是 body／script
   });
   ```
 
@@ -142,7 +157,7 @@ const stripTag = (h) => String(h||'')
   const slimList = (s) => ({
     id: s.editorialid, itemid: s.itemid,          // editorialid＝AP 編號、itemid＝詳情要用的 32 碼
     title: s.title, head: s.headline,
-    cap:  stripTag(s.caption && s.caption.nitf),  // ⭐ 清單就有一句話摘要
+    cap:  clean(s.caption && s.caption.nitf),  // ⭐ 清單就有一句話摘要
     role: s.editorialrole,                        // ⭐ 形式：VO／VOSOT／SOT／Package
     src:  (s.sources||[]).map(x=>x.name).join('/'),  // ⭐ SNTV 判定（本則的 sources，不是列表黏標）
     sig:  (s.signals||[]).filter(x=>/Ready|SNTV/i.test(x)).join(','),  // NewsroomReady＝稿齊
@@ -151,8 +166,8 @@ const stripTag = (h) => String(h||'')
   // 詳情：寫三段式用
   const slimDetail = (s) => ({
     id: s.editorialid, title: s.title, head: s.headline,
-    cap:    stripTag(s.caption && s.caption.nitf),
-    script: stripTag(s.script && s.script.nitf),  // ⚠️ 稿全文在 `script.nitf`（HTML）
+    cap:    clean(s.caption && s.caption.nitf),
+    script: clean(s.script && s.script.nitf),  // ⚠️ 稿全文在 `script.nitf`（HTML）
     role: s.editorialrole, src: (s.sources||[]).map(x=>x.name).join('/'),
     rights: s.rightsline, line: s.dateline || s.locationline,
     dur:  (s.shots && s.shots[0] && s.shots[0].end) || '',  // ⚠️ 沒有 duration 欄位，時長由 shots[0].end 推
