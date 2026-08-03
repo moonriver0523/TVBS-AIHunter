@@ -228,6 +228,7 @@ python scripts/s2_render.py --file "G:\...\0802-s2-state.json" --base-date 0802 
 - `raw_entry` **零加工輸出**；側錄照 `14-S2b` 兩行式原樣帶出（不壓縮、不加 `▎`、TC 冒號格式保留）。
 - **YouTube 兩行式（§4c）的網址行照樣帶時段標記**，但標記與網址之間**一定要有半形空格**——`△https://…` 會黏成一串、網址點不開（2026-08-03 使用者訂正）。render 的 prefix 固定以一個半形空格收尾，並對首行 lstrip，不會出現雙空格或漏空格。⚠️ 存進狀態檔時**小分題不要塞進 `raw_entry` 第一行**——那是 `category.小分題` 的位子，`raw_entry` 只放「網址行＋備註行」兩行（0802 有 8 則存成三行，render 會把小分題當內容輸出）。
 - 寫檔走 tmp+rename（原子），寫完在狀態檔記 `last_render_ts`／`last_render_sha`（`--no-touch-state` 可略）。分類不在 16 格樣板內的會附在檔尾並在 stderr 警告——看到就去修 `set-category`。
+- 💾 **輕量備份（2026-08-03 加）**：覆蓋前把現行 txt 另存 `{MMDD}晚班交接.txt.prev.txt`（同資料夾，只留最近一版，不無限累積）。這不是 diff3 復活——不比對、不裁決，純粹「render 本身出 bug 吐出壞 txt 時有東西可以救」。要回復上一版就把 `.prev.txt` 內容複製回正式檔名，不必跑腳本。
 - ⛔ **手改偵測（2026-08-03 加）**：覆蓋前比對現行 txt 的 sha 與 `last_render_sha`，對不上就**拒絕覆蓋並 exit 3**。這是防「手改 txt／側錄只貼 txt 沒 add-side」被無聲洗掉——看到這個錯誤，先把 txt 上那些內容寫回狀態檔，確認可丟棄才加 `--force`。
 - 📊 **每輪必看的對帳三行**：render 完會印「素材 N 則（±X）／側錄 M 段（±X）／YouTube K 支（±X）」，並點名「現行 txt 有、本次 render 沒有」的代碼。**出現點名就是漏了 `add-side`／`update-entry`**，不要當成正常。回報時要把這三行貼上來。
 - ✅ render 完會**自動跑一次 `check`**（`--no-check` 可略），不必另外呼叫。

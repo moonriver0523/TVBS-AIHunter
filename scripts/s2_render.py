@@ -213,11 +213,30 @@ def render(state, window="", base_mmdd="", date=""):
     return "\n".join(header + [""] + body).rstrip("\n") + "\n"
 
 
+def backup_prev(path):
+    """覆蓋前把現行 txt 另存 `{path}.prev.txt`（只留最近一版，不無限累積）。
+
+    diff3／snapshot 廢除的理由是「不需要拿舊 txt 比對保留人工編輯」，但那跟
+    「留一份東西讓 render 本身出包時能救」是兩件事——後者這裡補上。純檔案操作，
+    不影響省 token 的設計、不涉及 AI 判斷。
+    """
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8-sig") as f:
+                prev = f.read()
+            with open(path + ".prev.txt", "w", encoding="utf-8", newline="\n") as f:
+                f.write(prev)
+        except OSError as e:
+            print(f"⚠️ 備份上一版失敗（{e}）——仍照常覆蓋，但這輪沒有 .prev.txt 可救",
+                  file=sys.stderr)
+
+
 def write_atomic(path, text):
-    """tmp + rename：中途失敗不留半殘 txt（每輪全量覆蓋，寫壞就沒有備份可回）。"""
+    """先備份現行版（見 backup_prev），再 tmp + rename 覆蓋（中途失敗不留半殘 txt）。"""
     d = os.path.dirname(path)
     if d:
         os.makedirs(d, exist_ok=True)
+    backup_prev(path)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         f.write(text)
