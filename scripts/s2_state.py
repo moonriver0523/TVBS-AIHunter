@@ -60,11 +60,30 @@ def norm_id(s):
     return s.strip().replace("RTV", "RT", 1) if s.strip().startswith("RTV") else s.strip()
 
 
+def now_ts():
+    # 微秒精度：同一秒內「整併完又改一次」的更新必須抓得到，秒精度會相等而漏掉
+    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+
+
+def is_todo(v):
+    """是否待整併。
+
+    ⚠️ 比較一律用腳本自己寫的時間戳（`entry_updated_ts` / `compiled_ts`），
+    不要用 checkpoint 標籤——標籤是 agent 自由命名的字串，字串比較會出錯：
+    `"r10" < "r8"`（'1'<'8'），所以第 10 輪之後的更新對上第 1–9 輪的 compiled
+    會被判成「沒變動」而靜默漏掉（0803 實錯，50 則更新沒進 txt）。
+    舊資料沒有 ts 欄位：兩邊都缺→視為未變動（那批已整併且已人工修正），
+    有新更新時才會寫入 ts，之後比較就正確。
+    """
+    if v.get("compiled") is None:
+        return True
+    return v.get("entry_updated_ts", "") > (v.get("compiled_ts") or "")
+
+
 def cmd_resume(state, args):
     items = state["items"]
     pend = [i for i, v in items.items() if v.get("script_status") == "pending"]
-    todo = [i for i, v in items.items()
-            if v.get("compiled") is None or v.get("entry_updated", "") > (v.get("compiled") or "")]
+    todo = [i for i, v in items.items() if is_todo(v)]
     review = [i for i, v in items.items() if v.get("needs_review")]
     cps = sorted({v.get("last_checked_checkpoint", "") for v in items.values() if v.get("last_checked_checkpoint")})
     print(f"日期:{state.get('date','?')} 共{len(items)}則 pending:{len(pend)} 待整併:{len(todo)} 待人工:{len(review)}")
@@ -116,6 +135,7 @@ def new_item(source, checkpoint, status, entry):
         "script_status": status,
         "raw_entry": entry,
         "entry_updated": checkpoint,
+        "entry_updated_ts": now_ts(),
         "compiled": None,
         "category": None,
     }
@@ -183,6 +203,7 @@ def cmd_update_entry(state, args):
     if args.status:
         it["script_status"] = args.status
     it["entry_updated"] = args.checkpoint or it.get("last_checked_checkpoint", "")
+    it["entry_updated_ts"] = now_ts()
     save(state, args.file)
     print(f"OK 已覆寫 {i}（{it['script_status']}）")
 
@@ -195,7 +216,7 @@ def cmd_pending(state, args):
 def cmd_to_compile(state, args):
     out = []
     for i, v in sorted(state["items"].items()):
-        if v.get("compiled") is None or v.get("entry_updated", "") > (v.get("compiled") or ""):
+        if is_todo(v):
             c = v.get("category")
             cat = f"{c['大分類']}/{c['中主題']}" if isinstance(c, dict) else (c or "(未分類)")
             out.append(f"### {i} [{cat}] {v.get('script_status')}\n{v.get('raw_entry','')}")
@@ -208,8 +229,10 @@ def cmd_mark_compiled(state, args):
     if missing:
         print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未標記，請修正後重跑）")
         sys.exit(2)
+    ts = now_ts()
     for i in ids:
         state["items"][i]["compiled"] = args.checkpoint
+        state["items"][i]["compiled_ts"] = ts
     save(state, args.file)
     print(f"OK 已標記 {len(ids)} 則 compiled={args.checkpoint}")
 
