@@ -7,21 +7,26 @@
                              [--alert "▲ IN-23SU 希臘消防直升機空中相撞…"] [--clear-alerts]
                                                    輸出檔頭三／四行＋重大提醒行
                                                    （--alert 省略時沿用檔內既有重大行）
-  python s2_validate.py diff3 <現行.txt> <機器版快照.txt>
-                                                   列出人工編輯過的行
+
+⚠️ 2026-08-03（WP1）起 txt 由 `s2_render.py` 從狀態檔全量渲染、人工不改，
+`diff3` 三方比對與 `.snapshot.txt` 一併廢除（沒有「人工編輯過的行」可裁決了）。
 
 規則依據 common/13-S2-定時掃帶.md「最終整併：稿未到清查＋品質掃」。
 """
 import argparse
-import difflib
-import io
 import os
 import re
 import sys
 from datetime import datetime
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+# ⚠️ 用 reconfigure 不用 TextIOWrapper：包第二層時（例如 s2_state 匯入 s2_validate）
+# 舊寫法會讓其中一個 wrapper 被回收時關掉底層 buffer，整支腳本以 "I/O operation on
+# closed file" 掛掉（2026-08-03 WP1 實錯）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:  # py<3.7
+        pass
 
 # 素材代碼（行首）：RT#### / AP####### / APcctv###### / CNN Newsource XX-##XX / 側錄 CNN|NHK ######
 CODE = r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2}-\d{1,3}[A-Z]{2}|(?:CNN|NHK) \d{6})"
@@ -329,8 +334,13 @@ def check(path):
             print(f"  行{n}: {r}")
 
 
-def stats(path, window, date="", alerts=None, clear_alerts=False):
-    lines = read(path)
+def header_from_lines(lines, window="", date="", mmdd="", alerts=()):
+    """由正文行算出檔頭各行，回傳 list[str]（不印）。
+
+    ⚠️ 這是檔頭生成的**唯一**實作：`stats`（讀 txt）與 `s2_render.render`（讀狀態檔
+    渲染出的正文）都走這裡，避免兩套邏輯分叉。`alerts` 由呼叫端決定來源——
+    stats 從舊 txt 檔頭沿用、render 從狀態檔 `_top.alerts` 取（見 13b §2）。
+    """
     counts = {"AP": 0, "RT": 0, "NS": 0, "其他": 0}
     for _, l in material_lines(lines):
         first = re.match(CODE, l).group(0)
@@ -347,13 +357,12 @@ def stats(path, window, date="", alerts=None, clear_alerts=False):
     # 側錄一段連線常被切成十幾個 TC，計進去會把「收錄外電共X則」灌爆、失去掃視價值。
     # 檔頭統計的是「通訊社素材則數」，側錄是另一條料源，完全不納入。
     total = sum(counts.values())
+    out = []
     # 檔頭三行（2026-08-02 使用者定案）：標題／時間窗（含時數）／則數統計
-    mmdd = re.search(r"(\d{4})晚班交接", os.path.basename(path))
-    mmdd = mmdd.group(1) if mmdd else ""
     if not date and mmdd:
         date = f"{datetime.now().year}-{mmdd[:2]}-{mmdd[2:]}"
     if mmdd:
-        print(f"{mmdd} 晚班交接")
+        out.append(f"{mmdd} 晚班交接")
     if window:
         # 起訖可帶日期（跨夜續掃：`2026-08-02 14:00 - 2026-08-03 09:00`），
         # 所以只拿全形連接號或「空白-空白」當分隔，不能直接 split("-")（日期裡也有）
@@ -367,9 +376,9 @@ def stats(path, window, date="", alerts=None, clear_alerts=False):
                 span += 24 * 60
             # 起訖任一邊自帶日期時，就不再補檔名推得的日期，避免 `2026-08-02 2026-08-02 14:00`
             pre = "" if re.search(r"\d{4}-\d{2}-\d{2}", window) else (date + " " if date else "")
-            print(f"時間窗：{pre}{s}–{e}（約{span / 60:g}hrs）")
+            out.append(f"時間窗：{pre}{s}–{e}（約{span / 60:g}hrs）")
         else:
-            print(f"時間窗：{date + ' ' if date else ''}{window}")
+            out.append(f"時間窗：{date + ' ' if date else ''}{window}")
     parts = [f"AP {counts['AP']}則", f"RT {counts['RT']}則", f"NS {counts['NS']}則"]
     if counts["其他"]:
         parts.append(f"其他 {counts['其他']}則")
@@ -381,36 +390,34 @@ def stats(path, window, date="", alerts=None, clear_alerts=False):
     if any(marked[m] for m in OVERNIGHT_MARKS):
         tail = "；隔夜續掃 " + "／".join(
             f"{m} {marked[m]}則" for m in OVERNIGHT_MARKS if marked[m])
-    print(f"收錄外電共{total}則（{'／'.join(parts)}）{tail}")
+    out.append(f"收錄外電共{total}則（{'／'.join(parts)}）{tail}")
     # 第 4 行圖例：只要當份有用到任一時段標記就印（含 △），沒用到就不印
     if any(marked.values()):
-        print("標記：" + "　".join(f"{m}={MARKS[m]}" for m in MARKS if marked[m]))
-    # 最後才是重大提醒行。⚠️ 預設沿用檔內既有的，不是每次重生——
-    # 檔頭每輪整併都要重算覆寫，若不沿用，一次例行 stats 就會把上一輪標的重大洗掉。
-    # 要改內容才傳 --alert（可重複，會整組取代）；要撤掉傳 --clear-alerts。
-    if clear_alerts:
-        out = []
-    elif alerts:
-        out = [a if ALERT_RE.match(a) else f"🔴 重大：{a}" for a in alerts]
-    else:
-        out = [l for l in header_lines(lines) if ALERT_RE.match(l)]
-    for a in out[:ALERT_MAX]:
-        print(a)
-    if len(out) > ALERT_MAX:
-        print(f"(略過 {len(out) - ALERT_MAX} 行：重大提醒上限 {ALERT_MAX} 行)",
+        out.append("標記：" + "　".join(f"{m}={MARKS[m]}" for m in MARKS if marked[m]))
+    # 最後才是重大提醒行（來源由呼叫端決定，見 docstring）
+    al = [a if ALERT_RE.match(a) else f"🔴 重大：{a}" for a in (alerts or [])]
+    if len(al) > ALERT_MAX:
+        print(f"(略過 {len(al) - ALERT_MAX} 行：重大提醒上限 {ALERT_MAX} 行)",
               file=sys.stderr)
+    return out + al[:ALERT_MAX]
 
 
-def diff3(cur_path, snap_path):
-    cur, snap = read(cur_path), read(snap_path)
-    edited = [l for l in difflib.unified_diff(snap, cur, lineterm="", n=0)
-              if l.startswith(("+", "-")) and not l.startswith(("+++", "---"))]
-    if not edited:
-        print("OK 無人工編輯，整併可直接以機器版為底")
+def stats(path, window, date="", alerts=None, clear_alerts=False):
+    lines = read(path)
+    mmdd = re.search(r"(\d{4})晚班交接", os.path.basename(path))
+    mmdd = mmdd.group(1) if mmdd else ""
+    # ⚠️ 重大提醒行預設沿用檔內既有的，不是每次重生——檔頭每輪整併都要重算覆寫，
+    # 若不沿用，一次例行 stats 就會把上一輪標的重大洗掉。
+    # 要改內容才傳 --alert（可重複，會整組取代）；要撤掉傳 --clear-alerts。
+    # （render 路徑不走這裡：它從狀態檔 `_top.alerts` 取，見 WP1 前提四。）
+    if clear_alerts:
+        al = []
+    elif alerts:
+        al = alerts
     else:
-        print(f"人工編輯 {len(edited)} 行（-為快照原文、+為現行；整併時保留人工版）：")
-        for l in edited:
-            print("  " + l)
+        al = [l for l in header_lines(lines) if ALERT_RE.match(l)]
+    for l in header_from_lines(lines, window, date, mmdd, al):
+        print(l)
 
 
 def main():
@@ -427,16 +434,11 @@ def main():
                         "省略＝沿用檔內既有重大行")
     s.add_argument("--clear-alerts", action="store_true",
                    help="撤掉全部重大提醒行（事件退燒／隔日換檔時用）")
-    d = sub.add_parser("diff3")
-    d.add_argument("current")
-    d.add_argument("snapshot")
     args = p.parse_args()
     if args.cmd == "check":
         check(args.path)
-    elif args.cmd == "stats":
-        stats(args.path, args.window, args.date, args.alert, args.clear_alerts)
     else:
-        diff3(args.current, args.snapshot)
+        stats(args.path, args.window, args.date, args.alert, args.clear_alerts)
 
 
 if __name__ == "__main__":
