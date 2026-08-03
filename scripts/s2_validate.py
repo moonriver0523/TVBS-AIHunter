@@ -27,11 +27,14 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="repla
 CODE = r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2}-\d{1,3}[A-Z]{2}|(?:CNN|NHK) \d{6})"
 LINE_RE = re.compile(rf"^{CODE}(?:\s*/\s*{CODE})*\s")
 
-# 隔夜續掃標記（2026-08-02 使用者訂案）：素材代碼前可帶一個時段符號，
-# ▲＝23:00–07:00 新增、●＝07:00–09:00 新增，無標記＝23:00 前晚班既有。
+# 時段標記（2026-08-02 訂案，2026-08-03 補 △）：素材代碼前帶一個時段符號。
+# △＝23:00 前晚班既有、▲＝23:00–07:00 新增、●＝07:00–09:00 新增。
+# ⚠️ 2026-08-03 起 △ 也要寫出來（原本是「無標記」），三種標記齊全才方便快速瀏覽；
+# 「隔夜續掃 N 則」只統計 ▲／●，△ 是基底不計入。
 # 一律先剝掉再做其餘比對，否則整行會兩邊都漏辨識（同 SIDE_RE 踩過的坑）。
-MARKS = {"▲": "23:00–07:00", "●": "07:00–09:00"}
-MARK_RE = re.compile(r"^([▲●])\s*")
+MARKS = {"△": "23:00 前既有", "▲": "23:00–07:00 新增", "●": "07:00–09:00 新增"}
+OVERNIGHT_MARKS = ("▲", "●")  # 計入檔頭「隔夜續掃」的，不含 △
+MARK_RE = re.compile(r"^([△▲●])\s*")
 
 
 def strip_mark(l):
@@ -64,7 +67,11 @@ def alert_lines(lines):
 # 側錄行（S2b）：{來源} {6碼}[ 小標]，格式與通訊社三段式完全不同——
 # 通訊社的畫面/BITE/150字檢查一律不適用，需分流（2026-08-02 訂正）
 # 全形括號可緊貼 TC（`CNN 160106（主播）`），不強制空白，否則整行會兩邊都漏辨識
-SIDE_RE = re.compile(r"^(?:CNN|NHK) \d{6}(?:[\s（]|$)")
+# ⚠️ TC 兩種寫法都要認（2026-08-03 補，原本只認 6 碼是長期盲區）：
+#   6 碼 `160106`／冒號 `16:01:06`／範圍 `16:53:50-16:56:38`
+# 認不得會讓整段側錄在品質掃與統計裡隱形，回報的「0 命中」是假的。
+_TC = r"(?:\d{6}|\d{1,2}:\d{2}:\d{2}(?:\s*[-–~]\s*\d{1,2}:\d{2}:\d{2})?)"
+SIDE_RE = re.compile(rf"^(?:CNN|NHK) {_TC}(?:[\s（]|$)")
 # ⚠️ 側錄 SUPER 一律照搬、不檢查、不修正（2026-08-02 使用者訂正）：
 # 貼進來的內容已經人工篩選校正過，agent 改 SUPER（含「角色標錯就改」與「缺 SUPER 就補」）
 # 都是擅自竄改。角色誤判要修，是在上游 15-歐印萬掃帶／人工那一關做，不是這裡。
@@ -258,10 +265,11 @@ def check(path):
         if len(ns) > 1:
             hit(ns[-1], f"重複 YouTube 影片 {v}（另見行 {ns[:-1]}）")
 
-    # 側錄行（S2b 兩行式）：TC行＝{來源} {6碼}[ （SUPER）]，下一行起為內容
+    # 側錄行（S2b 兩行式）：TC行＝{來源} {TC}[ （SUPER）]，下一行起為內容
+    # TC 三種寫法（6碼／冒號／範圍）都要認，見 _TC
     seen_side = {}
     for n, l, block in side_lines(lines):
-        src, tc = re.match(r"^(CNN|NHK) (\d{6})", l).groups()
+        src, tc = re.match(rf"^(CNN|NHK) ({_TC})", l).groups()
         seen_side.setdefault(f"{src} {tc}", []).append(n)
         if "▎" in l or any("▎" in b for b in block):
             hit(n, "側錄段落不該用 ▎ 分段（那是通訊社三段式，側錄走 TC＋SUPER行/內容行）")
@@ -334,14 +342,13 @@ def stats(path, window, date="", alerts=None, clear_alerts=False):
         if m:
             marked[m] += 1
     tail = ""
-    if any(marked.values()):
+    if any(marked[m] for m in OVERNIGHT_MARKS):
         tail = "；隔夜續掃 " + "／".join(
-            f"{m} {marked[m]}則" for m in MARKS if marked[m])
+            f"{m} {marked[m]}則" for m in OVERNIGHT_MARKS if marked[m])
     print(f"收錄外電共{total}則（{'／'.join(parts)}）{tail}")
-    # 第 4 行圖例：只要當份有用到隔夜標記就印，沒用到就不印（純晚班檔維持三行）
+    # 第 4 行圖例：只要當份有用到任一時段標記就印（含 △），沒用到就不印
     if any(marked.values()):
-        print("標記：" + "　".join(f"{m}={MARKS[m]} 新增" for m in MARKS
-                                   if marked[m]) + "（無標記＝23:00 前晚班既有）")
+        print("標記：" + "　".join(f"{m}={MARKS[m]}" for m in MARKS if marked[m]))
     # 最後才是重大提醒行。⚠️ 預設沿用檔內既有的，不是每次重生——
     # 檔頭每輪整併都要重算覆寫，若不沿用，一次例行 stats 就會把上一輪標的重大洗掉。
     # 要改內容才傳 --alert（可重複，會整組取代）；要撤掉傳 --clear-alerts。
