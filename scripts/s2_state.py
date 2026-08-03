@@ -293,7 +293,7 @@ def load_validate():
     return s2_validate
 
 
-def parse_side_txt(text):
+def parse_side_txt(text, source=None, homes=None):
     """把側錄 TXT 解析成狀態檔項目。
 
     吃兩種寫法（都用同一套三層結構辨識）：
@@ -302,11 +302,21 @@ def parse_side_txt(text):
       2. 篩選 agent 的候選 TXT：每則前面帶
          `擬歸位：======大分類====== → 【中主題】 → 小分題`（見 14-S2b）。
 
+    `source`（CNN／NHK）：檔案裡的 TC 行**沒有來源前綴**時（歐印萬原始檔多半如此，
+    只有裸 TC）自動補上。不補的話 `SIDE_RE` 認不出來，整份會解析出 0 段。
+    `homes`：`{TC 數字: (大分類, 中主題, 小分題)}`，給檔內沒寫「擬歸位」的情形——
+    agent 只要吐 TC 就能指定歸位，不必把整段逐字內容重打一遍（省 token）。
+
     回傳 [(id, source, category, raw_entry)]；raw_entry 是**去掉時段標記後的原文**
     （TC 行＋內容行），時段標記由 render 依 first_seen_checkpoint 自動補。
     """
     sv = load_validate()
     lines = text.replace("\r\n", "\n").split("\n")
+    if source:   # 裸 TC 行補來源前綴：`160106（主播）` → `CNN 160106（主播）`
+        bare = re.compile(rf"^({sv._TC})(?=[\s（(]|$)")
+        lines = [bare.sub(source + r" \1", l.strip(), count=1)
+                 if bare.match(l.strip()) else l for l in lines]
+    homes = homes or {}
     big = mid = sub = ""
     out, cur = [], None
 
@@ -348,9 +358,11 @@ def parse_side_txt(text):
         if sv.SIDE_RE.match(l):
             flush()
             src, tc = re.match(rf"^(CNN|NHK) ({sv._TC})", l).groups()
-            cat = {"大分類": big, "中主題": mid}
-            if sub:
-                cat["小分題"] = sub
+            h = homes.get(re.sub(r"\D", "", tc))    # --homes 指定的歸位優先
+            b2, m2, s2 = h if h else (big, mid, sub)
+            cat = {"大分類": b2, "中主題": m2}
+            if s2:
+                cat["小分題"] = s2
             cur = (f"{src} {tc}", f"SIDE_{src}", cat, l.rstrip())
             continue
         if sv.LINE_RE.match(l):   # 通訊社素材行：不是側錄，跳過（供混排 txt 直接餵）
@@ -373,7 +385,19 @@ def cmd_add_side(state, args):
     except OSError as e:
         print(f"ERROR: 側錄檔讀取失敗（{e}）")
         sys.exit(2)
-    parsed = parse_side_txt(text)
+    homes = {}
+    for tok in (t.strip() for t in (args.homes or "").split(";")):
+        if not tok:
+            continue
+        if "=" not in tok:
+            print(f"ERROR: --homes 格式為 大分類/中主題[/小分題]=TC,TC;… ，這段不合：{tok}")
+            sys.exit(2)
+        cat, tcs = tok.split("=", 1)
+        parts = [x.strip() for x in cat.split("/", 2)] + ["", ""]
+        for tc in tcs.split(","):
+            if tc.strip():
+                homes[re.sub(r"\D", "", tc)] = (parts[0], parts[1], parts[2])
+    parsed = parse_side_txt(text, args.source, homes)
     if not parsed:
         print("ERROR: 沒解析到任何側錄段落（TC 行格式須為 `CNN 160106（主播）`）")
         sys.exit(2)
@@ -521,6 +545,10 @@ def main():
     sd = sub.add_parser("add-side", help="側錄 TXT 入狀態檔（SIDE_CNN／SIDE_NHK）")
     sd.add_argument("--txt", required=True, help="側錄候選 TXT（或直接餵晚班交接 txt）")
     sd.add_argument("--checkpoint", required=True)
+    sd.add_argument("--source", choices=["CNN", "NHK"],
+                    help="TC 行沒有來源前綴時自動補（歐印萬原始檔多半是裸 TC）")
+    sd.add_argument("--homes", default="",
+                    help='用 TC 指定歸位："大分類/中主題[/小分題]=TC,TC;…"（檔內沒寫擬歸位時用）')
     sd.add_argument("--overwrite", action="store_true", help="已在庫的段落也覆寫")
     sd.add_argument("--dry-run", action="store_true", help="只解析不寫檔")
     sm = sub.add_parser("set-mark", help="寫死時段標記（補掃輪等 checkpoint 判不準時）")

@@ -144,8 +144,12 @@ python scripts/s2_state.py pending                         # 稿未到清單（�
 python scripts/s2_state.py set-category --pairs "RT2333=社會/休達移民/岸際動態;RT2360=天氣/野火"
                                                            # ⭐ 批次設分類（預設路徑）；單筆仍可 --id RT2333 --cat "社會/休達移民"
                                                            # 第三段＝小分題（選填）：render 會產出裸行標題＋`+` 分隔
-python scripts/s2_state.py add-side --txt 側錄候選.txt --checkpoint 22:10
-                                                           # 側錄入庫（SIDE_CNN／SIDE_NHK），見 14-S2b；--dry-run 先驗
+python scripts/s2_state.py add-side --txt "…/0803 CNN側錄.txt" --source CNN --checkpoint 22:00 \
+       --homes "天氣/華州野火/州長宣布緊急=160106,160151"
+                                                           # 側錄入庫（SIDE_CNN／SIDE_NHK），見 14-S2b「暫定辦法」
+                                                           # --source：裸 TC 檔補來源前綴（不補會解析出 0 段）
+                                                           # --homes：用 TC 指定歸位，不必重打逐字內容
+                                                           # --dry-run 先驗解析段數
 python scripts/s2_state.py set-alert --set "▲ AP4676262 巴基斯坦自殺炸彈14死…"
                                                            # 檔頭 🔴 重大提醒行（≤3則，整組取代；--add 追加／--clear 撤掉）
 python scripts/s2_state.py set-mark --ids RT2754,RT2753 --mark ▲
