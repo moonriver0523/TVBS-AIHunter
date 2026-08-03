@@ -123,9 +123,9 @@
 
 ⚠️ **檔名與 schema（2026-08-02 實跑訂正，務必照做）**：
 - **檔名＝`{MMDD}-s2-state.json`**（例 `0802-s2-state.json`），與 `{MMDD}晚班交接.txt` 同資料夾、**一天一檔**。不是固定的 `s2-state.json`。
-- **正式 schema**：頂層有 `checkpoint`／`updated_at`／`window_local`／`rt_status`／`ap_status`／`cnn_status`／`notes`／`items`；**`items` 是陣列**（每筆含 `id`）；**`category` 是 `{"大分類": …, "中主題": …}` 物件**，不是字串。`s2_state.py` 已對齊此格式，`set-category --cat "大分類/中主題"` 會自動轉成物件。
-- 頂層欄位用 `set-top {欄位} {值}` 設定（開工先設 `window_local` 與 `checkpoint`）。
-- **整併後另存機器版快照** `{MMDD}晚班交接.snapshot.txt`（同資料夾），供下一輪 `diff3` 三方比對用。
+- **正式 schema**：頂層有 `checkpoint`／`updated_at`／`window_local`／`rt_status`／`ap_status`／`cnn_status`／`notes`／`items`，2026-08-03（WP1）另加 **`alerts`**（檔頭 🔴 重大提醒行，陣列 ≤3）／**`special_category`**（第一格機動大分類顯示名，如「熊本地震」）／**`last_render_ts`**；**`items` 是陣列**（每筆含 `id`）；**`category` 是 `{"大分類": …, "中主題": …[, "小分題": …]}` 物件**，不是字串。`s2_state.py` 已對齊此格式，`set-category --cat "大分類/中主題[/小分題]"` 會自動轉成物件。
+- 頂層欄位用 `set-top {欄位} {值}` 設定（開工先設 `window_local` 與 `checkpoint`）；`alerts` 用專用的 `set-alert`。
+- ⚠️ **`.snapshot.txt` 機器版快照與 `diff3` 已廢除（2026-08-03，WP1）**：txt 改由 `s2_render.py` 從狀態檔全量渲染、人工不改，沒有「人工編輯過的行」要裁決了。
 
 指令：
 
@@ -141,10 +141,15 @@ python scripts/s2_state.py update-entry --id RT2333 --status has_script --entry 
                                                            #    ISO長帶/裸SOT/音軌等天生無旁白稿的＝has_script＋備註形態，不是 pending
                                                            # add／update-entry 短內容用 --entry 行內；長內容（如CNN連線全文）才用 --entry-file
 python scripts/s2_state.py pending                         # 稿未到清單（最終整併清查用）
-python scripts/s2_state.py to-compile                      # 增量整併輸入：新增＋變動，含 raw_entry 全文
-python scripts/s2_state.py mark-compiled --checkpoint 18:00 --ids RT2333,RT2360
-python scripts/s2_state.py set-category --pairs "RT2333=社會/休達移民;RT2360=國際/野火"
+python scripts/s2_state.py set-category --pairs "RT2333=社會/休達移民/岸際動態;RT2360=天氣/野火"
                                                            # ⭐ 批次設分類（預設路徑）；單筆仍可 --id RT2333 --cat "社會/休達移民"
+                                                           # 第三段＝小分題（選填）：render 會產出裸行標題＋`+` 分隔
+python scripts/s2_state.py add-side --txt 側錄候選.txt --checkpoint 22:10
+                                                           # 側錄入庫（SIDE_CNN／SIDE_NHK），見 14-S2b；--dry-run 先驗
+python scripts/s2_state.py set-alert --set "▲ AP4676262 巴基斯坦自殺炸彈14死…"
+                                                           # 檔頭 🔴 重大提醒行（≤3則，整組取代；--add 追加／--clear 撤掉）
+python scripts/s2_state.py set-mark --ids RT2754,RT2753 --mark ▲
+                                                           # 補掃輪等 checkpoint 判不準時寫死時段標記（--clear 改回自動）
 python scripts/s2_state.py get --id RT2333                 # 單則全文
 python scripts/s2_state.py needs-review add --id RT2333 --note "疑似UGC，待人工"
 python scripts/s2_state.py needs-review list
@@ -152,7 +157,9 @@ python scripts/s2_state.py needs-review list
 
 - 批次擷取流程 ＝ 收集本輪列表 ID → `diff` → 只對「新的」取文稿（**§1a API 直查，不開詳情頁**；失敗才退 §1b） → **邊看邊把每則累積進一份 `batch.json`，全部看完後一次 `add-batch`**。不要一則一次 `add`（2026-08-02 起：呼叫次數是 V2 變慢主因，一輪 25 則從約 52 次呼叫降到約 4 次）。**全程不載入 70 則 raw_entry。**
 - **批次規則**：`batch.json` 是 JSON 陣列，每筆 `{"id","source","checkpoint","status","entry"}`（`entry` 直接放字串，含換行）。撞已存在 id 或格式錯的單筆會**自動跳過並回報原因、不中斷**——回報裡有跳過清單時，逐筆判斷：已存在→改用 `update-entry`，格式錯→修正後單筆補。`--pairs` 的分隔符**優先用分號 `;`**（中主題含逗號時逗號會切錯）。
-- 整併流程 ＝ `to-compile` 拿增量 → 批次設分類（`set-category --pairs`）→ 改寫 txt → `mark-compiled`。
+- **整併流程（2026-08-03 WP1 改版）＝ `add-batch`／`update-entry` 更新狀態檔 → `set-category --pairs` 批次設分類（含小分題）→ 側錄 `add-side` → 重大素材 `set-alert` → `s2_render.py` 全量渲染 txt。agent 輸出趨近 0，不再手寫整份 txt。**
+- ⚠️ **`to-compile`／`mark-compiled`／`compiled` 欄位已廢除**：它們存在的唯一理由是「讓 agent 不用每輪重寫整份」，render 讓重寫免費，增量反而多一次呼叫又會漏（0803 標籤字串比較實錯漏 50 則）。`resume` 的「待整併」改成「上次 render 後有變動」，只是參考值，不影響產出。
+- ⚠️ **狀態檔＝唯一真相源，render 是單向投影**：狀態檔裡沒有的東西，下一輪 render 就會從 txt 消失。所以**任何進 txt 的內容都必須先進狀態檔**（側錄、檔頭重大提醒行都在此列），也**不要手改 txt**——下一輪就被覆蓋。品質掃命中要修的是 `raw_entry`，不是 txt。
 - **腳本連續失敗 2 次**：把錯誤訊息原文記進回報，**當輪改用 V1 直讀 JSON 的做法繼續**（degraded mode），不得卡住不動。
 
 ## 3. 品質掃／統計／比對：`s2_validate.py`
@@ -160,14 +167,23 @@ python scripts/s2_state.py needs-review list
 ```
 python scripts/s2_validate.py check "G:\...\0802晚班交接.txt"   # 格式異常掃描，輸出命中清單（行號＋原因）
 python scripts/s2_validate.py stats "G:\...\0802晚班交接.txt" --window "14:00 - 15:00"   # 輸出檔頭各行（日期由檔名推得）
-python scripts/s2_validate.py diff3 current.txt snapshot.txt    # 三方比對：列出人工編輯過的行
+```
+
+**渲染：`s2_render.py`（2026-08-03 上線，WP1，整併主力）**
+
+```
+python scripts/s2_render.py --file "G:\...\0802-s2-state.json" --out "G:\...\0802晚班交接.txt" --window "2026-08-02 14:00 - 2026-08-03 09:00"
+python scripts/s2_render.py --file "G:\...\0802-s2-state.json" --base-date 0802   # 不給 --out ＝ 印出預覽，不寫檔
 ```
 
 - `check` 涵蓋 V1「格式異常」表全部可 regex 的項目：BITE 矛盾、缺 `▎畫面：`、缺講者、備註重標、GMT 洩漏、`FILE`／`檔案`、操作備註全形括號、重複代碼、第二括號非 `(BITE)` 等。
 - **LLM 只處理命中清單**（回站核對、修 raw_entry＋txt），不再整份逐行讀。`明顯可疑`（數字矛盾等語意類）維持 LLM 抽查，但只在機器掃結果之外補充，不重複掃格式。
-- `stats` 產出的**檔頭各行**（基本三行＋標記圖例＋沿用的重大提醒行）直接貼進檔頭（見 V1 `13`「晚班交接檔頭」）。
-- ⚠️ **重大提醒行（`🔴 重大：…`）**：本輪掃到重大素材時，用 `stats --alert "{標記}{代碼} {一句話}"` 把它產進檔頭最後一行（最多 3 則），判準與撤除時機見 V1 `13`「重大提醒行」。**不給 `--alert` 時 `stats` 會自動沿用檔內既有的重大行**，所以例行重算檔頭不會把它洗掉；要撤才傳 `--clear-alerts`。`check` 會抓「代碼正文找不到／沒寫代碼／超過 3 行／不在檔頭」。
-- `diff3` 只把「與機器版快照不同的行」列出來，LLM 只裁決這些行保不保留。
+- `stats` 產出的**檔頭各行**（基本三行＋標記圖例＋沿用的重大提醒行）直接貼進檔頭（見 V1 `13`「晚班交接檔頭」）。走 render 時**不必再跑 `stats`**——檔頭由 render 自己生（同一個函式 `header_from_lines`）。
+- **render 產出順序**：檔頭（🔴 重大行取自狀態檔 `alerts`）→ 樣板 16 格大分類（空格保留）→ `【中主題】` → 小分題（裸行＋`+` 分隔）→ 素材行。
+- **時段標記由 render 依 `first_seen_checkpoint` 自動補**：23:00 前＝`△`、23:00–07:00＝`▲`、07:00–09:00＝`●`（23:00 那輪算 `▲`）。**補掃輪**（例如 09:10 撈回稍早漏掉的素材）checkpoint 判不準，用 `s2_state.py set-mark` 逐則寫死。
+- `raw_entry` **零加工輸出**；側錄照 `14-S2b` 兩行式原樣帶出（不壓縮、不加 `▎`、TC 冒號格式保留）。
+- 寫檔走 tmp+rename（原子），寫完在狀態檔記 `last_render_ts`（`--no-touch-state` 可略）。分類不在 16 格樣板內的會附在檔尾並在 stderr 警告——看到就去修 `set-category`。
+- ⚠️ **重大提醒行（`🔴 重大：…`）**：本輪掃到重大素材時，用 **`s2_state.py set-alert`** 存進狀態檔（render 每輪從那裡取；`stats --alert` 只剩不走 render 的舊路徑用）（最多 3 則），判準與撤除時機見 V1 `13`「重大提醒行」。**不給 `--alert` 時 `stats` 會自動沿用檔內既有的重大行**，所以例行重算檔頭不會把它洗掉；要撤才傳 `--clear-alerts`。`check` 會抓「代碼正文找不到／沒寫代碼／超過 3 行／不在檔頭」。
 - **腳本失敗行為**：連續失敗 2 次 → 品質掃記為「未執行（腳本錯誤）」寫進回報，**禁止 agent 自行逐行手掃替代**。
 
 ## 4. SNTV 列表級收錄（機械白名單）
