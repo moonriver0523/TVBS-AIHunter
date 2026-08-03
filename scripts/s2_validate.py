@@ -34,13 +34,27 @@ LINE_RE = re.compile(rf"^{CODE}(?:\s*/\s*{CODE})*\s")
 # 一律先剝掉再做其餘比對，否則整行會兩邊都漏辨識（同 SIDE_RE 踩過的坑）。
 MARKS = {"△": "23:00 前既有", "▲": "23:00–07:00 新增", "●": "07:00–09:00 新增"}
 OVERNIGHT_MARKS = ("▲", "●")  # 計入檔頭「隔夜續掃」的，不含 △
+# 素材行的重大標記（2026-08-03 使用者訂案）：時段標記之後、代碼之前插一個 🔴，
+# 讓編輯在正文區也能一眼找到檔頭 `🔴 重大：` 點名的那幾則。行首對齊不變。
+#   `▲ 🔴 IN-23SU (…) ▎…`
+# ⚠️ 一併剝掉才不會讓整行漏辨識——不剝的話 LINE_RE 不 match，該行會從品質掃與
+# 檔頭統計裡整個消失（△ 上線時已經踩過一次，數量會少算）。
+RED_RE = re.compile(r"^(🔴)\s*")
 MARK_RE = re.compile(r"^([△▲●])\s*")
 
 
 def strip_mark(l):
-    """回傳 (標記或空字串, 去掉標記後的行)。"""
+    """回傳 (時段標記或空字串, 去掉時段標記與 🔴 之後的行)。"""
     m = MARK_RE.match(l)
-    return (m.group(1), l[m.end():]) if m else ("", l)
+    mark, rest = (m.group(1), l[m.end():]) if m else ("", l)
+    r = RED_RE.match(rest)
+    return (mark, rest[r.end():] if r else rest)
+
+
+def is_red(l):
+    """素材行是否帶重大標記（時段標記後、代碼前的 🔴）。"""
+    m = MARK_RE.match(l)
+    return bool(RED_RE.match(l[m.end():] if m else l))
 
 
 # 檔頭重大提醒行（2026-08-03 使用者訂案）：`🔴 重大：{標記}{代碼} {一句話}`
@@ -228,6 +242,23 @@ def check(path):
         for c in codes:
             if c not in seen_codes:
                 hit(n, f"重大提醒行的代碼 {c} 在正文找不到對應素材行（漏寫或已被刪）")
+
+    # 檔頭 🔴 與正文 🔴 要雙向一致（2026-08-03 訂案）：檔頭點名的，正文那行也要標 🔴，
+    # 反之正文標了 🔴 卻沒進檔頭也是漏。兩邊對不上時編輯就找不到那則素材。
+    alert_codes = {c for _, l in alerts for c in re.findall(CODE, l)}
+    red_body = {}
+    for n, raw in enumerate(lines, 1):
+        _, l = strip_mark(raw)
+        if LINE_RE.match(l) and not SIDE_RE.match(l) and is_red(raw):
+            for c in re.findall(CODE, l.split("▎")[0]):
+                red_body.setdefault(c, n)
+    for c in alert_codes:
+        if c in seen_codes and c not in red_body:
+            hit(seen_codes[c][0],
+                f"檔頭標了 🔴 重大：{c}，但正文該行沒有 🔴（應寫成「{{時段標記}} 🔴 {c} …」）")
+    for c, n in red_body.items():
+        if c not in alert_codes:
+            hit(n, f"正文 {c} 標了 🔴 但檔頭沒有對應的「🔴 重大：」行（要嘛補檔頭、要嘛拿掉）")
 
     # 隔夜標記（▲／●）：只要用了就必須在檔頭寫圖例，否則編輯看不懂那些符號
     used_marks = {m for _, m, _ in material_lines(lines, with_mark=True) if m}
