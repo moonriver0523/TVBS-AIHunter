@@ -293,7 +293,7 @@ def load_validate():
     return s2_validate
 
 
-def parse_side_txt(text, source=None, homes=None):
+def parse_side_txt(text, source=None, homes=None, normalize=False):
     """把側錄 TXT 解析成狀態檔項目。
 
     吃兩種寫法（都用同一套三層結構辨識）：
@@ -312,6 +312,8 @@ def parse_side_txt(text, source=None, homes=None):
     """
     sv = load_validate()
     lines = text.replace("\r\n", "\n").split("\n")
+    if normalize:  # 先把隨手存的格式整成定版兩行式（純位置搬移，見 normalize_side）
+        lines = normalize_side(lines, source, sv)
     if source:   # 裸 TC 行補來源前綴：`160106（主播）` → `CNN 160106（主播）`
         bare = re.compile(rf"^({sv._TC})(?=[\s（(]|$)")
         lines = [bare.sub(source + r" \1", l.strip(), count=1)
@@ -377,6 +379,55 @@ def parse_side_txt(text, source=None, homes=None):
     return out
 
 
+def normalize_side(lines, source, sv):
+    """把上傳者隨手存的側錄檔整成 14-S2b 定版兩行式（**純位置搬移，不改任何一個字**）。
+
+    上傳側錄的人不一定懂格式（2026-08-03 使用者指出），所以能用機械規則解掉的
+    一律在這裡解掉，不要丟給模型逐字重打——側錄有「逐字一字不能改」的鐵律，
+    模型重打就有潤稿風險。認不得的形狀一律原樣留著，交給 add-side 回報。
+
+    做四件事：
+      1. TC 正規化：`16:01:06-16:01:51` 範圍 → 取起點；冒號去掉 → 6 碼 `160106`。
+      2. TC 行與內容黏在同一行 → 拆成兩行（TC 行／內容行）。
+      3. 內容行開頭的 `（角色…）` → 搬到 TC 行尾（TC 行本身沒有 SUPER 時才搬）。
+      4. 純分隔線（`---`／`___`／`***`）丟掉；其餘雜訊行原樣保留。
+    """
+    tc_head = re.compile(rf"^(?:(CNN|NHK)\s+)?({sv._TC})\s*(.*)$")
+    role = re.compile(r"^\s*([（(][^）)]{1,30}[）)])\s*")
+    out = []
+    for raw in lines:
+        l = raw.rstrip()
+        t = l.strip()
+        if re.fullmatch(r"[-_*=]{3,}", t):
+            continue                                   # 純分隔線
+        # `=== 0803 CNN側錄 ===` 這種標題行是雜訊，但 `======大分類======`（6個等號）
+        # 是候選 TXT 的歸位標記，不能丟——只砍等號少於 6 個的
+        if re.fullmatch(r"={1,5}[^=]+={1,5}", t):
+            continue
+        m = tc_head.match(l.strip())
+        if not m:
+            # 內容行：開頭若有角色標示，且上一行是剛產出的 TC 行且沒 SUPER，就搬上去
+            r = role.match(l)
+            if r and out and tc_head.match(out[-1]) and not role.search(out[-1]):
+                out[-1] = out[-1] + " " + r.group(1)
+                l = l[r.end():]
+                if not l.strip():
+                    continue
+            out.append(l)
+            continue
+        src, tc, rest = m.groups()
+        tc6 = re.sub(r"\D", "", re.split(r"\s*[-–~]\s*", tc)[0])[:6]   # 範圍取起點、去冒號
+        head = f"{src or source or ''} {tc6}".strip()
+        r = role.match(rest)
+        if r:                                          # `160106（主播）內容…`
+            head += " " + r.group(1)
+            rest = rest[r.end():]
+        out.append(head)
+        if rest.strip():                               # TC 行後面黏著內容 → 拆行
+            out.append(rest.strip())
+    return out
+
+
 def cmd_add_side(state, args):
     """把側錄 TXT 收進狀態檔（WP1 前提二：不入狀態檔，隔夜 render 會把它刪掉）。"""
     try:
@@ -397,7 +448,7 @@ def cmd_add_side(state, args):
         for tc in tcs.split(","):
             if tc.strip():
                 homes[re.sub(r"\D", "", tc)] = (parts[0], parts[1], parts[2])
-    parsed = parse_side_txt(text, args.source, homes)
+    parsed = parse_side_txt(text, args.source, homes, args.normalize)
     if not parsed:
         print("ERROR: 沒解析到任何側錄段落（TC 行格式須為 `CNN 160106（主播）`）")
         sys.exit(2)
@@ -419,6 +470,12 @@ def cmd_add_side(state, args):
         added.append(i)
     if args.dry_run:
         print(f"DRY-RUN 解析 {len(parsed)} 段：新增/覆寫 {len(added)}、已在庫略過 {len(updated)}")
+        # 預覽前兩段：格式錯了要當場看得出來，不要等進了狀態檔才發現
+        for i, src, cat, entry in parsed[:2]:
+            print(f"  ── {i}（{src}）→ {cat.get('大分類') or '(缺大分類)'}／"
+                  f"{cat.get('中主題') or '(缺中主題)'}／{cat.get('小分題') or '-'}")
+            for ln in entry.split("\n")[:2]:
+                print(f"     {ln[:60]}")
     else:
         if added:
             save(state, args.file)
@@ -545,6 +602,9 @@ def main():
     sd = sub.add_parser("add-side", help="側錄 TXT 入狀態檔（SIDE_CNN／SIDE_NHK）")
     sd.add_argument("--txt", required=True, help="側錄候選 TXT（或直接餵晚班交接 txt）")
     sd.add_argument("--checkpoint", required=True)
+    sd.add_argument("--normalize", action="store_true",
+                    help="先做機械正規化（範圍TC取起點去冒號成6碼、角色搬到TC行、拆黏行）；"
+                         "上傳者不懂格式時用，純位置搬移不改字")
     sd.add_argument("--source", choices=["CNN", "NHK"],
                     help="TC 行沒有來源前綴時自動補（歐印萬原始檔多半是裸 TC）")
     sd.add_argument("--homes", default="",

@@ -147,6 +147,8 @@ python scripts/s2_state.py set-category --pairs "RT2333=社會/休達移民/岸�
 python scripts/s2_state.py add-side --txt "…/0803 CNN側錄.txt" --source CNN --checkpoint 22:00 \
        --homes "天氣/華州野火/州長宣布緊急=160106,160151"
                                                            # 側錄入庫（SIDE_CNN／SIDE_NHK），見 14-S2b「暫定辦法」
+                                                           # --normalize：機械正規化（上傳者不懂格式時一律加）
+                                                           #   範圍TC取起點去冒號成6碼／拆黏行／角色搬到TC行／清雜訊，不改字
                                                            # --source：裸 TC 檔補來源前綴（不補會解析出 0 段）
                                                            # --homes：用 TC 指定歸位，不必重打逐字內容
                                                            # --dry-run 先驗解析段數
