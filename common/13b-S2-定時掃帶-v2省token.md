@@ -85,6 +85,8 @@ python scripts/s2_state.py add-batch --entries batch.json  # ⭐ 批次新增（
 python scripts/s2_state.py add --id RT2333 --source RT --checkpoint 16:00 --status pending --entry "RT2333 ▎一句話摘要▎畫面：…"
 python scripts/s2_state.py update-entry --id RT2333 --status has_script --entry "改寫後內容"
                                                            # pending→has_script 覆寫 raw_entry
+                                                           # ⚠️ 標 pending 前先讀 13「有稿判準」：沒標記但有完整敘事＝有稿；
+                                                           #    ISO長帶/裸SOT/音軌等天生無旁白稿的＝has_script＋備註形態，不是 pending
                                                            # add／update-entry 短內容用 --entry 行內；長內容（如CNN連線全文）才用 --entry-file
 python scripts/s2_state.py pending                         # 稿未到清單（最終整併清查用）
 python scripts/s2_state.py to-compile                      # 增量整併輸入：新增＋變動，含 raw_entry 全文
