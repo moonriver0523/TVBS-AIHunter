@@ -361,7 +361,14 @@ python scripts/s2_state.py set-mark --ids RT2754,RT2753 --mark ▲
 python scripts/s2_state.py get --id RT2333                 # 單則全文
 python scripts/s2_state.py needs-review add --id RT2333 --note "疑似UGC，待人工"
 python scripts/s2_state.py needs-review list
+python scripts/s2_state.py needs-review done --ids RT2333    # 處理完就結案，別讓清單只進不出
 ```
+
+- 📌 **`needs-review` 是「待辦」不是「日誌」，處理完一定要 `done`（2026-08-04 補齊）**：
+  - **`add` 對不存在的 id** 會建一個 `script_status="note"` 的備註殼（例：`--id RT-r9-空白` 記某輪掃到 0 筆的原因）。**殼不算素材**——不計入 `pending`、不進 render、不出現在晚班交接，只出現在 `resume` 的「待人工」與 `needs-review list`。⚠️ 0803 實錯：這種殼原本建成 `pending`，害 60 則 pending 裡有 7 則是假的。
+  - **`done --ids` 是唯一的結案出口**，兩種項目處理方式不同（腳本自動分辨，不用你判斷）：**備註殼**→整筆刪掉；**真素材**→只脫掉 `needs_review` 旗標，素材與內文原封不動留在庫存。
+  - **全有全無**：一批裡有任何一個 id 不存在、或本來就沒有標記，整批都不處理並報錯——避免「以為清掉了、其實只清一半」。
+  - 不結案的話，`resume` 每輪都會重印同一批早就處理完的項目，清單失去警示作用，真正該注意的新項目會被淹沒。
 
 - 批次擷取流程 ＝ 收集本輪列表 ID → `diff` → 只對「新的」取文稿（**§1a API 直查，不開詳情頁**；失敗才退 §1b） → **邊看邊把每則累積進一份 `batch.json`，全部看完後一次 `add-batch`**。不要一則一次 `add`（2026-08-02 起：呼叫次數是 V2 變慢主因，一輪 25 則從約 52 次呼叫降到約 4 次）。**全程不載入 70 則 raw_entry。**
 - **批次規則**：`batch.json` 是 JSON 陣列，每筆 `{"id","source","checkpoint","status","entry"}`（`entry` 直接放字串，含換行）。撞已存在 id 或格式錯的單筆會**自動跳過並回報原因、不中斷**——回報裡有跳過清單時，逐筆判斷：已存在→改用 `update-entry`，格式錯→修正後單筆補。`--pairs` 的分隔符**優先用分號 `;`**（中主題含逗號時逗號會切錯）。

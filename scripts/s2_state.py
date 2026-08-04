@@ -605,6 +605,9 @@ def cmd_remove(state, args):
 
 def cmd_needs_review(state, args):
     if args.action == "add":
+        if not args.id:
+            print("ERROR: add 需要 --id")
+            sys.exit(2)
         i = norm_id(args.id)
         # 對不存在的 id（純備註，如「RT-r9-空白」）建 status="note" 的殼，
         # 不是 pending——0803 實錯：7 筆備註殼灌水 pending 計數（60 裡有 7 假的），
@@ -614,6 +617,40 @@ def cmd_needs_review(state, args):
         state["items"][i]["needs_review"] = args.note or "待人工"
         save(state, args.file)
         print(f"OK {i} 已記待人工：{args.note}")
+    elif args.action == "done":
+        # 結案。缺這個動作時「待人工」只進不出，resume 每輪重印同一批已處理完的項目，
+        # 久了整個清單失去警示作用（0803 立案時的另一半問題）。
+        # 兩種項目結案方式不同，不能一律 del：
+        #   純備註殼（status=note、無內文）→ 整筆刪掉，它本來就不是素材
+        #   真素材（有 raw_entry）→ 只拿掉 needs_review 旗標，素材本身留著
+        if not args.ids:
+            print("ERROR: done 需要 --ids（逗號分隔）")
+            sys.exit(2)
+        ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+        missing = [i for i in ids if i not in state["items"]]
+        if missing:
+            print(f"ERROR: 不存在的 id：{','.join(missing)}（全部未處理，請修正後重跑）")
+            sys.exit(2)
+        idle = [i for i in ids if not state["items"][i].get("needs_review")]
+        if idle:
+            print(f"ERROR: 這些本來就沒有待人工標記：{','.join(idle)}（全部未處理）")
+            sys.exit(2)
+        dropped, cleared = [], []
+        for i in ids:
+            v = state["items"][i]
+            if v.get("script_status") == "note" and not (v.get("raw_entry") or "").strip():
+                del state["items"][i]
+                dropped.append(i)
+            else:
+                v.pop("needs_review", None)
+                cleared.append(i)
+        save(state, args.file)
+        msg = []
+        if dropped:
+            msg.append(f"刪除備註殼 {len(dropped)} 筆：{','.join(dropped)}")
+        if cleared:
+            msg.append(f"素材解除標記 {len(cleared)} 筆（素材保留）：{','.join(cleared)}")
+        print("OK " + "；".join(msg))
     else:
         rows = [(i, v["needs_review"]) for i, v in sorted(state["items"].items()) if v.get("needs_review")]
         print("\n".join(f"{i}: {n}" for i, n in rows) if rows else "(無待人工項目)")
@@ -684,9 +721,10 @@ def main():
     rm = sub.add_parser("remove", help="整則刪除（誤收、排除白名單命中等），不是留待人工")
     rm.add_argument("--ids", required=True)
     r = sub.add_parser("needs-review")
-    r.add_argument("action", choices=["add", "list"])
-    r.add_argument("--id")
-    r.add_argument("--note")
+    r.add_argument("action", choices=["add", "list", "done"])
+    r.add_argument("--id", help="add 用：要標記的素材代碼或備註代號")
+    r.add_argument("--note", help="add 用：備註內容")
+    r.add_argument("--ids", help="done 用：結案的 id，逗號分隔")
 
     args = p.parse_args()
     state = load(args.file)

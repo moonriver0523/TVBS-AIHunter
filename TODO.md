@@ -322,7 +322,11 @@ WP1 已經把 txt 變成**從狀態檔全量渲染的單向投影**（狀態檔�
 
 ## `s2_state.py` 待修小問題（2026-08-03 立案）
 
-- [ ] **`needs-review add` 會建出空殼素材、灌水 pending**：`cmd_needs_review` 對不存在的 id 用 `setdefault` 建一筆 `script_status: "pending"`、`raw_entry` 空白的項目。所以每記一筆待人工備註，pending 數字就虛增 1——0803 早上 pending 60 則裡有 **7 則是這種空殼**（`NS r8 pending 群`／`PENDING清查-r10未完成`／`SCRIPT-BUG-ENCODING`／三則 `RT-*-空白` 等）。修法待定：備註型項目應與素材分開（例如另存 `notes` 陣列，或給空殼一個不計入 pending 的 status），並清掉既有那幾則。
+- [x] **~~`needs-review add` 會建出空殼素材、灌水 pending~~ ✅ 兩半都已修完（前半 2026-08-03 `ebc324c`，後半 2026-08-04）**。原症狀：`cmd_needs_review` 對不存在的 id 用 `setdefault` 建 `script_status: "pending"`、`raw_entry` 空白的項目，每記一筆備註 pending 就虛增 1——0803 早上 60 則 pending 裡有 **7 則是這種空殼**（`NS r8 pending 群`／`PENDING清查-r10未完成`／`SCRIPT-BUG-ENCODING`／三則 `RT-*-空白` 等）。
+  - **前半（灌水）已修**：備註殼改建 `script_status="note"`。三處都認得：`changed_since_render()` 不算它待整併、`cmd_resume` 的 pending 計數排除它、`s2_render.py group_items()` 跳過它不出 txt。
+  - **後半（只進不出）0804 補齊**：原本只有 `add`／`list`，**沒有任何結案方式**，標記一旦記下就永久留在 `resume` 的「待人工」清單，久了真正該注意的新項目會被淹沒。新增 **`needs-review done --ids`**：備註殼→整筆刪掉（本來就不是素材）；真素材→只脫掉 `needs_review` 旗標、素材與內文原封不動。批次採**全有全無**（含不存在 id 或本來就沒標記者，整批不處理並報錯），避免清一半。
+  - **測試**：新增 [`scripts/test_s2_needs_review.py`](scripts/test_s2_needs_review.py)，14 項全過（涵蓋兩半症狀、真素材保留、四種防呆、全有全無）。另用 0803 真實狀態檔（435 則）重跑 render，**產出與現行定版逐字元一致**，確認無下游影響。
+  - **既有那幾則不必清**：0803 狀態檔已完全乾淨（435 則全 `has_script`、零 pending、零空殼）；那 9 筆殼留在已封存的 `Archive/0802-s2-state.json`，早已是 `note`、不影響任何計數，且內容是有價值的查核記錄（RT profile 鎖死的三筆訂正、兩筆腳本 bug 回報）。**已確認那兩筆 bug 都修掉了**——🔴 誤判已改成只取行首代碼（同 `ebc324c`）、`entry-file` 讀取本來就明確指定 `utf-8-sig`。刪掉只會失去記錄、換不到任何好處，故保留。
 - [x] **~~to-compile／resume 字串比較漏抓待整併~~**（2026-08-03 已修，commit `8f850c4`）：checkpoint 標籤字串比較 `"r10" < "r8"`，第 10 輪後的更新對上第 1–9 輪 compiled 被判成沒變動而靜默漏掉（實錯 50 則沒進 txt）。已改用腳本自寫的微秒時間戳比較。**待查**：0802 那晚是否也跑到兩位數輪次、有沒有更早的漏網素材。
 
 ## 三站省 token 持續優化研究（2026-08-03 立案，方向盤）
