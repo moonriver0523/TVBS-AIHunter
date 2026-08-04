@@ -73,6 +73,21 @@ def norm_id(s):
     return s.strip().replace("RTV", "RT", 1) if s.strip().startswith("RTV") else s.strip()
 
 
+def scratch_dir(mmdd, base_dir=None):
+    """回傳（並確保建立）某晚班次的暫存檔資料夾：{base_dir}/{YYYYMMDD}/。
+
+    2026-08-03 深夜訂案：每輪批次擷取的暫存檔（_ap_*／_rt_*／{MMDD}-batch-*
+    這類中間檔）一律進這個資料夾，不要散在 `自動掃帶系統/` 這層——
+    正式庫存檔（{MMDD}-s2-state.json／{MMDD}晚班交接.txt）不受影響，維持原位。
+    日期用「晚班起始日」的 MMDD，不是實際掃帶當下的日曆日，跟「檔名不換日」同邏輯：
+    8/3 晚班開的班次，8/4 凌晨到早上的暫存檔一樣進 `20260803/`。
+    """
+    base = base_dir or os.path.dirname(DEFAULT_FILE)
+    d = os.path.join(base, f"{datetime.now().year}{mmdd}")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def now_ts():
     # 微秒精度：同一秒內「整併完又改一次」的更新必須抓得到，秒精度會相等而漏掉
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
@@ -220,6 +235,11 @@ def cmd_update_entry(state, args):
     it["entry_updated_ts"] = now_ts()
     save(state, args.file)
     print(f"OK 已覆寫 {i}（{it['script_status']}）")
+
+
+def cmd_scratch_dir(state, args):
+    """印出（並建立）今晚班次的暫存檔資料夾路徑，供 agent 開工時取用。"""
+    print(scratch_dir(args.mmdd))
 
 
 def cmd_pending(state, args):
@@ -591,6 +611,8 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("resume")
+    sc = sub.add_parser("scratch-dir", help="印出並建立今晚班次的暫存檔資料夾（{YYYYMMDD}/）")
+    sc.add_argument("--mmdd", required=True, help="晚班起始日 MMDD（不是實際掃帶當下的日曆日）")
     d = sub.add_parser("diff")
     d.add_argument("--checkpoint", required=True)
     d.add_argument("--ids", required=True)
@@ -660,6 +682,7 @@ def main():
         "set-mark": cmd_set_mark,
         "set-category": cmd_set_category, "get": cmd_get, "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,
+        "scratch-dir": cmd_scratch_dir,
     }[args.cmd](state, args)
 
 
