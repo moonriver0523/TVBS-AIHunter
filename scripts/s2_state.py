@@ -14,6 +14,9 @@ import re
 import sys
 from datetime import datetime
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import s2_parse as sp  # noqa: E402  raw_entry → 結構化欄位（寫入時自動推導）
+
 # ⚠️ 用 reconfigure 不用 TextIOWrapper：包第二層時（例如 s2_state 匯入 s2_validate）
 # 舊寫法會讓其中一個 wrapper 被回收時關掉底層 buffer，整支腳本以 "I/O operation on
 # closed file" 掛掉（2026-08-03 WP1 實錯）。
@@ -157,7 +160,7 @@ def read_entry(args):
 
 
 def new_item(source, checkpoint, status, entry):
-    return {
+    it = {
         "source": source,
         "first_seen_checkpoint": checkpoint,
         "last_checked_checkpoint": checkpoint,
@@ -168,6 +171,10 @@ def new_item(source, checkpoint, status, entry):
         "compiled": None,
         "category": None,
     }
+    # 結構化欄位由腳本推導（2026-08-04 新增，見 s2_parse）：agent 完全無感、
+    # 不必多寫一份。解析失敗只標 parse_ok:false，**不擋入庫**。
+    sp.derive(it)
+    return it
 
 
 def cmd_add(state, args):
@@ -247,6 +254,7 @@ def cmd_update_entry(state, args):
         it["script_status"] = args.status
     it["entry_updated"] = args.checkpoint or it.get("last_checked_checkpoint", "")
     it["entry_updated_ts"] = now_ts()
+    sp.derive(it)                        # 內容變了，結構化欄位跟著重推（見 s2_parse）
     save(state, args.file)
     print(f"OK 已覆寫 {i}（{it['script_status']}）")
 

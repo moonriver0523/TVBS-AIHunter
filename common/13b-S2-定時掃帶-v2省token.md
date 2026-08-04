@@ -598,3 +598,28 @@ youtube.com/watch?v=AA6tRh8n-_w
 - [ ] 實測一晚總 token，對照 V1 估算 30.8 萬
 - [ ] **時間／呼叫次數**（2026-08-02 補，batch 熱修後量）：批次擷取段與整併段各自耗時、工具呼叫總數。原差異總表只估 token 沒估呼叫次數，這正是 V2 變慢沒被預見的原因；此數據也是 txt 渲染案（`common/plans/2026-08-02-S2提速計劃.md` WP1）的 go/no-go 依據
   - 第一筆基準（2026-08-03 00:00 實驗輪，§1b＋batch 全開）：**7 則全流程（含整併）12 分 18 秒、52 次呼叫**，守門零觸發，add-batch／--pairs 零跳過，check 0 命中。狀態檔操作僅佔個位數次呼叫，大宗已移到瀏覽器擷取——WP1 評估時要看的是整併段在這 52 次／12 分裡的佔比
+
+## 2c. 結構化欄位：`fields`／`parse_ok`（2026-08-04 上線，dashboard 前置）
+
+`raw_entry` 存的是「要印進 txt 的那一行原文」，render 照抄零加工——好處是所見即所得，代價是**內容不可查詢**。要做外電 dashboard 就得先有欄位，所以每一則另外存一份結構化版本。
+
+```jsonc
+"raw_entry": "△ AP4676497 (斯波坎縱火逮嫌 限斯波坎市場) (BITE) ▎警長宣布…▎畫面：…▎BITE：…▎01:34",
+"parse_ok": true,
+"fields": {
+  "codes": ["AP4676497"],                    // A/B 並列會有多個
+  "notes": ["斯波坎縱火逮嫌 限斯波坎市場", "BITE"],  // 每個括號一筆
+  "summary": "…", "footage": "…",
+  "bite": ["…"],                             // 多講者收成多筆；無BITE 時為空陣列
+  "no_bite": false,
+  "duration": "01:34"                        // 沒寫時長為 null
+}
+```
+
+**agent 完全不用管這件事**——`add`／`add-batch`／`update-entry` 寫入時由 `s2_parse.derive()` 自動推導，不必多寫一份、不多花 token。
+
+- ⛔ **`fields` 不取代 `raw_entry`**：render 仍然吃 `raw_entry`。這條輸出路徑每天在跑，不為了加欄位重寫它；欄位壞掉最多是 dashboard 少資料，不會害交接檔出不來。
+- ⛔ **解析失敗不擋入庫**：只標 `parse_ok: false` ＋ `parse_note`（失敗原因），素材照收。擋下來會害掃帶當場卡住，而那些多半是好素材。
+- ⛔ **三類不解析、也不寫任何欄位**（`skip_reason()`）：側錄逐字（`SIDE_*`）、YouTube 兩行式（`source: "YT"`）、備註殼（`script_status: "note"`）。**它們本來就不是三段式**，硬解只會製造假失敗，把真正該修的解析 bug 淹掉。
+- **歷史已回填**：`python scripts/s2_backfill_fields.py --apply`（預設 dry-run；`--show-fail` 列出失敗原文）。2026-08-04 實測 0731–0804 共 **909 則、解析成功率 100%**，回填前後 render 產物逐字元一致。⚠️ 舊格式（0731／0801）摘要前面**沒有** `▎`，解析器兩種都吃。
+- **`parse_ok: false` 冒出來時**：先看 `parse_note`。若是格式真的寫壞 → 修 `raw_entry`；若是解析器沒涵蓋的合法變體 → 改 `s2_parse.py` 並補測試（`scripts/test_s2_parse.py`），不要放著累積。
