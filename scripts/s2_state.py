@@ -212,6 +212,14 @@ def cmd_add_batch(state, args):
         if i in state["items"]:
             skipped.append(f"{i}: 已存在（要更新請用 update-entry）")
             continue
+        # 🎯 BITE 機械兜底（2026-08-04，實錯修正 RT2960/RT2947）：batch 每筆可帶
+        # `sb_count`＝抽取白名單數出的 SOUNDBITE 段數（RT story／AP script）。
+        # sb_count > 0 卻寫「無BITE」＝LLM 漏看引言段，機器直接擋下要求改寫，
+        # 不入庫。沒帶 sb_count 的（NS 走 footageType、SNTV 列表級等）不檢查。
+        sb = e.get("sb_count")
+        if isinstance(sb, int) and sb > 0 and "無BITE" in e["entry"]:
+            skipped.append(f"{i}: 稿內有 {sb} 個 SOUNDBITE 卻寫「無BITE」——回頭把引言寫進 ▎BITE： 段再重送")
+            continue
         state["items"][i] = new_item(e["source"], e["checkpoint"], e["status"], e["entry"].strip())
         added.append(i)
     if added:
@@ -228,7 +236,13 @@ def cmd_update_entry(state, args):
         print(f"ERROR: {i} 不存在，請先 add")
         sys.exit(2)
     it = state["items"][i]
-    it["raw_entry"] = read_entry(args)
+    entry = read_entry(args)
+    # 🎯 BITE 機械兜底（同 add-batch）：--sb-count 有給且 >0 卻寫「無BITE」直接擋
+    if args.sb_count and args.sb_count > 0 and "無BITE" in entry:
+        print(f"ERROR: {i} 稿內有 {args.sb_count} 個 SOUNDBITE 卻寫「無BITE」——"
+              f"把引言寫進 ▎BITE： 段再重送")
+        sys.exit(2)
+    it["raw_entry"] = entry
     if args.status:
         it["script_status"] = args.status
     it["entry_updated"] = args.checkpoint or it.get("last_checked_checkpoint", "")
@@ -632,6 +646,8 @@ def main():
     u.add_argument("--checkpoint")
     u.add_argument("--entry", help="行內短內容（與 --entry-file 擇一）")
     u.add_argument("--entry-file", help="長內容檔案路徑（與 --entry 擇一）")
+    u.add_argument("--sb-count", type=int, default=0,
+                   help="抽取白名單數出的 SOUNDBITE 段數；>0 且 entry 寫「無BITE」會擋下")
     sub.add_parser("pending")
     # ⚠️ WP1（2026-08-03）廢除 to-compile／mark-compiled／compiled 欄位：
     # 它們存在的唯一理由是「讓 agent 不用每輪重寫整份 txt」，改用 s2_render.py

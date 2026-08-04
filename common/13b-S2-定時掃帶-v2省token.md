@@ -125,20 +125,25 @@ const clean = (h) => decodeEnt(
 
   ```js
   const pick = (t,k) => { const m = t.match(new RegExp('"~:'+k+'","((?:[^"\\\\]|\\\\.)*)"')); return m?m[1]:''; };
-  const slimRT = (t, guid) => ({
-    edit:  (guid.match(/RW(\d{4})/)||[])[1] || '',   // Edit No 由 guid 推，不從內文抓
-    head:  unesc(pick(t,'headline')),
-    slug:  unesc(pick(t,'slug')),
-    dur:   pick(t,'duration'),        // ⚠️ 字串 "00:02:34" 不是數字，別用 \d+ 抓
-    src:   unesc(pick(t,'source')),   // CCTV／SKAI TV／第三方判定用
-    restr: unesc(pick(t,'restrictions')),  // ⚠️ 純字串不是陣列
-    early: t.includes('early-access-script'),  // true＝稿未到（pending 判定）
-    story: clean(pick(t,'story'))  // ⚠️ 稿件全文在 `~:story`，不是 body／script
-  });
+  const slimRT = (t, guid) => {
+    const story = clean(pick(t,'story'));
+    return {
+      edit:  (guid.match(/RW(\d{4})/)||[])[1] || '',   // Edit No 由 guid 推，不從內文抓
+      head:  unesc(pick(t,'headline')),
+      slug:  unesc(pick(t,'slug')),
+      dur:   pick(t,'duration'),        // ⚠️ 字串 "00:02:34" 不是數字，別用 \d+ 抓
+      src:   unesc(pick(t,'source')),   // CCTV／SKAI TV／第三方判定用
+      restr: unesc(pick(t,'restrictions')),  // ⚠️ 純字串不是陣列
+      early: t.includes('early-access-script'),  // true＝稿未到（pending 判定）
+      story,  // ⚠️ 稿件全文在 `~:story`，不是 body／script
+      sb_count: (story.match(/SOUNDBITE/gi) || []).length  // 🎯 BITE 機械計數（見下方「BITE 判定」）
+    };
+  };
   ```
 
 - ⚠️ **欄位名容易猜錯的三個**：稿全文是 **`~:story`**（不是 `body`／`script`）；`duration` 是**字串**；`restrictions` 是**純字串**（`"Broadcast: None. Digital: None.."`／`"Broadcast: No Use Greece…"`），不是陣列。
 - `early-access-script` 出現＝該則只有早期版、**稿未到**，對應 `script_status: pending`（判準仍以 `13`「有稿判準」為準）。
+- 🎯 **BITE 判定＝看 `sb_count`，不是 agent 自己讀稿判斷（2026-08-04 訂案，實錯修正）**：`sb_count > 0` 的素材**禁止標「無BITE」**——機器已經數出稿裡有 N 個 `SOUNDBITE)` 段，agent 的工作只剩「把那些段落翻成 `▎BITE：{講者}「{內容}」`」，不再自行判斷有無。0803–0804 實錯：`RT2960`（4 個 SOUNDBITE）、`RT2947`（4 個）都被標成「無BITE」——稿件長（4,900+ 字元）、SOUNDBITE 夾在中間，LLM 摘要時漏看，結尾順手補了「無BITE。」。抽取與資料都沒問題（驗證過 `pick()` 完整保留全部 SOUNDBITE、版次假說也排除），純粹是 LLM 注意力遺漏，所以判定必須機械化。
 
 ### 2) AP
 
@@ -164,16 +169,26 @@ const clean = (h) => decodeEnt(
     line: s.dateline, ts: s.firstcreated, comp: s.compositiontype
   });
   // 詳情：寫三段式用
-  const slimDetail = (s) => ({
-    id: 'AP' + s.editorialid, title: s.title, head: s.headline,
-    cap:    clean(s.caption && s.caption.nitf),
-    script: clean(s.script && s.script.nitf),  // ⚠️ 稿全文在 `script.nitf`（HTML）
-    role: s.editorialrole, src: (s.sources||[]).map(x=>x.name).join('/'),
-    rights: s.rightsline, line: s.dateline || s.locationline,
-    dur:  (s.shots && s.shots[0] && s.shots[0].end) || '',  // ⚠️ 沒有 duration 欄位，時長由 shots[0].end 推
-    comp: s.compositiontype
-  });
+  const slimDetail = (s) => {
+    const script = clean(s.script && s.script.nitf);  // ⚠️ 稿全文在 `script.nitf`（HTML）
+    return {
+      id: 'AP' + s.editorialid, title: s.title, head: s.headline,
+      cap:    clean(s.caption && s.caption.nitf),
+      script,
+      role: s.editorialrole, src: (s.sources||[]).map(x=>x.name).join('/'),
+      rights: s.rightsline, line: s.dateline || s.locationline,
+      dur:  (s.shots && s.shots[0] && s.shots[0].end) || '',  // ⚠️ 沒有 duration 欄位，時長由 shots[0].end 推
+      comp: s.compositiontype,
+      sb_count: (script.match(/SOUNDBITE/gi) || []).length,   // 🎯 BITE 機械計數
+      has_sot: /SOT/i.test(s.editorialrole || '')             // 🎯 VOSOT／SOT 形式＝必有訪問聲音
+    };
+  };
   ```
+
+- 🎯 **BITE 判定＝看 `has_sot` 與 `sb_count`，不是 agent 自己讀稿判斷（2026-08-04 訂案，實錯修正）**：
+  - **`has_sot`（`editorialrole` 含 `SOT`）為 true → 必定標 `(BITE)`**，這是 AP 自己標的素材形式（`VOSOT`＝VO＋SOT、`SOT`＝純訪問），有這個標記就代表帶子裡有訪問聲音——0804 實測當下清單 **16/16 全是 `VOSOT`／`SOT`**，但 state 裡 AP 卻有 55% 標「無BITE」，明顯大量誤判。
+  - **引言逐字稿在 `SHOTLIST` 段，不在 `STORYLINE` 段**（0804 實測 6 則：SOUNDBITE 全部在 SHOTLIST、STORYLINE 段 0 個）——寫 `▎BITE：` 段時要去 **SHOTLIST 段**抓 `SOUNDBITE (語言) 講者職銜姓名, SAYING:` 後面的引言，**只讀 STORYLINE（敘事摘要段）會誤以為整篇沒有引言**，這正是大量「無BITE」誤判的成因。
+  - `sb_count > 0` 同樣**禁止標「無BITE」**；`has_sot` 為 true 但 `sb_count` 為 0（shotlist 沒逐字）時，標 `(BITE)` 並在 BITE 段寫講者與內容概述（例：`▎BITE：市長受訪談疏散進度（逐字稿未附）`），不可寫「無BITE」。
 
 - ⚠️ **`id` 前綴踩雷（2026-08-04 工作 agent 實錯回報，已修）**：`s.editorialid` 是**裸數字**（如 `4676366`），但狀態檔／既有素材代碼一律是 `AP` 前綴＋數字（`AP4676366`）。**上面兩個函式都已補上 `'AP' +` 前綴**——早期版本沒補，若 diff 步驟拿裸數字直接跟狀態檔比對，永遠比不出「已收過」，每輪都會把舊素材當新素材重新判斷一次。**任何依這份文件早期版本抄過程式碼的地方，都要回頭檢查有沒有補這個前綴。**
 - ⚠️ **欄位名容易猜錯的三個**：稿全文是 **`script.nitf`**（HTML 字串，不是 `storyline`／`shotlist`——照那兩個名字抓會拿到空字串，還會算出「省 98%」的假數字）；**沒有 `duration` 欄位**，時長要用 `shots[0].end`（格式 `00:02:16.720`）換算成 `MM:SS`；`caption`／`script` 都是**物件**，內容在 `.nitf`。
@@ -220,6 +235,7 @@ const clean = (h) => decodeEnt(
   ```
 
 - **`footageType` 實測全集**（0803 晚 100 則樣本）：`PKG`／`NAT PKG`／`DONUT`／`LOOK LIVE`／`VO/NAT`／`VO/STILL`／`VO/SIL`／`VO/RAW`／`SOT`／`BUTTED SOTS`／`ISO`／`CLIP`／`BEEPER`／`GRAPHIC`／`AUDIO TRACK`／`""`（空字串多為 `VERTICAL:` 直式素材）。前面那些是正常內容型態；要排除的只有 `AUDIO TRACK` 與「`GRAPHIC` ＋初稿字樣」兩種。
+- 🎯 **BITE 判定＝看 `footageType`（機械判準，2026-08-04 明文化）**：`footageType` 為 `SOT`／`BUTTED SOTS`／`SOT RAW` → **必定標 `(BITE)`**，禁止標「無BITE」。0804 抽驗 10 則 `SOT` 類素材，state 裡全部正確標了 `(BITE)`——NS 是三站裡唯一沒出誤判的，正因為它一直在用這個機械欄位；這條把既有正確做法明文化，與 RT（`sb_count`）／AP（`has_sot`）統一成同一套「有無 BITE 由機器判、BITE 內容才是 LLM 的事」原則。⚠️ NS 稿件**不用 `SOUNDBITE` 這個詞**（0804 實測 60 則全部 0 個），引言段標記是 `--SOT--`——**不要拿 AP／RT 的關鍵字習慣來掃 NS 稿件**，會全部誤判成無BITE。
 - ⚠️ **`hideScript` 與初稿無關**（實測排除的誤判線索）：`hideScript: true` 的那幾則稿件一樣完整（含 `--LEAD IN--`／`--VO SCRIPT--`），只是站方的顯示設定，**不可拿來判斷稿件狀態**。
 - ⚠️ **token 過期時第一次呼叫會拿到 `null`**，重新整理頁面等登入完成再打；**連兩次拿不到就是真的登出，停下來請使用者登入**（agent 不得自行輸入帳密）。
 - 這條路一次解掉 NS 的五個老卡點（清單無連結／虛擬化列表/捲不動／逐則點 modal／Has Script 篩不動），詳見回覆檔。
@@ -331,6 +347,7 @@ python scripts/s2_state.py needs-review list
 
 - 批次擷取流程 ＝ 收集本輪列表 ID → `diff` → 只對「新的」取文稿（**§1a API 直查，不開詳情頁**；失敗才退 §1b） → **邊看邊把每則累積進一份 `batch.json`，全部看完後一次 `add-batch`**。不要一則一次 `add`（2026-08-02 起：呼叫次數是 V2 變慢主因，一輪 25 則從約 52 次呼叫降到約 4 次）。**全程不載入 70 則 raw_entry。**
 - **批次規則**：`batch.json` 是 JSON 陣列，每筆 `{"id","source","checkpoint","status","entry"}`（`entry` 直接放字串，含換行）。撞已存在 id 或格式錯的單筆會**自動跳過並回報原因、不中斷**——回報裡有跳過清單時，逐筆判斷：已存在→改用 `update-entry`，格式錯→修正後單筆補。`--pairs` 的分隔符**優先用分號 `;`**（中主題含逗號時逗號會切錯）。
+- 🎯 **RT／AP 每筆必帶 `sb_count`（2026-08-04 起，BITE 機械兜底）**：抽取白名單已回傳 `sb_count`（RT）／`sb_count`＋`has_sot`（AP），寫 batch.json 時**原樣帶上**（`{"id":…,"sb_count":4,…}`）。`add-batch` 會擋「`sb_count > 0` 卻寫『無BITE』」的單筆（跳過並要求把引言寫進 `▎BITE：` 段重送）；`update-entry` 用 `--sb-count N` 帶入，同樣會擋。NS 走 `footageType` 判準、SNTV 列表級沒有全文，這兩類**不帶** `sb_count`（不帶＝不檢查，向下相容）。
 - **整併流程（2026-08-03 WP1 改版）＝ `pending` 全量重查（見下）→ `add-batch`／`update-entry` 更新狀態檔 → `set-category --pairs` 批次設分類（含小分題）→ 側錄 `add-side` → 重大素材 `set-alert` → `s2_render.py` 全量渲染 txt。agent 輸出趨近 0，不再手寫整份 txt。**
 - ⚠️ **pending 每輪都要主動清查，不只 23:00（2026-08-03 訂正，見 `13` 決策 4）**：跑 `pending` 看目前清單，逐則走 §1a API 批次重查（NS 整批一次查；RT／AP guid／itemid 一次 `Promise.all` 打 N 則，同一個 `browser_evaluate` 裡做，工具呼叫仍算 1 次）。稿已到就 `update-entry` 覆寫；稿仍未到維持原樣。**查完照規則直接處理，不要停下來問使用者「要不要清」**——這不是需要裁決的事，是每輪固定要做的步驟。pending 為 0 的輪次跳過，不必空跑。
 - ⚠️ **`to-compile`／`mark-compiled`／`compiled` 欄位已廢除**：它們存在的唯一理由是「讓 agent 不用每輪重寫整份」，render 讓重寫免費，增量反而多一次呼叫又會漏（0803 標籤字串比較實錯漏 50 則）。`resume` 的「待整併」改成「上次 render 後有變動」，只是參考值，不影響產出。
@@ -388,7 +405,8 @@ python scripts/s2_topic_dedupe.py --file "G:\...\0803-s2-state.json"
 
 **為什麼體育可以不開詳情（2026-08-02 使用者確認的理由）**：體育新聞的畫面**必然是比賽或訪問**，開詳情看 shotlist 得到的資訊，跟從標題推出來的幾乎一樣——這是「跳過詳情不會漏掉判斷素材價值所需資訊」的少數類別。其他分類不成立（同樣是社會案件，畫面可能是空景、可能是關鍵監視器，差很多），所以白名單**只給體育、且只認機械可判的 `AP5`**。
 
-- **僅限代碼 `AP5` 開頭**（SNTV 體育，判定規則同 V1）：直接以列表可見資訊（標題＋時長＋Source）寫簡版三段式，**不開詳情頁**。備註照標 `(SNTV)`，摘要一句話，結尾 `無BITE。`（列表看不到 BITE 就不標）。
+- **僅限代碼 `AP5` 開頭**（SNTV 體育，判定規則同 V1）：直接以列表可見資訊（標題＋時長＋Source）寫簡版三段式，**不開詳情頁**。備註照標 `(SNTV)`，摘要一句話。
+- 🎯 **結尾標記看 `editorialrole`，不再寫死「無BITE」（2026-08-04 訂正，推翻原本「結尾一律 `無BITE。`」）**：§1a API 清單的 `slimList` 本來就帶 `role` 欄位（免開詳情就有），照三站統一判準——**`role` 含 `SOT`（`VOSOT`／`SOT`）→ 標 `(BITE)`**，BITE 段從清單 `cap`（caption 一句話摘要）能寫多少寫多少，寫不出引言原文就寫講者＋內容概述；`role` 是 `VO` 等無聲形式才標 `無BITE。`。**舊規則寫死「一律無BITE」造成的實害（0803–0804）**：`AP5466752` 摘要都寫出「稱『絕佳機會』」了、畫面段寫「受訪」，結尾卻標無BITE——摘要裡有引言、結尾說沒有，自相矛盾，編輯無所適從。實務上 agent 也早就沒照舊規則做（0803 有 7 則 SNTV 標了 BITE），這次是把規則跟上實務並給出機械判準。
 - ⚠️ **`畫面：` 要寫「依標題可推的實際畫面」，絕不可寫操作註記（2026-08-02 實錯訂正）**：
   - ❌ `▎畫面：(列表級,未開詳情)。`／`▎畫面：(未開詳情)資料畫面。`——這是**給 agent 自己看的註記**，違反 V1「操作備註禁止寫進素材行」，編輯看了完全無用。
   - ✅ 依項目寫**必然會有的畫面**：`▎畫面：比賽精華、遠射進球與重播。`／`▎畫面：決賽對打精華、賽末點與捧盃。`／`▎畫面：Skubal投球資料畫面。`
