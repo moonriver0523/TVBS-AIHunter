@@ -29,6 +29,7 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import s2_validate as sv  # noqa: E402  共用行辨識 regex 與檔頭生成，不重寫一套
+import s2_topic_dedupe as td  # noqa: E402  render 後同名小分題跨大分類重複偵測
 
 # ⚠️ 用 reconfigure 不用 TextIOWrapper：包第二層時（例如 s2_state 匯入 s2_validate）
 # 舊寫法會讓其中一個 wrapper 被回收時關掉底層 buffer，整支腳本以 "I/O operation on
@@ -47,7 +48,7 @@ SPECIAL_SLOT = '(時效性特殊 例如"熊本地震")'
 FIXED = ["大陸", "關稅", "美伊", "中東", "烏俄", "美國", "政治", "財經",
          "社會", "天氣", "體育", "科技", "娛樂", "話題"]
 
-MARK_RE = re.compile(r"^\s*([△▲●])\s*")
+MARK_RE = re.compile(r"^\s*([△▲●◆])\s*")
 RED_RE = re.compile(r"^\s*(🔴)\s*")
 
 
@@ -84,12 +85,17 @@ def mmdd_shift(mmdd, days):
 def mark_for(checkpoint, base_mmdd):
     """依 `first_seen_checkpoint` 推時段標記（WP1 前提三：由 render 自動補）。
 
-    判準沿用 `13` 隔夜續掃節：23:00 前＝`△`、23:00–07:00＝`▲`、07:00–09:00＝`●`。
+    判準沿用 `13` 隔夜續掃節（2026-08-03 晚訂正，早班上班時間由 07:00 改 05:00；
+    2026-08-04 補 `◆`，日班 09:00–14:00）：
+    22:00 前＝`△`、22:00–05:00＝`▲`、05:00–09:00＝`●`、09:00–14:00＝`◆`。
+    **22:00 是晚班最後一輪掃帶**，之後留一小時人工最後檢查（22:00–23:00）；
+    這段時間即使有自動掃帶也視同無人值守，一律標 `▲`，跟半夜 01:00／04:40 那幾輪同等對待——
+    早班 05:00 上班後才收的素材才標 `●`，讓早班一眼看出「上班前」與「上班後」的界線；
+    09:00 之後、14:00 前收的素材再進一步標 `◆`，跟 `●` 分開。
     checkpoint 標籤是 agent 自由命名的字串（`0802-1700`／`r8-0803-0100`／
     `exp-0803-0000`／`r13-0803-0910-RT補漏`），所以只認裡面的 4 位數字群：
     認得出當天／隔天 MMDD 就據以判日，認不出才退回「用最後一組數字當 HHMM」。
-    23:00 整那輪算 `▲`：那一輪收到的素材是「23:00 當下才進來的」，不是「23:00 前既有」
-    （0802 定版 txt 的 5 則實例即標 ▲）。
+    22:00 整那輪算 `▲`：那一輪收到的素材是「22:00 當下才進來的」，不是「22:00 前既有」。
     補掃輪（例如 09:10 的 `r13-…-RT補掃` 撈回稍早漏掉的素材）用 checkpoint 判會標成 `●`，
     但它們其實屬更早的時段——這種要用 `s2_state.py set-mark` 在該則上寫死標記，見下方 override。
     """
@@ -110,8 +116,10 @@ def mark_for(checkpoint, base_mmdd):
     if hhmm is None:
         return "△"
     if day >= 1:
-        return "▲" if hhmm < 700 else "●"
-    return "▲" if hhmm >= 2300 else "△"
+        if hhmm < 500:
+            return "▲"
+        return "●" if hhmm < 900 else "◆"
+    return "▲" if hhmm >= 2200 else "△"
 
 
 def is_side(it):
@@ -138,7 +146,7 @@ def render_item(it, base_mmdd):
     """
     red, body = strip_marks(it.get("raw_entry", "") or "")
     # 該則若有寫死的 `mark`（補掃輪等 checkpoint 判不準的情形，見 set-mark）優先用它
-    mk = it.get("mark") if it.get("mark") in ("△", "▲", "●") else         mark_for(it.get("first_seen_checkpoint"), base_mmdd)
+    mk = it.get("mark") if it.get("mark") in ("△", "▲", "●", "◆") else         mark_for(it.get("first_seen_checkpoint"), base_mmdd)
     prefix = mk + " "
     if red:
         prefix += "🔴 "
@@ -330,6 +338,8 @@ def main():
     p.add_argument("--force", action="store_true",
                    help="現行 txt 被手改過也照樣覆蓋（會永久丟掉那些沒進狀態檔的內容）")
     p.add_argument("--no-check", action="store_true", help="render 後不自動跑品質掃")
+    p.add_argument("--no-topic-check", action="store_true",
+                   help="render 後不自動跑同名小分題跨大分類重複偵測")
     args = p.parse_args()
 
     state = load_state(args.file)
@@ -354,6 +364,15 @@ def main():
     reconcile(old, text)
     if not args.no_check:
         sv.check(args.out)
+    if not args.no_topic_check:
+        today_hits, cross_hits = td.check(args.file)
+        n = len(today_hits) + len(cross_hits)
+        if n:
+            print(f"⚠️ 主題重複偵測 {n} 組命中，跑 "
+                  f"`python s2_topic_dedupe.py --file \"{args.file}\"` 看詳情、"
+                  f"確認後用 set-category 手動改（純提示，不影響本次已寫入的 txt）")
+        else:
+            print("OK 主題重複偵測 0 命中")
 
 
 if __name__ == "__main__":
