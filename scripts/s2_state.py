@@ -543,6 +543,29 @@ def cmd_set_mark(state, args):
     print(f"OK {len(ids)} 則標記" + ("已清除（改回自動推算）" if args.clear else f"寫死為 {args.mark}"))
 
 
+def cmd_set_aired(state, args):
+    """標記／取消「本台已做過這則新聞」（render 會在代碼前印 ⚪）。
+
+    2026-08-04 使用者訂案。**素材仍照常留在庫存、照常摘要**——後續發展可能還要再做，
+    ⚪ 只是把優先度降下來，讓編輯一眼略過已處理的，不是「刪掉」也不是「不要收」。
+    ⛔ 這是**人工判斷**：外電網站不會知道 TVBS 播過什麼，agent 不得自行推測，
+    一律由使用者下令才標（同 `set-alert` 的性質）。
+    """
+    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    missing = [i for i in ids if i not in state["items"]]
+    if missing:
+        print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未變更，請修正後重跑）")
+        sys.exit(2)
+    for i in ids:
+        if args.clear:
+            state["items"][i].pop("aired", None)
+        else:
+            state["items"][i]["aired"] = True
+    save(state, args.file)
+    verb = "已取消已播標記" if args.clear else "已標為本台已做過（⚪，仍留庫存）"
+    print(f"OK {len(ids)} 則{verb}：{','.join(ids)}")
+
+
 def cmd_set_alert(state, args):
     """檔頭 🔴 重大提醒行（WP1 前提四）。
 
@@ -705,6 +728,9 @@ def main():
     sm.add_argument("--ids", required=True)
     sm.add_argument("--mark", choices=["△", "▲", "●", "◆"])
     sm.add_argument("--clear", action="store_true", help="清除寫死值，改回自動推算")
+    sr = sub.add_parser("set-aired", help="⚪ 本台已做過（仍留庫存、仍可做後續）；人工判斷，agent 不自行標")
+    sr.add_argument("--ids", required=True)
+    sr.add_argument("--clear", action="store_true", help="取消已播標記")
     sa = sub.add_parser("set-alert", help="檔頭 🔴 重大提醒行（存狀態檔，render 每輪取用）")
     sa.add_argument("--set", action="append", help="整組取代（可重複，最多3則）")
     sa.add_argument("--add", help="追加一則（超過3則丟最舊的）")
@@ -733,7 +759,7 @@ def main():
         "add-batch": cmd_add_batch,
         "update-entry": cmd_update_entry, "pending": cmd_pending,
         "add-side": cmd_add_side, "set-alert": cmd_set_alert,
-        "set-mark": cmd_set_mark,
+        "set-mark": cmd_set_mark, "set-aired": cmd_set_aired,
         "set-category": cmd_set_category, "get": cmd_get, "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,
         "scratch-dir": cmd_scratch_dir,

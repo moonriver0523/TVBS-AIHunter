@@ -363,6 +363,9 @@ python scripts/s2_state.py add-side --txt "…/0803 CNN側錄.txt" --source CNN 
                                                            # --dry-run 先驗解析段數
 python scripts/s2_state.py set-alert --set "▲ AP4676262 巴基斯坦自殺炸彈14死…"
                                                            # 檔頭 🔴 重大提醒行（≤3則，整組取代；--add 追加／--clear 撤掉）
+python scripts/s2_state.py set-aired --ids RT2995,AP4676455
+                                                           # ⚪ 本台已做過（仍留庫存、仍可做後續）；--clear 取消
+                                                           # ⛔ 只有使用者下令才標，agent 不得自行判斷
 python scripts/s2_state.py set-mark --ids RT2754,RT2753 --mark ▲
                                                            # 補掃輪等 checkpoint 判不準時寫死時段標記（--clear 改回自動）
 python scripts/s2_state.py get --id RT2333                 # 單則全文
