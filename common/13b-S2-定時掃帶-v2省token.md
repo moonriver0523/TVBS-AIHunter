@@ -148,9 +148,11 @@ const clean = (h) => decodeEnt(
 ### 2) AP
 
 - **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`（cookie 驗證）。**照抄頁面實際發出的 request body**——自己拼的 body 排序會偏 relevance 抓到舊素材；照抄則順序與畫面完全一致（實測 16 則逐一比對相符）。
-- ⚠️ **`PageNumber` 不可靠**：實測 `PageNumber=2`＋`PageSize=16` 回了 100 筆、與第 1 頁零重疊，回應卻自稱 Page=2。**要多筆一律固定 `PageNumber=1` 加大 `PageSize`**。
-- 🔴 **`PageSize` 絕對不可以「調小」（2026-08-03 18:50 實測訂正，推翻同日早上「16/50/100/200 都精準」的結論）**：同一個 body 只把 `PageSize` 從 **16 改成 5**，回傳的就從「當下最新素材」（`2026-08-03T10:46`／`10:45`…）變成 **2024–2025 年的舊素材**（`Afghanistan Earthquake Bereaved` 2025-09、`HZ US CES BOSCH` 2024-01），**排序整個換掉且毫無錯誤訊息**。
-  - **照抄頁面的 `PageSize=16`**，需要更多就往上加（50／100／200 已驗過）；**永遠不要為了「只想看幾則」而調小**——會靜默抓到兩年前的舊素材，diff 之後全部當成「新素材」收進庫存。
+- ⚠️ **`PageNumber` 不可靠**：實測 `PageNumber=2`＋`PageSize=16` 回了 100 筆、與第 1 頁零重疊，回應卻自稱 Page=2。
+- 🔴🔴 **`PageSize` 一個字都不准改，只能照抄頁面的 `16`（2026-08-04 實測再訂正，推翻先前「往上加沒問題／50、100、200 已驗過」的說法）**：`PageSize` **不論調大或調小都會靜默換掉排序**，回傳完全不同的一批舊素材，且**毫無錯誤訊息**：
+  - **調小**（0803 18:50 實測）：`16 → 5`，回傳從「當下最新」變成 **2024–2025 年舊素材**（`Afghanistan Earthquake Bereaved` 2025-09、`HZ US CES BOSCH` 2024-01）。
+  - **調大**（0804 11:4x 實測，這次才發現）：同一個 body、同一個 TopicId，`PageSize=16` 回傳最新的 `4676491`（當下最新素材）；改成 **`PageSize=50` 回傳最新的變成 `4472065`**（更舊的一批）、`PageSize=100` 最新是 `4634593`——**要找的今日素材一則都不在裡面**。先前「50／100／200 已驗過」是誤判，實際上只有 16 是對的。
+  - ⛔ **所以「要多筆就加大 PageSize」這條舊做法作廢**。需要更多則時，正確做法是**照抄 `PageSize=16` 分批取**（`PageNumber` 也不可靠，見上），或改用其他能穩定定位的路徑（§1b 清單 DOM 直撈）。**永遠不要為了「多抓幾則」或「只想看幾則」去動這個值**——動了就會拿到兩年前的素材，diff 之後全部被當成「新素材」收進庫存。
   - 這也是為什麼規則一直寫「**照抄頁面實際發出的 request body**」：照抄就不會踩到。
 - 欄位：`_source.itemid`＝32 碼 GUID、`_source.editorialid`＝**AP 編號**、`friendlykey`／`title`／`headline`／`dateline`。
 - **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。**逗號串多則不支援**（回空），一則一次；但可在同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則，**工具呼叫仍只算 1 次**。
