@@ -48,7 +48,7 @@ SPECIAL_SLOT = '(時效性特殊 例如"熊本地震")'
 FIXED = ["大陸", "關稅", "美伊", "中東", "烏俄", "美國", "政治", "財經",
          "社會", "天氣", "體育", "科技", "娛樂", "話題"]
 
-MARK_RE = re.compile(r"^\s*([△▲●◆])\s*")
+MARK_RE = re.compile(r"^\s*([△▲■◆●])\s*")   # `●` 為舊符號，剝離時仍須認得
 RED_RE = re.compile(r"^\s*(🔴)\s*")
 AIRED_RE = re.compile(r"^\s*(🟤)\s*")
 
@@ -95,15 +95,15 @@ def mark_for(checkpoint, base_mmdd):
     22:00／05:00 的訂正，也推翻更早「23:00 那輪算▲」的原始規則——使用者確認
     16:00～23:00 全部仍算晚班有人值班、一律 `△`，23:00 是下班前最後一輪；
     早班上班時間維持 07:00，不是 2026-08-03 晚一度改過的 05:00）：
-    23:00（含）前＝`△`、隔天 07:00 前＝`▲`、07:00–09:00＝`●`、09:00–14:00＝`◆`。
+    23:00（含）前＝`△`、隔天 07:00 前＝`▲`、07:00–09:00＝`■`、09:00–14:00＝`◆`。
     固定排程（原則性，使用者可當天隨時特例調整）：
     16:00／18:00／20:00／22:00／23:00＝晚班（`△`，23:00 是下班前最後一輪）；
-    01:00／04:30＝無人值守（`▲`）；07:00／08:00＝晨班（`●`）；
+    01:00／04:30＝無人值守（`▲`）；07:00／08:00＝晨班（`■`）；
     10:00／12:00／13:00＝早班（`◆`）。
     checkpoint 標籤是 agent 自由命名的字串（`0802-1700`／`r8-0803-0100`／
     `exp-0803-0000`／`r13-0803-0910-RT補漏`），所以只認裡面的 4 位數字群：
     認得出當天／隔天 MMDD 就據以判日，認不出才退回「用最後一組數字當 HHMM」。
-    補掃輪（例如 09:10 的 `r13-…-RT補掃` 撈回稍早漏掉的素材）用 checkpoint 判會標成 `●`，
+    補掃輪（例如 09:10 的 `r13-…-RT補掃` 撈回稍早漏掉的素材）用 checkpoint 判會標成 `■`，
     但它們其實屬更早的時段——這種要用 `s2_state.py set-mark` 在該則上寫死標記，見下方 override。
     """
     cp = checkpoint or ""
@@ -125,7 +125,7 @@ def mark_for(checkpoint, base_mmdd):
     if day >= 1:
         if hhmm < 700:
             return "▲"
-        return "●" if hhmm < 900 else "◆"
+        return "■" if hhmm < 900 else "◆"
     return "△"  # 同一晚班日：16:00～23:00 全部仍算晚班有人值班，一律 △
 
 
@@ -153,7 +153,7 @@ def render_item(it, base_mmdd):
     """
     red, aired_txt, body = strip_marks(it.get("raw_entry", "") or "")
     # 該則若有寫死的 `mark`（補掃輪等 checkpoint 判不準的情形，見 set-mark）優先用它
-    mk = it.get("mark") if it.get("mark") in ("△", "▲", "●", "◆") else         mark_for(it.get("first_seen_checkpoint"), base_mmdd)
+    mk = it.get("mark") if it.get("mark") in ("△", "▲", "■", "◆", "●") else         mark_for(it.get("first_seen_checkpoint"), base_mmdd)
     prefix = mk + " "
     if red:
         prefix += "🔴 "
