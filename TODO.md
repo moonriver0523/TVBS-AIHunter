@@ -297,7 +297,7 @@ WP1 已經把 txt 變成**從狀態檔全量渲染的單向投影**（狀態檔�
 - API 回應**沒有任何** `status`／`version`／`draft` 類欄位（100 則樣本＋`api/refdata` 都掃過）。
 - 關鍵字掃 script 會**大量假陽性**：`early`（"still in the early stages"）、`UPDATED`（標題 `(UPDATED) DANGEROUS HEAT DOME…` 是正常素材的更新版，**要收不要排除**）。
 
-- [ ] **待決（不影響 NS 上線）**：AP 那邊也有初稿標記——`AP4676355` 的 script 開頭寫 `++PRELIMINARY SCRIPT ++`，但 AP 是**純文字標記、沒有對應的機械欄位**，且該則本身是可用素材（伊朗外交部簡報，有 SOUNDBITE），跟 NS 那種「佔位公告」性質不同。要不要一併排除、還是只在備註標「初稿」，等實務上遇到再定。
+- [x] **~~待決：AP `++PRELIMINARY SCRIPT++` 要不要排除~~ ✅ 已訂案並上線（2026-08-04 使用者裁示：不排除，標 `pending` 下一輪補）**。AP 這種是**真素材**（`AP4676355` 伊朗外交部簡報，有畫面有 SOUNDBITE），只是稿為初稿版、正式稿之後會出——與 NS 的 `footageType==="GRAPHIC"` 佔位公告（本身不是新聞帶、整則排除）性質完全不同，**不要混為一談**。處置：素材照收、`script_status=pending`、備註加 `(初稿)`、內容照初稿正常寫三段式（有 BITE 就寫，`sb_count`／`has_sot` 兜底照常適用），下一輪 pending 清查補正式稿後轉 `has_script`。AP 沒有機械欄位可判，抽取白名單新增 `prelim` 旗標掃 `script` 字樣，正則**錨定開頭**（`^\s*\+\+`）避免內文提到就誤判（5 項正反例測過）。規則寫進 `common/13`「有稿判準」節與 `13b` §1a-3 AP 白名單。
 
 ## ~~大分類歸位規則~~ ✅ 已訂案並上線（2026-08-03，commit `db6a7c0`）
 

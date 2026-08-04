@@ -197,10 +197,17 @@ const clean = (h) => decodeEnt(
       dur:  (s.shots && s.shots[0] && s.shots[0].end) || '',  // ⚠️ 沒有 duration 欄位，時長由 shots[0].end 推
       comp: s.compositiontype,
       sb_count: (script.match(/SOUNDBITE/gi) || []).length,   // 🎯 BITE 機械計數
-      has_sot: /SOT/i.test(s.editorialrole || '')             // 🎯 VOSOT／SOT 形式＝必有訪問聲音
+      has_sot: /SOT/i.test(s.editorialrole || ''),            // 🎯 VOSOT／SOT 形式＝必有訪問聲音
+      prelim: /^\s*\+\+\s*PRELIMINARY SCRIPT/i.test(script)   // 🎯 初稿：只認開頭，內文提到不算
     };
   };
   ```
+
+- 🎯 **`prelim` 為 true ＝ 素材照收、標 `pending`、備註加 `(初稿)`，下一輪補正式稿（2026-08-04 使用者訂案）**：
+  - **不是排除**——這跟 NS 的 `footageType==="GRAPHIC"` 佔位公告完全不同。AP 這種是**真素材**（實例 `AP4676355` 伊朗外交部簡報，有畫面有 SOUNDBITE），只是稿子還是初稿版，正式稿之後會出。NS 那種本身不是新聞帶，要整則排除。
+  - **AP 沒有機械欄位可判初稿**（不像 NS 有 `footageType`），只能掃 `script` 字樣——所以正則**錨定開頭**（`^\s*\+\+`），不對全文 `find`，避免內文順帶提到就誤判。
+  - 內容照初稿版正常寫三段式，**有 BITE 就寫 BITE**，不要因為是初稿就留白（`sb_count`／`has_sot` 兜底照常適用）。
+  - 下一輪 pending 清查回頭重查：正式稿到了就覆寫 `raw_entry`、拿掉 `(初稿)`、轉 `has_script`。
 
 - 🎯 **BITE 判定＝看 `has_sot` 與 `sb_count`，不是 agent 自己讀稿判斷（2026-08-04 訂案，實錯修正）**：
   - **`has_sot`（`editorialrole` 含 `SOT`）為 true → 必定標 `(BITE)`**，這是 AP 自己標的素材形式（`VOSOT`＝VO＋SOT、`SOT`＝純訪問），有這個標記就代表帶子裡有訪問聲音——0804 實測當下清單 **16/16 全是 `VOSOT`／`SOT`**，但 state 裡 AP 卻有 55% 標「無BITE」，明顯大量誤判。
