@@ -186,7 +186,22 @@ const clean = (h) => decodeEnt(
 ### 3) NS（CNN Newsource）——**收益最大的一站**
 
 - **清單即文稿**：`POST https://newsource-content-api-530.ns.cnn.com/api/v3/stories`，一次回傳 **`alternateIds.bitcentralId`（＝NS 編號）＋`footageType`（PKG/SOT/VO 等形式）＋`duration`＋`description`（現成一句摘要）＋`content.bitcentral.script`（稿件全文，含 `--LEAD IN--`／`--VO SCRIPT--` 標記）＋`embargo`**。**完全不必開詳情頁或 Preview modal。**
-- Bearer token 在 `localStorage.newsourceSession.token`（1 小時效期，頁面開著會自動續）。
+- Bearer token 在 `localStorage.newsourceSession.token`（**1 小時效期**）。
+
+> 🔴 **NS 登入態是「滑動時效」，過期就必須人工重登——這是 NS 天生設計，不是設定問題（2026-08-04 實測定案）**
+>
+> **實測證據**：三站認證機制根本不同——**AP** 有 `session_user`（httpOnly，**7 天**）、**RT** 有 `mexlogin`（**23 小時**）＋`rcp-sid`；**NS 一個認證 cookie 都沒有**（`newsource.ns.cnn.com`／`.cnnnewsource.com`／`.cnn.com` 底下全是 `_ga`／`_cb`／`_chartbeat2`／`SigniantAppInstalled` 這類 analytics 與廣告）。**NS 的登入態 100% 只存在 localStorage 那顆 1 小時 JWT 裡。**
+>
+> **機制**：`exp - iat` 恰為 3600 秒。只要 token **還沒過期**，每次載入 NS 頁面就會拿舊 token 換一顆新的、時效**重新算 1 小時**（sliding session）。一旦**過期**，沒有任何後備憑證可用——實測把 localStorage 的 session 刪掉後 reload，直接被踢回 `/`、出現密碼欄位，**無法自動恢復**。
+>
+> ⚠️ **這會誤導診斷**：如果剛好在 1 小時內測試，會看到「重開瀏覽器也能自動登入」的假象（0804 第一輪測試就被誤導過）。要驗證必須模擬「token 不存在」的狀態，不是只重開瀏覽器。
+
+- 🎫 **NS 保活（keep-alive）：每 58 分鐘續一次門票（2026-08-04 使用者訂案）**
+  - **為什麼需要**：固定排程的間隔（23:00→01:00 隔 2hr、01:00→04:30 隔 3.5hr、13:00→隔天 16:00 隔 3hr）**每一段都超過 1 小時**，等於每輪開工 NS 幾乎必定已經過期。插一個極輕量的保活動作就能無限續期。
+  - **做什麼**：只要 `browser_navigate` 開一次 `https://newsource.ns.cnn.com/landing`、等 token 寫入、確認 `isAuthenticated` 為真，就完成續期——**不查清單、不打 API、不寫狀態檔**，成本約 1–2 次工具呼叫。
+  - ⚠️ **一律由掃帶 agent 自己執行，不可另開獨立 agent／排程去做**（使用者明確要求）：Playwright 只有**一個** persistent profile，另一個行程去開瀏覽器就會跟正在掃帶的 agent 互鎖——那正是 0803 害 RT 空窗八小時的坑（見 §0）。**保活必須排進掃帶 agent 自己的工作序列裡，跟其他 Playwright 動作共用同一個瀏覽器 session。**
+  - **時機**：掃帶 agent 在**兩輪之間的等待期**，若距離上次接觸 NS 已接近 58 分鐘，就順手做一次保活再繼續等；若下一輪馬上就要開工，直接開工即可（開工本身就會續期），不必多跑一次。
+  - **過期了怎麼辦**：保活失敗或發現已經卡登入頁 → **停下來請使用者手動登入**，agent **不得自行輸入帳密**。無人值守時段（`▲`）遇到就照 §5「半夜禁問」原則記進 `needs-review` 並跳過 NS，不要卡住整輪。
 - ⚠️ **回應是多行 JSON（NDJSON）**，不能 `r.json()`——取含 `"stories"` 的那一行再 parse。
 - `scriptOnly: true` **就是 UI 上點不動的 Has Script 篩選**；`from`／`size` 分頁，`size` 上限 100。
 - ⚠️ **`size` 開大配全稿一次回傳會爆量（2026-08-04 工作 agent 實錯回報）**：`size:100` 一次要完整稿件全文，實測輸出約 **198k 字元**，整包塞進 agent context 太浪費。**正確做法：先用小欄位（不含 `script`）篩出時間窗內真的要收的則數，再只對這些則另外打一次要全文的查詢**——不要為了少一次呼叫就一次要 100 則的完整稿。
@@ -454,10 +469,11 @@ youtube.com/watch?v=AA6tRh8n-_w
 
 1. **每輪開工第一步跑 `resume`**——context 斷掉重進時，以腳本回報的狀態為準接續，不憑記憶。
    ⚠️ **緊接著跑 `scratch-dir --mmdd {晚班起始日MMDD}`**（2026-08-03 深夜訂案），取得（並自動建立）本輪暫存檔資料夾路徑——本輪所有中間檔（`_ap_*`／`_rt_*`／`{MMDD}-batch-*.json` 等）都寫進這個路徑，**不要**直接寫在 `自動掃帶系統/` 這層。日期用晚班起始日，不是實際掃帶當下的日曆日（跟「檔名不換日」同邏輯）。正式庫存檔（`{MMDD}-s2-state.json`／`{MMDD}晚班交接.txt`）不受影響，維持原位不動。指令：`python scripts/s2_state.py scratch-dir --mmdd 0804`（印出路徑，資料夾不存在就自動建）。
-2. **RT 卡住跳站**：連續 2 次 Next 沒反應／頁面沒變 → 記下目前 Edit No.（`needs-review add`），跳去掃 AP／CNN，回報 RT 中斷點。不准死磕（V1 已知 SPA 卡快取雷）。
-3. **半夜禁問**：無人值守時段遇到需使用者確認的事項（可疑素材、分類拿不準、腳本壞掉）→ `needs-review add` 記錄＋寫進交接檔備註，**繼續往下跑**。不得 `AskUserQuestion` 等回應、不得停住。
-4. **fallback 全部單向**：階梯只往下走（選擇器→整頁→截圖），不回頭重試上一步。
-5. ⚠️ **RT 連掃＝單分頁 Next 鏈＋「換頁後必須刷新再讀」（2026-08-02 三輪實測定案，取代先前雙分頁法）**
+2. 🎫 **兩輪之間顧好 NS 保活（58 分鐘門票）**：NS 登入態是 1 小時滑動時效、過期只能人工重登（機制與證據見 §1a-3「NS 登入態」框）。**掃帶 agent 自己在等待期做**——距上次接觸 NS 接近 58 分鐘就 `browser_navigate` 開一次 `newsource.ns.cnn.com/landing`、確認 `isAuthenticated`，然後照常收工關瀏覽器。⛔ **不可另開獨立 agent／排程做這件事**，Playwright 只有一個 persistent profile，會跟掃帶互鎖（0803 空窗八小時的坑）。下一輪馬上要開工就不必多跑（開工本身就會續期）。
+3. **RT 卡住跳站**：連續 2 次 Next 沒反應／頁面沒變 → 記下目前 Edit No.（`needs-review add`），跳去掃 AP／CNN，回報 RT 中斷點。不准死磕（V1 已知 SPA 卡快取雷）。
+4. **半夜禁問**：無人值守時段遇到需使用者確認的事項（可疑素材、分類拿不準、腳本壞掉）→ `needs-review add` 記錄＋寫進交接檔備註，**繼續往下跑**。不得 `AskUserQuestion` 等回應、不得停住。⚠️ **NS 登入過期是此原則的典型適用場景**：無人值守時段發現 NS 卡登入頁，記進 `needs-review` 並跳過 NS，不要停住等使用者。
+5. **fallback 全部單向**：階梯只往下走（選擇器→整頁→截圖），不回頭重試上一步。
+6. ⚠️ **RT 連掃＝單分頁 Next 鏈＋「換頁後必須刷新再讀」（2026-08-02 三輪實測定案，取代先前雙分頁法）**
 
    **根因**：`get_page_text`／`find`／`read_page` 讀的是**擷取快照**，SPA 換頁（Next／Previous）**不會**刷新它——換頁後立刻讀，會**無聲拿到上一則的完整內容**（URL 與畫面都已是新的，只有文字是舊的）。**純 `wait` 無效、連讀兩次也無效**；只有**會回傳畫面的互動動作**（`screenshot` 或 `scroll`）能強制刷新。
 
