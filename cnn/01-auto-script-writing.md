@@ -31,7 +31,7 @@
 10. **完成版先交付，不預設啟動第二審（2026-07-21 訂定）**：寫稿階段本身完成事實分層、SB／TC 對照與**步驟 6.5 的 `--mode ctv` 驗證關卡**後，直接把這一版視為「完成版」交付；**不要預設另派 agent 重讀官方稿、ASR、完成稿與整份規則做深度審稿**。只有使用者明確下令「檢查／複核／校稿／嚴格審稿」時，才啟動第二輪語意審查。若寫稿前真的存在會改變事實的姓名、金額、歸因或畫面判讀矛盾，應在寫稿階段先釐清或標註，不可把問題留給事後複查。
 
 ## 步驟 1 — 找到該則並取得**完整官方稿件**（關鍵，不可省略）
-在 CNN Newsource（newsource.ns.cnn.com）搜尋該 ID，開啟該則展開的詳細框（Story Number、Title、Description、Source、Embargo、Footage Type、TRT、Reporter、Script）。
+在 CNN Newsource（`newsource.ns.cnn.com`）**用網站上方的搜尋欄輸入**該 ID（⛔ **不是拼一個 `/search?q=` 網址**，那會回 Page Not Found——見下方警告），開啟該則展開的詳細框（Story Number、Title、Description、Source、Embargo、Footage Type、TRT、Reporter、Script）。
 
 ⚠️ **CNN Newsource 不支援用網址直接搜尋**（2026-07-21 使用者確認；**2026-08-04 已同步寫進 [`common/13b`](../common/13b-S2-定時掃帶-v2省token.md) §0**——原本只記在這份自動寫稿規則裡，掃帶 agent 讀不到，0804 就有 agent 打了 `/search`、看到 Page Not Found 後轉去查「NS 卡點」繞一大圈）。`https://newsource.ns.cnn.com/search?q={ID}` 會回 **Page Not Found**，只能在網站上方搜尋欄輸入。這點與 Reuters／AP 相反，不要套用它們的網址查詢做法。送出後若整頁凍結，見 [`../common/09-known-issues.md`](../common/09-known-issues.md#cnn-newsource)。
 

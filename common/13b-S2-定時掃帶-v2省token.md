@@ -17,15 +17,20 @@
 | **2** | AP Newsroom | `https://newsroom.ap.org/home` | Latest 分頁；空白關鍵字查詢會回空白頁 |
 | **3** | Reuters Connect（RT） | `https://www.reutersconnect.com/all?media-types=vid` | 大列表，My Subscription／Newest First |
 
-⛔ **NS 的禁用路徑（打了會白費一輪，2026-08-04 工作 agent 實錯）**
+✅ **NS 白名單：掃帶全程只會用到這兩個網址，其餘一律不對**（2026-08-04 訂，取代原本的禁用路徑黑名單——黑名單列不完，0804 同一個錯犯了兩次）
 
-| 錯誤寫法 | 症狀 | 正確做法 |
+| 用途 | 網址 | 何時用 |
 |---|---|---|
-| `newsource.ns.cnn.com/search`（或 `/search?q=…`） | **回 Page Not Found**。0804 有 agent 打了這個，看到頁面不對就轉去查「NS 卡點怎麼解」，繞了一大圈 | **NS 不支援用網址直接搜尋**（2026-07-21 已確認，原記於 [`cnn/01`](../cnn/01-auto-script-writing.md)）。掃帶根本不需要搜尋——走 §1a-3 的 `POST /api/v3/stories` 拿清單；真要搜只能在網站上方搜尋欄輸入 |
-| `newsource.cnn.com`（缺 `.ns.`） | 導向「隱私權設定發生錯誤」頁，`get_page_text`／截圖都讀不到 | 補上 `.ns.` |
+| 保活／取 token | `https://newsource.ns.cnn.com/landing` | 每輪開工第一件事；兩輪之間的 58 分鐘續命 |
+| 清單＋全文 | `POST https://newsource-content-api-530.ns.cnn.com/api/v3/stories` | 掃清單、拿稿、pending 重查——**全部走這支** |
 
-🔍 **NS 頁面不對時的懷疑順序（先自己再站方）**：①**自己的網址打錯了**（上表兩種最常見）②Playwright profile 被鎖（見 §1a-0）③登入態過期。
-⚠️ **不要一看到頁面不對就開調查「站方卡點」**——0804 那次就是跳過①②直接查③，站方其實好好的。核對網址只要一秒，開調查要花掉大半輪。
+⛔ **除了這兩個，不該出現任何其他 NS 網址。** 尤其：
+
+- **`/search`（或 `/search?q=…`）→ 回 Page Not Found。** NS **不支援用網址直接搜尋**（2026-07-21 已確認，原記於 [`cnn/01`](../cnn/01-auto-script-writing.md)）。⚠️ **0804 同一個錯犯了兩次**——會犯是因為「我要查某一則」時很自然就想拼一個搜尋網址，但**掃帶從頭到尾都不需要搜尋**：要查特定素材就用上面那支 API 撈回來自己比對 id，不要開 UI。
+- **`newsource.cnn.com`（缺 `.ns.`）→** 導向「隱私權設定發生錯誤」頁，`get_page_text`／截圖都讀不到。
+
+🔍 **NS 頁面不對時的懷疑順序（先自己再站方）**：①**自己的網址不在白名單上**②Playwright profile 被鎖（見 §1a-0）③登入態過期。
+⚠️ **不要一看到頁面不對就開調查「站方卡點」**——0804 兩次都是這個形狀，站方其實好好的。核對網址只要一秒，開調查要花掉大半輪。
 
 
 ### ⏱️ 掃描順序固定 **NS → AP → RT**（2026-08-04 使用者訂案）
