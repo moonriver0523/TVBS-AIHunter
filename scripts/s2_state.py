@@ -163,6 +163,14 @@ def read_entry(args):
     sys.exit(2)
 
 
+# NS `footageType` → 有無訪問聲音（2026-08-04 依 0731–0804 全庫存交叉統計訂定，
+# 非憑印象列舉；完整對照表與實測數字見 13b §1a-3）。
+# 這是 NS 的 BITE 兜底依據——NS 稿件不用 SOUNDBITE 這個詞、數不出 sb_count，
+# 在此之前 NS 是三站裡唯一完全沒有兜底的。
+FT_MUST_BITE = {"SOT", "BUTTED SOTS", "SOT RAW", "ISO", "DONUT", "INTERVIEW", "RAW"}
+FT_GRAY = {"PKG"}          # 實測 7 無／8 有，真的混合——只提醒不擋
+
+
 def new_item(source, checkpoint, status, entry):
     it = {
         "source": source,
@@ -204,7 +212,7 @@ def cmd_add_batch(state, args):
     if not isinstance(data, list):
         print("ERROR: --entries 需為 JSON 陣列（或含 entries 陣列的物件）")
         sys.exit(2)
-    added, skipped = [], []
+    added, skipped, notes = [], [], []
     for n, e in enumerate(data, 1):
         if not isinstance(e, dict):
             skipped.append(f"第{n}筆: 不是物件")
@@ -231,11 +239,26 @@ def cmd_add_batch(state, args):
         if isinstance(sb, int) and sb > 0 and "無BITE" in e["entry"]:
             skipped.append(f"{i}: 稿內有 {sb} 個 SOUNDBITE 卻寫「無BITE」——回頭把引言寫進 ▎BITE： 段再重送")
             continue
+        # 🎯 NS 的兜底走 `footage_type`（2026-08-04 補；NS 稿件不用 SOUNDBITE 這個詞，
+        # 數不出 sb_count，在此之前 NS 是三站裡唯一完全沒有兜底的）。
+        # 分類依據：0731–0804 全庫存交叉統計，見 13b §1a-3 對照表。
+        ft = str(e.get("footage_type") or "").strip().upper()
+        if ft in FT_MUST_BITE and "無BITE" in e["entry"]:
+            skipped.append(f"{i}: footageType={ft} 必有訪問聲音卻寫「無BITE」——"
+                           f"回頭把引言寫進 ▎BITE： 段再重送")
+            continue
+        if ft in FT_GRAY and "無BITE" in e["entry"]:
+            # 灰區不擋（PKG 確實有真的無訪問的，如史上的今天資料回顧），只提醒
+            notes.append(f"{i}: footageType={ft} 標了「無BITE」——PKG 有一半以上其實有訪問，"
+                         f"若是 1 分鐘以上的記者包裝請回頭確認一次")
         state["items"][i] = new_item(e["source"], e["checkpoint"], e["status"], e["entry"].strip())
         added.append(i)
     if added:
         save(state, args.file)
     print(f"OK 新增 {len(added)} 則" + (f"：{','.join(added)}" if added else ""))
+    if notes:
+        print(f"提醒 {len(notes)} 則（已入庫，請自行確認）：")
+        print("\n".join("  " + n for n in notes))
     if skipped:
         print(f"跳過 {len(skipped)} 則：")
         print("\n".join("  " + s for s in skipped))

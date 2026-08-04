@@ -285,7 +285,20 @@ const clean = (h) => decodeEnt(
   ```
 
 - **`footageType` 實測全集**（0803 晚 100 則樣本）：`PKG`／`NAT PKG`／`DONUT`／`LOOK LIVE`／`VO/NAT`／`VO/STILL`／`VO/SIL`／`VO/RAW`／`SOT`／`BUTTED SOTS`／`ISO`／`CLIP`／`BEEPER`／`GRAPHIC`／`AUDIO TRACK`／`""`（空字串多為 `VERTICAL:` 直式素材）。前面那些是正常內容型態；要排除的只有 `AUDIO TRACK` 與「`GRAPHIC` ＋初稿字樣」兩種。
-- 🎯 **BITE 判定＝看 `footageType`（機械判準，2026-08-04 明文化）**：`footageType` 為 `SOT`／`BUTTED SOTS`／`SOT RAW` → **必定標 `(BITE)`**，禁止標「無BITE」。0804 抽驗 10 則 `SOT` 類素材，state 裡全部正確標了 `(BITE)`——NS 是三站裡唯一沒出誤判的，正因為它一直在用這個機械欄位；這條把既有正確做法明文化，與 RT（`sb_count`）／AP（`has_sot`）統一成同一套「有無 BITE 由機器判、BITE 內容才是 LLM 的事」原則。⚠️ NS 稿件**不用 `SOUNDBITE` 這個詞**（0804 實測 60 則全部 0 個），引言段標記是 `--SOT--`——**不要拿 AP／RT 的關鍵字習慣來掃 NS 稿件**，會全部誤判成無BITE。
+- 🎯 **BITE 判定＝看 `footageType`（機械判準；2026-08-04 依實測全表訂正）**：三站統一「有無 BITE 由機器判、BITE 內容才是 LLM 的事」。⚠️ NS 稿件**不用 `SOUNDBITE` 這個詞**（0804 實測 60 則全部 0 個），引言段標記是 `--SOT--`——**不要拿 AP／RT 的關鍵字習慣來掃 NS 稿件**，會全部誤判成無BITE。
+
+  **完整對照表**（0731–0804 共 15 種 `footageType`、實際庫存交叉統計，非憑印象列舉）：
+
+  | 類別 | `footageType` | 實測（無BITE／有BITE） | 處置 |
+  |---|---|---|---|
+  | 🔴 **必有 BITE** | `SOT`／`BUTTED SOTS`／`SOT RAW`／`ISO`／`DONUT`／`INTERVIEW`／`RAW` | **0 ／ 43** | **禁止標「無BITE」**，`add-batch` 直接擋 |
+  | ⚠️ **灰區** | `PKG` | 7 ／ 8 | **不硬擋**，`add-batch` 印提醒；1 分鐘以上的記者包裝多半有訪問，標無BITE 前回頭看一次稿 |
+  | ✅ 多半無聲 | `VO/NAT`／`VO/STILL`／`VO/SIL`／`VO/RAW`／`LOOK LIVE`／`CLIP`／`CLIP-VIDEO`／`NAT PKG` | 52 ／ 0 | 標「無BITE」合理，不檢查 |
+  | ⛔ 不採納 | `AUDIO TRACK`／`GRAPHIC`（＋`THIS IS NOT THE FINAL SCRIPT`） | — | 列表階段直接排除，見 `13` |
+
+  ⚠️ **原規則只列 `SOT`／`BUTTED SOTS`／`SOT RAW` 是不完整的**（0804 訂正）——`ISO`（來賓單機／聽證會長帶）、`DONUT`（記者連線包裝）、`INTERVIEW`（專訪）、`RAW`（記者會原始帶）同樣**零例外**必有訪問聲音。漏列的代價：`isSot` 用 `/SOT/i` 測 `footageType`，`INTERVIEW` 不含 "SOT" 字樣就回 false，agent 照著標無BITE（0804 `IN-19TU` 西班牙球星專訪整支是 Q&A 逐字稿，一度被標無BITE，agent 後來自行發現才修正——**靠人工補救就是誤判的來源**）。
+
+  🎯 **`batch.json` 的 NS 項目必帶 `footage_type`**（2026-08-04 起，與 RT／AP 的 `sb_count` 同一機制）：抽取白名單已經有 `ft` 欄位，原樣帶上即可。`add-batch` 會擋「必有 BITE 類卻寫無BITE」的單筆，PKG 則只印提醒不擋。不帶＝不檢查（向下相容），但**新輪次一律要帶**。
 - ⚠️ **`hideScript` 與初稿無關**（實測排除的誤判線索）：`hideScript: true` 的那幾則稿件一樣完整（含 `--LEAD IN--`／`--VO SCRIPT--`），只是站方的顯示設定，**不可拿來判斷稿件狀態**。
 - ⚠️ **token 過期時第一次呼叫會拿到 `null`**，重新整理頁面等登入完成再打；**連兩次拿不到就是真的登出，停下來請使用者登入**（agent 不得自行輸入帳密）。
 - 這條路一次解掉 NS 的五個老卡點（清單無連結／虛擬化列表/捲不動／逐則點 modal／Has Script 篩不動），詳見回覆檔。
@@ -407,7 +420,7 @@ python scripts/s2_state.py needs-review done --ids RT2333    # 處理完就結�
 
 - 批次擷取流程 ＝ 收集本輪列表 ID → `diff` → 只對「新的」取文稿（**§1a API 直查，不開詳情頁**；失敗才退 §1b） → **邊看邊把每則累積進一份 `batch.json`，全部看完後一次 `add-batch`**。不要一則一次 `add`（2026-08-02 起：呼叫次數是 V2 變慢主因，一輪 25 則從約 52 次呼叫降到約 4 次）。**全程不載入 70 則 raw_entry。**
 - **批次規則**：`batch.json` 是 JSON 陣列，每筆 `{"id","source","checkpoint","status","entry"}`（`entry` 直接放字串，含換行）。撞已存在 id 或格式錯的單筆會**自動跳過並回報原因、不中斷**——回報裡有跳過清單時，逐筆判斷：已存在→改用 `update-entry`，格式錯→修正後單筆補。`--pairs` 的分隔符**優先用分號 `;`**（中主題含逗號時逗號會切錯）。
-- 🎯 **RT／AP 每筆必帶 `sb_count`（2026-08-04 起，BITE 機械兜底）**：抽取白名單已回傳 `sb_count`（RT）／`sb_count`＋`has_sot`（AP），寫 batch.json 時**原樣帶上**（`{"id":…,"sb_count":4,…}`）。`add-batch` 會擋「`sb_count > 0` 卻寫『無BITE』」的單筆（跳過並要求把引言寫進 `▎BITE：` 段重送）；`update-entry` 用 `--sb-count N` 帶入，同樣會擋。NS 走 `footageType` 判準、SNTV 列表級沒有全文，這兩類**不帶** `sb_count`（不帶＝不檢查，向下相容）。
+- 🎯 **RT／AP 每筆必帶 `sb_count`（2026-08-04 起，BITE 機械兜底）**：抽取白名單已回傳 `sb_count`（RT）／`sb_count`＋`has_sot`（AP），寫 batch.json 時**原樣帶上**（`{"id":…,"sb_count":4,…}`）。`add-batch` 會擋「`sb_count > 0` 卻寫『無BITE』」的單筆（跳過並要求把引言寫進 `▎BITE：` 段重送）；`update-entry` 用 `--sb-count N` 帶入，同樣會擋。SNTV 列表級沒有全文，**不帶** `sb_count`（不帶＝不檢查，向下相容）。**NS 改帶 `footage_type`**（2026-08-04 起）——NS 稿件不用 `SOUNDBITE` 這個詞、數不出 `sb_count`，兜底改看 `footageType`：必有 BITE 的七種直接擋、`PKG` 只印提醒，對照表見 §1a-3。
 - 💾 **每筆必帶 `src_text`＝瘦身後的原文，落檔留存（2026-08-04 訂案）**：`batch.json` 每筆再加一個 `src_text`，放**抽取白名單瘦身後的稿件全文**（RT 的 `story`／AP 的 `script`／NS 的 `script`，已經去過 tag 與 metadata 的那份），`add-batch` 會忽略這個未知欄位、不影響入庫，但檔案本身留在 `{YYYYMMDD}/` 暫存資料夾裡可事後查。
   - **為什麼要存（0804 實錯代價）**：原本 `batch.json` 只存 `entry`（agent 消化完的中文三段式成品），**瘦身後的原文用完就沒了**。0804 回頭查 BITE 誤判時，只能重開瀏覽器打 API 撈原稿，而且**RT 有 4 則（`RT2875`／`2845`／`2902`／`2847`）、AP 有 9 則已經捲出 API 翻頁範圍，永遠查不回來**——素材一旦被新素材推出清單就無法回溯，等於當天的判斷再也無法查證。存了原文就能離線比對，不必開瀏覽器、也不受站方清單長度限制。
   - **用途**：①誤判查證（BITE、限制語、時長、講者都能回頭核）②`sb_count` 兜底擋下時直接看原文改，不必重打 API ③日後要做規則研究或抽樣分析有現成語料。
