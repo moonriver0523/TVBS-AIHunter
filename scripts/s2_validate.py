@@ -50,13 +50,13 @@ RED_RE = re.compile(r"^(🔴)\s*")
 MARK_RE = re.compile(r"^([△▲●◆])\s*")
 # 已播標記（2026-08-04 使用者訂案）：本台已經做過這則新聞的素材。
 # **仍然照常摘要入庫**——後續發展可能還要再做，只是優先度降低，讓編輯一眼略過已處理的。
-# 位置在 🔴 之後、代碼之前，兩者可並存：`▲ 🔴 ⚪ IN-23SU (…) ▎…`
+# 位置在 🔴 之後、代碼之前，兩者可並存：`▲ 🔴 🟤 IN-23SU (…) ▎…`
 # ⚠️ 跟 🔴 同樣必須一併剝掉，否則 LINE_RE 不 match，整行會從品質掃與檔頭統計裡消失。
-AIRED_RE = re.compile(r"^(⚪)\s*")
+AIRED_RE = re.compile(r"^(🟤)\s*")
 
 
 def strip_mark(l):
-    """回傳 (時段標記或空字串, 去掉時段標記／🔴／⚪ 之後的行)。"""
+    """回傳 (時段標記或空字串, 去掉時段標記／🔴／🟤 之後的行)。"""
     m = MARK_RE.match(l)
     mark, rest = (m.group(1), l[m.end():]) if m else ("", l)
     for rx in (RED_RE, AIRED_RE):
@@ -77,7 +77,7 @@ def is_red(l):
 
 
 def is_aired(l):
-    """素材行是否帶已播標記 ⚪（時段標記與 🔴 之後、代碼之前）。"""
+    """素材行是否帶已播標記 🟤（時段標記與 🔴 之後、代碼之前）。"""
     rest = _after_mark(l)
     r = RED_RE.match(rest)
     if r:
@@ -421,10 +421,10 @@ def header_from_lines(lines, window="", date="", mmdd="", alerts=()):
     out.append(f"收錄外電共{total}則（{'／'.join(parts)}）{tail}")
     # 第 4 行圖例：只要當份有用到任一時段標記就印（含 △），沒用到就不印
     legend = [f"{m}={MARKS[m]}" for m in MARKS if marked[m]]
-    # ⚪ 已播（2026-08-04）：同樣「有用到才印」——沒標到的日子不要多一段沒用的圖例。
+    # 🟤 已播（2026-08-04）：同樣「有用到才印」——沒標到的日子不要多一段沒用的圖例。
     # 🔴 不進圖例：它已經有檔頭「🔴 重大：」那幾行自我說明，再列一次是贅字。
     if any(is_aired(raw) for raw in lines):
-        legend.append("⚪=本台已做過（仍可做後續）")
+        legend.append("🟤=本台已做過（仍可做後續）")
     if legend:
         out.append("標記：" + "　".join(legend))
     # 最後才是重大提醒行（來源由呼叫端決定，見 docstring）

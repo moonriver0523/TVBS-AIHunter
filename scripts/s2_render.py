@@ -50,7 +50,7 @@ FIXED = ["大陸", "關稅", "美伊", "中東", "烏俄", "美國", "政治", "
 
 MARK_RE = re.compile(r"^\s*([△▲●◆])\s*")
 RED_RE = re.compile(r"^\s*(🔴)\s*")
-AIRED_RE = re.compile(r"^\s*(⚪)\s*")
+AIRED_RE = re.compile(r"^\s*(🟤)\s*")
 
 
 def load_state(path):
@@ -63,11 +63,11 @@ def load_state(path):
 
 
 def strip_marks(entry):
-    """剝掉 raw_entry 開頭既有的時段標記／🔴／⚪，回傳 (有無🔴, 有無⚪, 淨內容)。
+    """剝掉 raw_entry 開頭既有的時段標記／🔴／🟤，回傳 (有無🔴, 有無🟤, 淨內容)。
 
     標記一律由 render 重算後補回：舊資料有的有、有的沒有，照抄會出現雙標記或漏標記。
-    ⚪ 的正規來源是 item 的 `aired` 欄位（`set-aired` 寫入），但 raw_entry 裡若被手打
-    進去也認得——認完就剝掉，避免欄位與字串同時吃到而印出兩個 ⚪。
+    🟤 的正規來源是 item 的 `aired` 欄位（`set-aired` 寫入），但 raw_entry 裡若被手打
+    進去也認得——認完就剝掉，避免欄位與字串同時吃到而印出兩個 🟤。
     """
     e = entry.lstrip("\ufeff")
     m = MARK_RE.match(e)
@@ -157,9 +157,9 @@ def render_item(it, base_mmdd):
     prefix = mk + " "
     if red:
         prefix += "🔴 "
-    # ⚪ 已播：正規來源是 `aired` 欄位（set-aired 寫入），raw_entry 手打的也認
+    # 🟤 已播：正規來源是 `aired` 欄位（set-aired 寫入），raw_entry 手打的也認
     if it.get("aired") or aired_txt:
-        prefix += "⚪ "
+        prefix += "🟤 "
     lines = body.split("\n")
     # lstrip：raw_entry 首行若自帶前導空白，補上標記後會變成「△  內容」或讓網址位移；
     # prefix 固定以一個半形空格收尾，確保 `△ https://…` 不會黏在一起

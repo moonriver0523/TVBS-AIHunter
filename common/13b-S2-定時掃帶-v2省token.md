@@ -366,7 +366,7 @@ python scripts/s2_state.py add-side --txt "…/0803 CNN側錄.txt" --source CNN 
 python scripts/s2_state.py set-alert --set "▲ AP4676262 巴基斯坦自殺炸彈14死…"
                                                            # 檔頭 🔴 重大提醒行（≤3則，整組取代；--add 追加／--clear 撤掉）
 python scripts/s2_state.py set-aired --ids RT2995,AP4676455
-                                                           # ⚪ 本台已做過（仍留庫存、仍可做後續）；--clear 取消
+                                                           # 🟤 本台已做過（仍留庫存、仍可做後續）；--clear 取消
                                                            # ⛔ 只有使用者下令才標，agent 不得自行判斷
 python scripts/s2_state.py set-mark --ids RT2754,RT2753 --mark ▲
                                                            # 補掃輪等 checkpoint 判不準時寫死時段標記（--clear 改回自動）
@@ -410,14 +410,14 @@ python scripts/s2_state.py needs-review done --ids RT2333    # 處理完就結�
 
 | 使用者這樣說 | 你要跑的 |
 |---|---|
-| 「把 RT2612、RT2993 標**已播**／**灰圈**／**⚪**／**本台做過了**」 | `set-aired --ids RT2612,RT2993` |
+| 「把 RT2612、RT2993 標**已播**／**灰圈**／**🟤**／**本台做過了**」 | `set-aired --ids RT2612,RT2993` |
 | 「RT2612 **取消已播**／拿掉灰圈」 | `set-aired --ids RT2612 --clear` |
 | 「把 XX 標**重大**／紅圈」 | `set-alert --add "…"`（檔頭行）＋正文該則加 `🔴`（見 `13`） |
 | 「XX **分類錯了**，應該放 OO」 | `set-category --pairs`（分隔符用分號 `;`） |
 | 「XX 這則**不要了**／誤收」 | `remove --ids XX`（真的不要才用；「待人工」用 `needs-review add`） |
 | 「XX 的**時段標記**錯了」 | `set-mark --ids XX --mark ▲` |
 
-**回報**：實際改了幾則、render 後有沒有反映出來（例如標 ⚪ 後檔頭圖例是否出現 `⚪=本台已做過（仍可做後續）`）。⚠️ **不要**把整份 txt 貼回來。
+**回報**：實際改了幾則、render 後有沒有反映出來（例如標 🟤 後檔頭圖例是否出現 `🟤=本台已做過（仍可做後續）`）。⚠️ **不要**把整份 txt 貼回來。
 
 > ⚠️ **併發**：狀態檔沒有鎖檔機制。若當下正在跑掃帶輪次，**先做完該輪再處理口令**，不要兩邊同時寫（0803 實錯：另一個 session 同時動同一份檔）。若使用者是在開工 prompt 裡一併交代的，就掃完順手做、只 render 一次。
 
