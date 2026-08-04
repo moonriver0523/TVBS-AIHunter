@@ -512,7 +512,7 @@ def cmd_set_mark(state, args):
     """寫死某幾則的時段標記（render 預設由 first_seen_checkpoint 推）。
 
     用在 checkpoint 判不準的輪次——最典型是**補掃輪**：09:10 的 `r13-…-RT補掃`
-    撈回的是稍早該收而漏掉的素材，照 checkpoint 會標成 `●`（05:00–09:00 新增），
+    撈回的是稍早該收而漏掉的素材，照 checkpoint 會標成 `●`（07:00–09:00 新增），
     但它們實際屬 `▲` 那個時段。標記寫進該則的 `mark` 欄位，render 一律優先採用。
     """
     ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
