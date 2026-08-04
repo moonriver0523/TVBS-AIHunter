@@ -33,7 +33,7 @@
 ## 步驟 1 — 找到該則並取得**完整官方稿件**（關鍵，不可省略）
 在 CNN Newsource（newsource.ns.cnn.com）搜尋該 ID，開啟該則展開的詳細框（Story Number、Title、Description、Source、Embargo、Footage Type、TRT、Reporter、Script）。
 
-⚠️ **CNN Newsource 不支援用網址直接搜尋**（2026-07-21 使用者確認）。`https://newsource.ns.cnn.com/search?q={ID}` 會回 **Page Not Found**，只能在網站上方搜尋欄輸入。這點與 Reuters／AP 相反，不要套用它們的網址查詢做法。送出後若整頁凍結，見 [`../common/09-known-issues.md`](../common/09-known-issues.md#cnn-newsource)。
+⚠️ **CNN Newsource 不支援用網址直接搜尋**（2026-07-21 使用者確認；**2026-08-04 已同步寫進 [`common/13b`](../common/13b-S2-定時掃帶-v2省token.md) §0**——原本只記在這份自動寫稿規則裡，掃帶 agent 讀不到，0804 就有 agent 打了 `/search`、看到 Page Not Found 後轉去查「NS 卡點」繞一大圈）。`https://newsource.ns.cnn.com/search?q={ID}` 會回 **Page Not Found**，只能在網站上方搜尋欄輸入。這點與 Reuters／AP 相反，不要套用它們的網址查詢做法。送出後若整頁凍結，見 [`../common/09-known-issues.md`](../common/09-known-issues.md#cnn-newsource)。
 
 ⚠️ 此展開框裡精簡的「Script」欄位**經常只是佔位符**（例如「*EDITORIAL INFORMATION PROVIDED BY [source]*」），**不是**完整稿件，不要誤用。真正完整的稿件（SUPER 8 姓名/職稱清單、LEAD IN、完整記者包裝含所有旁白與 BITE）在「Media:」列旁的 **「≡Q」icon** 後面（會開啟一個「Preview」彈窗，左側播放器、右側為完整稿件文字，可捲動）。
 
