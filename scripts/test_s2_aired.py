@@ -61,7 +61,7 @@ lines = ["△ " + BODY, "△ 🟤 RT2880 (NYSE) ▎美股開高。▎畫面：�
 hdr = sv.header_from_lines(lines, mmdd="0804")
 joined = "\n".join(hdr)
 report("🟤 行計入檔頭則數（應為 2 則）", "共2則" in joined, joined)
-report("🟤 用到時圖例才出現", "🟤=本台已做過" in joined, joined)
+report("🟤 用到時圖例才出現", "🟤=已做過" in joined, joined)
 report("沒用到 🟤 時圖例不出現",
        "🟤" not in "\n".join(sv.header_from_lines(["△ " + BODY], mmdd="0804")))
 

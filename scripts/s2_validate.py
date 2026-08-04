@@ -424,7 +424,7 @@ def header_from_lines(lines, window="", date="", mmdd="", alerts=()):
     # 🟤 已播（2026-08-04）：同樣「有用到才印」——沒標到的日子不要多一段沒用的圖例。
     # 🔴 不進圖例：它已經有檔頭「🔴 重大：」那幾行自我說明，再列一次是贅字。
     if any(is_aired(raw) for raw in lines):
-        legend.append("🟤=本台已做過（仍可做後續）")
+        legend.append("🟤=已做過")
     if legend:
         out.append("標記：" + "　".join(legend))
     # 最後才是重大提醒行（來源由呼叫端決定，見 docstring）
