@@ -11,11 +11,21 @@
 
 ⚠️ **靠記憶打網址容易打錯**（2026-08-02 實例：CNN Newsource 被誤記成 `newsource.cnn.com`，缺了 `.ns.`，導向「隱私權設定發生錯誤」頁面，`get_page_text`／截圖都讀不到東西）。開工前照這份表核對，不要憑印象打：
 
-| 站 | 入口網址 | 備註 |
-|---|---|---|
-| AP Newsroom | `https://newsroom.ap.org/home` | Latest 分頁；空白關鍵字查詢會回空白頁 |
-| Reuters Connect | `https://www.reutersconnect.com/all?media-types=vid` | 大列表，My Subscription／Newest First |
-| CNN Newsource | `https://newsource.ns.cnn.com` | **注意中間有 `.ns.`**，少了會導向錯誤頁；不支援網址直接搜尋，見 [`cnn/01-auto-script-writing.md`](../cnn/01-auto-script-writing.md) |
+| 順序 | 站 | 入口網址 | 備註 |
+|---|---|---|---|
+| **1** | CNN Newsource（NS） | `https://newsource.ns.cnn.com` | **注意中間有 `.ns.`**，少了會導向錯誤頁；不支援網址直接搜尋，見 [`cnn/01-auto-script-writing.md`](../cnn/01-auto-script-writing.md) |
+| **2** | AP Newsroom | `https://newsroom.ap.org/home` | Latest 分頁；空白關鍵字查詢會回空白頁 |
+| **3** | Reuters Connect（RT） | `https://www.reutersconnect.com/all?media-types=vid` | 大列表，My Subscription／Newest First |
+
+### ⏱️ 掃描順序固定 **NS → AP → RT**（2026-08-04 使用者訂案）
+
+**理由是 NS 的 58 分鐘保活門票要能算得準**：NS 登入態是 1 小時滑動時效，每次開頁面就重新計時（機制見 §1a-3「NS 登入態」框）。**把 NS 排在整點開工的第一站，「上次接觸 NS」就等於「這一輪的開始時間」**——下一次該續命的時刻直接用整點推算即可。
+
+⚠️ **NS 排最後就失控**：一輪跑多久取決於當天素材量與站方回應速度，NS 可能 16:05 開、也可能 16:40 才開，「距上次接觸 58 分鐘」的基準點每輪都在飄，保活該在幾點做就算不準——過期只能人工重登，無人值守時段（`▲`）尤其付不起這個代價。
+
+- 這是**順序**規則，不是「只掃 NS」：三站照舊全掃，只是先後固定。
+- 某站失敗照 §1a-4 守門條款退階梯，**不影響其餘兩站的順序**（NS 掛了仍然接著掃 AP → RT）。
+- 保活的實際做法（兩輪之間怎麼補一次）見 §5 防卡設計第 2 條。
 
 ## 與 V1 的差異總表
 
@@ -580,7 +590,8 @@ youtube.com/watch?v=AA6tRh8n-_w
 
 1. **每輪開工第一步跑 `resume`**——context 斷掉重進時，以腳本回報的狀態為準接續，不憑記憶。
    ⚠️ **緊接著跑 `scratch-dir --mmdd {晚班起始日MMDD}`**（2026-08-03 深夜訂案），取得（並自動建立）本輪暫存檔資料夾路徑——本輪所有中間檔（`_ap_*`／`_rt_*`／`{MMDD}-batch-*.json` 等）都寫進這個路徑，**不要**直接寫在 `自動掃帶系統/` 這層。日期用晚班起始日，不是實際掃帶當下的日曆日（跟「檔名不換日」同邏輯）。正式庫存檔（`{MMDD}-s2-state.json`／`{MMDD}晚班交接.txt`）不受影響，維持原位不動。指令：`python scripts/s2_state.py scratch-dir --mmdd 0804`（印出路徑，資料夾不存在就自動建）。
-2. 🎫 **兩輪之間顧好 NS 保活（58 分鐘門票）**：NS 登入態是 1 小時滑動時效、過期只能人工重登（機制與證據見 §1a-3「NS 登入態」框）。**掃帶 agent 自己在等待期做**——距上次接觸 NS 接近 58 分鐘就 `browser_navigate` 開一次 `newsource.ns.cnn.com/landing`、確認 `isAuthenticated`，然後照常收工關瀏覽器。⛔ **不可另開獨立 agent／排程做這件事**，Playwright 只有一個 persistent profile，會跟掃帶互鎖（0803 空窗八小時的坑）。下一輪馬上要開工就不必多跑（開工本身就會續期）。
+2. 🎫 **兩輪之間顧好 NS 保活（58 分鐘門票）**：NS 登入態是 1 小時滑動時效、過期只能人工重登（機制與證據見 §1a-3「NS 登入態」框）。**掃帶 agent 自己在等待期做**——距上次接觸 NS 接近 58 分鐘就 `browser_navigate` 開一次 `newsource.ns.cnn.com/landing`、確認 `isAuthenticated`，然後照常收工關瀏覽器。
+   ⏱️ **基準點＝這一輪的開工時間**（2026-08-04）：掃描順序固定 **NS → AP → RT**（見 §0），NS 是每輪第一站，所以「上次接觸 NS」就等於整點開工那一刻，續命時刻直接用整點推算即可。⚠️ 若哪次破例把 NS 排到後面，這個推算就不成立——要改用**實際打開 NS 的時間**當基準，不能照整點算。⛔ **不可另開獨立 agent／排程做這件事**，Playwright 只有一個 persistent profile，會跟掃帶互鎖（0803 空窗八小時的坑）。下一輪馬上要開工就不必多跑（開工本身就會續期）。
 3. **RT 卡住跳站**：連續 2 次 Next 沒反應／頁面沒變 → 記下目前 Edit No.（`needs-review add`），跳去掃 AP／CNN，回報 RT 中斷點。不准死磕（V1 已知 SPA 卡快取雷）。
 4. **半夜禁問**：無人值守時段遇到需使用者確認的事項（可疑素材、分類拿不準、腳本壞掉）→ `needs-review add` 記錄＋寫進交接檔備註，**繼續往下跑**。不得 `AskUserQuestion` 等回應、不得停住。⚠️ **NS 登入過期是此原則的典型適用場景**：無人值守時段發現 NS 卡登入頁，記進 `needs-review` 並跳過 NS，不要停住等使用者。
 5. **fallback 全部單向**：階梯只往下走（選擇器→整頁→截圖），不回頭重試上一步。
