@@ -28,8 +28,13 @@ for _s in (sys.stdout, sys.stderr):
     except AttributeError:  # py<3.7
         pass
 
-# 素材代碼（行首）：RT#### / AP####### / APcctv###### / CNN Newsource XX-##XX / 側錄 CNN|NHK ######
-CODE = r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2}-\d{1,3}[A-Z]{2}|(?:CNN|NHK) \d{6})"
+# 素材代碼（行首）：RT#### / AP####### / APcctv###### / CNN Newsource 前綴-##XX / 側錄 CNN|NHK ######
+# ⚠️ NS 代碼的字母前綴**不是固定兩碼**（2026-08-04 實錯）：除了常見的 `PY-03MO`／`WE-001TU`，
+# 還有 `DIG-01TU`（數位專題）、`HIST-02TU`（史上的今天）這類三、四碼前綴。原本寫死 `[A-Z]{2}`，
+# 那兩則就**整行不被辨識成素材行**——正文印得出來（render 直接輸出 raw_entry、不靠 CODE），
+# 但檔頭則數少算、品質掃完全跳過它們，而且回報還是「0 命中」。這種漏是靜默的，
+# 放寬成 2–6 碼；日後再冒出更長的前綴，症狀一樣是「txt 有這行但檔頭數字對不上」。
+CODE = r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2,6}-\d{1,3}[A-Z]{2}|(?:CNN|NHK) \d{6})"
 LINE_RE = re.compile(rf"^{CODE}(?:\s*/\s*{CODE})*\s")
 
 # 時段標記（2026-08-02 訂案，2026-08-03 補 △，2026-08-04 固定排程定案邊界＋補 ◆）：
@@ -386,7 +391,7 @@ def header_from_lines(lines, window="", date="", mmdd="", alerts=()):
             counts["AP"] += 1
         elif first.startswith("RT"):
             counts["RT"] += 1
-        elif re.match(r"[A-Z]{2}-\d", first):
+        elif re.match(r"[A-Z]{2,6}-\d", first):   # 前綴不是固定兩碼，見 CODE 的說明
             counts["NS"] += 1
         else:
             counts["其他"] += 1

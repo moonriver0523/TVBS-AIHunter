@@ -78,5 +78,36 @@ report("set-mark 寫死的舊 ● 仍生效（舊資料相容）", sr.render_ite
     {"raw_entry": BODY, "first_seen_checkpoint": "0804-1600", "mark": "●"},
     "0804")[0].startswith("● "))
 
+
+# ── 累計時間窗（2026-08-04 訂正：不是單輪區間）─────────────────────
+def st(items_cp, checkpoint, window_start=None):
+    s = {"items": [{"first_seen_checkpoint": c} for c in items_cp],
+         "checkpoint": checkpoint}
+    if window_start:
+        s["window_start"] = window_start
+    return s
+
+
+w = sr.window_from_state(st(["0804-1600", "0804-1800"], "0804-1800",
+                            "2026-08-04 13:00"), "0804")
+report("有 window_start：從開檔算起", w == "2026-08-04 13:00–2026-08-04 18:00", w)
+
+w = sr.window_from_state(st(["0804-1600", "0804-1800"], "0804-1800"), "0804")
+report("沒 window_start：退回最早 checkpoint",
+       w == "2026-08-04 16:00–2026-08-04 18:00", w)
+
+w = sr.window_from_state(st(["0804-1600", "0805-0100", "0805-0800"], "0805-0800",
+                            "2026-08-04 13:00"), "0804")
+report("跨夜：終點落在隔天", w == "2026-08-04 13:00–2026-08-05 08:00", w)
+
+report("不自己補「（約N hrs）」（會被檔頭重複計算）", "hrs" not in w, w)
+
+hdr = "\n".join(sv.header_from_lines(
+    ["△ " + BODY], window="2026-08-04 13:00–2026-08-04 18:00", mmdd="0804"))
+report("檔頭算出時數且不重複", "（約5hrs）" in hdr and hdr.count("hrs") == 1, hdr)
+
+w = sr.window_from_state({"items": [], "checkpoint": ""}, "0804")
+report("完全沒資料時回空字串（不炸）", w == "", repr(w))
+
 print("\n" + ("全部通過" if ok else "有項目失敗"))
 sys.exit(0 if ok else 1)

@@ -35,7 +35,11 @@ TOP_FIELDS = ("checkpoint", "updated_at", "window_local",
               # alerts＝檔頭 🔴 重大提醒行（沒有舊 txt 可沿用了）；
               # special_category＝第一格機動大分類的顯示名（如「熊本地震」）；
               # last_render_ts＝上次 render 時間，resume 用來算「距上次 render 有變動」。
-              "alerts", "special_category", "last_render_ts")
+              # window_start（2026-08-04）＝這份交接檔「開檔」的時間（第一輪掃描窗的
+              # 起點，如 `2026-08-04 13:00`），**建檔那一輪寫一次就不要再動**。
+              # 檔頭時間窗＝window_start → 目前 checkpoint，才看得出累計掃了多久；
+              # window_local 是單輪區間、每輪覆蓋，不能拿來當檔頭（0804 實錯）。
+              "alerts", "special_category", "last_render_ts", "window_start")
 
 
 def load(path):

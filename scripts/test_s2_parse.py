@@ -66,6 +66,12 @@ report("HH:MM:SS 時長也認（舊資料有）", f and f["duration"] == "01:01:
 f, _ = sp.parse_entry("△ AP4676115 (測試) ▎摘要。▎畫面：畫面。▎無BITE。")
 report("沒有時長時 duration 為 None", f and f["duration"] is None)
 
+# ── NS 代碼的字母前綴不是固定兩碼（2026-08-04 實錯）─────────────────
+for code, label in (("PY-03MO", "兩碼前綴"), ("WE-001TU", "兩碼＋三位數"),
+                    ("DIG-01TU", "三碼前綴"), ("HIST-02TU", "四碼前綴")):
+    f, why = sp.parse_entry(f"△ {code} (測試) ▎摘要。▎畫面：畫面。▎無BITE。▎00:25")
+    report(f"NS {label}（{code}）解析得出", f is not None and f["codes"] == [code], why or "")
+
 # ── 多代碼並列 ───────────────────────────────────────────────────────
 f, _ = sp.parse_entry("△ RT2670 / RT2654 (華州野火) ▎野火當下畫面。▎畫面：火場。▎無BITE。")
 report("A/B 並列代碼都收", f and f["codes"] == ["RT2670", "RT2654"], f and f["codes"])

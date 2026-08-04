@@ -88,6 +88,67 @@ def mmdd_shift(mmdd, days):
     return d.strftime("%m%d")
 
 
+def checkpoint_time(checkpoint, base_mmdd):
+    """checkpoint 標籤 → `(第幾天, HHMM)`；認不出時間回 `(0, None)`。
+
+    標籤是 agent 自由命名的字串（`0802-1700`／`r8-0803-0100`／`exp-0803-0000`／
+    `r13-0803-0910-RT補漏`），所以只認裡面的 4 位數字群：認得出當天／隔天 MMDD
+    就據以判日，認不出才退回「用最後一組數字當 HHMM」。
+    """
+    toks = re.findall(r"\d{4}", checkpoint or "")
+    nxt = mmdd_shift(base_mmdd, 1) if base_mmdd else None
+    for n, t in enumerate(toks):
+        if t == base_mmdd:
+            return 0, (int(toks[n + 1]) if n + 1 < len(toks) else None)
+        if t == nxt:
+            return 1, (int(toks[n + 1]) if n + 1 < len(toks) else None)
+    return 0, (int(toks[-1]) if toks else None)   # 認不出日期：假設當天
+
+
+def window_from_state(state, base_mmdd):
+    """算出**開檔至今**的累計時間窗字串，供檔頭第 2 行使用（2026-08-04 訂正）。
+
+    ⚠️ 原本是直接印狀態檔的 `window_local`，但那個欄位存的是**單輪**掃描區間
+    （agent 每輪覆蓋成 `16:00-18:00` 這種），所以檔頭永遠只反映最後一輪、
+    看不出這份交接檔累積掃了多久——使用者 2026-08-04 指出。
+
+    起點：`_top.window_start`（第一輪建檔時寫一次，格式 `YYYY-MM-DD HH:MM` 或 `HH:MM`）；
+    沒有就退回**最早的 checkpoint**。⚠️ 退路會少算第一輪往前涵蓋的那段
+    （例：16:00 那輪掃的是 13:00–16:00，checkpoint 只看得到 16:00），
+    所以第一輪應該把 `window_start` 設好。
+    終點：頂層 `checkpoint`（目前這輪），沒有就取最晚的 checkpoint。
+    """
+    times = [checkpoint_time(v.get("first_seen_checkpoint"), base_mmdd)
+             for v in state.get("items", [])
+             if isinstance(v, dict) and v.get("first_seen_checkpoint")]
+    times = [t for t in times if t[1] is not None]
+
+    end = checkpoint_time(state.get("checkpoint"), base_mmdd)
+    if end[1] is None:
+        end = max(times) if times else None
+    if end is None:
+        return ""
+
+    start_txt = (state.get("window_start") or "").strip()
+    m = re.search(r"(\d{1,2}):(\d{2})", start_txt)
+    if m:
+        sday = 1 if (base_mmdd and mmdd_shift(base_mmdd, 1) in start_txt) else 0
+        start = (sday, int(m.group(1)) * 100 + int(m.group(2)))
+    elif times:
+        start = min(times)
+    else:
+        return ""
+
+    def fmt(t):
+        d = mmdd_shift(base_mmdd, t[0]) if base_mmdd else ""
+        hm = f"{t[1] // 100:02d}:{t[1] % 100:02d}"
+        return f"{datetime.now().year}-{d[:2]}-{d[2:]} {hm}" if d else hm
+
+    # 只回傳起訖，**不要**自己補「（約N hrs）」——時數由 header_from_lines 算，
+    # 這裡先補上會被它當成終點字串的一部分，變成「18:00（約5hrs）（約5hrs）」。
+    return f"{fmt(start)}–{fmt(end)}"
+
+
 def mark_for(checkpoint, base_mmdd):
     """依 `first_seen_checkpoint` 推時段標記（WP1 前提三：由 render 自動補）。
 
@@ -106,20 +167,7 @@ def mark_for(checkpoint, base_mmdd):
     補掃輪（例如 09:10 的 `r13-…-RT補掃` 撈回稍早漏掉的素材）用 checkpoint 判會標成 `■`，
     但它們其實屬更早的時段——這種要用 `s2_state.py set-mark` 在該則上寫死標記，見下方 override。
     """
-    cp = checkpoint or ""
-    toks = re.findall(r"\d{4}", cp)
-    nxt = mmdd_shift(base_mmdd, 1) if base_mmdd else None
-    day, hhmm = None, None
-    for n, t in enumerate(toks):
-        if day is not None:
-            break
-        if t == base_mmdd:
-            day, hhmm = 0, int(toks[n + 1]) if n + 1 < len(toks) else None
-        elif t == nxt:
-            day, hhmm = 1, int(toks[n + 1]) if n + 1 < len(toks) else None
-    if day is None:                      # 認不出日期：假設當天，取最後一組數字
-        day = 0
-        hhmm = int(toks[-1]) if toks else None
+    day, hhmm = checkpoint_time(checkpoint, base_mmdd)
     if hhmm is None:
         return "△"
     if day >= 1:
@@ -360,7 +408,11 @@ def main():
     if not base:
         m = re.search(r"(\d{4})-s2-state", os.path.basename(args.file))
         base = m.group(1) if m else state.get("date", "")
-    text = render(state, args.window or state.get("window_local", ""), base, args.date)
+    # 時間窗優先序：--window 明確指定 > 由狀態檔算出的累計窗 > 舊的 window_local。
+    # ⚠️ `window_local` 是**單輪**區間（agent 每輪覆蓋），拿它當檔頭會讓交接檔
+    # 看起來只掃了兩小時——2026-08-04 使用者指出，改由 window_from_state() 算。
+    win = args.window or window_from_state(state, base) or state.get("window_local", "")
+    text = render(state, win, base, args.date)
     if not args.out:
         sys.stdout.write(text)
         return
