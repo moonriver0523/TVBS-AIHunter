@@ -427,13 +427,29 @@ def stats(path, window, date="", alerts=None, clear_alerts=False):
         print(l)
 
 
+def resolve_path(args):
+    """`path` 位置參數與 `--file` 旗標擇一，兩者都給以 `--file` 優先。
+
+    2026-08-04 補：s2_state.py／s2_render.py 都用 `--file`，只有這支腳本原本是
+    純位置參數，三支姊妹腳本介面不一致，agent 常照另外兩支的慣例猜錯（實錯回報）。
+    這裡兩種都收，不用逼 agent 記住哪支是例外。
+    """
+    p = args.file or args.path
+    if not p:
+        print("ERROR: 需要指定路徑（位置參數或 --file 都可以）")
+        sys.exit(2)
+    return p
+
+
 def main():
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check")
-    c.add_argument("path")
+    c.add_argument("path", nargs="?")
+    c.add_argument("--file", help="與 path 位置參數擇一，同時給以 --file 優先")
     s = sub.add_parser("stats")
-    s.add_argument("path")
+    s.add_argument("path", nargs="?")
+    s.add_argument("--file", help="與 path 位置參數擇一，同時給以 --file 優先")
     s.add_argument("--window", default="")
     s.add_argument("--date", default="", help="YYYY-MM-DD；預設由檔名 MMDD 推得")
     s.add_argument("--alert", action="append", default=[],
@@ -443,9 +459,9 @@ def main():
                    help="撤掉全部重大提醒行（事件退燒／隔日換檔時用）")
     args = p.parse_args()
     if args.cmd == "check":
-        check(args.path)
+        check(resolve_path(args))
     else:
-        stats(args.path, args.window, args.date, args.alert, args.clear_alerts)
+        stats(resolve_path(args), args.window, args.date, args.alert, args.clear_alerts)
 
 
 if __name__ == "__main__":

@@ -201,21 +201,21 @@ WP1 已經把 txt 變成**從狀態檔全量渲染的單向投影**（狀態檔�
 
 `POST /api/v3/stories` 一次回傳編號／形式／時長／摘要／稿件全文／embargo，一輪 NS 從 40+ 次呼叫壓到 2 次。規則已寫進 `common/13b` §1a-3（含 auto mode 安全審查通過的寫法、抽取白名單、footageType 排除純音軌與初稿佔位公告）。配方原文見 [`common/investigation-logs/2026-08-03-NS掃帶卡點報告-回覆.txt`](common/investigation-logs/2026-08-03-NS掃帶卡點報告-回覆.txt)。⚠️ 僅 Playwright 瀏覽器可用，claude-in-chrome 走不通。
 
-## NS 掃帶：Playwright 開瀏覽器仍會卡在帳密登入頁（2026-08-04 使用者回報，待診斷）
+## NS 掃帶：Playwright 登入態不會隨 persistent profile 存續，需人工定期重登（2026-08-04 已確認根因）
 
-上面「API 破口」解掉的是呼叫次數問題，**開瀏覽器本身**這步驟仍不穩——Playwright 開 NS（CNN Newsource）時還是會卡在帳密登入頁，跟持久化 profile（`--user-data-dir` 取代 `--isolated`）原本要解決的「登入狀態跨 session 保留」目標不符。可能跟上面「三層分類」節之前記的 **profile 佔用防呆**（多 agent 並行鎖住同一個 persistent profile）是同一個根因，也可能是登入 cookie／session 真的沒有隨 profile 保留下來，兩者需要分開排除。
+上面「API 破口」解掉的是呼叫次數問題，**開瀏覽器本身**這步驟仍不穩——Playwright 開 NS（CNN Newsource）時還是會卡在帳密登入頁，跟持久化 profile（`--user-data-dir` 取代 `--isolated`）原本要解決的「登入狀態跨 session 保留」目標不符。
 
-- [ ] 先確認是不是 profile 被鎖（同一時段有沒有別的 agent／殘留 Chrome 佔用同一個 persistent profile）
-- [ ] 排除鎖死問題後，若仍卡登入頁，再查是不是登入態沒有真的隨 profile 存續
+- [x] **✅ 根因已確認（2026-08-04，使用者親自重登驗證）**：**不是 profile 被鎖**——是登入態真的沒有隨 persistent profile 穩定存續，需要**人工手動重新登入**才會恢復（使用者這次就是自己手動登的，登完 API 恢復正常）。原本列的「profile 佔用」那個假說**排除**，不必再往那個方向查。
+- [ ] **待確認頻率／規律**：多久會掉一次登入態？是固定時間（例如 session 存活超過某個時數）還是隨機／每次重開機都會掉？知道規律才能決定要不要排進固定排程裡「順便檢查」，或乾脆每輪開工都固定檢查一次登入狀態（成本低，比卡住整輪掃帶划算）。
+- [ ] `common/13b`「每輪開工必做」清單要不要加一條：NS 開工前先確認登入態（例如打一次輕量 API 看回應是不是登入頁），卡住就停下來請使用者手動登入，不要死等或誤判成其他錯誤。
 
-## 工作 agent 回報兩個腳本／規則 bug（2026-08-04 深夜，待修）
+## ~~工作 agent 回報兩個腳本／規則 bug~~ ✅ 兩項都已修（2026-08-04 深夜）
 
-工作 agent 實際跑掃帶時回報，記錄下來但**先不打斷現在的素材處理**，之後找空檔修。
+工作 agent 實際跑掃帶時回報，當下先記錄不打斷素材處理，現已補修。
 
-- [ ] **① `s2_validate.py` 不支援 `--file`，跟手足腳本不一致，容易被猜錯**：`s2_state.py`／`s2_render.py` 都用 `--file 路徑` 這種旗標形式；`s2_validate.py` 的 `check`／`stats` 卻是**位置參數**（`s2_validate.py check "路徑"`，沒有 `--file`）。三支姊妹腳本用法不一致，agent 很自然照另外兩支的慣例去猜，猜錯就噴 `unrecognized arguments`。**確認過現有文件裡的用法範例本身都寫對**（都是位置參數），不是文件錯，是 CLI 介面本身埋了坑。修法：讓 `s2_validate.py` 的 `check`／`stats` 也接受 `--file` 當位置參數的別名（兩種都收），不要求 agent 記住哪支腳本是例外。
-- [ ] **② AP 差集比對可能因為缺前綴誤判「全新」，需要查是否已經影響庫存**：`13b` §1a-3 AP 白名單抽取程式碼（`slimList`／`slimDetail`）的 `id` 欄位直接放 `s.editorialid`，這是**裸數字**（如 `4676366`）；但狀態檔／既有素材代碼一律是 `AP` 前綴＋數字（如 `AP4676366`）。**已確認是程式碼本身的問題，不是猜測**——如果 diff 步驟拿這個裸數字 `id` 直接跟狀態檔裡 `AP` 前綴的既有代碼比對，永遠比不出「已收過」，每輪都會把舊素材當新素材重新判斷一次。
-  - [ ] 先查**有沒有實害**：既有素材代碼裡有沒有出現重複收錄（同一則新聞兩個相鄰時段各收一次）的痕跡；如果 `add-batch`／`add` 本身有用完整 `AP{id}` 格式去對 state 的 key（而不是直接拿裸 `editorialid` 比對），可能在更下游那層就已經被救回來，要查清楚問題卡在哪一層。
-  - [ ] 修法：`slimList`／`slimDetail` 的 `id` 欄位直接組成 `'AP' + s.editorialid`，從源頭就是完整代碼，下游 diff／state key 比對不用再自己記得加前綴。
+- [x] **① `s2_validate.py` 已支援 `--file`**：`check`／`stats` 的 `path` 改成可選位置參數，新增 `--file` 旗標，兩種給法都收（同時給以 `--file` 優先），都不給會印清楚的錯誤訊息而不是 argparse 原生的 `unrecognized arguments`。已測位置參數／`--file`／都不給三種情境。
+- [x] **② AP `id` 已補 `AP` 前綴**：`13b` §1a-3 白名單抽取程式碼（`slimList`／`slimDetail`）的 `id` 欄位從 `s.editorialid`（裸數字）改成 `'AP' + s.editorialid`，並在文件裡加警語提醒「照抄過舊版程式碼的地方都要回頭補前綴」。
+  - [ ] **仍待查（不影響修法本身）**：有沒有實害——既有素材代碼裡有沒有出現重複收錄的痕跡，用來判斷這個 bug 過去幾天實際造成了多少無謂的重複判斷或庫存污染。
 
 ## 「無BITE」誤判：成因不明，需多方測試（2026-08-04 使用者回報，待診斷）
 

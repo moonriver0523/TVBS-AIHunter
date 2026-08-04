@@ -105,7 +105,7 @@ const clean = (h) => decodeEnt(
     Select ProcessId, CreationDate, @{n='Age';e={[int]((Get-Date)-$_.CreationDate).TotalMinutes}}
   ```
   用 `Get-Process` 的 `MainWindowTitle`／CPU／存活時間判斷是否閒置；閒置就 `Stop-Process -Force` 再開工。
-- **自己收工也要關瀏覽器**，不要留給下一個 agent。
+- **自己收工也要關瀏覽器**，不要留給下一個 agent。⚠️ **`browser_close` 偶爾因暫時性服務錯誤失敗（2026-08-04 實錯回報）**：失敗不代表瀏覽器沒關掉，改用精準的 Playwright Chrome PID（前面殘留檢查那段查到的 ProcessId）`Stop-Process` 收尾，再確認真的關了，不要因為工具回錯就當沒收工、留著殘留鎖下一輪。
 - ⚠️ **`navigate` 失敗、或清單回 0 筆時，第一個懷疑對象是 profile 被鎖，不是「站方無素材」或「帳號失效」**——0803 實錯：RT 連續三輪（04:40／06:40／08:40）回報「全站 0 items」，實測帳號完全正常、當下窗內明明有新素材，根因是 01:28 的殘留鎖掉前兩輪、另一個 agent 08:22 開的 Chrome 鎖掉第三輪，**RT 素材因此空窗 01:00–09:00**。誤判成帳號問題會叫醒錯的人、還埋掉真因。
 - ⚠️ **`navigate` 第一次失敗訊息是「Target page, context or browser has been closed」時，通常是它自己剛啟動了一個孤兒 process**（底層瀏覽器已起、連線沒接上），第二次才會看到真正的 `Browser is already in use`。**先精準確認再清**，不要用 `taskkill /IM chrome.exe` 之類的廣域指令（機器上通常同時有幾十個不相干的 chrome.exe）：
   ```powershell
@@ -155,7 +155,7 @@ const clean = (h) => decodeEnt(
   ```js
   // 清單：diff 與初判用（不必開詳情就能判斷收不收、是不是 SNTV）
   const slimList = (s) => ({
-    id: s.editorialid, itemid: s.itemid,          // editorialid＝AP 編號、itemid＝詳情要用的 32 碼
+    id: 'AP' + s.editorialid, itemid: s.itemid,   // ⚠️ 一定要加 AP 前綴，見下方「id 前綴」踩雷
     title: s.title, head: s.headline,
     cap:  clean(s.caption && s.caption.nitf),  // ⭐ 清單就有一句話摘要
     role: s.editorialrole,                        // ⭐ 形式：VO／VOSOT／SOT／Package
@@ -165,7 +165,7 @@ const clean = (h) => decodeEnt(
   });
   // 詳情：寫三段式用
   const slimDetail = (s) => ({
-    id: s.editorialid, title: s.title, head: s.headline,
+    id: 'AP' + s.editorialid, title: s.title, head: s.headline,
     cap:    clean(s.caption && s.caption.nitf),
     script: clean(s.script && s.script.nitf),  // ⚠️ 稿全文在 `script.nitf`（HTML）
     role: s.editorialrole, src: (s.sources||[]).map(x=>x.name).join('/'),
@@ -175,6 +175,7 @@ const clean = (h) => decodeEnt(
   });
   ```
 
+- ⚠️ **`id` 前綴踩雷（2026-08-04 工作 agent 實錯回報，已修）**：`s.editorialid` 是**裸數字**（如 `4676366`），但狀態檔／既有素材代碼一律是 `AP` 前綴＋數字（`AP4676366`）。**上面兩個函式都已補上 `'AP' +` 前綴**——早期版本沒補，若 diff 步驟拿裸數字直接跟狀態檔比對，永遠比不出「已收過」，每輪都會把舊素材當新素材重新判斷一次。**任何依這份文件早期版本抄過程式碼的地方，都要回頭檢查有沒有補這個前綴。**
 - ⚠️ **欄位名容易猜錯的三個**：稿全文是 **`script.nitf`**（HTML 字串，不是 `storyline`／`shotlist`——照那兩個名字抓會拿到空字串，還會算出「省 98%」的假數字）；**沒有 `duration` 欄位**，時長要用 `shots[0].end`（格式 `00:02:16.720`）換算成 `MM:SS`；`caption`／`script` 都是**物件**，內容在 `.nitf`。
 - **雜訊大戶**：`renditions`（7,920）＋`filings`（7,373）＝ 單則詳情的 63%；另有 `embeddings`／`pooled_embedding`／`searchembedding`（向量嵌入）、`subjects`／`audiences`／`services`（分類代碼）。這些**一律不取**。
 - **`signals` 含 `NewsroomReady`** 可當「稿齊」訊號。
@@ -188,6 +189,7 @@ const clean = (h) => decodeEnt(
 - Bearer token 在 `localStorage.newsourceSession.token`（1 小時效期，頁面開著會自動續）。
 - ⚠️ **回應是多行 JSON（NDJSON）**，不能 `r.json()`——取含 `"stories"` 的那一行再 parse。
 - `scriptOnly: true` **就是 UI 上點不動的 Has Script 篩選**；`from`／`size` 分頁，`size` 上限 100。
+- ⚠️ **`size` 開大配全稿一次回傳會爆量（2026-08-04 工作 agent 實錯回報）**：`size:100` 一次要完整稿件全文，實測輸出約 **198k 字元**，整包塞進 agent context 太浪費。**正確做法：先用小欄位（不含 `script`）篩出時間窗內真的要收的則數，再只對這些則另外打一次要全文的查詢**——不要為了少一次呼叫就一次要 100 則的完整稿。
 - ⛔ **兩類直接排除，用 `footageType` 機械判斷（2026-08-03 晚實測定版，不要用關鍵字猜）**：判準與理由見 `13`「NS 兩類素材不採納」。抽取階段就濾掉，不進 `batch.json`：
 
   ```js
