@@ -1,0 +1,158 @@
+三站（AP／RT／NS）API 破解總表
+產出時間：2026-08-03 02:45（全部端到端實測通過）
+NS 詳細配方另見：2026-08-03-NS掃帶卡點報告-回覆.txt
+共同前提：一律用 Playwright 瀏覽器（mcp__browser__* 工具），persistent profile
+三站都已登入。claude-in-chrome 在 NS 已確認走不通；AP/RT 的頁內 fetch 理論上
+可行但未測。
+※ 2026-08-03 更新：13b 已寫成正式規則並上線（§1a），本檔退居「配方原文與實測記錄」，
+  執行時一律以 13b 為準；兩邊若有出入，以 13b 為準（它較新且有 8 輪驗證記錄）。
+
+────────────────────────
+一、總表
+────────────────────────
+            清單API                          單則API                稿全文位置
+AP   POST api.newsroom.ap.org             POST 同域名             單則API
+     /v1/nrsearch/search/topic            /v1/nrsearch/search/    (STORYLINE+
+     (cookie驗證,直接重放OK)               item/details            SHOTLIST+
+                                                                   Restrictions)
+RT   POST reutersconnect.com              GET reutersconnect.com  單則API
+     /api/search-api?hash={hash}          /api/item/{guid}        (SCRIPT+
+     (同源cookie,重放OK,transit格式)       ?hash={hash}&live=false SHOTLIST+
+                                          (同源cookie,重放OK)      Restrictions)
+NS   POST newsource-content-api-530       不需要                  清單API直接含
+     .ns.cnn.com/api/v3/stories                                   script全文
+     (Bearer JWT,localStorage取)
+
+每輪呼叫數估算（10 則新素材）：
+  舊流程：AP/RT 各 20-30 次、NS 40+ 次
+  API 流程：每站 2-3 次（開頁 1＋清單 1＋詳情批次 1）
+
+────────────────────────
+二、AP 配方
+────────────────────────
+1) 清單：POST https://api.newsroom.ap.org/v1/nrsearch/search/topic
+   headers: Content-Type: application/json ＋ credentials:'include'（cookie 驗證）
+   body 範例（照 /home Latest 頁實際發出的請求；TopicId 是 Latest 主題的 id，
+   可從 GET /v1/topics/get-topics?location=latest,top 拿）：
+   {"SearchType":"keyword","PageNumber":1,"PageSize":16,"MediaTypes":["video"],
+    "TopicId":"{latest主題id}","isTopicSearch":true,"ProductGroup":"","language":"",
+    "digitizationType":null,"isSemanticItemIdSearch":false,"Semantic":null,
+    "MyPlanSearch":false}
+   回應：Items[]._source → itemid(32碼GUID)／editorialid(＝AP編號數字部)／
+   friendlykey／title／headline／dateline／caption／renditions
+   ⚠️ 待確認：用上述 body 直接重放時排序偏 relevance 抓到舊素材，正式使用前
+   要先驗「重放的清單順序＝頁面 Latest 順序」；保險做法是照抄頁面當下發出的
+   同一 request body（用 read/network 抓），不要自己拼。
+
+2) 詳情：POST https://api.newsroom.ap.org/v1/nrsearch/search/item/details
+   body: {"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}
+   回應含 STORYLINE＋SHOTLIST＋Restrictions＋editorialid 全文（實測 27KB）。
+   ⚠️ ItemIds 逗號串多則實測失敗（回空），要一則一次——但可在同一次
+   browser_evaluate 裡 Promise.all 打 N 則，工具呼叫仍只算 1 次。
+
+────────────────────────
+三、RT 配方
+────────────────────────
+1) 清單（可續用 §1b DOM 直撈，或改 API）：
+   POST https://www.reutersconnect.com/api/search-api?hash={hash}
+   （hash 從當下頁面網路請求照抄，如 klwn20；同源 cookie 驗證）
+   headers: Content-Type: application/x-www-form-urlencoded
+   body（照抄實際請求即可）關鍵參數：
+     content-api-filters=med://vid、cursorMark=*（翻頁用 nextCursorMark 回填）、
+     limit=60、selected-facet-media-types=V、sort=ts、search-scope=:my-feed
+   回應：transit 壓縮 JSON（欄位名只出現一次，後續用 ^N 參照，regex 直抓
+   欄位值會漏）。含 editnumber／guid／headline／slug／duration／versioncreated／
+   fragment(稿件前300字)／early-access-script 訊號。
+   guid 本身就含 Edit No＋日期：newsml_RW{4碼EditNo}{DDMMYYYY}RP1。
+
+2) 單則：GET https://www.reutersconnect.com/api/item/{guid}?hash={hash}&live=false
+   guid 例：tag:reuters.com,2026:newsml_RW266702082026RP1:3（版次尾碼照清單 href 抄）
+   同源 fetch＋credentials:'include' 即可，回應含完整 SCRIPT＋SHOTLIST＋
+   Restrictions（實測 8KB，transit 格式）。
+   建議組合：清單照 §1b DOM 直撈（已上線、順序保證）→ 新素材 guid 一次
+   Promise.all 打 /api/item/ ×N → 免開任何詳情分頁、免等 8-9 秒。
+
+────────────────────────
+四、NS 配方（摘要，詳見回覆檔）
+────────────────────────
+POST https://newsource-content-api-530.ns.cnn.com/api/v3/stories
+Bearer token 在 localStorage.newsourceSession.token（1hr 自動續）
+一次回傳：bitcentralId 編號＋footageType＋duration＋description＋script 全文＋
+embargo。scriptOnly:true＝Has Script 篩選。回應 NDJSON 取含 "stories" 那行。
+
+────────────────────────
+四之二、待驗事項的驗證結果（2026-08-03 09:40 實測，尚未上規則）
+────────────────────────
+✅ 1. AP 清單排序：**照抄頁面 request body 重放 → 順序與 DOM 完全一致**
+   （16 則逐一比對 itemid，sameOrder=true）。先前「偏 relevance 抓到舊素材」
+   是我自己拼 body 造成的，照抄就沒問題。
+
+⚠️ 2. AP 翻頁：**PageNumber 不可靠，不要用**。實測 PageNumber=2 + PageSize=16
+   回了 100 筆、與第 1 頁零重疊，回應卻自稱 Page=2/PageSize=16（伺服器行為
+   異常）。**可靠做法：固定 PageNumber=1，加大 PageSize**。
+   TotalRows 約 10.7 萬，窗內素材用 PageSize 50–100 綽綽有餘。
+
+   🔴🔴 2026-08-03 18:50 重大訂正（推翻上面「16/50/100/200 都精準」的說法）：
+   **PageSize 絕對不可以「調小」**。同一個 body 只把 PageSize 從 16 改成 5，
+   回傳的就從「當下最新素材」（2026-08-03T10:46）變成 2024–2025 年的舊素材
+   （Afghanistan Earthquake Bereaved 2025-09、HZ US CES BOSCH 2024-01），
+   排序整個換掉、且毫無錯誤訊息。調小會靜默把兩年前的素材當新素材收進庫存。
+   → **一律照抄頁面的 PageSize=16**，要更多才往上加（50/100/200 已驗過）；
+     永遠不要為了「只想看幾則」而調小。
+
+✅ 3. AP TopicId 跨 session 穩定：兩次 session（08-03 凌晨與早上）都是
+   `116e9ab7aa044476925398d731289267`，可直接沿用；但仍建議每輪從頁面
+   實際請求照抄，成本只有一次 read_network_requests。
+
+✅ 4. RT hash 跨 session 穩定：兩次 session 都是 `klwn20`，重放成功。
+   注意這像是前端 build hash，**站方改版會變**，規則要寫「照抄當下頁面請求」
+   而非硬編。
+
+✅ 5. RT transit 抽取的機械做法（原問題：欄位名只出現一次、之後用 ^N 參照，
+   regex 會只抓到第一則）→ **結論：不要用 regex 硬解清單**，分工如下：
+   - **清單**：照 §1b DOM 直撈（已上線）拿 Edit No／href／狀態，順序有保證。
+   - **Edit No 也可從 guid 機械推出**：`newsml_RW{4碼}` 那 4 碼即 Edit No
+     （實測 `newsml_RW275603082026RP1:4` → Edit No 2756），可與 DOM 值互相
+     校驗。
+   - **單則詳情**：`/api/item/{guid}` 每個欄位在單則回應裡只出現一次，
+     **第一次出現一定是字面值不是 ^N 參照，所以 regex 可靠**。實測 2 則
+     （17.7KB／19KB）headline／SHOTLIST／SCRIPT／Restrictions 全抓得到。
+   - ⚠️ 但 `editnumber` 在 item 回應裡結構較深、regex 抓不穩定
+     （實測回 undefined）——**Edit No 一律以清單 DOM 或 guid 推導為準**，
+     不要從 item 回應抓。
+
+────────────────────────
+五、上規則前的待辦（裁定用）
+────────────────────────
+1. ~~AP 清單排序驗證~~ ✅ 已驗（見四之二）。
+2. ~~RT transit 抽取機械做法~~ ✅ 已定（見四之二-5：清單走 DOM、詳情走 API regex）。
+3. 三站 API 流程都要配守門條款（API 失敗／欄位缺→退回現行 UI 流程）。
+4. 13b 要寫明：NS/API 段用 Playwright 工具組（mcp__browser__*），與
+   claude-in-chrome 的分工。
+5. hash（RT）與 TopicId（AP）是否穩定跨 session，要在正式輪各驗一次。
+
+
+────────────────────────
+七、抽取白名單：先瘦身再交 AI（2026-08-03 上線，8 輪實測）
+────────────────────────
+原始 API 回應 6–9 成是雜訊（AP 的 renditions+filings 佔單則詳情 63%、
+RT 的授權計價規則與檔案 URL），對「收不收、怎麼寫三段式」沒用卻整包進
+agent context。改成在同一個 page.evaluate() 裡抽完再回傳：
+
+  AP 清單 5 則   53,461 → 2,190    省 95.9%
+  AP 詳情 16 則  706,460 → 82,212  省 88.4%
+  RT 單則（一般） 7,207 → 1,486     省 79–92%
+  RT 超長整理包  74,145 → 55,530   省 25%（story 本身 5.5 萬字，是內容不是雜訊）
+
+⛔ 不准砍：稿件全文、SHOTLIST 段、SOUNDBITE 段與講者、限制語、來源、形式、
+   時長、素材代碼。砍的只有 metadata／檔案 URL／計價規則。
+
+可直接抄的完整程式碼（含 HTML 實體解碼、欄位名與型別的地雷）見
+E:\GitHub\TVBS-AIHunter\common\13b-S2-定時掃帶-v2省token.md §1a-0-1／1)RT／2)AP。
+本檔不重複貼，以 13b 為準（那邊有 8 輪、67 則次的驗證記錄）。
+
+三個最容易踩的欄位地雷（照文件描述猜會出錯）：
+  1. AP 稿全文在 script.nitf（HTML），不是 storyline／shotlist；
+     照猜的名字抓會拿到空字串，還會算出「省 98%」的假數字。
+  2. AP 沒有 duration 欄位，時長要用 shots[0].end（格式 00:02:16.720）換算。
+  3. RT 稿全文在 ~:story；duration 與 restrictions 都是「字串」不是數字/陣列。

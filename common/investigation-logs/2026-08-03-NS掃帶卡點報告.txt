@@ -1,0 +1,66 @@
+CNN Newsource（NS）掃帶卡點報告
+產出時間：2026-08-03 01:30（S2 r8-0803-0100 輪實測）
+目的：交給另一個 agent 研究「怎麼把 NS 清單與稿況抓得更省、更穩」
+唯一入口（使用者指定）：https://newsource.ns.cnn.com/landing
+
+────────────────────────
+一、這輪實際發生什麼
+────────────────────────
+時間窗 台北 21:00–01:00（＝GMT 13:00–17:00），窗內 20 列、實收 18 則。
+資料本身沒問題，卡的是「怎麼把清單讀出來」與「怎麼確認每則有沒有稿」。
+結果：18 則裡只有 4 則真的開稿確認過，另外 14 則只能靠清單 metadata 寫入、
+一律標 (稿未到)+pending，留給 09:00 最終清查回頭補。
+
+────────────────────────
+二、五個具體卡點
+────────────────────────
+1. 清單抓不到連結，無法做「清單直開」
+   document.querySelectorAll('a[href]') 全頁只有 11 個，沒有任何 detail 連結。
+   → AP／RT 用的 §1b 清單直開（挖 GUID／href 直開詳情頁）在 NS 完全用不上。
+
+2. 清單是虛擬化列表，捲過去就卸載
+   一次抽取只拿得到畫面內約 7 列；捲到下面，上面的列就從 DOM 消失。
+   只能邊捲邊累積（實作：把結果存進 window.__acc 這個 Map，跨多次
+   javascript_tool 呼叫累加，最後才 filter 出窗內）。
+
+3. JS 捲不動，只能用實體滾輪
+   window.scrollTo / document.scrollingElement.scrollTop 都無效，
+   也找不到 scrollHeight > clientHeight 的容器可捲。
+   → 只能用 computer scroll（滑鼠滾輪）＋每捲一次跑一次 JS 抽取，呼叫數翻倍。
+
+4. 捲動位置不可預測
+   有一次 scroll up 5 反而往下跳（清單重新 render），
+   另一次 scroll down 10 直接從 GMT 11:xx 掉到 05:xx，衝過頭。
+   → 每次捲完幾乎都得截圖確認位置，又是額外呼叫。
+
+5. 看稿只能一則一則點，關掉還會跳回頂端
+   要確認有沒有 --LEAD IN--／--VO SCRIPT--，只能點該列的 ≡🔍 開 Preview modal，
+   讀完關掉，清單跳回最上面（已知 quirk），下一則又要重捲。
+   一則約 2–3 次呼叫，18 則就要 40 次上下 → 本輪判斷成本不划算而放棄。
+
+────────────────────────
+三、兩個零星異常（可能是雜訊，一併記著）
+────────────────────────
+* 點 ≡🔍 有一次開出一個新分頁又立刻消失（tabId 1215976268），
+  疑似點到旁邊的下載 icon；之後改用截圖對座標就沒再發生。
+* javascript_tool 讀 document.body.innerText 全文時，回過一次
+  「[BLOCKED: Cookie/query string data]」，整段輸出被擋。
+  改成只取 Preview modal 內那一塊的 innerText 就正常。
+
+────────────────────────
+四、想請另一個 agent 查的四件事（依優先序）
+────────────────────────
+① 有沒有清單 API：用 read_network_requests 看 landing 載清單時打了哪支 XHR／JSON。
+   如果能直接帶時間區間或 offset 取回 item 陣列（含 story number、TRT、
+   footage type、script 全文），上面五個卡點會一次消失，這是最高價值。
+② 詳情頁有沒有可直開的 URL pattern（像 AP 的 /detail/x/{GUID}/video）。
+   若有，就能比照 §1b 改寫 NS 流程。
+③ 清單的 scroll container 到底是哪個元素（要能用 JS 捲、能觸發 lazy-load），
+   或有沒有分頁／每頁筆數參數可用，取代滑鼠滾輪。
+④ Preview modal 有沒有上一則／下一則可連讀（像 RT 詳情頁的 ‹ ›），
+   有的話看 18 則的稿就從 40 次呼叫壓到 20 次左右。
+
+※ 請對方只做「查證與回報方法」，不要動 0802晚班交接.txt 與 0802-s2-state.json
+  （狀態檔一律經 scripts/s2_state.py 操作，不直接改 JSON）。
+※ 規則最新版在 E:\GitHub\TVBS-AIHunter\common\13-S2-定時掃帶.md
+  與 common\13b-S2-定時掃帶-v2省token.md。

@@ -1,0 +1,180 @@
+# -*- coding: utf-8 -*-
+"""S2 同名小分題跨大分類重複偵測（render 前置檢查，2026-08-03 上線）。
+
+只做「分級 A」——同一個小分題名稱同時出現在不同大分類底下，這是
+「同一事件被拆到兩處」的高信度訊號（0803 回溯驗證：對含真實錯誤的樣本
+精準命中、零誤報；曾試過的「不同名稱但內文模糊比對」雜訊過高，已放棄，
+不要重新加回來）。純讀取＋比對，不寫 state、不動 render 產出。
+
+種子來源：
+  1. 今天狀態檔（`{MMDD}-s2-state.json`）自己的小分題
+  2. 前一天狀態檔的小分題（找不到 json 才退回解析前一天的晚班交接 txt）
+  只回看「前一天」這一份，不做多天累積，避免關鍵字池無限膨脹
+  （common/13b「S2 提速計劃」的省 token 精神——這支也要遵守）。
+
+用法：
+  python s2_topic_dedupe.py --file "…/0803-s2-state.json"
+  （省略 --yesterday-file 時自動用 MMDD-1 天推算同目錄檔名，找不到就跳過跨日檢查）
+"""
+import argparse
+import io
+import json
+import os
+import re
+import sys
+from datetime import datetime, timedelta
+
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:  # py<3.7
+        pass
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import s2_validate as sv  # noqa: E402  共用行辨識 regex
+
+
+def mmdd_shift(mmdd, days):
+    d = datetime(datetime.now().year, int(mmdd[:2]), int(mmdd[2:])) + timedelta(days=days)
+    return d.strftime("%m%d")
+
+
+def cat_of(it):
+    """與 s2_render.cat_of 同邏輯（故意不 import s2_render，避免互相耦合狀態檔路徑）。"""
+    c = it.get("category")
+    if isinstance(c, dict):
+        return (c.get("大分類") or "", c.get("中主題") or "", c.get("小分題") or "")
+    if isinstance(c, str) and "/" in c:
+        p = [x.strip() for x in c.split("/", 2)] + ["", ""]
+        return p[0], p[1], p[2]
+    return "", "", ""
+
+
+def sub_locs_from_state(path):
+    """回傳 {小分題: [(大分類, 中主題, id), ...]}。找不到檔案回傳 None（給呼叫端判斷要不要跳過）。"""
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    out = {}
+    for it in raw.get("items", []):
+        big, mid, sub = cat_of(it)
+        if not sub:
+            continue
+        out.setdefault(sub, [])
+        loc = (big, mid, it.get("id", "?"))
+        if (big, mid) not in {(b, m) for b, m, _ in out[sub]}:
+            out[sub].append(loc)
+    return out
+
+
+def sub_locs_from_txt(path):
+    """退路：state.json 不存在時，解析前一天渲染出的 txt 結構取小分題位置。"""
+    if not os.path.exists(path):
+        return None
+    lines = io.open(path, encoding="utf-8-sig").read().splitlines()
+    out = {}
+    big = mid = sub = ""
+    seen_material_since_sub = False
+    for raw in lines:
+        l = sv.strip_mark(raw)[1]
+        s = l.strip()
+        if l.startswith("======") and l.endswith("======"):
+            big, mid, sub = l.strip("=").strip(), "", ""
+            continue
+        if l.startswith("【") and l.endswith("】"):
+            mid, sub = l.strip("【】").strip(), ""
+            continue
+        if not s:
+            continue
+        if s == "+":
+            sub = ""
+            continue
+        if sv.LINE_RE.match(l) and not sv.SIDE_RE.match(l):
+            if sub:
+                out.setdefault(sub, [])
+                if (big, mid) not in {(b, m) for b, m, _ in out[sub]}:
+                    ids = re.findall(sv.CODE, l)
+                    out[sub].append((big, mid, ids[0] if ids else "?"))
+            continue
+        if not sub:  # 非代碼、非空、非 + ：小分題標題
+            sub = s
+    return out
+
+
+def check(state_path, yesterday_path=""):
+    """回傳 (today_hits, cross_day_hits)，兩者都是 [(小分題, [(大分類,中主題,id), ...])]。"""
+    today = sub_locs_from_state(state_path)
+    if today is None:
+        print(f"ERROR: 讀不到今天狀態檔 {state_path}", file=sys.stderr)
+        return [], []
+
+    # ⚠️ 只比對「大分類」，不比中主題——中主題名稱本來就允許每天微調措辭
+    # （0803 實測：「歐洲野火」→「希臘野火」這種改名會被誤判成跨天拆散，
+    # 真正嚴重的是整個大分類跑掉，像「烏俄」被拆成「話題」那種）。
+    today_hits = [(name, locs) for name, locs in today.items()
+                  if len({b for b, _m, _i in locs}) > 1]
+
+    if not yesterday_path:
+        m = re.search(r"(\d{4})-s2-state", os.path.basename(state_path))
+        if m:
+            prev = mmdd_shift(m.group(1), -1)
+            d = os.path.dirname(state_path)
+            cand_json = os.path.join(d, f"{prev}-s2-state.json")
+            cand_txt = os.path.join(d, f"{prev}晚班交接.txt")
+            yesterday_path = cand_json if os.path.exists(cand_json) else cand_txt
+
+    cross_hits = []
+    if yesterday_path and os.path.exists(yesterday_path):
+        yesterday = (sub_locs_from_state(yesterday_path)
+                     if yesterday_path.endswith(".json")
+                     else sub_locs_from_txt(yesterday_path))
+        if yesterday:
+            for name, locs in today.items():
+                if name not in yesterday:
+                    continue
+                today_big = {b for b, _m, _i in locs}
+                yday_big = {b for b, _m, _i in yesterday[name]}
+                if not (today_big & yday_big):  # 大分類完全不重疊才算跨天被拆
+                    cross_hits.append((name, locs, yesterday[name]))
+    else:
+        print(f"(跳過跨日檢查：找不到前一天檔案 {yesterday_path or '（無法推算）'})", file=sys.stderr)
+
+    return today_hits, cross_hits
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--file", required=True, help="今天的狀態檔路徑")
+    p.add_argument("--yesterday-file", default="",
+                   help="前一天狀態檔或 txt 路徑；省略＝自動用 MMDD-1 天推算同目錄檔名")
+    args = p.parse_args()
+
+    today_hits, cross_hits = check(args.file, args.yesterday_file)
+
+    print("【今天內部】同一小分題出現在不同大分類")
+    if not today_hits:
+        print("0 命中")
+    for name, locs in today_hits:
+        loc_str = "／".join(f"{b}／{m}（如 {i}）" for b, m, i in locs)
+        print(f"⚠️ 「{name}」同時出現在：{loc_str}，請覆核是否應合併")
+
+    print("-" * 60)
+    print("【跨天】前一天有的小分題，今天換了大分類位置")
+    if not cross_hits:
+        print("0 命中")
+    for name, locs, yloc in cross_hits:
+        today_str = "／".join(f"{b}／{m}（如 {i}）" for b, m, i in locs)
+        yday_str = "／".join(f"{b}／{m}" for b, m, _ in yloc)
+        print(f"⚠️ 「{name}」昨天在 {yday_str}，今天卻在 {today_str}，請覆核是否為延續故事被拆開")
+
+    print("-" * 60)
+    print(f"共 {len(today_hits) + len(cross_hits)} 組命中（純提示，不改 state；"
+          f"確認後用 s2_state.py set-category 手動改）")
+
+
+if __name__ == "__main__":
+    main()

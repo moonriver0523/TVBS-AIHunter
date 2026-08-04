@@ -90,7 +90,7 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
 
 ### CNN Newsource（NS）：文稿走 API，**影片只能走 UI**
 
-- **文稿（大幅省成本）**：`POST https://newsource-content-api-530.ns.cnn.com/api/v3/stories`（Bearer token 在 `localStorage.newsourceSession.token`）——**清單回應直接含 `content.bitcentral.script` 全文**，不必開任何詳情頁或 Preview modal。完整配方見 `G:\...\自動掃帶系統\0803-NS掃帶卡點報告-回覆.txt`。
+- **文稿（大幅省成本）**：`POST https://newsource-content-api-530.ns.cnn.com/api/v3/stories`（Bearer token 在 `localStorage.newsourceSession.token`）——**清單回應直接含 `content.bitcentral.script` 全文**，不必開任何詳情頁或 Preview modal。完整配方見 [`common/investigation-logs/2026-08-03-NS掃帶卡點報告-回覆.txt`](../common/investigation-logs/2026-08-03-NS掃帶卡點報告-回覆.txt)。
 - ⚠️ **影片下載不能 API 直取**（2026-08-03 實測結論）：NS 走 **Signiant 傳輸服務**（`POST /api/v2/download` → `downloadIds` → `/api/v2/download/config/{id}` 回的是 `sig://` 路徑＋Signiant 伺服器與憑證，前端載入 `transferapi.min.js` 由 Signiant 客戶端搬檔），**沒有 HTTP 直鏈可取**。NS 影片一律照下一節 UI 做法點 Download。
 - ⚠️ NS token 會過期，第一次呼叫拿到 `null` 是常態——重新整理頁面等登入完成再打；**連兩次拿不到就是真的登出，停下來請使用者登入**（agent 不得自行輸入帳密）。
 

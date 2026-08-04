@@ -1,0 +1,68 @@
+RT 即時快訊（右上角鈴鐺）API — 探索結果
+產出時間：2026-08-03 09:50　狀態：實測成功，尚未上規則
+=========================================
+
+【結論】
+RT 右上角鈴鐺的突發快訊**可以整批抓下來**，一次拿到約 40 則、涵蓋近 24 小時，
+每則含快訊全文＋精確時間戳＋已讀狀態＋來源文章 ID。這是 S2 目前完全沒用到的
+一條料源：**文字快訊比影片素材更早到**（實例見下），可當「今天有什麼大事」的
+先行指標。
+
+【端點】
+GET https://ap-northeast-1.rcp-api.reutersconnect.com/ws-active/messages/user
+    ?_type=breaking-news,calendar-event,account-alert
+驗證：header `authorization: {base64 ticket}`，票券由
+      POST .../ws-active/auth-ticket/issue 於頁面載入時自動取得。
+
+⚠️ **不能用 browser_evaluate 直接 fetch**（跨網域被擋，實測 ERR_FAILED 並掛住
+   120 秒）。**正確做法是讓頁面自己發，再讀網路紀錄**：
+   1. browser_navigate 開 https://www.reutersconnect.com/all?media-types=vid
+   2. browser_network_requests 篩 `ws-active|messages`
+   3. browser_network_request 取該筆的 response-body
+   共 3 次呼叫，不需要點鈴鐺、不需要開任何 UI。
+
+【回應格式】
+{"success": true, "messages": [ {...}, ... ]}
+每則欄位：
+  msg            快訊全文（全大寫英文，一句話，如
+                 "MOROCCO'S INTERIOR MINISTRY SAYS TEN PEOPLE KILLED IN MASS
+                  CROSSING TO CEUTA"）
+  created        Unix 時間戳（浮點，秒）→ 台北時間 +8
+  ttl            created + 86400（**保留 24 小時**，過期就查不到）
+  is_read        0＝未讀、1＝已讀（未讀數＝鈴鐺上的數字，實測 27 對得上）
+  sourceEventId  來源文章 ID（tag:reuters.com,2026:ninjs_…），可回查原文
+  _type          breaking-news／calendar-event／account-alert
+  messageId      去重用的唯一鍵
+
+【本次實抓樣本（2026-08-03 09:50，共約 40 則、時間跨 08/02 10:06 – 08/03 09:41）】
+  09:41 中國科創50指數跌逾3%
+  09:15 埃及修正震央位置：距蘇伊士38公里
+  08:39 埃及5.6強震（西奈半島東北61公里）
+  06:41 貝森特談日圓聯合干預（連續5則）
+  05:51 UKMTO：阿曼外海油輪附近爆炸、船員均安（連續3則）
+  05:03 川普談伊朗：談判明天下午開始、荷莫茲有協議（連續5則）
+  03:36 摩洛哥內政部：休達越境10死、約4萬人企圖越境（連續4則）
+  23:51 希臘消防直升機相撞「兩死」
+  21:32 希臘消防直升機相撞（第一則）
+
+【為什麼對 S2 有價值（實例）】
+昨晚被列為「🔴 重大」的 IN-23SU 希臘直升機相撞：
+  - **21:32** 快訊就發了第一則（相撞、搜救中）
+  - **23:51** 快訊更新「兩死」
+  - 影片素材則是更晚才進庫
+→ 若掃帶時順手抓快訊，可以**在影片還沒到之前就知道有大事**，也能拿到
+  官方傷亡數字更新（我們的素材摘要常缺這一塊）。
+
+【可能用途（待裁定，先不上規則）】
+1. **重大提醒行的判斷依據**：快訊是 Reuters 編輯台自己認定的「值得推播」，
+   拿來當 🔴 重大的候選來源比 agent 自行判斷可靠。
+2. **稿未到／pending 的補充資訊**：影片還沒到但快訊已有數字時，摘要可先寫上
+   （需訂規則：快訊來源要不要標註、能不能寫進素材行）。
+3. **每輪開工先抓一次**：3 次呼叫成本極低，可放在 resume 之後。
+4. ⚠️ **24 小時就消失**：要留存就得每輪抓、存進狀態檔或另存檔案，不能事後回補。
+
+【尚未探索】
+- socket.io（ws-active）是即時推播通道，理論上可長連監聽而不必輪詢，未測。
+- calendar-event／account-alert 兩型內容未實看（本次回應全是 breaking-news）。
+- 是否有分頁／可否指定時間區間（本次一次回 40 則，未測上限）。
+- 已讀狀態能否寫回（標為已讀）——未測，也不建議動使用者的未讀狀態。
