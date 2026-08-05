@@ -25,10 +25,37 @@
 
 見下方「S2b 側錄轉譯摘要」節的「排程機制待評估」——當時是為側錄監看提的，**但對 S2 掃帶完全適用而且更嚴重**：側錄漏一次沒關係，**掃帶漏一輪就是素材空窗**。
 
+- [x] **✅ 環境已查證（2026-08-05，實測非憑印象）——Task Scheduler 方案技術上成立**
+
+  | 項目 | 結果 |
+  |---|---|
+  | CLI 路徑 | `C:\Users\User\.local\bin\claude.exe` |
+  | 版本 | 2.1.222 |
+  | **非互動執行** | ✅ `-p` / `--print`，**實測離開碼 0、耗時 11 秒**、輸出正確 |
+  | 權限模式 | ✅ `--permission-mode`（含 `bypassPermissions`／`manual`） |
+  | 指定 model | ✅ `--model` |
+  | 追加系統提示 | ✅ `--append-system-prompt`（可用來塞「開工前重讀規則」） |
+  | 輸出格式 | ✅ `--output-format`（含 `stream-json`，要解析執行結果時用） |
+
+  指令雛形（**尚未實際建立排程**）：
+  ```
+  claude -p "<開工 prompt>" --permission-mode bypassPermissions --model <model> > 掃帶log_%date%.txt 2>&1
+  ```
+
 - [ ] **改用 Windows 工作排程器（Task Scheduler）呼叫 `claude` CLI**。它不管 REPL 忙不忙、不管 session 有沒有關、重開機也還在。
 - [ ] **先查環境再提方案**：`claude` CLI 的實際路徑、能否非互動執行（`-p`／`--print` 之類）、怎麼把 prompt 帶進去、輸出往哪去、失敗如何得知。⚠️ **不要憑印象寫排程指令**，先實測跑得起來。
 - [ ] **要處理「上一輪還沒跑完，下一輪就到了」**：實測每輪 20 分鐘、最短間隔 1 小時，目前還有餘裕，但補漏或素材暴增時可能撞上。需要簡單的互斥（例如鎖檔）或「跑不動就跳過並記錄」，**不要兩輪並行**——Playwright 只有一個 persistent profile，並行必互鎖（0803 空窗八小時的坑）。
 - [ ] **cron 不是完全沒用**：它適合「REPL 閒著時順手做點事」（例如 NS 58 分鐘保活），不適合「準時執行 20 分鐘的長工作」。改用 Task Scheduler 之後，可評估保活是否仍留在 cron。
+- [ ] 🔴 **順帶抓到的獨立 bug：`settings.json` 有一條 `Write(...)` 規則實際上沒生效**（2026-08-05 實測 `claude -p` 時，輸出前兩行就是這個警告）：
+  ```
+  Permission allow rule (.claude\settings.json):
+  Write(G:/我的雲端硬碟/Claude共用/自動掃帶系統/**) is not matched by file permission
+  checks — only Edit(path) rules are.
+  Use Edit(G:/我的雲端硬碟/Claude共用/自動掃帶系統/**) instead
+  ```
+  **檔案權限檢查只認 `Edit(...)`**（`Edit` 規則涵蓋所有寫檔工具），所以那條 `Write(...)` 等於沒設——工作 agent 每次要寫掃帶系統資料夾可能都在跳權限提示，**這可能是它常卡住的原因之一**。修法：把 `Write(` 改成 `Edit(`。
+  ⚠️ **只有使用者能改 `permissions`**（自我授權被擋）。**這件事獨立於排程，值得先修。**
+- [ ] **動手前要先決定的三件事**：①**權限模式**——排程執行時沒人能回應提示，得用 `bypassPermissions` 或把 allow 規則設完整（安全取捨，使用者決定）②**互斥**（見上一條）③先修好上面那條 `Write(`→`Edit(`。
 - 📌 **在改好之前**：排程輪次要靠使用者手動觸發，或接受會漏。**漏掉的輪次要事後補掃**（0805 RT 漏 36 則、NS 漏 5 則都是這樣補回來的）。
 
 ## ~~AP(SNTV) 直式／橫式重複主題：只收橫式~~ ✅ 規則已訂（2026-08-03）
