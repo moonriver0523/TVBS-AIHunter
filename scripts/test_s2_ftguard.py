@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""NS `footage_type` BITE 兜底迴歸（2026-08-04）。
+"""BITE 兜底迴歸：**照收＋標記**，絕不拒收（2026-08-05 訂正）。
 
-NS 稿件不用 `SOUNDBITE` 這個詞、數不出 `sb_count`，在這條兜底之前 **NS 是三站裡
-唯一完全沒有機械擋線的**——只能靠 agent 自己讀稿判斷，那正是誤判的來源。
+原本 sb_count／footageType 兩條判準是寫成拒收閘門（`continue` 整筆丟棄），
+那是設計錯誤——把「BITE 標記對不對」跟「該不該收錄」綁在一起。
+0805 實錯 SE-005WE：主播直播打瞌睡的花絮，footageType=RAW 但真的沒有引言
+（稿內只有 `(pause :12 seconds for nat)`），被整筆丟棄、只在終端機印一行就消失。
 
-分類依據是 0731–0804 全庫存交叉統計（見 13b §1a-3），不是憑印象列舉。
+**這支測試的核心是釘死「不准丟資料」**：任何情況都要入庫，疑慮寫進 needs_review。
 
 用法：python test_s2_ftguard.py
 """
@@ -16,6 +18,8 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(HERE, "s2_state.py")
+sys.path.insert(0, HERE)
+import s2_state as S  # noqa: E402
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -42,52 +46,86 @@ def run_batch(entries):
     r = subprocess.run([sys.executable, SCRIPT, "--file", sp_, "add-batch", "--entries", bp],
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     with open(sp_, encoding="utf-8-sig") as f:
-        got = {i["id"] for i in json.load(f)["items"]}
-    return (r.stdout or "") + (r.stderr or ""), got
+        items = {i["id"]: i for i in json.load(f)["items"]}
+    return (r.stdout or "") + (r.stderr or ""), items
 
 
-def e(i, ft, nobite=True):
+def e(i, ft=None, sb=None, nobite=True):
     tail = "▎無BITE。▎01:30" if nobite else "▎BITE：受訪者「內容」。▎01:30"
     tag = "" if nobite else " (BITE)"
-    return {"id": i, "source": "NS", "checkpoint": "t", "status": "has_script",
-            "footage_type": ft, "entry": f"{i} (測試){tag} ▎摘要。▎畫面：畫面。{tail}"}
+    d = {"id": i, "source": "NS", "checkpoint": "t", "status": "has_script",
+         "entry": f"{i} (測試){tag} ▎摘要。▎畫面：畫面。{tail}"}
+    if ft:
+        d["footage_type"] = ft
+    if sb is not None:
+        d["sb_count"] = sb
+    return d
 
 
-# 必有 BITE 的七種：標無BITE 一律擋下、不入庫
+# ── 核心：必有BITE 類標無BITE → **入庫**＋標記，絕不丟棄 ────────────────
 for n, ft in enumerate(("SOT", "BUTTED SOTS", "SOT RAW", "ISO", "DONUT", "INTERVIEW", "RAW")):
     code = f"AA-{n + 10}ZZ"
-    out, got = run_batch([e(code, ft)])
-    report(f"{ft} 標無BITE → 擋下不入庫", code not in got and ft in out)
+    out, items = run_batch([e(code, ft=ft)])
+    report(f"{ft} 標無BITE → **入庫**（不是丟棄）", code in items)
+    report(f"{ft} → 疑慮寫進 needs_review",
+           bool(items.get(code, {}).get("needs_review")),
+           str(items.get(code, {}).get("needs_review"))[:40])
 
-# 同樣的 footageType，有寫 BITE 就正常入庫
-out, got = run_batch([e("AA-20ZZ", "INTERVIEW", nobite=False)])
-report("INTERVIEW 有寫 BITE → 正常入庫", "AA-20ZZ" in got, out.strip())
+out, items = run_batch([e("AA-20ZZ", sb=4)])
+report("sb_count>0 標無BITE → 入庫＋標記",
+       "AA-20ZZ" in items and "4 個 SOUNDBITE" in str(items["AA-20ZZ"].get("needs_review")))
 
-# 灰區 PKG：不擋，但要出提醒
-out, got = run_batch([e("AA-21ZZ", "PKG")])
-report("PKG 標無BITE → 入庫但印提醒", "AA-21ZZ" in got and "提醒" in out, out.strip()[:90])
+# ── 不該標的別亂標 ───────────────────────────────────────────────────
+out, items = run_batch([e("AA-21ZZ", ft="INTERVIEW", nobite=False)])
+report("有寫 BITE → 不標疑慮", not items["AA-21ZZ"].get("needs_review"))
+for ft in ("VO/NAT", "VO/SIL", "LOOK LIVE", "CLIP-VIDEO"):
+    out, items = run_batch([e("AA-22ZZ", ft=ft)])
+    report(f"{ft} 標無BITE → 入庫且不標疑慮",
+           "AA-22ZZ" in items and not items["AA-22ZZ"].get("needs_review"))
+out, items = run_batch([e("AA-23ZZ", ft="PKG")])
+report("PKG 灰區 → 入庫、只印提醒、不寫 needs_review",
+       "AA-23ZZ" in items and not items["AA-23ZZ"].get("needs_review") and "提醒" in out)
+out, items = run_batch([e("AA-24ZZ")])
+report("沒帶 footage_type/sb_count → 入庫不標（向下相容）",
+       "AA-24ZZ" in items and not items["AA-24ZZ"].get("needs_review"))
 
-# 無聲類：不檢查
-for n, ft in enumerate(("VO/NAT", "VO/STILL", "VO/SIL", "VO/RAW", "LOOK LIVE", "CLIP-VIDEO")):
-    code = f"AA-{n + 30}ZZ"
-    out, got = run_batch([e(code, ft)])
-    report(f"{ft} 標無BITE → 正常入庫（不檢查）", code in got)
+# ── 混合批次：一則都不能少 ───────────────────────────────────────────
+out, items = run_batch([e("AA-30ZZ", ft="RAW"), e("AA-31ZZ", ft="VO/SIL"),
+                        e("AA-32ZZ", ft="PKG"), e("AA-33ZZ", sb=2),
+                        e("AA-34ZZ", ft="SOT", nobite=False)])
+report("混合批次 5 則全數入庫（零丟棄）", len(items) == 5, sorted(items))
+report("混合批次只有該標的被標",
+       {k for k, v in items.items() if v.get("needs_review")} == {"AA-30ZZ", "AA-33ZZ"})
 
-# 沒帶 footage_type：向下相容，不檢查
-x = e("AA-40ZZ", "INTERVIEW")
-del x["footage_type"]
-out, got = run_batch([x])
-report("沒帶 footage_type → 不檢查（向下相容）", "AA-40ZZ" in got)
+# ── bite_doubt 單元 ─────────────────────────────────────────────────
+report("bite_doubt：有 BITE 的一律不判疑慮",
+       S.bite_doubt("x (BITE) ▎a▎畫面：b▎BITE：「c」▎01:00", 5, "SOT") is None)
+report("bite_doubt：大小寫與空白容錯",
+       S.bite_doubt("x ▎a▎畫面：b▎無BITE。", None, " raw ") is not None)
+report("bite_doubt：sb_count 優先於 footage_type",
+       "SOUNDBITE" in (S.bite_doubt("x ▎a▎無BITE。", 3, "RAW") or ""))
 
-# 大小寫／空白容錯
-out, got = run_batch([e("AA-41ZZ", " interview ")])
-report("footage_type 大小寫與前後空白容錯", "AA-41ZZ" not in got)
+# ── update-entry：改好了要自動結案 ──────────────────────────────────
+d = tempfile.mkdtemp()
+sp_ = os.path.join(d, "s.json")
+with open(sp_, "w", encoding="utf-8") as f:
+    json.dump({"date": "0101", "items": []}, f)
+subprocess.run([sys.executable, SCRIPT, "--file", sp_, "add", "--id", "AA-40ZZ",
+                "--source", "NS", "--checkpoint", "t", "--status", "has_script",
+                "--footage-type", "RAW",
+                "--entry", "AA-40ZZ (測試) ▎摘要。▎畫面：畫面。▎無BITE。▎01:00"],
+               capture_output=True, text=True, encoding="utf-8")
+with open(sp_, encoding="utf-8-sig") as f:
+    it = json.load(f)["items"][0]
+report("add 單筆也會標疑慮（不再是後門）", bool(it.get("needs_review")), str(it.get("needs_review"))[:40])
 
-# 一批混合：擋的擋、過的過，不因一筆壞掉就中斷
-out, got = run_batch([e("AA-50ZZ", "INTERVIEW"), e("AA-51ZZ", "VO/SIL"),
-                      e("AA-52ZZ", "PKG"), e("AA-53ZZ", "SOT", nobite=False)])
-report("混合批次：只擋該擋的，其餘照常入庫",
-       got == {"AA-51ZZ", "AA-52ZZ", "AA-53ZZ"}, sorted(got))
+subprocess.run([sys.executable, SCRIPT, "--file", sp_, "update-entry", "--id", "AA-40ZZ",
+                "--sb-count", "0", "--checkpoint", "t",
+                "--entry", "AA-40ZZ (測試) (BITE) ▎摘要。▎畫面：畫面。▎BITE：某人「話」。▎01:00"],
+               capture_output=True, text=True, encoding="utf-8")
+with open(sp_, encoding="utf-8-sig") as f:
+    it = json.load(f)["items"][0]
+report("update-entry 補上 BITE 後自動結案", "needs_review" not in it)
 
 print("\n" + ("全部通過" if ok else "有項目失敗"))
 sys.exit(0 if ok else 1)

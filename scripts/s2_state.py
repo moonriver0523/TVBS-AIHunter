@@ -168,7 +168,35 @@ def read_entry(args):
 # 這是 NS 的 BITE 兜底依據——NS 稿件不用 SOUNDBITE 這個詞、數不出 sb_count，
 # 在此之前 NS 是三站裡唯一完全沒有兜底的。
 FT_MUST_BITE = {"SOT", "BUTTED SOTS", "SOT RAW", "ISO", "DONUT", "INTERVIEW", "RAW"}
-FT_GRAY = {"PKG"}          # 實測 7 無／8 有，真的混合——只提醒不擋
+FT_GRAY = {"PKG"}          # 實測 7 無／8 有，真的混合——只印提醒，不寫 needs_review
+
+
+def bite_doubt(entry, sb_count=None, footage_type=None):
+    """BITE 標記可疑嗎？回傳疑慮說明，沒問題回 None。
+
+    ⚠️ **只判斷「BITE 標記對不對」，不判斷「該不該收錄」**（2026-08-05 訂正）。
+
+    原本這兩條判準寫成**拒收閘門**（`continue` 整筆丟棄），那是設計錯誤：
+    統計上的「零例外」被當成邏輯上的必然。0805 實錯 `SE-005WE`——曼菲斯主播
+    直播打瞌睡的花絮，`footageType=RAW` 但**真的沒有任何引言**（稿內只有
+    `(pause :12 seconds for nat)` 留 12 秒自然音）。`RAW` 是「原始素材」，
+    不是「一定有人講話」。素材被整筆丟棄、只在終端機印一行就消失，
+    使用者與下一輪 agent 都無從得知曾經有過這則。
+
+    現在改成**照收＋把疑慮寫進 `needs_review`**：資料不會消失，疑慮也不會消失
+    （`resume` 每輪列出「待人工」，確認後用 `needs-review done` 結案）。
+    ⛔ **不要再改回拒收**——兜底的價值是提醒漏標，不是替使用者決定收不收。
+    """
+    if "無BITE" not in (entry or ""):
+        return None
+    if isinstance(sb_count, int) and sb_count > 0:
+        return (f"稿內有 {sb_count} 個 SOUNDBITE 卻標「無BITE」——"
+                f"多半是漏把引言寫進 ▎BITE： 段；確認真的沒有可用引言才留著")
+    ft = str(footage_type or "").strip().upper()
+    if ft in FT_MUST_BITE:
+        return (f"footageType={ft} 通常必有訪問聲音卻標「無BITE」——"
+                f"確認是真的沒有引言（純花絮／自然音／字卡）還是漏寫")
+    return None
 
 
 def new_item(source, checkpoint, status, entry):
@@ -194,9 +222,18 @@ def cmd_add(state, args):
     if i in state["items"]:
         print(f"ERROR: {i} 已存在，要更新內容請用 update-entry")
         sys.exit(2)
-    state["items"][i] = new_item(args.source, args.checkpoint, args.status, read_entry(args))
+    entry = read_entry(args)
+    state["items"][i] = new_item(args.source, args.checkpoint, args.status, entry)
+    # BITE 疑慮判斷與 add-batch 一致（2026-08-05 補）：原本單筆完全不檢查，
+    # 是意外留下的後門——0805 那則被 add-batch 擋掉的素材就是靠 `add` 繞過收進來的。
+    # 兩條路徑行為不一致時，人會往阻力小的那條走，兜底等於形同虛設。
+    doubt = bite_doubt(entry, args.sb_count, args.footage_type)
+    if doubt:
+        state["items"][i]["needs_review"] = doubt
     save(state, args.file)
     print(f"OK 已新增 {i}（{args.status}）")
+    if doubt:
+        print(f"⚠️ BITE 待確認（已入庫，已記進 needs-review）：{doubt}")
 
 
 def cmd_add_batch(state, args):
@@ -212,7 +249,7 @@ def cmd_add_batch(state, args):
     if not isinstance(data, list):
         print("ERROR: --entries 需為 JSON 陣列（或含 entries 陣列的物件）")
         sys.exit(2)
-    added, skipped, notes = [], [], []
+    added, skipped, notes, flagged = [], [], [], []
     for n, e in enumerate(data, 1):
         if not isinstance(e, dict):
             skipped.append(f"第{n}筆: 不是物件")
@@ -231,31 +268,26 @@ def cmd_add_batch(state, args):
         if i in state["items"]:
             skipped.append(f"{i}: 已存在（要更新請用 update-entry）")
             continue
-        # 🎯 BITE 機械兜底（2026-08-04，實錯修正 RT2960/RT2947）：batch 每筆可帶
-        # `sb_count`＝抽取白名單數出的 SOUNDBITE 段數（RT story／AP script）。
-        # sb_count > 0 卻寫「無BITE」＝LLM 漏看引言段，機器直接擋下要求改寫，
-        # 不入庫。沒帶 sb_count 的（NS 走 footageType、SNTV 列表級等）不檢查。
-        sb = e.get("sb_count")
-        if isinstance(sb, int) and sb > 0 and "無BITE" in e["entry"]:
-            skipped.append(f"{i}: 稿內有 {sb} 個 SOUNDBITE 卻寫「無BITE」——回頭把引言寫進 ▎BITE： 段再重送")
-            continue
-        # 🎯 NS 的兜底走 `footage_type`（2026-08-04 補；NS 稿件不用 SOUNDBITE 這個詞，
-        # 數不出 sb_count，在此之前 NS 是三站裡唯一完全沒有兜底的）。
-        # 分類依據：0731–0804 全庫存交叉統計，見 13b §1a-3 對照表。
+        # 🎯 BITE 機械兜底：**照收，把疑慮寫進 needs_review**（2026-08-05 訂正，
+        # 原本是 continue 拒收——那會靜默丟掉素材，理由見 bite_doubt()）。
         ft = str(e.get("footage_type") or "").strip().upper()
-        if ft in FT_MUST_BITE and "無BITE" in e["entry"]:
-            skipped.append(f"{i}: footageType={ft} 必有訪問聲音卻寫「無BITE」——"
-                           f"回頭把引言寫進 ▎BITE： 段再重送")
-            continue
+        doubt = bite_doubt(e["entry"], e.get("sb_count"), ft)
         if ft in FT_GRAY and "無BITE" in e["entry"]:
-            # 灰區不擋（PKG 確實有真的無訪問的，如史上的今天資料回顧），只提醒
+            # 灰區訊號弱（實測 7 無／8 有），只印提醒不寫 needs_review，免得洗版
             notes.append(f"{i}: footageType={ft} 標了「無BITE」——PKG 有一半以上其實有訪問，"
                          f"若是 1 分鐘以上的記者包裝請回頭確認一次")
         state["items"][i] = new_item(e["source"], e["checkpoint"], e["status"], e["entry"].strip())
+        if doubt:
+            state["items"][i]["needs_review"] = doubt
+            flagged.append(f"{i}: {doubt}")
         added.append(i)
     if added:
         save(state, args.file)
     print(f"OK 新增 {len(added)} 則" + (f"：{','.join(added)}" if added else ""))
+    if flagged:
+        print(f"⚠️ BITE 待確認 {len(flagged)} 則（**已入庫**，已記進 needs-review，"
+              f"確認後用 `needs-review done --ids …` 結案）：")
+        print("\n".join("  " + n for n in flagged))
     if notes:
         print(f"提醒 {len(notes)} 則（已入庫，請自行確認）：")
         print("\n".join("  " + n for n in notes))
@@ -271,17 +303,20 @@ def cmd_update_entry(state, args):
         sys.exit(2)
     it = state["items"][i]
     entry = read_entry(args)
-    # 🎯 BITE 機械兜底（同 add-batch）：--sb-count 有給且 >0 卻寫「無BITE」直接擋
-    if args.sb_count and args.sb_count > 0 and "無BITE" in entry:
-        print(f"ERROR: {i} 稿內有 {args.sb_count} 個 SOUNDBITE 卻寫「無BITE」——"
-              f"把引言寫進 ▎BITE： 段再重送")
-        sys.exit(2)
+    # 🎯 BITE 兜底（同 add-batch，2026-08-05 由「直接擋」改為「照收＋標記」）：
+    # 覆寫時擋下更危險——舊內容已經在庫存裡，擋下只會讓它停在舊版本，
+    # 而 agent 以為自己更新過了。
+    doubt = bite_doubt(entry, args.sb_count, getattr(args, "footage_type", None))
     it["raw_entry"] = entry
     if args.status:
         it["script_status"] = args.status
     it["entry_updated"] = args.checkpoint or it.get("last_checked_checkpoint", "")
     it["entry_updated_ts"] = now_ts()
     sp.derive(it)                        # 內容變了，結構化欄位跟著重推（見 s2_parse）
+    if doubt:
+        it["needs_review"] = doubt
+    else:
+        it.pop("needs_review", None)     # 改好了就自動結案，不用手動 done
     save(state, args.file)
     print(f"OK 已覆寫 {i}（{it['script_status']}）")
 
@@ -776,6 +811,8 @@ def main():
     a.add_argument("--status", required=True, choices=["has_script", "pending"])
     a.add_argument("--entry", help="行內短內容（與 --entry-file 擇一）")
     a.add_argument("--entry-file", help="長內容檔案路徑（與 --entry 擇一）")
+    a.add_argument("--sb-count", type=int, help="SOUNDBITE 段數（BITE 疑慮判斷用，同 add-batch）")
+    a.add_argument("--footage-type", help="NS footageType（BITE 疑慮判斷用，同 add-batch）")
     ab = sub.add_parser("add-batch")
     ab.add_argument("--entries", required=True,
                     help="JSON 陣列檔，每筆含 id/source/checkpoint/status/entry")
