@@ -97,6 +97,24 @@ report("混合批次 5 則全數入庫（零丟棄）", len(items) == 5, sorted(
 report("混合批次只有該標的被標",
        {k for k, v in items.items() if v.get("needs_review")} == {"AA-30ZZ", "AA-33ZZ"})
 
+# ── 反向：標了 (BITE) 卻沒有 SOUNDBITE（2026-08-06 AP 實錯 7 則）──────
+FAKE = ("AA-50ZZ (直播) (BITE) ▎摘要。▎畫面：畫面。"
+        "▎BITE：現場原音「逐字稿未附」▎01:00")
+report("(BITE) 但 sb_count=0 → 判為疑慮",
+       S.bite_doubt(FAKE, 0, None) is not None, str(S.bite_doubt(FAKE, 0, None))[:40])
+report("(BITE) 且 sb_count>0 → 不判疑慮",
+       S.bite_doubt(FAKE.replace("現場原音「逐字稿未附」", "市長「真的引言」"), 3, None) is None)
+report("沒帶 sb_count 時不誤判（NS 走 footageType，不帶 sb_count）",
+       S.bite_doubt(FAKE, None, "SOT") is None)
+report("標無BITE 的不會被反向規則誤觸",
+       S.bite_doubt("AA-51ZZ (x) ▎a。▎畫面：b。▎無BITE。▎01:00", 0, None) is None)
+
+out, items = run_batch([{"id": "AA-52ZZ", "source": "AP", "checkpoint": "t",
+                         "status": "has_script", "sb_count": 0,
+                         "entry": FAKE.replace("AA-50ZZ", "AA-52ZZ")}])
+report("假 BITE 照樣入庫（不擋）＋寫進 needs_review",
+       "AA-52ZZ" in items and bool(items["AA-52ZZ"].get("needs_review")))
+
 # ── bite_doubt 單元 ─────────────────────────────────────────────────
 report("bite_doubt：有 BITE 的一律不判疑慮",
        S.bite_doubt("x (BITE) ▎a▎畫面：b▎BITE：「c」▎01:00", 5, "SOT") is None)
@@ -120,7 +138,7 @@ with open(sp_, encoding="utf-8-sig") as f:
 report("add 單筆也會標疑慮（不再是後門）", bool(it.get("needs_review")), str(it.get("needs_review"))[:40])
 
 subprocess.run([sys.executable, SCRIPT, "--file", sp_, "update-entry", "--id", "AA-40ZZ",
-                "--sb-count", "0", "--checkpoint", "t",
+                "--sb-count", "1", "--checkpoint", "t",
                 "--entry", "AA-40ZZ (測試) (BITE) ▎摘要。▎畫面：畫面。▎BITE：某人「話」。▎01:00"],
                capture_output=True, text=True, encoding="utf-8")
 with open(sp_, encoding="utf-8-sig") as f:

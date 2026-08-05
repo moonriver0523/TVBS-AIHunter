@@ -187,7 +187,16 @@ def bite_doubt(entry, sb_count=None, footage_type=None):
     （`resume` 每輪列出「待人工」，確認後用 `needs-review done` 結案）。
     ⛔ **不要再改回拒收**——兜底的價值是提醒漏標，不是替使用者決定收不收。
     """
-    if "無BITE" not in (entry or ""):
+    e = entry or ""
+    # ── 反向：標了 (BITE) 卻一個 SOUNDBITE 都沒有（2026-08-05 補，AP 實錯 7 則）──
+    # 這比漏標更糟：編輯看到 (BITE) 以為有可掐的話，調出來只有環境音，白費一趟。
+    # 典型來源是 **AP Live Choice**（直播原始錄影、未經編審、沒有逐字稿）——
+    # `editorialrole` 標 SOT 只代表「素材形式含現場聲」，不代表「有可引用的引言」。
+    if "無BITE" not in e and "(BITE)" in e and isinstance(sb_count, int) and sb_count == 0:
+        return ("標了 (BITE) 但稿內沒有任何 SOUNDBITE——"
+                "「現場原音」「逐字稿未附」不是 BITE；確認有可引用的引言原文，"
+                "否則改標「無BITE。」並在第一括號寫素材形態（如 直播原始帶／現場原音）")
+    if "無BITE" not in e:
         return None
     if isinstance(sb_count, int) and sb_count > 0:
         return (f"稿內有 {sb_count} 個 SOUNDBITE 卻標「無BITE」——"

@@ -261,7 +261,26 @@ const clean = (h) => decodeEnt(
 - 🎯 **BITE 判定＝看 `has_sot` 與 `sb_count`，不是 agent 自己讀稿判斷（2026-08-04 訂案，實錯修正）**：
   - **`has_sot`（`editorialrole` 含 `SOT`）為 true → 必定標 `(BITE)`**，這是 AP 自己標的素材形式（`VOSOT`＝VO＋SOT、`SOT`＝純訪問），有這個標記就代表帶子裡有訪問聲音——0804 實測當下清單 **16/16 全是 `VOSOT`／`SOT`**，但 state 裡 AP 卻有 55% 標「無BITE」，明顯大量誤判。
   - **引言逐字稿在 `SHOTLIST` 段，不在 `STORYLINE` 段**（0804 實測 6 則：SOUNDBITE 全部在 SHOTLIST、STORYLINE 段 0 個）——寫 `▎BITE：` 段時要去 **SHOTLIST 段**抓 `SOUNDBITE (語言) 講者職銜姓名, SAYING:` 後面的引言，**只讀 STORYLINE（敘事摘要段）會誤以為整篇沒有引言**，這正是大量「無BITE」誤判的成因。
-  - `sb_count > 0` 同樣**禁止標「無BITE」**；`has_sot` 為 true 但 `sb_count` 為 0（shotlist 沒逐字）時，標 `(BITE)` 並在 BITE 段寫講者與內容概述（例：`▎BITE：市長受訪談疏散進度（逐字稿未附）`），不可寫「無BITE」。
+  - `sb_count > 0` 同樣**禁止標「無BITE」**。
+
+  🔴 **`has_sot` 為 true 但 `sb_count` 為 0 → 標「無BITE。」，不要硬湊 BITE 段（2026-08-06 訂正，推翻原規則）**
+
+  原規則寫「標 `(BITE)` 並在 BITE 段寫講者與內容概述（逐字稿未附）」——**這條是錯的**，0805 造成 **7 則 AP 假 BITE**：
+  ```
+  ▎BITE：漢光演習現場原音「逐字稿未附」
+  ▎BITE：川普抵達現場原音「逐字稿未附」
+  ▎BITE：現場原音「逐字稿未附」
+  ```
+  **「現場原音」不是 BITE。** 編輯看到 `(BITE)` 會以為有可掐的話，調出來只有環境音——**這比標「無BITE」更糟**，因為它會浪費一趟調帶。
+
+  **根因**：`editorialrole` 含 `SOT` 只代表「素材形式含現場聲」，**不代表「有可引用的引言」**。7 則裡 5 則是 **AP Live Choice**——直播原始錄影，稿件開頭就寫著 `This video is a recording of an event transmitted live on AP Live Choice that has not gone through a full editorial review by the AP`，**沒有編審、沒有逐字稿**。
+
+  **正確做法**：
+  - `sb_count == 0` → 結尾標 **`無BITE。`**，即使 `has_sot` 為 true
+  - 真的有現場聲但沒逐字稿 → 寫進**第一括號備註**（`(直播原始帶)`／`(現場原音)`／`(AP Live 未編審)`），讓編輯自己判斷要不要調帶
+  - ⚠️ **AP Live Choice 可機械識別**：`src_text` 含 `AP Live Choice` 即是，這類一律不標 `(BITE)`
+
+  🎯 **`add-batch`／`add`／`update-entry` 會偵測「標了 `(BITE)` 但 `sb_count == 0`」並寫進 `needs_review`**（照收不擋，同 §2「兜底只判標記不判收錄」原則）。⚠️ NS 走 `footageType`、稿件不用 `SOUNDBITE` 這個詞，**不帶 `sb_count`**，所以不會誤觸。
   - ⚠️ **AP 也會出現「引言被消化進摘要就不寫 BITE 段」這個形狀**——`AP5466752` 摘要已寫出「稱『絕佳機會』」、畫面段寫「受訪」，結尾仍標「無BITE」，自相矛盾。成因與判準見上方 **§1 RT 的「誤判的真正形狀」** 那段，兩站完全一樣：**摘要回答「這件事是什麼」，BITE 段回答「哪一段話可以直接剪出來上鏡、講者是誰」，前者不能取代後者。**
 
 - ⚠️ **`id` 前綴踩雷（2026-08-04 工作 agent 實錯回報，已修）**：`s.editorialid` 是**裸數字**（如 `4676366`），但狀態檔／既有素材代碼一律是 `AP` 前綴＋數字（`AP4676366`）。**上面兩個函式都已補上 `'AP' +` 前綴**——早期版本沒補，若 diff 步驟拿裸數字直接跟狀態檔比對，永遠比不出「已收過」，每輪都會把舊素材當新素材重新判斷一次。**任何依這份文件早期版本抄過程式碼的地方，都要回頭檢查有沒有補這個前綴。**
