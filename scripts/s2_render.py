@@ -223,8 +223,70 @@ def render_item(it, base_mmdd):
     return lines
 
 
-def group_items(state):
-    """大分類 → 中主題 → 小分題 → [素材]，三層都保 items 原順序（保序 dict）。"""
+def _lcs_len(a, b):
+    """最長共同**連續**子字串長度。中文短名用這個比 bigram 準：
+    `野火`⊂`歐洲野火`＝2、`熱浪`⊂`亞洲熱浪`＝2、`華州野火`vs`加州野火`＝3。
+    """
+    if not a or not b:
+        return 0
+    best = 0
+    prev = [0] * (len(b) + 1)
+    for i in range(1, len(a) + 1):
+        cur = [0] * (len(b) + 1)
+        for j in range(1, len(b) + 1):
+            if a[i - 1] == b[j - 1]:
+                cur[j] = prev[j - 1] + 1
+                if cur[j] > best:
+                    best = cur[j]
+        prev = cur
+    return best
+
+
+# 相近判準：共同連續子字串 ≥ 2 個字。1 個字太鬆（`美股`vs`亞股`只共用「股」、
+# `政治`vs`政壇`只共用「政」都會被誤湊在一起），2 個字實測剛好：
+# 熱浪／野火／事故／財報／動物 這類真正的同族詞都是 2 字以上。
+_TOPIC_SIM_MIN = 2
+
+
+def order_topics(mids):
+    """中主題排序：**維持到貨順序，但新主題插到名稱最相近的既有主題旁邊**。
+
+    2026-08-05 使用者訂案。原本純粹依素材到貨順序排，跨輪的相關主題必然散開——
+    0804 實測【歐洲野火】(18:00 到) 與【野火】(22:00 到) 中間隔了 4 個不相干的主題，
+    只因為晚了 4 小時；【亞洲熱浪】【歐洲熱浪】【熱浪】更是散在三處。
+
+    做法：照到貨順序逐一放入，每個新主題找出**共同連續子字串最長**的既有主題；
+    達門檻就插在**該族最後一個**的後面（插在最後一個而不是第一個，多個同族才會連成一片），
+    沒達門檻就照舊接在最後。純顯示層調整，不動任何資料。
+    """
+    out = []
+    for m in mids:
+        best, best_at = 0, -1
+        for idx, seen in enumerate(out):
+            sc = _lcs_len(m, seen)
+            if sc >= best:                 # `>=`：同分取較後者，同族才會連續
+                best, best_at = sc, idx
+        if best >= _TOPIC_SIM_MIN and best_at >= 0:
+            out.insert(best_at + 1, m)
+        else:
+            out.append(m)
+    return out
+
+
+# 中主題重排的排除名單（2026-08-05 使用者訂案：**只從 0805 新檔起生效，不追溯**）。
+# `0804` 那份當時正在跑（早班 10:00 輪剛更新），中途換排列會讓已經在看的編輯錯亂。
+# ⚠️ 用明確的排除集合、不用 `mmdd >= "0805"` 比大小——後者跨年就壞掉
+# （2027-01-01 的 `0101` 會小於 `0805`，整年都不重排）。
+# 這份名單留著不必清：已歸檔的舊檔本來就不該重新渲染，留著剛好保住它們的原始排列。
+TOPIC_ORDER_SKIP_MMDD = {"0804"}
+
+
+def group_items(state, base_mmdd=""):
+    """大分類 → 中主題 → 小分題 → [素材]，小分題與素材保原順序。
+
+    中主題順序另外經 `order_topics()` 調整（相近名稱靠攏，見該函式）；
+    `TOPIC_ORDER_SKIP_MMDD` 裡的日期維持原本的到貨順序。
+    """
     items = state.get("items", [])
     if isinstance(items, dict):                       # 容錯：dict 形式也吃
         items = [dict(id=k, **v) for k, v in items.items()]
@@ -236,6 +298,11 @@ def group_items(state):
         if not big:
             big = "話題"                              # 沒分類的落到最後一格，不遺失
         groups.setdefault(big, {}).setdefault(mid, {}).setdefault(sub, []).append(it)
+    # 中主題重排：相近名稱靠攏（小分題與素材順序完全不動）
+    if base_mmdd not in TOPIC_ORDER_SKIP_MMDD:
+        for big in groups:
+            mids = groups[big]
+            groups[big] = {m: mids[m] for m in order_topics(list(mids))}
     return groups
 
 
@@ -259,7 +326,7 @@ def render_block(big, mids, base_mmdd):
 
 
 def build_body(state, base_mmdd):
-    groups = group_items(state)
+    groups = group_items(state, base_mmdd)
     # 第一格機動大分類的顯示名：_top 指定 > items 裡不屬固定 15 格的那個 > 樣板佔位
     special = (state.get("special_category") or "").strip()
     if not special:
