@@ -8,8 +8,10 @@
 AP 假 BITE 7 則、中主題 92→62。共同形狀是**當輪 agent 看不見自己的盲區**：
 它按規則做了、也覺得做完了，但規則有洞或視野被縮小。**只有換一雙眼睛才看得到。**
 
-⚡ **本模組全部離線**：只讀狀態檔與當晚暫存檔，**零瀏覽器呼叫、零 API**，
-數秒跑完。唯一需要開瀏覽器的「三站清單對帳」不在這裡（見 §A 的說明）。
+⚡ **①–⑦ 全部離線**：只讀狀態檔與當晚暫存檔，零瀏覽器呼叫、數秒跑完。
+Ⓐ **清單對帳**要一份 agent 剛撈的清單快照（`--rt-list` 等）——**稽核的時機
+必然是掃帶剛結束、Playwright 正好空著**，所以這一項做得到，別跳過：
+它是價值最高的檢查（0805 靠它抓到 47 則漏收）。
 ⚠️ 這正是 `src_text`／`_rt_list_{HHMM}.json` 落檔規則存在的理由——
 沒有那兩份，稽核就得重開瀏覽器，成本差一個數量級。
 
@@ -38,6 +40,7 @@ for _s in (sys.stdout, sys.stderr):
 
 BASE = os.path.dirname(S.DEFAULT_FILE)
 RED, YEL = [], []
+AUDIT_ARGS = None
 
 
 def red(msg):
@@ -56,6 +59,102 @@ def ok(msg):
 
 def sec(title):
     print(f"\n── {title} " + "─" * max(0, 56 - len(title) * 2))
+
+
+
+def parse_list_file(path):
+    """讀 agent 撈回來的清單快照。兩種格式都吃：
+
+    ① 純文字，每行 `CODE|MM/DD/YYYY HH:MM` 或 `CODE|HH:MM`（多餘欄位忽略）
+    ② JSON 陣列，每筆 {"code": "...", "at": "..."}／{"id": ..., "time": ...}
+    """
+    raw = open(path, encoding="utf-8-sig").read().strip()
+    rows = []
+    if raw.startswith("["):
+        for it in json.loads(raw):
+            c = it.get("code") or it.get("id") or ""
+            t = it.get("at") or it.get("time") or ""
+            if c:
+                rows.append((c.strip(), str(t)))
+    else:
+        for line in raw.split("\n"):
+            if not line.strip():
+                continue
+            parts = [x.strip() for x in line.split("|")]
+            if parts[0]:
+                rows.append((parts[0], parts[1] if len(parts) > 1 else ""))
+    return rows
+
+
+def _hhmm(t):
+    m = re.search(r"(\d{1,2}):(\d{2})", t or "")
+    return int(m.group(1)) * 60 + int(m.group(2)) if m else None
+
+
+def reconcile(st, mmdd, path, label):
+    """清單 vs 狀態檔對帳：算出**窗內該收而未收**的。"""
+    rows = parse_list_file(path)
+    cur = set(st["items"])
+    prev = set()
+    for f in glob.glob(os.path.join(BASE, "Archive", "**", "[01]*-s2-state.json"), recursive=True):
+        try:
+            prev |= set(S.load(f)["items"])
+        except Exception:
+            pass
+    prev -= cur
+
+    # 窗：window_start → 目前 checkpoint（都取 HH:MM，跨夜用 +24h 折算）
+    ws = _hhmm(st["_top"].get("window_start") or "")
+    _d, end = R.checkpoint_time(st["_top"].get("checkpoint"), mmdd)
+    we = (end // 100 * 60 + end % 100) if end is not None else None
+    if we is not None and ws is not None and we < ws:
+        we += 1440
+
+    def norm(t):
+        v = _hhmm(t)
+        if v is None or ws is None:
+            return v
+        return v + 1440 if v < ws else v      # 跨夜：小於起點的算隔天
+
+    got = [c for c, _t in rows if c in cur]
+    old_ = [c for c, _t in rows if c not in cur and c in prev]
+    rest = [(c, t) for c, t in rows if c not in cur and c not in prev]
+    inw = [(c, t) for c, t in rest if ws is None or we is None
+           or (norm(t) is not None and ws <= norm(t) <= we)]
+    after = [(c, t) for c, t in rest if (c, t) not in inw]
+
+    print(f"     {label}：清單 {len(rows)}｜已收 {len(got)}｜前幾天收過 {len(old_)}"
+          f"｜窗內未收 {len(inw)}｜窗外 {len(after)}")
+    if inw:
+        red(f"{label} 窗內漏收 {len(inw)} 則：" +
+            "／".join(f"{c}({t[-5:]})" for c, t in inw[:12]))
+    else:
+        ok(f"{label} 窗內零漏收")
+    if after:
+        print(f"        （窗外 {len(after)} 則屬下一輪，不算漏：" +
+              "／".join(c for c, _t in after[:8]) + "）")
+
+
+    # ── Ⓐ 三站清單對帳（給 --rt-list／--ap-list／--ns-list 就做）──────
+def _reconcile_section(st, mmdd, args):
+    sec("Ⓐ 清單對帳（最高價值：0805 靠它抓到 47 則漏收）")
+    any_ = False
+    for opt, label in (("rt_list", "RT"), ("ap_list", "AP"), ("ns_list", "NS")):
+        path = getattr(args, opt, None)
+        if path:
+            any_ = True
+            if not os.path.exists(path):
+                red(f"{label} 清單檔不存在：{path}")
+            else:
+                reconcile(st, mmdd, path, label)
+    if not any_:
+        yel("沒給 --rt-list／--ap-list／--ns-list，**這一項沒做**——"
+            "它是價值最高的檢查，別跳過")
+        print("        做法：稽核時剛好是掃帶剛結束、Playwright 空著的時候。")
+        print("        ① agent 撈各站清單（RT 見 13b §1b 第 3 條的容器捲動寫法）")
+        print("        ② 存成每行 `CODE|MM/DD/YYYY HH:MM` 的純文字或 JSON 陣列")
+        print("        ③ 重跑本模組並帶上 --rt-list <檔案>")
+        print("        ⚠️ 開瀏覽器前先確認下一輪掃帶還沒開始，否則 Playwright 互鎖。")
 
 
 def audit(mmdd, state_path, txt_path, scratch):
@@ -212,13 +311,7 @@ def audit(mmdd, state_path, txt_path, scratch):
     else:
         yel(f"找不到 {txt_path}——尚未 render？")
 
-    # ── ⓐ 需要開瀏覽器的部分（本模組不做）────────────────────────
-    sec("Ⓐ 需要開瀏覽器的檢查（本模組不做）")
-    print("     🔍 三站清單對帳（最高價值，0805 靠它抓到 47 則漏收）：")
-    print("        重撈各站清單 → 跟狀態檔 diff → 算出窗內未收的。")
-    print("        ⚠️ Playwright 只有一個 persistent profile，開之前先確認")
-    print("           掃帶輪次沒在跑，否則會互鎖（0803 空窗八小時的坑）。")
-    print("        ⚠️ RT 清單是內層容器虛擬捲動，首屏只有約 10 則——做法見 13b §1b 第 3 條。")
+    _reconcile_section(st, mmdd, AUDIT_ARGS)
 
 
 def main():
@@ -226,7 +319,12 @@ def main():
     p.add_argument("--mmdd", required=True, help="晚班起始日，如 0805")
     p.add_argument("--file", help="狀態檔路徑（省略＝依 --mmdd 自動組）")
     p.add_argument("--txt", help="晚班交接 txt（省略＝依 --mmdd 自動組）")
+    p.add_argument("--rt-list", help="RT 清單快照（對帳用；每行 CODE|時間 或 JSON 陣列）")
+    p.add_argument("--ap-list", help="AP 清單快照")
+    p.add_argument("--ns-list", help="NS 清單快照")
     a = p.parse_args()
+    global AUDIT_ARGS
+    AUDIT_ARGS = a
     state = a.file or os.path.join(BASE, f"{a.mmdd}-s2-state.json")
     txt = a.txt or os.path.join(BASE, f"{a.mmdd}晚班交接.txt")
     scratch = os.path.join(BASE, f"2026{a.mmdd}")
