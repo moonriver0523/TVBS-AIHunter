@@ -67,7 +67,7 @@ report("沒用到 🟤 時圖例不出現",
 
 # ── render：欄位與字串兩種來源都要生出 🟤，且不重複 ──────────────────
 report("strip_marks 認得 raw_entry 裡手打的 🟤",
-       sr.strip_marks("△ 🟤 " + BODY) == (False, True, BODY))
+       sr.strip_marks("△ 🟤 " + BODY) == (False, False, True, BODY))   # (紅, 橘, 已播, 內文)
 
 it = {"raw_entry": BODY, "first_seen_checkpoint": "0804-1600", "aired": True}
 out = sr.render_item(it, "0804")[0]
