@@ -463,7 +463,7 @@ python scripts/s2_state.py needs-review done --ids RT2333    # 處理完就結�
 | 「把 RT2612、RT2993 標**已播**／**灰圈**／**🟤**／**本台做過了**」 | `set-aired --ids RT2612,RT2993` |
 | 「RT2612 **取消已播**／拿掉灰圈」 | `set-aired --ids RT2612 --clear` |
 | 「把 XX 標**重大**／紅圈」 | `set-alert --add "…"`（檔頭行）＋正文該則加 `🔴`（見 `13`） |
-| 「XX 標**次重大**／橘圈」 | 正文該則加 `🟠`（重大但不進檔頭，不用動 `set-alert`；見 `13`） |
+| 「XX 標**次重大**／橘圈」 | 正文該則加 `🟡`（重大但不進檔頭，不用動 `set-alert`；見 `13`） |
 | 「XX **分類錯了**，應該放 OO」 | `set-category --pairs`（分隔符用分號 `;`） |
 | 「XX 這則**不要了**／誤收」 | `remove --ids XX`（真的不要才用；「待人工」用 `needs-review add`） |
 | 「XX 的**時段標記**錯了」 | `set-mark --ids XX --mark ▲` |

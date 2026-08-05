@@ -68,20 +68,22 @@ MARK_RE = re.compile(r"^([△▲■◆●])\s*")   # `●` 為舊符號，見上
 # 位置在 🔴 之後、代碼之前，兩者可並存：`▲ 🔴 🟤 IN-23SU (…) ▎…`
 # ⚠️ 跟 🔴 同樣必須一併剝掉，否則 LINE_RE 不 match，整行會從品質掃與檔頭統計裡消失。
 AIRED_RE = re.compile(r"^(🟤)\s*")
-# 次級重大標記（2026-08-05 使用者訂案）：**重大、但沒擠進檔頭前三**。
+# 次級重大標記 🟡（2026-08-05 使用者訂案）：**重大、但沒擠進檔頭前三**。
+# ⚠️ 一度用過 🟠 橘圓（同日稍早），使用者反映與 🔴 對比不夠明顯，當天即改為 🟡。
+#    上線範圍：**0805 新開的晚班交接起**，0804 以前不追溯（那幾天本來就沒有任何一則標過）。
 # 為什麼要分兩層：檔頭只有 3 行上限，但一晚常有 10 幾件重大事件——單一層級下，
 # agent 判斷「這則排不進前三」時會連正文標記一起放棄（0804 整晚只標 1 則的機制）。
-# 拆開之後標 🟠 不必宣稱自己是今天前三，門檻的綁架就解除了。
-#   🔴＝曾進過檔頭（最高層級，永久保留）／🟠＝重大但未進檔頭（同樣永久保留）
+# 拆開之後標 🟡 不必宣稱自己是今天前三，門檻的綁架就解除了。
+#   🔴＝曾進過檔頭（最高層級，永久保留）／🟡＝重大但未進檔頭（同樣永久保留）
 # ⚠️ 兩者互斥：升進檔頭就改標 🔴，不會同時出現。
-ORANGE_RE = re.compile(r"^(🟠)\s*")
+SUBALERT_RE = re.compile(r"^(🟡)\s*")
 
 
 def strip_mark(l):
-    """回傳 (時段標記或空字串, 去掉時段標記／🔴／🟠／🟤 之後的行)。"""
+    """回傳 (時段標記或空字串, 去掉時段標記／🔴／🟡／🟤 之後的行)。"""
     m = MARK_RE.match(l)
     mark, rest = (m.group(1), l[m.end():]) if m else ("", l)
-    for rx in (RED_RE, ORANGE_RE, AIRED_RE):
+    for rx in (RED_RE, SUBALERT_RE, AIRED_RE):
         r = rx.match(rest)
         if r:
             rest = rest[r.end():]
@@ -98,15 +100,15 @@ def is_red(l):
     return bool(RED_RE.match(_after_mark(l)))
 
 
-def is_orange(l):
-    """素材行是否帶次級重大標記 🟠（時段標記之後、代碼之前）。"""
-    return bool(ORANGE_RE.match(_after_mark(l)))
+def is_subalert(l):
+    """素材行是否帶次級重大標記 🟡（時段標記之後、代碼之前）。"""
+    return bool(SUBALERT_RE.match(_after_mark(l)))
 
 
 def is_aired(l):
-    """素材行是否帶已播標記 🟤（時段標記與 🔴／🟠 之後、代碼之前）。"""
+    """素材行是否帶已播標記 🟤（時段標記與 🔴／🟡 之後、代碼之前）。"""
     rest = _after_mark(l)
-    for rx in (RED_RE, ORANGE_RE):
+    for rx in (RED_RE, SUBALERT_RE):
         r = rx.match(rest)
         if r:
             rest = rest[r.end():]
@@ -451,9 +453,9 @@ def header_from_lines(lines, window="", date="", mmdd="", alerts=()):
     legend = [f"{m}={MARKS[m]}" for m in MARKS if marked[m]]
     # 🟤 已播（2026-08-04）：同樣「有用到才印」——沒標到的日子不要多一段沒用的圖例。
     # 🔴 不進圖例：它已經有檔頭「🔴 重大：」那幾行自我說明，再列一次是贅字。
-    # 🟠 有用到才印圖例——它沒有檔頭那幾行可以自我說明，編輯不看圖例會不懂
-    if any(is_orange(raw) for raw in lines):
-        legend.append("🔴=檔頭重大　🟠=重大未進檔頭")
+    # 🟡 有用到才印圖例——它沒有檔頭那幾行可以自我說明，編輯不看圖例會不懂
+    if any(is_subalert(raw) for raw in lines):
+        legend.append("🔴=檔頭重大　🟡=重大未進檔頭")
     if any(is_aired(raw) for raw in lines):
         legend.append("🟤=已做過")
     if legend:

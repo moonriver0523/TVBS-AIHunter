@@ -51,7 +51,7 @@ FIXED = ["大陸", "關稅", "美伊", "中東", "烏俄", "美國", "政治", "
 MARK_RE = re.compile(r"^\s*([△▲■◆●])\s*")   # `●` 為舊符號，剝離時仍須認得
 RED_RE = re.compile(r"^\s*(🔴)\s*")
 AIRED_RE = re.compile(r"^\s*(🟤)\s*")
-ORANGE_RE = re.compile(r"^\s*(🟠)\s*")   # 次級重大：重大但未進檔頭
+SUBALERT_RE = re.compile(r"^\s*(🟡)\s*")   # 次級重大：重大但未進檔頭
 
 
 def load_state(path):
@@ -64,7 +64,7 @@ def load_state(path):
 
 
 def strip_marks(entry):
-    """剝掉 raw_entry 開頭既有的時段標記／🔴／🟠／🟤，回傳 (有無🔴, 有無🟠, 有無🟤, 淨內容)。
+    """剝掉 raw_entry 開頭既有的時段標記／🔴／🟡／🟤，回傳 (有無🔴, 有無🟡, 有無🟤, 淨內容)。
 
     標記一律由 render 重算後補回：舊資料有的有、有的沒有，照抄會出現雙標記或漏標記。
     🟤 的正規來源是 item 的 `aired` 欄位（`set-aired` 寫入），但 raw_entry 裡若被手打
@@ -77,13 +77,13 @@ def strip_marks(entry):
     red = bool(RED_RE.match(e))
     if red:
         e = RED_RE.sub("", e, count=1)
-    orange = bool(ORANGE_RE.match(e))
+    orange = bool(SUBALERT_RE.match(e))
     if orange:
-        e = ORANGE_RE.sub("", e, count=1)
+        e = SUBALERT_RE.sub("", e, count=1)
     aired = bool(AIRED_RE.match(e))
     if aired:
         e = AIRED_RE.sub("", e, count=1)
-    # 🔴 與 🟠 互斥：升進檔頭就是 🔴，不會同時掛兩個。萬一內容裡兩個都寫了，
+    # 🔴 與 🟡 互斥：升進檔頭就是 🔴，不會同時掛兩個。萬一內容裡兩個都寫了，
     # 取較高層級的 🔴——降級會讓「曾進過檔頭」這個永久註記憑空消失。
     return red, (orange and not red), aired, e
 
@@ -212,7 +212,7 @@ def render_item(it, base_mmdd):
     if red:
         prefix += "🔴 "
     elif orange:
-        prefix += "🟠 "          # 重大但未進檔頭（2026-08-05），與 🔴 互斥
+        prefix += "🟡 "          # 重大但未進檔頭（2026-08-05），與 🔴 互斥
     # 🟤 已播：正規來源是 `aired` 欄位（set-aired 寫入），raw_entry 手打的也認
     if it.get("aired") or aired_txt:
         prefix += "🟤 "
