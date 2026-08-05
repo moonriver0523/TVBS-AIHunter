@@ -286,6 +286,48 @@ def cmd_update_entry(state, args):
     print(f"OK 已覆寫 {i}（{it['script_status']}）")
 
 
+def cmd_list_topics(state, args):
+    """印出目前各大分類底下的中主題與則數——**開新中主題前必跑**。
+
+    2026-08-05 訂案。要解的是中主題重複的**真正成因：agent 每輪獨立命名、
+    看不到既有清單**。0805 實例：20:00 那輪替基輔攻擊開了【俄襲烏克蘭】，
+    但 16:30 輪已經有【基輔空襲】——兩個名稱都合理，卻分裂成兩個中主題
+    （當天 77 個中主題人工合併後剩 55）。這是「看不到」不是「不想用」，
+    所以先給視野、再談命名規則。
+
+    成本近乎零：只讀狀態檔，零瀏覽器呼叫、零 API。
+    """
+    rows = {}
+    for v in state["items"].values():
+        c = v.get("category") or {}
+        big, mid = c.get("大分類"), c.get("中主題")
+        if not big:
+            continue
+        rows.setdefault(big, {}).setdefault(mid or "(未填)", []).append(c.get("小分題") or "")
+    if not rows:
+        print("(目前沒有任何已分類的素材)")
+        return
+    # 大分類依則數排序；中主題用 render 的靠攏順序，看到的排列與 txt 一致
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from s2_render import order_topics
+    except Exception:
+        def order_topics(x):
+            return x
+    total = 0
+    for big in sorted(rows, key=lambda b: -sum(len(v) for v in rows[b].values())):
+        mids = rows[big]
+        n = sum(len(v) for v in mids.values())
+        total += n
+        print(f"■ {big}（{n} 則 / {len(mids)} 個中主題）")
+        for m in order_topics(list(mids)):
+            subs = [x for x in mids[m] if x]
+            tail = f"　└ {'／'.join(sorted(set(subs)))}" if args.subs and subs else ""
+            print(f"    【{m}】×{len(mids[m])}{tail}")
+    print(f"\n合計 {total} 則 / {sum(len(v) for v in rows.values())} 個中主題")
+    print("⚠️ 要開新中主題前先看這份：同一事件已經有名字就沿用，不要另起爐灶。")
+
+
 def cmd_scratch_dir(state, args):
     """印出（並建立）今晚班次的暫存檔資料夾路徑，供 agent 開工時取用。"""
     print(scratch_dir(args.mmdd))
@@ -720,6 +762,8 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("resume")
+    lt = sub.add_parser("list-topics", help="列出目前各大分類的中主題與則數（開新中主題前必跑）")
+    lt.add_argument("--subs", action="store_true", help="連小分題一起列出")
     sc = sub.add_parser("scratch-dir", help="印出並建立今晚班次的暫存檔資料夾（{YYYYMMDD}/）")
     sc.add_argument("--mmdd", required=True, help="晚班起始日 MMDD（不是實際掃帶當下的日曆日）")
     d = sub.add_parser("diff")
@@ -799,7 +843,7 @@ def main():
         "set-mark": cmd_set_mark, "set-aired": cmd_set_aired,
         "set-category": cmd_set_category, "get": cmd_get, "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,
-        "scratch-dir": cmd_scratch_dir,
+        "scratch-dir": cmd_scratch_dir, "list-topics": cmd_list_topics,
     }[args.cmd](state, args)
 
 

@@ -450,6 +450,8 @@ python scripts/s2_state.py update-entry --id RT2333 --status has_script --entry 
                                                            # add／update-entry 短內容用 --entry 行內；長內容（如CNN連線全文）才用 --entry-file
 python scripts/s2_state.py pending                         # 稿未到清單（最終整併清查用）
 python scripts/s2_state.py set-category --pairs "RT2333=社會/休達移民/岸際動態;RT2360=天氣/野火"
+python scripts/s2_state.py list-topics                     # ⭐ 開新中主題前必跑：列出各大分類現有的中主題與則數
+                                                           # --subs 連小分題一起列；只讀狀態檔、零瀏覽器呼叫
                                                            # ⭐ 批次設分類（預設路徑）；單筆仍可 --id RT2333 --cat "社會/休達移民"
                                                            # 第三段＝小分題（選填）：render 會產出裸行標題＋`+` 分隔
 python scripts/s2_state.py add-side --txt "…/0803 CNN側錄.txt" --source CNN --checkpoint 22:00 \
