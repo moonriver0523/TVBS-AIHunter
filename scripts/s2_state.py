@@ -330,6 +330,49 @@ def cmd_update_entry(state, args):
     print(f"OK 已覆寫 {i}（{it['script_status']}）")
 
 
+# 地區詞 → 樣板上該去的大分類（2026-08-06 訂）。用來抓「中主題放錯大分類」。
+# 為什麼有效：agent 命名時會自己把地區寫進中主題名（【美國治安】【美國地方】），
+# 它知道這是哪裡的事，只是**沒去想樣板上有沒有專屬的那一格**。名稱就是現成線索。
+# ⚠️ 只抓得到「名稱含地區詞」的——【布朗克斯爆炸】放社會格就抓不到。
+#    但 0805 實測 7 組全部都有地區詞（那是 agent 自然的命名習慣），
+#    所以這是「便宜且抓得到大多數」的方案，不是完備方案。
+GEO_HOME = {
+    "美國": "美國", "中國": "大陸", "中共": "大陸", "北京": "大陸",
+    "台灣": "政治", "台海": "政治", "漢光": "政治",
+    "俄羅斯": "烏俄", "俄軍": "烏俄", "俄烏": "烏俄", "烏克蘭": "烏俄", "基輔": "烏俄",
+    "伊朗": "美伊", "荷莫茲": "美伊", "德黑蘭": "美伊",
+    "以色列": "中東", "加薩": "中東", "黎巴嫩": "中東", "耶路撒冷": "中東",
+    "關稅": "關稅",
+}
+# 題材格：主題明確、獨立收，優先級高於地緣格（2026-08-04 使用者裁示）。
+# 落在這幾格的中主題即使名稱含地區詞也不提示（美股歸財經是對的）。
+# ⚠️ `社會`／`天氣`／`話題` 算不算題材格**尚未裁定**，所以暫不列入——
+#    未裁定的案例會持續被提示，等於提醒使用者去裁定，而不是靜靜累積。
+TOPIC_SLOTS = {"財經", "娛樂", "體育"}
+
+
+def misplaced_topics(state):
+    """找出「中主題名稱含地區詞、卻放在別的大分類」的組合。
+
+    回傳 [(現在的大分類, 中主題, 則數, 命中的地區詞, 建議的大分類)]。
+    """
+    counts = {}
+    for v in state.get("items", {}).values():
+        c = v.get("category") or {}
+        big, mid = c.get("大分類"), c.get("中主題") or ""
+        if big:
+            counts[(big, mid)] = counts.get((big, mid), 0) + 1
+    out = []
+    for (big, mid), n in sorted(counts.items()):
+        if big in TOPIC_SLOTS:
+            continue                      # 題材格優先，不提示
+        for word, home in GEO_HOME.items():
+            if word in mid and big != home:
+                out.append((big, mid, n, word, home))
+                break
+    return out
+
+
 def cmd_list_topics(state, args):
     """印出目前各大分類底下的中主題與則數——**開新中主題前必跑**。
 
@@ -370,6 +413,13 @@ def cmd_list_topics(state, args):
             print(f"    【{m}】×{len(mids[m])}{tail}")
     print(f"\n合計 {total} 則 / {sum(len(v) for v in rows.values())} 個中主題")
     print("⚠️ 要開新中主題前先看這份：同一事件已經有名字就沿用，不要另起爐灶。")
+    mis = misplaced_topics(state)
+    if mis:
+        print(f"\n🔴 疑似放錯大分類 {len(mis)} 組（名稱含地區詞、但樣板上有專屬格）：")
+        for big, mid, n, word, home in mis:
+            print(f"    {big}／【{mid}】×{n}  ← 含「{word}」，樣板上「{home}」在前")
+        print("    處置：確認後用 set-category 搬過去；若判定該留原格，"
+              "代表該格是題材格——回報使用者裁定，不要自己改規則。")
 
 
 def cmd_scratch_dir(state, args):
