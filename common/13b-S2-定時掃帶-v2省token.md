@@ -148,30 +148,42 @@ const clean = (h) => decodeEnt(
 
 - **清單**：`POST https://www.reutersconnect.com/api/search-api?hash={hash}`（同源 cookie，`browser_evaluate` 內 fetch）。`cursorMark=*` 起手、用回應的 `nextCursorMark` 翻頁；`limit=60`。
 - ⚠️ **回應是 transit 壓縮格式**（欄位名只出現一次、後續用 `^N` 參照）——**不要用 regex 解清單**，只會抓到第一則。清單改用 §1b 的 DOM 直撈拿 Edit No／href（順序有保證），API 清單當備援。
-- **文稿**：`GET /api/item/{guid}?hash={hash}&live=false`，**單則回應每個欄位只出現一次、必為字面值，regex 可靠**。新素材的 guid 一次 `Promise.all` 打 N 則——**免開分頁、免等 8–9 秒**。
-- Edit No 可從 guid 的 `newsml_RW{4碼}` 機械推出，與清單值互相校驗。⚠️ **不要從 item 回應抓 `editnumber`**（結構深、regex 不穩，實測回 undefined）。
-- `hash` **照抄當下頁面實際請求**（實測 `klwn20`，跨 session 穩定但那像前端 build hash、改版會變，不可硬編）。
-- ⭐ **抽取白名單（實測定版，欄位名與型別都已逐一 dump 確認）**：
+- **文稿**：`GET /api/item/{guid}?live=false`（同源 fetch，`hash` 可省）。新素材的 guid 一次 `Promise.all` 打 N 則。
+
+  🔴 **回應格式已變：現在是純 JSON，不是 transit（2026-08-05 實測訂正，這條害過一次大漏收）**
 
   ```js
-  const pick = (t,k) => { const m = t.match(new RegExp('"~:'+k+'","((?:[^"\\\\]|\\\\.)*)"')); return m?m[1]:''; };
-  const slimRT = (t, guid) => {
-    const story = clean(pick(t,'story'));
-    return {
-      edit:  (guid.match(/RW(\d{4})/)||[])[1] || '',   // Edit No 由 guid 推，不從內文抓
-      head:  unesc(pick(t,'headline')),
-      slug:  unesc(pick(t,'slug')),
-      dur:   pick(t,'duration'),        // ⚠️ 字串 "00:02:34" 不是數字，別用 \d+ 抓
-      src:   unesc(pick(t,'source')),   // CCTV／SKAI TV／第三方判定用
-      restr: unesc(pick(t,'restrictions')),  // ⚠️ 純字串不是陣列
-      early: t.includes('early-access-script'),  // true＝稿未到（pending 判定）
-      story,  // ⚠️ 稿件全文在 `~:story`，不是 body／script
-      sb_count: (story.match(/SOUNDBITE/gi) || []).length  // 🎯 BITE 機械計數（見下方「BITE 判定」）
-    };
+  // ✅ 現行做法：直接 JSON.parse，欄位是標準 JSON key
+  const strip = h => (h||'').replace(/<[^>]+>/g,'\n').replace(/&nbsp;/g,' ')
+    .replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+    .replace(/&ldquo;|&rdquo;/g,'"').replace(/&rsquo;/g,"'").replace(/&ndash;/g,'-')
+    .replace(/\n{2,}/g,'\n').trim();
+
+  const r  = await fetch('/api/item/' + encodeURIComponent(guid) + '?live=false',
+                         { headers:{ accept:'application/json' } });
+  const it = (await r.json()).item || {};        // ⚠️ 內容包在 `item` 底下
+  const story = strip(it.story);                 // `story` 是 HTML，要去 tag
+  const slim = {
+    edit:  'RT' + ((guid.match(/RW(\d{4})/)||[])[1] || ''),  // Edit No 由 guid 推
+    head:  it.headline,
+    slug:  it.slug,
+    dur:   it.duration,          // ⚠️ 字串 "00:02:34" 不是數字
+    src:   it.source,            // CCTV／CNS／第三方判定用
+    restr: it.restrictions,      // ⚠️ 純字串不是陣列
+    story,
+    sb_count: (story.match(/SOUNDBITE/gi) || []).length   // 🎯 BITE 機械計數
   };
   ```
 
-- ⚠️ **欄位名容易猜錯的三個**：稿全文是 **`~:story`**（不是 `body`／`script`）；`duration` 是**字串**；`restrictions` 是**純字串**（`"Broadcast: None. Digital: None.."`／`"Broadcast: No Use Greece…"`），不是陣列。
+  ⛔ **舊的 transit regex 寫法（`pick(t,'headline')` 比對 `"~:headline","…"`）已經失效，不要再用。**
+  **失效的形狀最陰險：HTTP 回 200、程式不報錯，但每個欄位都是空字串。** 0805 工作 agent 的
+  `_rt_details` 只拿到 3 則就放棄，很可能就是撞上這個——抓回來全空，於是判定「站方有問題」。
+  ⚠️ **日後若欄位又全空，第一個懷疑「回應格式是不是又變了」**：先 dump 一則原始回應的前 700 字元
+  看是 `"headline":"…"`（純 JSON）還是 `"~:headline","…"`（transit），不要直接假設站方故障。
+
+- ⚠️ **`story` 是 HTML 字串**（`<html>…<body><p>VIDEO SHOWS: …`），要去 tag＋解 HTML 實體才可讀；
+  `&nbsp;` 特別多，不解會滿篇亂碼。**內文一個字都不能改**（同側錄逐字規則）。
+
 - `early-access-script` 出現＝該則只有早期版、**稿未到**，對應 `script_status: pending`（判準仍以 `13`「有稿判準」為準）。
 - 🎯 **BITE 判定＝看 `sb_count`，不是 agent 自己讀稿判斷（2026-08-04 訂案，實錯修正）**：`sb_count > 0` 的素材**禁止標「無BITE」**——機器已經數出稿裡有 N 個 `SOUNDBITE)` 段，agent 的工作只剩「把那些段落翻成 `▎BITE：{講者}「{內容}」`」，不再自行判斷有無。0803–0804 實錯：0803 晚班交接的 ▲ 素材裡，**RT 誤判率高達 60%**（15 則抽查、9 則有 SOUNDBITE 卻標「無BITE」，最嚴重的 `RT2896` 有 7 個、`RT2915` 有 5 個）。抽取與資料都沒問題（驗證過 `pick()` 完整保留全部 SOUNDBITE、逐 37 個欄位確認引言只在 `story`、版次假說也排除），所以判定必須機械化。
 
@@ -369,7 +381,40 @@ const clean = (h) => decodeEnt(
 **RT**（實測 2026-08-02）：
 1. `all?media-types=vid` 大列表，一次 JS 撈 `a[href*="detail?id="]` 的 **href＋Edit No＋版次＋slug＋標題＋時長＋RAW/SCRIPT 狀態**——「EARLY ACCESS SCRIPT / Video will be available shortly」（稿到片未到）清單層直接可判。
 2. 新素材**照抄清單撈到的 href 直開**（內部碼勿自行拼湊，版次尾碼會變）；開後等 8–9 秒（同 AP 第 3 條，含重讀規則），核對 Edit No 與預期一致才讀。
-3. **Load More 三條行為規則**（實測）：⑴ 是**換頁替換**不是累加——按下後最新那批從 DOM 消失，所以**必須先撈完目前這頁才准按**，按完再撈一次做聯集去重；⑵ 只認**真實點擊**，合成 JS click 無效；⑶ 深夜窗通常首屏 10 則就夠，不需要按。舊的 LOAD MORE 禁則是為 Next 鏈設的，本流程不走 Next 鏈故不適用；退回舊流程時禁則照舊。
+3. 🔴 **清單是「內層容器的虛擬捲動」，必須捲那個容器才看得到全部（2026-08-05 實測訂正，這條害過一次大漏收）**
+
+   **首屏只渲染約 10 則**，捲動時 DOM 會替換——不捲就只看得到 1/6。0805 工作 agent 只「找到」2 則、實際窗內有 36 則未收，就是這個原因；它的回報「沒有漏收**已找到的**素材」在它的視野內是誠實的，**問題是視野被縮到只剩首屏**。
+
+   ⚠️ **`window.scrollBy` 無效**——要捲的是 `.homepage` 那個 `overflow-y:auto` 的內層 div（實測 `scrollHeight 5711` vs `clientHeight 1088`）。做法是**邊捲邊累積**，因為捲過去的會從 DOM 消失：
+
+   ```js
+   const box = [...document.querySelectorAll('div')].find(el =>
+     (el.className||'').toString().includes('homepage') &&
+     el.scrollHeight > el.clientHeight + 200);
+   const seen = new Map();
+   const grab = () => document.querySelectorAll('a[href*="/detail?id="]').forEach(a => {
+     const t = (a.innerText||'').replace(/\s+/g,' ').trim();
+     const m = t.match(/Edit No:\s*(\d{4})/);
+     if (!m || seen.has(m[1])) return;
+     const dm = t.match(/^(\d{2}\/\d{2}\/\d{4} \d{2}:\d{2})/);   // 上站時間，判窗內外用
+     let g=''; try { g = decodeURIComponent((a.href.match(/id=([^&]+)/)||[])[1]||''); } catch(e){}
+     seen.set(m[1], { code:'RT'+m[1], at: dm?dm[1]:'', guid:g, text:t.slice(0,110) });
+   });
+   grab();
+   let stall = 0;                       // 連續數次沒有新增就停，不要死捲
+   for (let i = 0; i < 60 && stall < 6; i++) {
+     box.scrollTop += 900;
+     await new Promise(r => setTimeout(r, 350));
+     const n = seen.size; grab();
+     stall = (seen.size === n) ? stall + 1 : 0;
+   }
+   ```
+
+   **實測一次可拿約 60 則、涵蓋前 5 個多小時**，正常輪次的窗完全夠用，**不需要碰 Load More**。
+
+4. **Load More 三條行為規則**（實測，僅在捲到底仍不夠時才用）：⑴ 是**換頁替換**不是累加——按下後最新那批從 DOM 消失，所以**必須先撈完目前這頁才准按**，按完再撈一次做聯集去重；⑵ 只認**真實點擊**，合成 JS click 無效；⑶ ⚠️ 原本寫「深夜窗通常首屏 10 則就夠」是**錯的**（0805 推翻）——首屏 10 則是虛擬捲動只渲染這麼多，不代表窗內只有 10 則。
+
+5. ✅ **收工前必做的自我檢查（0805 新增）**：把清單撈到、且**上站時間落在本輪窗內**的 Edit No 全部列出來，跟狀態檔 diff。**只要有一則窗內的沒進庫，就不算掃完** —— 不論原因是抓不到詳情、判定跳過還是任何其他理由，都要 `needs-review add` 記下代碼與原因。⛔ **不可以只回報「已找到的都收了」**：那句話在視野被縮小時永遠為真，卻掩蓋真正的漏收。舊的 LOAD MORE 禁則是為 Next 鏈設的，本流程不走 Next 鏈故不適用；退回舊流程時禁則照舊。
 
 **分波**：一次最多開 5–8 個分頁，讀完關掉再開下一波。
 
