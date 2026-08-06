@@ -190,16 +190,22 @@ def audit(mmdd, state_path, txt_path, scratch):
         ok("有多種時段標記，未見全部塌陷成 △")
 
     # ── ③ BITE 一致性 ─────────────────────────────────────────────
-    sec("③ BITE 一致性（讀當晚 batch 檔）")
+    sec("③ BITE 一致性（機械欄位取自 batch，判準文字取自狀態檔）")
+    # ⚠️ batch 是**中間檔**、停在送出當下，事後修正不會回寫。0806 實錯：7 則 AP 假 BITE
+    # 昨晚已在狀態檔改成「無BITE」，稽核卻照 batch 判成 🔴，逼人重查一次已經修好的東西。
+    # 所以 sb_count／footage_type 這種**機械事實**才讀 batch（狀態檔沒存），
+    # 「現在標成什麼」一律以**狀態檔**為準——那才是唯一真相源。
+    cur_entry = {k: (v.get("raw_entry") or "") for k, v in items.items()}
     nb = collections.Counter()
-    fake, missed = [], []
+    fake, missed, healed = [], [], []
     for f in sorted(glob.glob(os.path.join(scratch, "*batch*.json"))):
         try:
             data = json.load(open(f, encoding="utf-8-sig"))
         except Exception:
             continue
         for e in data if isinstance(data, list) else []:
-            ent, sb = e.get("entry", ""), e.get("sb_count")
+            was, sb = e.get("entry", ""), e.get("sb_count")
+            ent = cur_entry.get(e.get("id"), was)   # 狀態檔優先；已刪除的才退回 batch
             ft = str(e.get("footage_type") or "").strip().upper()
             nb["batch 筆數"] += 1
             if e.get("src_text"):
@@ -208,8 +214,12 @@ def audit(mmdd, state_path, txt_path, scratch):
                 nb["帶 sb_count"] += 1
             if ft:
                 nb["帶 footage_type"] += 1
-            if "(BITE)" in ent and isinstance(sb, int) and sb == 0:
+            bad_now = ("(BITE)" in ent and isinstance(sb, int) and sb == 0)
+            bad_was = ("(BITE)" in was and isinstance(sb, int) and sb == 0)
+            if bad_now:
                 fake.append(e.get("id"))
+            elif bad_was:
+                healed.append(e.get("id"))     # 送出時有問題、狀態檔已修好——不是待辦
             if "無BITE" in ent and ((isinstance(sb, int) and sb > 0) or ft in S.FT_MUST_BITE):
                 missed.append(e.get("id"))
     if nb:
@@ -221,6 +231,9 @@ def audit(mmdd, state_path, txt_path, scratch):
             red(f"標了 (BITE) 但 sb_count=0（假 BITE，0805 實錯 7 則）：{fake}")
         if missed:
             red(f"該有 BITE 卻標無BITE：{missed}")
+        if healed:
+            print(f"     （送出時標錯、狀態檔已修好 {len(healed)} 則，不用再處理："
+                  f"{'／'.join(str(x) for x in healed[:8])}）")
         if not fake and not missed:
             ok("未見漏標或假 BITE")
     else:
