@@ -24,6 +24,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -70,8 +71,23 @@ def parse_list_file(path):
     """
     raw = open(path, encoding="utf-8-sig").read().strip()
     rows = []
-    if raw.startswith("["):
-        for it in json.loads(raw):
+    if raw.startswith(("[", "{", '"')):
+        data = json.loads(raw)
+        # ⚠️ 實際落地的 `_rt_list_{HHMM}.json` 是**雙層編碼**的（整包 JSON 又被
+        # json.dumps 成一個字串），外層還包了 {"count":N,"items":[…]}。0806 實測
+        # 才發現——原本只認純陣列，遇到真檔會把**整個檔當成一筆**，然後印出
+        # 「清單 1 則」還一路 ✅ 過去。**對帳報 ✅ 卻其實沒對到，比不對帳更危險。**
+        for _ in range(3):                       # 最多剝三層字串
+            if isinstance(data, str):
+                data = json.loads(data)
+            else:
+                break
+        if isinstance(data, dict):
+            data = data.get("items") or data.get("list") or data.get("rows") or []
+        for it in data if isinstance(data, list) else []:
+            if isinstance(it, str):              # 只有代碼、沒有時間
+                rows.append((it.strip(), ""))
+                continue
             c = it.get("code") or it.get("id") or ""
             t = it.get("at") or it.get("time") or ""
             if c:
@@ -116,15 +132,32 @@ def reconcile(st, mmdd, path, label):
             return v
         return v + 1440 if v < ws else v      # 跨夜：小於起點的算隔天
 
+    # 已在 needs-review 裁定過「不收／重複／排除」的，不再報成漏收。
+    # ⚠️ 0806 實況：RT3426／RT3551 裁定不收後，每一輪稽核都照樣報 🔴，agent 得
+    # 每次解釋一遍「非新問題」。**重複誤報會把警告訓練成雜訊**，那比不報還糟。
+    # 代價很低：要讓它閉嘴就得寫 needs-review——正好就是我們要的留痕紀律。
+    ruled = set()
+    for k, v in st["items"].items():
+        note = v.get("needs_review")
+        if not isinstance(note, str) or not any(
+                w in note for w in ("不收", "重複", "排除", "未收", "跳過")):
+            continue
+        for code, _t in rows:
+            if code in note or code == k:
+                ruled.add(code)
+
     got = [c for c, _t in rows if c in cur]
     old_ = [c for c, _t in rows if c not in cur and c in prev]
-    rest = [(c, t) for c, t in rows if c not in cur and c not in prev]
+    rest = [(c, t) for c, t in rows if c not in cur and c not in prev and c not in ruled]
     inw = [(c, t) for c, t in rest if ws is None or we is None
            or (norm(t) is not None and ws <= norm(t) <= we)]
     after = [(c, t) for c, t in rest if (c, t) not in inw]
 
+    hit = sorted(c for c in ruled if c in {x for x, _ in rows} and c not in cur)
     print(f"     {label}：清單 {len(rows)}｜已收 {len(got)}｜前幾天收過 {len(old_)}"
-          f"｜窗內未收 {len(inw)}｜窗外 {len(after)}")
+          f"｜已裁定不收 {len(hit)}｜窗內未收 {len(inw)}｜窗外 {len(after)}")
+    if hit:
+        print(f"        （已裁定不收，不重複報：{'／'.join(hit[:8])}）")
     if inw:
         red(f"{label} 窗內漏收 {len(inw)} 則：" +
             "／".join(f"{c}({t[-5:]})" for c, t in inw[:12]))
@@ -133,12 +166,31 @@ def reconcile(st, mmdd, path, label):
     if after:
         print(f"        （窗外 {len(after)} 則屬下一輪，不算漏：" +
               "／".join(c for c, _t in after[:8]) + "）")
+    return {"list": len(rows), "got": len(got), "missing": len(inw),
+            "missing_ids": [c for c, _t in inw[:20]]}
+
+
+def _log_reconcile(state_path, checkpoint, done):
+    """把對帳結果寫回狀態檔，讓 render 查得到這一輪到底做了沒。
+
+    ⚠️ 這是整條鏈的關鍵：0806 RT 漏收的根因不是不會做，是**做了一半就忘了回頭補**
+    （10:41 那輪 agent 寫下「留待下次補做」，然後直接 render 收工）。留痕之後
+    render 會在收工那一刻把沒對帳的輪次喊出來，而不是等別人事後查。
+    """
+    if not checkpoint or not done:
+        return
+    st = S.load(state_path)
+    log = st["_top"].setdefault("reconcile_log", {})
+    log.setdefault(checkpoint, {}).update(done)
+    S.save(st, state_path)
+    print(f"     📌 已記錄本輪對帳（{checkpoint}：{'／'.join(sorted(done))}）")
 
 
     # ── Ⓐ 三站清單對帳（給 --rt-list／--ap-list／--ns-list 就做）──────
-def _reconcile_section(st, mmdd, args):
+def _reconcile_section(st, mmdd, args, state_path=None):
     sec("Ⓐ 清單對帳（最高價值：0805 靠它抓到 47 則漏收）")
-    any_ = False
+    any_, done = False, {}
+    ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S+08:00")
     for opt, label in (("rt_list", "RT"), ("ap_list", "AP"), ("ns_list", "NS")):
         path = getattr(args, opt, None)
         if path:
@@ -146,7 +198,14 @@ def _reconcile_section(st, mmdd, args):
             if not os.path.exists(path):
                 red(f"{label} 清單檔不存在：{path}")
             else:
-                reconcile(st, mmdd, path, label)
+                r = reconcile(st, mmdd, path, label)
+                if r:
+                    done[label] = dict(r, ts=ts)
+    if done and state_path:
+        _log_reconcile(state_path, st["_top"].get("checkpoint"), done)
+    if any_ and len(done) < 3:
+        yel("三站只對了 " + ("／".join(sorted(done)) or "0 站") +
+            "——缺的那幾站等於沒驗過，補撈清單再跑一次")
     if not any_:
         yel("沒給 --rt-list／--ap-list／--ns-list，**這一項沒做**——"
             "它是價值最高的檢查，別跳過")
@@ -324,7 +383,7 @@ def audit(mmdd, state_path, txt_path, scratch):
     else:
         yel(f"找不到 {txt_path}——尚未 render？")
 
-    _reconcile_section(st, mmdd, AUDIT_ARGS)
+    _reconcile_section(st, mmdd, AUDIT_ARGS, state_path)
 
 
 def main():

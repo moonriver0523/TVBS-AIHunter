@@ -459,6 +459,41 @@ def touch_last_render(state_path, text):
         print(f"⚠️ last_render_ts 未寫入（{e}）——txt 已產出，不影響本輪", file=sys.stderr)
 
 
+def warn_unreconciled(state):
+    """收工時把「這一輪沒做清單對帳」喊出來。
+
+    2026-08-06 立。**清單對帳是唯一能機械驗證「窗內真的全撈到」的步驟**，但它不會
+    自動觸發、得靠當輪 agent 主動跑——0806 RT 兩次漏收都倒在這裡：07:00／08:00 是
+    「還不知道有這工具」，10:41 是**知道、寫下「留待下次補做」、然後直接 render 收工**。
+
+    ⚠️ **只警告不擋**：無人值守時段（`▲`）硬擋會讓整輪卡死，違反 §5「半夜禁問」。
+    要的是「忘記回頭補」在收工那一刻現形，而不是等別人事後查。
+    """
+    # ⚠️ 兩種形狀都要吃：render 的 load_state() 回的是**扁平的原始 JSON**，
+    # s2_state.load() 回的是包在 `_top` 底下的。0806 實測時就是踩到這個——
+    # 只認 `_top` 的話 checkpoint 永遠讀成空字串、**每一輪都誤報沒對帳**，
+    # 而誤報的下場是這個警告被當成雜訊、然後被忽略，等於白做。
+    top = state.get("_top") if isinstance(state.get("_top"), dict) else state
+    cp = top.get("checkpoint") or ""
+    log = top.get("reconcile_log")
+    log = log if isinstance(log, dict) else {}   # 手改過的狀態檔什麼型別都可能
+    done = log.get(cp)
+    done = done if isinstance(done, dict) else {}
+    miss = [s for s in ("RT", "AP", "NS") if s not in done]
+    if not miss:
+        print(f"OK 清單對帳三站齊全（{cp}）")
+        return
+    bar = "!" * 60
+    tail = "：" + "／".join(miss) + " 缺" if done else "（三站全缺）"
+    print(f"\n{bar}\n⚠️  這一輪（{cp}）沒有做清單對帳{tail}")
+    print("    對帳是唯一能機械驗證「窗內真的全撈到」的步驟。0806 沒做的那幾輪，")
+    print("    事後補到 RT 2 則、NS 19 則——當輪全都回報「正常完成」。")
+    print("    補做：撈清單存檔後跑")
+    print("      python scripts/s2_audit.py --mmdd {MMDD} --rt-list <檔> "
+          "--ap-list <檔> --ns-list <檔>")
+    print(f"    真的做不了就 needs-review add 寫明原因，不要無聲跳過。\n{bar}")
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--file", default=DEFAULT_FILE, help="狀態檔路徑")
@@ -510,6 +545,7 @@ def main():
                   f"確認後用 set-category 手動改（純提示，不影響本次已寫入的 txt）")
         else:
             print("OK 主題重複偵測 0 命中")
+    warn_unreconciled(state)      # 放最後：收工前最後看到的就是這行
 
 
 if __name__ == "__main__":
