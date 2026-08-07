@@ -49,7 +49,12 @@ param(
     [string]$LockFile = "$env:USERPROFILE\.s2-scan.lock",
 
     # 只驗流程不真的叫 claude（排程設定完先用這個試一次）。
-    [switch]$DryRun
+    [switch]$DryRun,
+
+    # 測試模式：真的跑，但**每站只收前 N 則**。驗管線用，不是正式掃帶。
+    # ⚠️ 用完記得把排程的 -TestMode 拿掉，否則每輪都只收 5 則還不會報錯。
+    [switch]$TestMode,
+    [int]$TestLimit = 5
 )
 
 $ErrorActionPreference = 'Stop'
@@ -87,6 +92,23 @@ try {
 
     if (-not (Test-Path $PromptFile)) { throw "找不到 prompt 範本：$PromptFile" }
     $prompt = (Get-Content $PromptFile -Raw -Encoding UTF8) -replace '\{CHECKPOINT\}', $Checkpoint
+
+    if ($TestMode) {
+        # 擺在最後面，蓋掉範本裡「窗內全部收齊」的預設立場
+        $prompt += @"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ 本輪是【測試模式】，目的是驗管線通不通，不是正式掃帶。
+
+- **每站最多只收 $TestLimit 則**（挑最新的），收滿就停，其餘一律不收。
+- **不要**為了「窗內零漏收」去補掃整段時間窗——本輪本來就不求收齊。
+- 清單對帳照跑（那正是要驗的東西之一），但**窗內未收會是一大串，那是預期的**，
+  不必處理、也不要據此判定失敗。在 needs-review 記一則說明本輪是測試模式即可。
+- 其餘流程（分類、render、稽核、留痕）全部照正常做——**要驗的就是這些**。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"@
+        Write-Host "*** TestMode：每站上限 $TestLimit 則 ***"
+    }
 
     Write-Host "START [$Checkpoint] model=$Model log=$runLog"
     if ($DryRun) {
