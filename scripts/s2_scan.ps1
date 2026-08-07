@@ -36,6 +36,11 @@ param(
     # 開工 prompt 範本；{CHECKPOINT} 會被代換掉。
     [string]$PromptFile = "$PSScriptRoot\s2_scan_prompt.md",
 
+    # ⚠️ browser MCP server 只註冊在 .claude.json 的 local scope 'C:/Users/User'，
+    # 排程的 cwd 不是那裡就**整組工具都載不到**（0807 22:00 輪三站全 0 則的根因）。
+    # 用 --mcp-config 明講，就不再看 cwd 臉色。
+    [string]$McpConfig = "$PSScriptRoot\s2_mcp.json",
+
     [string]$Repo = 'E:\GitHub\TVBS-AIHunter',
     [string]$StateDir = 'G:\我的雲端硬碟\Claude共用\自動掃帶系統',
     [string]$LogDir = 'D:\Downloads\S2掃帶log',
@@ -94,20 +99,38 @@ try {
     claude -p $prompt `
         --permission-mode bypassPermissions `
         --model $Model `
+        --mcp-config $McpConfig `
         --add-dir $Repo --add-dir $StateDir `
         --output-format stream-json --verbose *> $runLog
     $code = $LASTEXITCODE
     $mins = [Math]::Round(((Get-Date) - $t0).TotalMinutes, 1)
 
-    # 離開碼 0 不代表掃帶做完了——一定要看產物（0806 就是這樣驗的）
+    # ⚠️ 離開碼 0 不代表掃帶做完了。**只檢查「檔案在不在」也不夠**——
+    # 0807 22:00 輪三站全部進不去，state 與 txt 照樣被建出來（裡面 0 則）、
+    # 離開碼還是 0，檢查全過。**沒有素材的那一輪，看起來跟成功的一輪一模一樣。**
+    # 所以這裡要看**本輪實際收了幾則**。
     $mmdd = $Checkpoint.Split('-')[0]
-    $stateOk = Test-Path (Join-Path $StateDir "$mmdd-s2-state.json")
+    $statePath = Join-Path $StateDir "$mmdd-s2-state.json"
     $txtOk = Test-Path (Join-Path $StateDir "$mmdd`晚班交接.txt")
+    $added = -1
+    if (Test-Path $statePath) {
+        try {
+            $st = Get-Content $statePath -Raw -Encoding UTF8 | ConvertFrom-Json
+            # 只算本輪新增的，不是整份總數——否則舊素材會把空輪次蓋過去
+            $added = @($st.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint }).Count
+        } catch { $added = -1 }
+    }
 
-    Write-Host "DONE [$Checkpoint] 離開碼=$code 耗時=${mins}分 state=$stateOk txt=$txtOk"
-    if ($code -ne 0 -or -not $stateOk -or -not $txtOk) {
-        "$stamp`t$Checkpoint`t異常：離開碼=$code state=$stateOk txt=$txtOk 見 $runLog" |
+    Write-Host "DONE [$Checkpoint] 離開碼=$code 耗時=${mins}分 本輪新增=$added 則 txt=$txtOk"
+    $bad = @()
+    if ($code -ne 0) { $bad += "離開碼=$code" }
+    if (-not $txtOk) { $bad += 'txt 沒產出' }
+    if ($added -eq 0) { $bad += '本輪 0 則——多半是三站都進不去，不是真的沒素材' }
+    if ($added -lt 0) { $bad += '讀不到狀態檔或格式異常' }
+    if ($bad) {
+        "$stamp`t$Checkpoint`t異常：$($bad -join '；') 見 $runLog" |
             Add-Content -Path $skipLog -Encoding UTF8
+        Write-Host "*** 異常：$($bad -join '；') ***"
     }
     exit $code
 }

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "browser": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp",
+        "--user-data-dir",
+        "C:\\Users\\User\\.playwright-mcp-profile",
+        "--output-dir",
+        "D:\\Downloads\\PlaywrightMCP"
+      ],
+      "env": {}
+    }
+  }
+}
