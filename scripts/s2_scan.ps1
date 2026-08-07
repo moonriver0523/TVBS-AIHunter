@@ -131,16 +131,26 @@ try {
     # 0807 22:00 輪三站全部進不去，state 與 txt 照樣被建出來（裡面 0 則）、
     # 離開碼還是 0，檢查全過。**沒有素材的那一輪，看起來跟成功的一輪一模一樣。**
     # 所以這裡要看**本輪實際收了幾則**。
-    $mmdd = $Checkpoint.Split('-')[0]
-    $statePath = Join-Path $StateDir "$mmdd-s2-state.json"
-    $txtOk = Test-Path (Join-Path $StateDir "$mmdd`晚班交接.txt")
-    $added = -1
-    if (Test-Path $statePath) {
+    # ⚠️ **不能用 checkpoint 的 MMDD 去組檔名**（0808-0100 輪實錯）：
+    # 晚班交接檔是**跨夜**的，凌晨 01:00 那輪屬於前一天的班次，寫的是
+    # `0807-s2-state.json`。拿日曆日 `0808` 去找檔案永遠找不到，
+    # 結果是**成功的一輪被誤報成異常**。誤報比漏報更傷——會把警告訓練成雜訊。
+    # 改成反過來找：哪一份狀態檔的 checkpoint 等於本輪，那份就是。
+    $statePath = $null
+    foreach ($f in Get-ChildItem $StateDir -Filter '*-s2-state.json' -File |
+                   Sort-Object LastWriteTime -Descending) {
         try {
-            $st = Get-Content $statePath -Raw -Encoding UTF8 | ConvertFrom-Json
-            # 只算本輪新增的，不是整份總數——否則舊素材會把空輪次蓋過去
-            $added = @($st.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint }).Count
-        } catch { $added = -1 }
+            $j = Get-Content $f.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($j.checkpoint -eq $Checkpoint) { $statePath = $f.FullName; $st = $j; break }
+        } catch { }
+    }
+    $added = -1
+    $txtOk = $false
+    if ($statePath) {
+        $mmdd = [System.IO.Path]::GetFileName($statePath).Split('-')[0]
+        $txtOk = Test-Path (Join-Path $StateDir "$mmdd`晚班交接.txt")
+        # 只算本輪新增的，不是整份總數——否則舊素材會把空輪次蓋過去
+        $added = @($st.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint }).Count
     }
 
     Write-Host "DONE [$Checkpoint] 離開碼=$code 耗時=${mins}分 本輪新增=$added 則 txt=$txtOk"
@@ -148,7 +158,7 @@ try {
     if ($code -ne 0) { $bad += "離開碼=$code" }
     if (-not $txtOk) { $bad += 'txt 沒產出' }
     if ($added -eq 0) { $bad += '本輪 0 則——多半是三站都進不去，不是真的沒素材' }
-    if ($added -lt 0) { $bad += '讀不到狀態檔或格式異常' }
+    if ($added -lt 0) { $bad += "找不到 checkpoint=$Checkpoint 的狀態檔——該輪可能整個沒跑完" }
     if ($bad) {
         "$stamp`t$Checkpoint`t異常：$($bad -join '；') 見 $runLog" |
             Add-Content -Path $skipLog -Encoding UTF8
