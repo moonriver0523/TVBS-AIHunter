@@ -65,11 +65,22 @@ $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $runLog = Join-Path $LogDir "掃帶log-$Checkpoint.txt"
 $skipLog = Join-Path $LogDir '_跳過紀錄.txt'
+# 每一輪的開工／收工都寫這裡（2026-08-09）。在此之前**只有異常才留痕**，
+# 成功的 DONE 只印在主控台視窗上——0808 加了 -WindowStyle Hidden 之後那個視窗
+# 不再出現，等於「跑完沒有、收了幾則」完全無從得知。**成功也要留痕**，
+# 而且要能一眼看完一整天，所以是單一檔案逐行 append，不是每輪一個檔。
+$runsLog = Join-Path $LogDir '_輪次紀錄.txt'
+
+function Write-Run([string]$line) {
+    "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$Checkpoint`t$line" |
+        Add-Content -Path $runsLog -Encoding UTF8
+}
 
 function Write-Skip([string]$why) {
     # ⚠️ 跳過一定要留痕。0806 的教訓：只在終端機講一句等於沒發生過，
     # 而排程根本沒有終端機可看。
     "$stamp`t$Checkpoint`t$why" | Add-Content -Path $skipLog -Encoding UTF8
+    Write-Run "SKIP`t$why"
     Write-Host "SKIP [$Checkpoint] $why"
 }
 
@@ -110,6 +121,7 @@ try {
         Write-Host "*** TestMode：每站上限 $TestLimit 則 ***"
     }
 
+    Write-Run "START`tmodel=$Model$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
     Write-Host "START [$Checkpoint] model=$Model log=$runLog"
     if ($DryRun) {
         Write-Host "--- DryRun：以下是會送出的 prompt 前 400 字 ---"
@@ -159,12 +171,21 @@ try {
     if (-not $txtOk) { $bad += 'txt 沒產出' }
     if ($added -eq 0) { $bad += '本輪 0 則——多半是三站都進不去，不是真的沒素材' }
     if ($added -lt 0) { $bad += "找不到 checkpoint=$Checkpoint 的狀態檔——該輪可能整個沒跑完" }
+    Write-Run ("DONE`t離開碼=$code`t耗時=${mins}分`t本輪新增=$added 則`ttxt=$txtOk" +
+               $(if ($bad) { "`t⚠️ $($bad -join '；')" } else { '' }))
     if ($bad) {
         "$stamp`t$Checkpoint`t異常：$($bad -join '；') 見 $runLog" |
             Add-Content -Path $skipLog -Encoding UTF8
         Write-Host "*** 異常：$($bad -join '；') ***"
     }
     exit $code
+}
+catch {
+    # ⚠️ 沒有這段的話，**外殼自己爆掉那一輪會完全無聲**——0808 20:49 手動測試就是
+    # claude 跑完、狀態檔也寫了，但外殼在收工前死掉，事後只能靠比對檔案時間去猜。
+    # 視窗藏起來之後更沒有第二個管道，所以例外一定要落檔再往外丟。
+    Write-Run "CRASH`t$($_.Exception.Message)"
+    throw
 }
 finally {
     if ($lock) { $lock.Dispose() }   # 正常結束、丟例外、Ctrl+C 都會走到這裡
