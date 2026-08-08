@@ -66,7 +66,14 @@ UI 清單裡」。**證據**：`S2-NS保活` 早就是 `Hidden=true`，21:20 那
       API `get-topics` 回 `TypeError: Failed to fetch` ＝沒帶 `session_user`），
       留痕在 `needs-review` 的 `0809-0100-AP登出進不去`。
 
-- [ ] 🟡 **Playwright MCP 的 allowed roots 不含狀態檔資料夾——每一輪都固定撞一次**
+- [x] ✅ **已修（2026-08-09）：Playwright MCP 的 allowed roots 不含狀態檔資料夾**
+      **修法是改規則不是改設定**——`13b` §Ⓐ 第 2 步明訂「快照一律用 PowerShell／python 寫檔，
+      不要走 browser MCP 的輸出檔功能」，並寫上為什麼不用 `--allow-unrestricted-file-access`
+      繞（會連帶解除 `file://` 封鎖，為了寫純文字快照放寬瀏覽器檔案存取不划算）。
+      實查 `@playwright/mcp` CLI 確認**沒有**「額外加 root」的參數，roots 由 client 端給。
+      原始症狀保留於下：
+
+      ~~每一輪都固定撞一次~~
       症狀：agent 要把三站清單快照寫進 `G:\...\自動掃帶系統\{YYYYMMDD}\_ns_list_*.txt` 時被擋：
       ```
       File access denied: G:\...\_ns_list_0100.txt is outside allowed roots.

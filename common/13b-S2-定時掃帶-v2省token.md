@@ -605,6 +605,15 @@ python scripts/s2_audit.py --mmdd 0806 --rt-list 20260806/_audit_rt_0700.txt
 三步：
 1. **agent 撈清單**（RT 要用內層容器捲動，見 §1b 第 3 條；首屏只有約 10 則）
 2. **存成檔**——每行 `CODE|MM/DD/YYYY HH:MM` 的純文字，或 JSON 陣列 `[{"code","at"}]`
+   ⚠️ **一律用 PowerShell／python 寫檔，不要走 browser MCP 的輸出檔功能**（2026-08-09 訂）：
+   MCP 的檔案存取被限制在 **workspace roots**（`--output-dir` ＋ cwd，實測就是
+   `D:\Downloads\PlaywrightMCP` 與 `E:\GitHub\TVBS-AIHunter`），**狀態檔所在的
+   `G:\...\自動掃帶系統\` 不在裡面**，寫進去一定回
+   `File access denied: ... is outside allowed roots`。
+   這不是偶發、是**每輪必撞**——0809-0100 輪就白白浪費一次來回。
+   📌 **不要改用 `--allow-unrestricted-file-access` 去繞**：那個旗標會**連帶解除
+   `file://` 網址的封鎖**，為了寫一個純文字快照放寬瀏覽器的檔案存取，不划算。
+   （實查 `@playwright/mcp` CLI：**沒有**「額外加一個 root」的參數，roots 由 MCP client 端給。）
 3. **重跑本模組帶 `--rt-list`**（`--ap-list`／`--ns-list` 同理）
 
 腳本會自動算出四類：**已收／前幾天收過／窗內未收（🔴 這才是漏收）／窗外（下一輪的，不算漏）**。窗是從 `_top.window_start` 到目前 `checkpoint`，跨夜會自動折算。
