@@ -31,7 +31,10 @@ param(
     # 覆寫 checkpoint（預設用現在時間算 {MMDD}-{HHMM}）。補掃時可傳 "0806-1300-補漏"。
     [string]$Checkpoint,
 
-    [string]$Model = 'opus',
+    # 2026-08-09 由 opus 改 sonnet（使用者指定）。改的時候**三個地方要一起改**：
+    # 這裡的預設值、工作排程器 `S2掃帶` 的 -Model 引數、`s2_watchdog.ps1` 代打時帶的值。
+    # 只改一處會變成「手動跑是 sonnet、排程跑是 opus」這種查半天的不一致。
+    [string]$Model = 'sonnet',
 
     # 開工 prompt 範本；{CHECKPOINT} 會被代換掉。
     [string]$PromptFile = "$PSScriptRoot\s2_scan_prompt.md",
