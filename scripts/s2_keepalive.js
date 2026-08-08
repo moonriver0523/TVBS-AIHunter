@@ -35,12 +35,32 @@ const SITES = [
       const p = JSON.parse(atob(JSON.parse(s).token.split('.')[1]));
       return { ok: true, note: Math.round((p.exp - Date.now() / 1000)) + 's' };
     } },
-  { name: 'AP', url: 'https://newsroom.ap.org/home', wait: 8000,
-    check: () => {
-      const t = document.body.innerText || '';
-      // 只看有沒有 Sign in 會誤判——SPA 載入中也長那樣，所以同時要求 Latest 出現
-      return { ok: /Latest/i.test(t) && !/sign\s*in/i.test(t) };
-    } },
+  // ⛔ AP 已於 2026-08-09 05:00 **暫時移出保活**——強烈懷疑保活本身就是元凶。
+  //
+  // 【證據】AP 在被納入保活之前，**一次都沒有掉過線**：
+  //   08-08 01:00  保活擴充成三站（commit 834644d），AP 首次被納入
+  //   08-08 01:20  保活第一次碰 AP → OK
+  //   08-08 01:50  OK
+  //   08-08 02:20  **LOGGED_OUT** ← 才第 3 次
+  //   接下來 28 小時內掉了 10 次；使用者手動重登後最短只撐 2 小時。
+  //   而在此之前 AP 靠掃帶輪次（一天 12 次開關）活了好幾天，符合「7 天 cookie」的說法。
+  //
+  // 【推論】保活一天開關這個 profile **48 次**，是原本的 4 倍。chromium 的 cookie
+  //   是在關閉時寫回磁碟的，關得不乾淨就可能丟失——0809 04:20 那次保活正是
+  //   異常結束（`Execution context was destroyed`、跑了 60 秒、RT 也逾時），
+  //   緊接著 04:30 掃帶就發現 `session_user` cookie 整個不見了。
+  //
+  // 【這是一個實驗，不是定論】判準：拿掉之後 **AP 若能連續撐過 24 小時不掉線**，
+  //   就證實保活是元凶；**若照樣掉**，代表另有原因，把這段還原回去即可。
+  //   ⚠️ 拿掉期間 AP 不會有 30 分鐘一次的掉線推播，但**掃帶輪次一天仍碰 AP 12 次**、
+  //   進不去時會寫 needs-review，所以不會失去監看，只是延遲變成最多 2 小時。
+  //
+  // { name: 'AP', url: 'https://newsroom.ap.org/home', wait: 8000,
+  //   check: () => {
+  //     const t = document.body.innerText || '';
+  //     // 只看有沒有 Sign in 會誤判——SPA 載入中也長那樣，所以同時要求 Latest 出現
+  //     return { ok: /Latest/i.test(t) && !/sign\s*in/i.test(t) };
+  //   } },
   { name: 'RT', url: 'https://www.reutersconnect.com/all?media-types=vid', wait: 8000,
     check: () => ({ ok: !/\/login/i.test(location.href) }) },
 ];

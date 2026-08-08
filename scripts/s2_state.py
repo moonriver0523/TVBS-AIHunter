@@ -171,6 +171,31 @@ FT_MUST_BITE = {"SOT", "BUTTED SOTS", "SOT RAW", "ISO", "DONUT", "INTERVIEW", "R
 FT_GRAY = {"PKG"}          # 實測 7 無／8 有，真的混合——只印提醒，不寫 needs_review
 
 
+def sb_applicable(src_text):
+    """`sb_count` 這個數字有沒有意義？（2026-08-09）
+
+    它是數稿件裡 `SOUNDBITE` 字樣的次數。**只有在「這種格式本來就會寫 SOUNDBITE」
+    的前提下，0 才等於「沒有引言」**；否則 0 只代表「數不出來」，兩者天差地遠。
+
+    路透的 captioned／rough-cut 社群短片**沒有 SHOTLIST 段、也不寫 SOUNDBITE**，
+    引言是直接以「姓名，職銜」＋引號段落呈現的。0808–0809 一夜就誤報三次
+    （RT4107／RT4131／RT4125），每一則都要人工回頭查證再結案。
+    ⚠️ **重複誤報會把警告訓練成雜訊，那比不報還糟。**
+
+    NS 早就撞過同一個問題（NS 稿件不用 SOUNDBITE 這個詞），解法是改看
+    `footage_type`（見 FT_MUST_BITE）——這裡是同一個道理的第二次應用。
+
+    ⛔ **判準刻意保守**：只要稿內出現 `SHOTLIST` 或 `SOUNDBITE` 任一個字樣，
+    就代表這份稿子「會寫」，`sb_count=0` 仍然有意義、照樣要擋。這樣才不會
+    把 0805 那批 AP Live Choice 假 BITE（那些是有 SHOTLIST 的）一起放行。
+    沒有原文可判時（`src_text` 空）維持原行為。
+    """
+    t = (src_text or "").upper()
+    if not t:
+        return True                       # 沒有原文就照舊，不放寬
+    return ("SHOTLIST" in t) or ("SOUNDBITE" in t)
+
+
 def bite_doubt(entry, sb_count=None, footage_type=None):
     """BITE 標記可疑嗎？回傳疑慮說明，沒問題回 None。
 
@@ -287,13 +312,20 @@ def cmd_add_batch(state, args):
         # 🎯 BITE 機械兜底：**照收，把疑慮寫進 needs_review**（2026-08-05 訂正，
         # 原本是 continue 拒收——那會靜默丟掉素材，理由見 bite_doubt()）。
         ft = str(e.get("footage_type") or "").strip().upper()
-        doubt = bite_doubt(e["entry"], e.get("sb_count"), ft)
+        # `sb_count=0` 在「這份稿本來就不寫 SOUNDBITE」的格式下是**數不出來**，
+        # 不是「沒有」——當成未知（None），別拿去擋（見 sb_applicable）。
+        sb = e.get("sb_count")
+        if not sb_applicable(e.get("src_text")):
+            sb = None
+        doubt = bite_doubt(e["entry"], sb, ft)
         if ft in FT_GRAY and "無BITE" in e["entry"]:
             # 灰區訊號弱（實測 7 無／8 有），只印提醒不寫 needs_review，免得洗版
             notes.append(f"{i}: footageType={ft} 標了「無BITE」——PKG 有一半以上其實有訪問，"
                          f"若是 1 分鐘以上的記者包裝請回頭確認一次")
+        # 存 `sb` 不是 `e["sb_count"]`：數不出來的格式要存成「沒有這個欄位」，
+        # 否則稽核③ 讀狀態檔時又會拿 0 去報一次假 BITE（誤報只是換個地方出現）。
         state["items"][i] = new_item(e["source"], e["checkpoint"], e["status"],
-                                     e["entry"].strip(), e.get("sb_count"))
+                                     e["entry"].strip(), sb)
         if doubt:
             state["items"][i]["needs_review"] = doubt
             flagged.append(f"{i}: {doubt}")
