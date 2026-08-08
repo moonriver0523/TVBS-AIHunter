@@ -438,7 +438,10 @@ def header_from_lines(lines, window="", date="", mmdd="", alerts=()):
                 span += 24 * 60
             # 起訖任一邊自帶日期時，就不再補檔名推得的日期，避免 `2026-08-02 2026-08-02 14:00`
             pre = "" if re.search(r"\d{4}-\d{2}-\d{2}", window) else (date + " " if date else "")
-            out.append(f"時間窗：{pre}{s}–{e}（約{span / 60:g}hrs）")
+            # 「時數取整數小時」（`13`「晚班交接檔頭」第 2 行）——起訖不是整點時
+            # `:g` 會印出 `約12.6667hrs`（0808-manual-test 實例，該輪 checkpoint 無
+            # HHMM、終點用 20:40 特例覆寫）。四捨五入到整數小時才合規。
+            out.append(f"時間窗：{pre}{s}–{e}（約{int(round(span / 60))}hrs）")
         else:
             out.append(f"時間窗：{date + ' ' if date else ''}{window}")
     parts = [f"AP {counts['AP']}則", f"RT {counts['RT']}則", f"NS {counts['NS']}則"]
