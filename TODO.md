@@ -57,9 +57,36 @@ UI 清單裡」。**證據**：`S2-NS保活` 早就是 `Hidden=true`，21:20 那
       這是**必然發生**的週期性中斷點，不是偶發。
 - [ ] **保活的 exit-3 訊息寫死「NS 已登出」**，實際上掛的是 AP 也照樣印 NS
       （見 log：`*** NS 已登出 *** NS=OK(3594s) AP=LOGGED_OUT RT=OK`）。**讀 log 會判斷錯人。**
-- [ ] **AP 的「7 天 cookie」與實測不符**：0808 一天內三次登出——02:20（單次，02:50 自己好了，
-      多半是 `/Latest/` 判準的偽陽性）、07:20–08:20（真的掉）、21:50（真的掉，使用者手動修）。
-      效期模型要重新確認，別再拿「7 天」當設計前提。
+- [ ] 🔴 **AP 的「7 天 cookie」確定不成立**——0808–0809 一天內掉了**四次**：
+      02:20（單次，02:50 自己好，多半是 `/Latest/` 判準偽陽性）、07:20–08:20（真的掉，
+      害 07:00／08:00 兩輪 AP 全空）、21:50（真的掉，使用者手動修）、
+      **23:50 起連續掉到隔天**（23:20 還 OK，害 0809-0100 輪 AP 收 0 則）。
+      **連 24 小時都撐不到，別再拿「7 天」當設計前提。**
+      0809-0100 那輪 agent 的判定完整可信（兩次被導回 landing、`hasPwd=false`、
+      API `get-topics` 回 `TypeError: Failed to fetch` ＝沒帶 `session_user`），
+      留痕在 `needs-review` 的 `0809-0100-AP登出進不去`。
+
+- [ ] 🟡 **Playwright MCP 的 allowed roots 不含狀態檔資料夾——每一輪都固定撞一次**
+      症狀：agent 要把三站清單快照寫進 `G:\...\自動掃帶系統\{YYYYMMDD}\_ns_list_*.txt` 時被擋：
+      ```
+      File access denied: G:\...\_ns_list_0100.txt is outside allowed roots.
+      Allowed roots: D:\Downloads\PlaywrightMCP, E:\GitHub\TVBS-AIHunter
+      ```
+      （root 只有 `s2_mcp.json` 給的 `--output-dir` ＋ 排程的 working directory 兩個。）
+      **agent 每輪都自己繞過去**（改用 PowerShell 寫檔，結果是對的），所以**沒有造成損害**——
+      但每輪白白浪費一次來回，而且是**可預期、必然發生**的摩擦，不是偶發。
+      修法方向：`scripts/s2_mcp.json` 讓 MCP 認得狀態檔資料夾（先查 `@playwright/mcp`
+      現行參數怎麼加 root，**不要憑印象寫**），或乾脆把「快照一律用 PowerShell 寫」寫進規則、
+      不要再叫 agent 先試 MCP 那條路。
+
+- [ ] 🟡 **稽核③的 `sb_count` 讀 batch 中間檔，pending→has_script 轉正後不回寫**
+      → 同一則會被**永久重複誤報**假 BITE（0809-0100 的 RT4098 實例：0808-2300 收錄時站方
+      還是 early-access 版真的 0 個 SOUNDBITE，本輪站方 RESENDING 補了完整稿、實測 5 個）。
+      當輪已就地修 batch 並保留 `sb_count_prev` 存證。
+      **正式修法二選一**：`update-entry --sb-count` 時同步回寫 batch，或把 `sb_count` 存進狀態檔。
+
+- [ ] 🟡 **`13b §4`（SNTV 列表級 role 含 SOT 就標 BITE）與 `§1a-2`（`sb_count=0` 不得標 BITE）
+      會互相衝突**——AP5467093 實例：靠多開一次詳情才避免產出假 BITE。兩條規則值得回頭統一。
 - [ ] **人工／agent 的互動式瀏覽器操作不拿 `.s2-scan.lock`**——0808 20:00 輪就因此卡住等了 5 分鐘
       （幫使用者開登入分頁佔住 profile）。目前完全靠人自覺別在排程時間點開瀏覽器。
 - [ ] **排程成功時外殼層完全不留痕**：只有異常才寫 `_跳過紀錄.txt`，成功的 `DONE` 只印在
