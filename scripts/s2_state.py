@@ -208,7 +208,7 @@ def bite_doubt(entry, sb_count=None, footage_type=None):
     return None
 
 
-def new_item(source, checkpoint, status, entry):
+def new_item(source, checkpoint, status, entry, sb_count=None):
     it = {
         "source": source,
         "first_seen_checkpoint": checkpoint,
@@ -220,6 +220,13 @@ def new_item(source, checkpoint, status, entry):
         "compiled": None,
         "category": None,
     }
+    # sb_count 存進狀態檔（2026-08-09）：在此之前它只活在 batch 中間檔裡，
+    # 而 batch **停在送出當下、事後不回寫**——素材由 pending 轉正、站方補上完整稿之後
+    # sb_count 就過期了，稽核③ 會對同一則**永久重複誤報**假 BITE
+    # （0809-0100 的 RT4098：收錄時真的 0 個，站方 RESENDING 後實際有 5 個）。
+    # 狀態檔＝唯一真相源，機械事實也該存在這裡。
+    if isinstance(sb_count, int):
+        it["sb_count"] = sb_count
     # 結構化欄位由腳本推導（2026-08-04 新增，見 s2_parse）：agent 完全無感、
     # 不必多寫一份。解析失敗只標 parse_ok:false，**不擋入庫**。
     sp.derive(it)
@@ -285,7 +292,8 @@ def cmd_add_batch(state, args):
             # 灰區訊號弱（實測 7 無／8 有），只印提醒不寫 needs_review，免得洗版
             notes.append(f"{i}: footageType={ft} 標了「無BITE」——PKG 有一半以上其實有訪問，"
                          f"若是 1 分鐘以上的記者包裝請回頭確認一次")
-        state["items"][i] = new_item(e["source"], e["checkpoint"], e["status"], e["entry"].strip())
+        state["items"][i] = new_item(e["source"], e["checkpoint"], e["status"],
+                                     e["entry"].strip(), e.get("sb_count"))
         if doubt:
             state["items"][i]["needs_review"] = doubt
             flagged.append(f"{i}: {doubt}")
@@ -317,6 +325,10 @@ def cmd_update_entry(state, args):
     # 而 agent 以為自己更新過了。
     doubt = bite_doubt(entry, args.sb_count, getattr(args, "footage_type", None))
     it["raw_entry"] = entry
+    # 站方補上完整稿後 sb_count 會變（0→5），**這條路就是唯一的回寫時機**——
+    # 沒帶就別動舊值（`None` ＝ 沒帶，不是 0；見下方 argparse 的 default 說明）。
+    if isinstance(args.sb_count, int):
+        it["sb_count"] = args.sb_count
     if args.status:
         it["script_status"] = args.status
     it["entry_updated"] = args.checkpoint or it.get("last_checked_checkpoint", "")
@@ -881,8 +893,13 @@ def main():
     u.add_argument("--checkpoint")
     u.add_argument("--entry", help="行內短內容（與 --entry-file 擇一）")
     u.add_argument("--entry-file", help="長內容檔案路徑（與 --entry 擇一）")
-    u.add_argument("--sb-count", type=int, default=0,
-                   help="抽取白名單數出的 SOUNDBITE 段數；>0 且 entry 寫「無BITE」會擋下")
+    # ⚠️ default 由 0 改為 None（2026-08-09）：0 是**有意義的值**（真的沒有 SOUNDBITE），
+    # 拿它當「沒帶參數」的預設，會讓每一次沒帶 --sb-count 的 update-entry 都撞上
+    # bite_doubt 的反向判準（`(BITE)` 且 sb_count==0 → 假 BITE），憑空生出 needs_review
+    # 雜訊；改存進狀態檔之後更嚴重，會把好的舊值蓋成 0。**None ＝ 沒帶，不要動舊值。**
+    u.add_argument("--sb-count", type=int, default=None,
+                   help="抽取白名單數出的 SOUNDBITE 段數；>0 且 entry 寫「無BITE」會擋下。"
+                        "站方補完整稿後回寫用（不帶＝不動舊值）")
     sub.add_parser("pending")
     # ⚠️ WP1（2026-08-03）廢除 to-compile／mark-compiled／compiled 欄位：
     # 它們存在的唯一理由是「讓 agent 不用每輪重寫整份 txt」，改用 s2_render.py

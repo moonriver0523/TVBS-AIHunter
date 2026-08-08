@@ -263,8 +263,14 @@ def audit(mmdd, state_path, txt_path, scratch):
         except Exception:
             continue
         for e in data if isinstance(data, list) else []:
-            was, sb = e.get("entry", ""), e.get("sb_count")
+            was = e.get("entry", "")
             ent = cur_entry.get(e.get("id"), was)   # 狀態檔優先；已刪除的才退回 batch
+            # sb_count 同樣狀態檔優先（2026-08-09）：batch 停在送出當下，素材由 pending
+            # 轉正、站方 RESENDING 補完整稿之後 batch 的值就過期了，會對同一則**永久
+            # 重複誤報**假 BITE（0809-0100 的 RT4098：batch 記 0，實際已有 5 個）。
+            # 舊狀態檔沒有這個欄位，退回 batch 值，行為與過去一致。
+            st_sb = (items.get(e.get("id")) or {}).get("sb_count")
+            sb = st_sb if isinstance(st_sb, int) else e.get("sb_count")
             ft = str(e.get("footage_type") or "").strip().upper()
             nb["batch 筆數"] += 1
             if e.get("src_text"):
