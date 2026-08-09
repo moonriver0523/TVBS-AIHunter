@@ -624,7 +624,7 @@ def load_validate():
     return s2_validate
 
 
-def parse_side_txt(text, source=None, homes=None, normalize=False):
+def parse_side_txt(text, source=None, homes=None, normalize=False, tc_date=None):
     """把側錄 TXT 解析成狀態檔項目。
 
     吃兩種寫法（都用同一套三層結構辨識）：
@@ -644,7 +644,7 @@ def parse_side_txt(text, source=None, homes=None, normalize=False):
     sv = load_validate()
     lines = text.replace("\r\n", "\n").split("\n")
     if normalize:  # 先把隨手存的格式整成定版兩行式（純位置搬移，見 normalize_side）
-        lines = normalize_side(lines, source, sv)
+        lines = normalize_side(lines, source, sv, tc_date)
     if source:   # 裸 TC 行補來源前綴：`160106（主播）` → `CNN 160106（主播）`
         bare = re.compile(rf"^({sv._TC})(?=[\s（(]|$)")
         lines = [bare.sub(source + r" \1", l.strip(), count=1)
@@ -690,13 +690,16 @@ def parse_side_txt(text, source=None, homes=None, normalize=False):
             continue
         if sv.SIDE_RE.match(l):
             flush()
-            src, tc = re.match(rf"^(CNN|NHK) ({sv._TC})", l).groups()
-            h = homes.get(re.sub(r"\D", "", tc))    # --homes 指定的歸位優先
+            # 日期段可有可無（舊資料沒有），有的話要一起進 id
+            src, dt, tc = re.match(
+                rf"^(CNN|NHK) (?:(\d{{2}}-\d{{2}}) )?({sv._TC})", l).groups()
+            h = homes.get(re.sub(r"\D", "", tc))    # --homes 指定的歸位優先（用純數字 TC 當鍵）
             b2, m2, s2 = h if h else (big, mid, sub)
             cat = {"大分類": b2, "中主題": m2}
             if s2:
                 cat["小分題"] = s2
-            cur = (f"{src} {tc}", f"SIDE_{src}", cat, l.rstrip())
+            key = " ".join(x for x in (src, dt or "", tc) if x)
+            cur = (key, f"SIDE_{src}", cat, l.rstrip())
             continue
         if sv.LINE_RE.match(l):   # 通訊社素材行：不是側錄，跳過（供混排 txt 直接餵）
             flush()
@@ -710,7 +713,7 @@ def parse_side_txt(text, source=None, homes=None, normalize=False):
     return out
 
 
-def normalize_side(lines, source, sv):
+def normalize_side(lines, source, sv, tc_date=None):
     """把上傳者隨手存的側錄檔整成 14-S2b 定版兩行式（**純位置搬移，不改任何一個字**）。
 
     上傳側錄的人不一定懂格式（2026-08-03 使用者指出），所以能用機械規則解掉的
@@ -722,8 +725,12 @@ def normalize_side(lines, source, sv):
       2. TC 行與內容黏在同一行 → 拆成兩行（TC 行／內容行）。
       3. 內容行開頭的 `（角色…）` → 搬到 TC 行尾（TC 行本身沒有 SUPER 時才搬）。
       4. 純分隔線（`---`／`___`／`***`）丟掉；其餘雜訊行原樣保留。
+      5. **補日期**（`tc_date`，格式 `MM-DD`，2026-08-09 加）：側錄是跨夜的，
+         光看 `151542` 分不出是哪一天。原本已帶日期的行不重複加。
     """
-    tc_head = re.compile(rf"^(?:(CNN|NHK)\s+)?({sv._TC})\s*(.*)$")
+    # ⚠️ 日期段要**可有可無**：檔案可能已經帶日期（重跑正規化、或上傳者自己寫了），
+    #    不認的話整行會被當成內容行、TC 就此消失。
+    tc_head = re.compile(rf"^(?:(CNN|NHK)\s+)?(?:(\d{{2}}-\d{{2}})\s+)?({sv._TC})\s*(.*)$")
     role = re.compile(r"^\s*([（(][^）)]{1,30}[）)])\s*")
     out = []
     for raw in lines:
@@ -746,9 +753,10 @@ def normalize_side(lines, source, sv):
                     continue
             out.append(l)
             continue
-        src, tc, rest = m.groups()
+        src, date_in, tc, rest = m.groups()
         tc6 = re.sub(r"\D", "", re.split(r"\s*[-–~]\s*", tc)[0])[:6]   # 範圍取起點、去冒號
-        head = f"{src or source or ''} {tc6}".strip()
+        # 檔案自己帶的日期優先——那是上傳者的判斷，不要用推算的蓋掉
+        head = " ".join(x for x in (src or source or "", date_in or tc_date or "", tc6) if x)
         r = role.match(rest)
         if r:                                          # `160106（主播）內容…`
             head += " " + r.group(1)
@@ -779,7 +787,25 @@ def cmd_add_side(state, args):
         for tc in tcs.split(","):
             if tc.strip():
                 homes[re.sub(r"\D", "", tc)] = (parts[0], parts[1], parts[2])
-    parsed = parse_side_txt(text, args.source, homes, args.normalize)
+    # ── TC 日期（2026-08-09 加）：側錄跨夜，光看 `151542` 分不出哪一天 ──
+    # 預設取本輪 checkpoint 的日期；檔案自己帶日期時以檔案為準（見 normalize_side）。
+    tc_date = args.tc_date
+    if not tc_date:
+        m = re.match(r"(\d{2})(\d{2})", args.checkpoint or "")
+        tc_date = f"{m.group(1)}-{m.group(2)}" if m else None
+    parsed = parse_side_txt(text, args.source, homes, args.normalize, tc_date)
+
+    # ⚠️ 跨夜防呆：凌晨的輪次收到晚上的 TC，多半是**前一天**錄的。
+    #    這裡只警告不自動改——猜錯會把日期寫成錯的，而錯的日期比沒有日期更難發現。
+    cp_h = int(re.search(r"-(\d{2})", args.checkpoint or "-99").group(1) or 99)
+    if not args.tc_date and cp_h < 6:
+        late = [p[0] for p in parsed
+                if re.search(r"(\d{2})\d{4}$", p[0]) and int(re.search(r"(\d{2})\d{4}$", p[0]).group(1)) >= 18]
+        if late:
+            print(f"⚠️ 本輪是凌晨 {cp_h:02d} 點，但有 {len(late)} 段 TC 是晚上（18:00 後）——"
+                  f"多半是前一天錄的，日期可能要用前一天。確認後用 --tc-date MM-DD 指定。")
+            print("   涉及：" + "／".join(late[:5]))
+
     if not parsed:
         print("ERROR: 沒解析到任何側錄段落（TC 行格式須為 `CNN 160106（主播）`）")
         sys.exit(2)
@@ -1024,6 +1050,8 @@ def main():
     sd.add_argument("--normalize", action="store_true",
                     help="先做機械正規化（範圍TC取起點去冒號成6碼、角色搬到TC行、拆黏行）；"
                          "上傳者不懂格式時用，純位置搬移不改字")
+    sd.add_argument("--tc-date", help="TC 的日期 MM-DD（省略＝取 --checkpoint 的日期）。"
+                                      "跨夜時用得到：凌晨的輪次收到晚上的 TC，那多半是前一天錄的")
     sd.add_argument("--source", choices=["CNN", "NHK"],
                     help="TC 行沒有來源前綴時自動補（歐印萬原始檔多半是裸 TC）")
     sd.add_argument("--homes", default="",
