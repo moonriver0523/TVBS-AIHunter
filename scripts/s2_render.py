@@ -427,7 +427,12 @@ def reconcile(old_text, new_text):
     def index(t):
         lines = (t or "").split("\n")
         mats = {re.match(sv.CODE, l).group(0) for _, l in sv.material_lines(lines)}
-        sides = {re.match(rf"^(?:CNN|NHK) {sv._TC}", l).group(0)
+        # ⚠️ 這裡要跟 sv.SIDE_RE 用**同一套**日期段規則（2026-08-09 實錯）：
+        #    側錄 TC 加日期後，這條漏了 `_SIDE_DATE`，`CNN 08-09 151439` 匹配不到
+        #    → `.group(0)` 對 None 取值，整個 render 在寫完 txt 之後才崩，
+        #    品質掃／HTML／對帳查核全部沒跑，離開碼還變成非 0。
+        #    **側錄的格式規則只要有一處沒同步，就會在別處炸掉或隱形。**
+        sides = {re.match(rf"^(?:CNN|NHK) {sv._SIDE_DATE}{sv._TC}", l).group(0)
                  for _, l, _ in sv.side_lines(lines)}
         yts = {sv.YT_URL_RE.match(u).group(1) for _, u, _ in sv.yt_blocks(lines)}
         return mats, sides, yts

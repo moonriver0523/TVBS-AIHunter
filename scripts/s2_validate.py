@@ -38,7 +38,8 @@ for _s in (sys.stdout, sys.stderr):
 # bitcentralId 原樣就是 4 位數）被 `\d{1,3}` 擋掉，症狀與上面那次一模一樣——txt 印得出來、
 # 檔頭卻只算 4 則（實收 5 則）。已放寬成 1–4 碼。**這兩處是同一種靜默漏算，
 # 看到「txt 行數與檔頭則數對不上」就先回來檢查這條正則。**
-CODE = r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2,6}-\d{1,4}[A-Z]{2}|(?:CNN|NHK) \d{6})"
+CODE = (r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2,6}-\d{1,4}[A-Z]{2}"
+        r"|(?:CNN|NHK) (?:\d{2}-\d{2} )?\d{6})")   # 側錄的日期段可有可無（2026-08-09）
 LINE_RE = re.compile(rf"^{CODE}(?:\s*/\s*{CODE})*\s")
 
 # 時段標記（2026-08-02 訂案，2026-08-03 補 △，2026-08-04 固定排程定案邊界＋補 ◆）：
@@ -377,8 +378,9 @@ def check(path):
     # TC 三種寫法（6碼／冒號／範圍）都要認，見 _TC
     seen_side = {}
     for n, l, block in side_lines(lines):
-        src, tc = re.match(rf"^(CNN|NHK) ({_TC})", l).groups()
-        seen_side.setdefault(f"{src} {tc}", []).append(n)
+        # 日期段可有可無——沒吃進來的話 `CNN 08-09 151439` 匹配失敗、直接崩
+        src, dt, tc = re.match(rf"^(CNN|NHK) (?:(\d{{2}}-\d{{2}}) )?({_TC})", l).groups()
+        seen_side.setdefault(" ".join(x for x in (src, dt or "", tc) if x), []).append(n)
         if "▎" in l or any("▎" in b for b in block):
             hit(n, "側錄段落不該用 ▎ 分段（那是通訊社三段式，側錄走 TC＋SUPER行/內容行）")
         if not block:
