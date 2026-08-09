@@ -432,10 +432,25 @@ def header_from_lines(lines, window="", date="", mmdd="", alerts=()):
         times = [re.search(r"(\d{1,2}):(\d{2})", h) for h in halves]
         if len(halves) == 2 and all(times):
             s, e = [h.strip() for h in halves]
-            mins = [int(t.group(1)) * 60 + int(t.group(2)) for t in times]
-            span = mins[1] - mins[0]
-            if span < 0:          # 跨午夜（23:00→09:00）
-                span += 24 * 60
+            # 🎯 兩邊都帶完整日期時，**直接用日期算**（2026-08-09 實錯修正）。
+            # 底下那個「span < 0 就 +24h」只是單日資訊下的猜測，**只有在「終點時刻
+            # 比起點早」時才剛好對**。0809-0900 實錯：窗是 `08-08 08:00 → 08-09 09:00`，
+            # 實際 25 小時，但 09:00 > 08:00 → 不補 24 小時 → 印成「約1hrs」。
+            # 更早那版 `08:00→07:00` 印出正確的 23hrs，純粹是因為它算出負數、誤打誤撞。
+            ds = re.findall(r"(\d{4})-(\d{2})-(\d{2})[ T]+(\d{1,2}):(\d{2})", window)
+            span = None
+            if len(ds) == 2:
+                try:
+                    a, b = [datetime(int(y), int(mo), int(d), int(hh), int(mi))
+                            for (y, mo, d, hh, mi) in ds]
+                    span = (b - a).total_seconds() / 60
+                except ValueError:
+                    span = None      # 日期本身不合法（手改壞了）就退回舊算法
+            if span is None:
+                mins = [int(t.group(1)) * 60 + int(t.group(2)) for t in times]
+                span = mins[1] - mins[0]
+                if span < 0:          # 跨午夜（23:00→09:00）
+                    span += 24 * 60
             # 起訖任一邊自帶日期時，就不再補檔名推得的日期，避免 `2026-08-02 2026-08-02 14:00`
             pre = "" if re.search(r"\d{4}-\d{2}-\d{2}", window) else (date + " " if date else "")
             # 「時數取整數小時」（`13`「晚班交接檔頭」第 2 行）——起訖不是整點時

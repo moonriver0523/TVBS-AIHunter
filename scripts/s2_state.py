@@ -26,7 +26,39 @@ for _s in (sys.stdout, sys.stderr):
     except AttributeError:  # py<3.7
         pass
 
-DEFAULT_FILE = r"G:\我的雲端硬碟\Claude共用\自動掃帶系統\s2-state.json"
+STATE_DIR = r"G:\我的雲端硬碟\Claude共用\自動掃帶系統"
+
+
+def default_file():
+    """`--file` 沒給時要用哪一份狀態檔——**自動找資料夾裡最新的那份**。
+
+    ⚠️ **這裡曾經是一個很傷的陷阱**（2026-08-09 實錯，改掉的就是它）：
+    原本寫死 `{STATE_DIR}\\s2-state.json`，而**正式檔名一律帶日期前綴**
+    （`0808-s2-state.json`），所以那個路徑**永遠不會存在**。任何忘了帶 `--file`
+    的指令都會讀到一份空檔、印出「共 0 則」——
+
+    而 `13b §5a` 第 2 條又把「共 0 則」寫成『確認自己真的在建新檔』的證明。
+    **規則反過來替錯誤背書**：0809-0900 那輪的 agent 因此判定自己是當天第一輪，
+    把還在使用的 0808 檔整個歸檔、另開新檔，資料斷成兩份（沒丟，但要人工併回）。
+
+    📌 **這類錯誤的形狀值得記住**：一個「檢查」的通過條件，
+    竟然與最常見的失敗模式長得一模一樣，那它就不是檢查，是背書。
+
+    現在的行為：資料夾裡有 `{MMDD}-s2-state.json` 就用**最新修改**的那份；
+    一份都沒有（真的是全新的一天）才回退到今天日期的新檔名。
+    ⛔ **不再回傳無日期前綴的路徑**——那個檔名本身就是不合規的。
+    """
+    try:
+        cands = [f for f in os.listdir(STATE_DIR) if re.fullmatch(r"\d{4}-s2-state\.json", f)]
+    except OSError:
+        cands = []
+    if cands:
+        newest = max(cands, key=lambda f: os.path.getmtime(os.path.join(STATE_DIR, f)))
+        return os.path.join(STATE_DIR, newest)
+    return os.path.join(STATE_DIR, f"{datetime.now().strftime('%m%d')}-s2-state.json")
+
+
+DEFAULT_FILE = default_file()
 
 
 TOP_FIELDS = ("checkpoint", "updated_at", "window_local",
