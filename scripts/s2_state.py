@@ -203,6 +203,46 @@ FT_MUST_BITE = {"SOT", "BUTTED SOTS", "SOT RAW", "ISO", "DONUT", "INTERVIEW", "R
 FT_GRAY = {"PKG"}          # 實測 7 無／8 有，真的混合——只印提醒，不寫 needs_review
 
 
+CJK_RE = re.compile(r"[㐀-鿿豈-﫿　-〿＀-￯]")
+
+
+def strip_agent_note(src_text):
+    """剝掉 agent 附在 `src_text` 尾巴的中文說明，回傳 (乾淨原文, 被剝掉的說明)。
+
+    ⚠️ **`src_text` 應該只放站方原文**（`13b` §543：抽取白名單瘦身後的稿件全文），
+    它是**事後離線查證的唯一依據**——混進判斷說明，後面每一個讀它的機制都會不可靠。
+
+    **實錯（2026-08-09，RT4131）**：agent 在原文尾巴接了一段
+    「（說明：sb_count=0 係因路透 captioned 格式，story 以「STORY: ::」開頭、
+    無 SHOTLIST 段，故數不到 SOUNDBITE 字樣…）」，裡面的「SHOTLIST」「SOUNDBITE」
+    字樣**害假 BITE 判準誤判**、讓同一則誤報連續四輪。
+
+    判準：三站原文一律是英／西文，**只要出現中文就幾乎必然是 agent 寫的**。
+    ⚠️ 不可用「中文字比英文字多」當判準（第一版就是這樣寫、當場失效）：
+    agent 的說明裡夾了 `sb_count`／`captioned`／`SHOTLIST` 等英文詞，
+    字母數反而多過中文字，整段就被放行了。**有沒有中文才是訊號，不是誰比較多。**
+
+    只剝**尾端連續**的含中文行，遇到第一行完全沒有中文的就停手——
+    ⛔ 不從中間挖，也不改動檔案本身（證據要留著）。
+    """
+    t = src_text or ""
+    if not t:
+        return t, ""
+    lines = t.split("\n")
+    cut = len(lines)
+    for i in range(len(lines) - 1, -1, -1):
+        s = lines[i].strip()
+        if not s:                      # 空行跟著一起帶走，但不單獨當判準
+            continue
+        if CJK_RE.search(s):
+            cut = i
+        else:
+            break
+    if cut >= len(lines):
+        return t, ""
+    return "\n".join(lines[:cut]).rstrip(), "\n".join(lines[cut:]).strip()
+
+
 def sb_applicable(src_text):
     """`sb_count` 這個數字有沒有意義？（2026-08-09）
 
@@ -231,7 +271,8 @@ def sb_applicable(src_text):
     📌 附帶問題：`src_text` 應該只放站方原文，不該混入 agent 的判斷說明——
     但偵測本身不該假設上游一定乾淨，所以這裡自己擋住。
     """
-    t = (src_text or "").upper()
+    clean, _ = strip_agent_note(src_text)   # agent 的中文說明不算原文（RT4131 實錯）
+    t = clean.upper()
     if not t:
         return True                       # 沒有原文就照舊，不放寬
     return bool(re.search(r"SHOTLIST\s*:", t) or re.search(r"\(\s*SOUNDBITE", t))

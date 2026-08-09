@@ -256,7 +256,7 @@ def audit(mmdd, state_path, txt_path, scratch):
     # 「現在標成什麼」一律以**狀態檔**為準——那才是唯一真相源。
     cur_entry = {k: (v.get("raw_entry") or "") for k, v in items.items()}
     nb = collections.Counter()
-    fake, missed, healed = [], [], []
+    fake, missed, healed, polluted = [], [], [], []
     for f in sorted(glob.glob(os.path.join(scratch, "*batch*.json"))):
         try:
             data = json.load(open(f, encoding="utf-8-sig"))
@@ -283,6 +283,10 @@ def audit(mmdd, state_path, txt_path, scratch):
             nb["batch 筆數"] += 1
             if e.get("src_text"):
                 nb["帶 src_text"] += 1
+                # src_text 只該有站方原文。混進 agent 的中文說明，會讓每一個
+                # 讀它的機制都不可靠——RT4131 就是這樣害假 BITE 判準誤判連四輪。
+                if S.strip_agent_note(e["src_text"])[1]:
+                    polluted.append(e.get("id"))
             if isinstance(sb, int):
                 nb["帶 sb_count"] += 1
             if ft:
@@ -300,6 +304,11 @@ def audit(mmdd, state_path, txt_path, scratch):
         n = nb["batch 筆數"]
         if nb["帶 src_text"] < n:
             yel(f"{n - nb['帶 src_text']} 筆沒帶 src_text——事後查證就得重開瀏覽器")
+        if polluted:
+            yel(f"{len(polluted)} 筆的 src_text 混入 agent 的中文說明："
+                f"{'／'.join(str(x) for x in sorted(set(polluted))[:8])}"
+                f"——src_text 只放站方原文（13b §543），它是事後離線查證的唯一依據；"
+                f"判斷寫進 needs-review，不要寫進原文（RT4131 曾害假 BITE 判準誤判連四輪）")
         if fake:
             red(f"標了 (BITE) 但 sb_count=0（假 BITE，0805 實錯 7 則）：{fake}")
         if missed:

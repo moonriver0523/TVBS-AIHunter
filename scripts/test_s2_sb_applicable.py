@@ -82,6 +82,26 @@ POLLUTED = RT_CAPTIONED + "\n[agent備註] 這則 STORY 以「STORY: ::」開頭
                           "故數不到 SOUNDBITE 字樣；稿內兩位受訪者姓名職銜齊備，屬可掐的談話。"
 report("src_text 被 agent 的中文說明污染時，仍判定為不適用（RT4131 實例）",
        S.sb_applicable(POLLUTED) is False)
+
+# ── strip_agent_note：src_text 只該有站方原文 ────────────────────────
+# ⚠️ 判準不可用「中文字比英文字多」（第一版就是這樣、當場失效）：agent 的說明裡
+# 夾了 sb_count／captioned／SHOTLIST 等英文詞，字母數反而多過中文字就被放行。
+# **有沒有中文才是訊號，不是誰比較多**——三站原文一律英／西文。
+for txt, desc, expect in [
+    ("Reuters said.\n（說明：sb_count=0 係因路透 captioned 格式，無 SHOTLIST 段。）",
+     "尾巴整段中文說明（英文詞夾雜其中）", True),
+    ("English line\n[note] desc 寫 Center City, WI，但 SUPERS 為 MN",
+     "[note] 形式的中文備註", True),
+    ("SHOTLIST:\n1. WIDE\n2. (SOUNDBITE) MAN SAYING:", "乾淨英文原文不可誤剝", False),
+    ("--SUPERS-- Friday\n--SOT--\n\"Text here.\"", "NS 英文原文不可誤剝", False),
+    ("中文在開頭\nEnglish tail line", "只剝尾端，不從中間挖", False),
+    ("", "空字串不炸", False),
+]:
+    clean, note = S.strip_agent_note(txt)
+    report(f"strip_agent_note：{desc}", bool(note) is expect)
+
+report("剝除後原文本身完好（不吃掉站方內容）",
+       S.strip_agent_note("Reuters said.\n（說明：測試。）")[0] == "Reuters said.")
 report("結構標記帶冒號才算（SHOTLIST: ✓）", S.sb_applicable("SHOTLIST:\n1. WIDE") is True)
 report("結構標記帶括號才算（(SOUNDBITE) ✓）", S.sb_applicable("2. (SOUNDBITE) MAN SAYING") is True)
 
