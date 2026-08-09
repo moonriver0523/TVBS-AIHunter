@@ -130,11 +130,13 @@ TEMPLATE = """<!doctype html>
 <style>
 :root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#e3e3e3;--card:#fafafa;
       --accent:#0b62d0;--chip:#eef2f7;--chipon:#0b62d0;--warn:#c00;
-      --big:#d94a1f;--subbg:#e8eaed;--subfg:#2b2f36}
+      --big:#d94a1f;--subbg:#e8eaed;--subfg:#2b2f36;
+      --midbg:#0b62d0;--midfg:#fff}
 @media (prefers-color-scheme:dark){
 :root{--bg:#16181c;--fg:#e8e8e8;--mut:#9aa0a6;--line:#2c3038;--card:#1d2026;
       --accent:#6aa9ff;--chip:#252a32;--chipon:#2b6cb0;--warn:#ff6b6b;
-      --big:#ff7a4d;--subbg:#333941;--subfg:#e8e8e8}}
+      --big:#ff7a4d;--subbg:#333941;--subfg:#e8e8e8;
+      --midbg:#2b6cb0;--midfg:#fff}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
      font:15px/1.7 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
@@ -220,7 +222,12 @@ main{padding:6px 14px 60px}
 .big{margin:22px 0 8px;padding:5px 0;
      border-top:2px solid var(--big);border-bottom:2px solid var(--big);
      font-size:16px;font-weight:700;letter-spacing:2px;color:var(--big)}
-.mid{margin:12px 0 4px;font-weight:700;color:var(--accent)}
+.mid{margin:12px 0 4px;font-weight:700}
+/* 中主題＝藍底白字色塊，去掉【】（2026-08-09 使用者訂）。
+   前後各留一個半形空格才不會貼著色塊邊緣；空格寫在文字裡而不是靠 padding，
+   使用者要的就是「 新加坡國慶 」這個形狀。⚠️ 只有網頁版這樣，TXT 版仍是【】。 */
+.mid .midtxt{display:inline-block;padding:2px 6px;border-radius:4px;
+     background:var(--midbg);color:var(--midfg)}
 .sub{margin:8px 0 2px;font-size:13px;color:var(--mut)}  /* 空清單提示沿用這個灰 */
 /* 小分題反白：底色掛在文字本身（inline-block），不是整條橫幅——
    橫幅會跟上面的大分類底線打架，而且小分題常常很短，整條反白看起來像錯誤訊息。
@@ -415,7 +422,10 @@ function draw(){
     mids.forEach((subs,mid)=>{
       if(mid){
         const mh=document.createElement('div'); mh.className='mid hd';
-        mh.append(document.createTextNode(`【${mid}】`));
+        // 藍底白字色塊只包文字，複製鈕留在色塊外（跟小分題同一套做法）
+        const mt=document.createElement('span'); mt.className='midtxt';
+        mt.textContent=` ${mid} `;
+        mh.append(mt);
         const n=[...subs.values()].flat().length;
         mh.append(btn(`複製（${n}）`,()=>copy(midText(mid,subs),`已複製「${mid}」${n} 則`)));
         list.append(mh);
@@ -558,14 +568,12 @@ $('grip').addEventListener('touchmove',e=>{
 },{passive:true});
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') openF(false); });
 
-// 檔頭資訊：手機先收起來把螢幕讓給素材；桌機空間夠就攤開。
+// 檔頭資訊：手機、桌機**一律預設攤開**（2026-08-09 使用者訂）。
+// 原本手機自動收起，但檔頭有當天則數與 🔴 重大三行——那是開檔第一眼最該看到的，
+// 自動收起等於把重點藏起來。要不要收由使用者自己點。
 // ⚠️ 篩選面板不在這裡控制——它的開關由 CSS 版型決定（桌機常駐、手機彈出），
 //    用 JS 加 .off 會把桌機的側欄也一起藏掉。
-if(isTouch){
-  $('meta').classList.add('off');
-}else{
-  $('metaCaret').classList.add('open');
-}
+$('metaCaret').classList.add('open');
 draw();
 </script></body></html>
 """
