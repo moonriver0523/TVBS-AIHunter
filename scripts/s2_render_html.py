@@ -229,6 +229,10 @@ main{padding:6px 14px 60px}
    不分開的話會在清單裡壓過真正的外電素材（0802 實測占 30%）。 */
 .item.side{border-left:3px solid var(--mut);padding-left:8px}
 .item.url{border-left:3px solid var(--accent);padding-left:8px}
+/* 側錄摺疊：預設只露第一行＋一小段內容，點開才看全文 */
+.sumline{cursor:pointer;user-select:none;color:var(--mut)}
+.sumline .caret{display:inline-block;margin-right:4px;transition:transform .15s}
+.sidebody{margin-top:4px;white-space:pre-wrap}
 .mark{flex:none;width:1.4em;text-align:center;font-size:15px}
 .item button{visibility:hidden;flex:none}
 .item:hover button{visibility:visible}
@@ -351,8 +355,15 @@ function draw(){
   // 混在一起算，就會出現「txt 說 222 則、網頁說 292 則」這種同資料兩個數字。
   const nWire=rows.filter(r=>r.kind!=='side').length, nSide=rows.length-nWire;
   const tWire=ROWS.filter(r=>r.kind!=='side').length;
+  // 側錄合併後「幾則」與原始「幾段」是兩個數字，**兩個都給**，不要讓人猜是哪個
+  let sideUnits=0, prev=null;
+  rows.filter(r=>r.kind==='side').forEach(r=>{
+    const k=[r.src,r.big,r.mid,r.sub].join('|');
+    if(k!==prev) sideUnits++;
+    prev=k;
+  });
   document.getElementById('cnt').textContent =
-    `${nWire} / ${tWire} 則` + (nSide ? `　側錄 ${nSide} 段` : '');
+    `${nWire} / ${tWire} 則` + (nSide ? `　側錄 ${sideUnits} 則（${nSide} 段）` : '');
   // 面板關起來時，光看浮動鈕就要知道有沒有在篩、篩了幾項——
   // 否則使用者會對著變少的清單納悶「東西怎麼變少了」。有篩時連顏色一起換。
   const nf=F.src.size+F.mark.size+F.big.size+(F.q?1:0);
@@ -390,15 +401,49 @@ function draw(){
           sh.append(btn(`複製（${its.length}）`,()=>copy(subText(sub,its),`已複製「${sub}」${its.length} 則`)));
           list.append(sh);
         }
+        // 側錄要「同段落同主題算一則、預設只顯示第一行、可展開」（2026-08-09 使用者訂）。
+        // 連續且同來源的側錄併成一個區塊——資料裡本來就照 TC 順序排、也帶三層分類，
+        // 所以「連續同類」直接就是一則連線報導，不必另外標記。
+        const units=[];
         its.forEach(r=>{
+          const last=units[units.length-1];
+          if(r.kind==='side' && last && last.kind==='side' && last.rows[0].src===r.src){
+            last.rows.push(r);
+          }else units.push({kind:r.kind, rows:[r]});
+        });
+
+        units.forEach(u=>{
+          const first=u.rows[0];
+          const full=u.rows.map(x=>x.text).join('\\n');
           const d=document.createElement('div');
-          // 側錄是逐字稿、篇幅遠大於三段式素材行，混在一起會壓過真正的素材。
-          // 給一條左邊界當視覺區隔，讓人一眼分得出「這不是外電素材」。
-          d.className='item'+(r.kind==='side'?' side':'')+(r.kind==='url'?' url':'');
-          const mk=document.createElement('span'); mk.className='mark'; mk.textContent=r.mark;
+          d.className='item'+(u.kind==='side'?' side':'')+(u.kind==='url'?' url':'');
+          const mk=document.createElement('span'); mk.className='mark'; mk.textContent=first.mark;
           const tx=document.createElement('div'); tx.className='txt';
-          tx.textContent=r.text.replace(/^\\s*[△▲■◆●]\\s*/,'');
-          d.append(mk,tx,btn('複製',()=>copy(r.text,`已複製 ${r.id}`)));
+          const bare=full.replace(/^\\s*[△▲■◆●]\\s*/,'');
+
+          if(u.kind==='side'){
+            // 摺疊：側錄中位數 401 字、最長 1442（0802 實測），而一則三段式素材才 150–250 字。
+            // **單段也要摺**——27/42 個區塊本來就是單段，長度一樣壓過素材。
+            const head=bare.split('\\n')[0];                    // 「CNN 151542 （主播）」
+            const body=bare.split('\\n').slice(1).join('\\n');
+            const peek=body.replace(/\\s+/g,' ').slice(0,28);
+            const sum=document.createElement('div');
+            sum.className='sumline';
+            sum.innerHTML='<span class="caret">▾</span>';
+            sum.append(document.createTextNode(
+              `${head}${u.rows.length>1?`　共 ${u.rows.length} 段`:''}　${peek}…`));
+            const bodyEl=document.createElement('div');
+            bodyEl.className='sidebody off'; bodyEl.textContent=bare;
+            sum.onclick=()=>{
+              bodyEl.classList.toggle('off');
+              sum.querySelector('.caret').classList.toggle('open', !bodyEl.classList.contains('off'));
+            };
+            tx.append(sum, bodyEl);
+          }else{
+            tx.textContent=bare;
+          }
+          // ⛔ 複製一律給**全文**，不是預覽——摺疊是顯示層的事，貼出去必須完整
+          d.append(mk,tx,btn('複製',()=>copy(full,`已複製 ${first.id}`)));
           list.append(d);
         });
       });
