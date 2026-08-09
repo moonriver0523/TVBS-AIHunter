@@ -146,8 +146,18 @@ def segments(body):
             continue
         m = _SEG.match(t)
         if m and m.group(1):
-            tc6 = m.group(1).replace(":", "").zfill(6)[-6:]
-            role, text = _split_role(m.group(2).strip())
+            tc, rest = m.group(1), m.group(2)
+            # ⚠️ 來源檔的起始 TC 有可能多打一段（實例 NHK 181723 第 20 行：
+            #    `18:19:19:45-18:19:45（小朋友）咦？`）。不處理的話 group(1) 會咬到
+            #    `18:19:19`、剩下的 `:45-18:19:45（小朋友）` 全被當成**逐字內容**——
+            #    TC 錯了、SUPER 消失、內容多出一串亂碼，三個症狀一起來。
+            #    修法：起始壞掉就**改用範圍終點**（那一行的終點正好是 18:19:45）。
+            #    ⛔ 不要自己拼湊「應該是幾點」——那是造 TC，下游沒辦法查證。
+            mm = re.match(r"^:\d{2}\s*[-–~]\s*(\d{1,2}:\d{2}:\d{2})\s*(.*)$", rest)
+            if mm:
+                tc, rest = mm.group(1), mm.group(2)
+            tc6 = tc.replace(":", "").zfill(6)[-6:]
+            role, text = _split_role(rest.strip())
             out.append([tc6, role, text.strip()])
         elif out:
             out[-1][2] = (out[-1][2] + "\n" + t).strip()
@@ -226,6 +236,11 @@ def main():
                  if datetime.fromtimestamp(os.path.getmtime(p)) >= cutd]
 
     cand, failed, total = [], [], 0
+    # ⚠️ TC 就是入庫的 id（`CNN MM-DD 6碼`）。來源檔**真的會出現重複的起始 TC**
+    #    （實例 NHK 181723：`18:19:58` 出現兩次，一段童聲、一段主播高溫警戒），
+    #    此時 add-side 會把第二段當成「已在庫」**靜靜略過** —— 段數對不上而且不報錯。
+    #    這裡先攔下來大聲講，讓人決定要捨哪一段或請上游修 TC。
+    seen_tc = {}
     for p in paths:
         with open(p, encoding="utf-8-sig", errors="replace") as f:
             raw = f.read()
@@ -244,7 +259,15 @@ def main():
         kw, bullets = hints(raw, p)
         src = args.source or source_of(p)
         for tc6, role, text in segs:
-            head = f"{src} {d} {tc6}"
+            key = f"{src} {d} {tc6}"
+            if key in seen_tc:
+                print(f"🔴 TC 重複：{key}")
+                print(f"     已有 [{seen_tc[key]}]")
+                print(f"     又見 [{os.path.basename(p)}] （{role}）{text[:30]}")
+                print("     → add-side 會靜靜略過後者，**入庫前要先決定怎麼辦**")
+            else:
+                seen_tc[key] = os.path.basename(p)
+            head = key
             if role:
                 head += f" （{role}）"
             cand.append(head)
