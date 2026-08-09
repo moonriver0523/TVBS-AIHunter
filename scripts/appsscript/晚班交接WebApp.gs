@@ -54,8 +54,8 @@ function 測試找檔() {
   var f = findLatest_();
   if (!f) { Logger.log('❌ 找不到檔名含「%s」的檔案', NAME_HINT); return; }
   var s = f.getBlob().getDataAsString('UTF-8');
-  Logger.log('✅ 檔名：%s', f.getName());
-  Logger.log('   最後修改：%s', f.getLastUpdated());
-  Logger.log('   大小：%s 字元', s.length);
-  Logger.log('   看起來是完整網頁：%s', s.indexOf('<!doctype html') === 0 ? '是' : '否（請檢查）');
+  console.log('✅ 檔名：%s', f.getName());
+  console.log('   最後修改：%s', f.getLastUpdated());
+  console.log('   大小：%s 字元', s.length);
+  console.log('   看起來是完整網頁：%s', s.indexOf('<!doctype html') === 0 ? '是' : '否（請檢查）');
 }
