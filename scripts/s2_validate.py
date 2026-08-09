@@ -276,6 +276,9 @@ def check(path):
     def hit(n, reason):
         hits.append((n, reason))
 
+    # 側錄的 TC 鍵（`CNN 08-09 190145`）也要能被檔頭重大行指到，見下方 alerts 檢查
+    seen_side_codes = {re.match(CODE, l).group(0)
+                       for _, l, _ in side_lines(lines) if re.match(CODE, l)}
     seen_codes = {}
     for n, l in material_lines(lines):
         codes = re.findall(CODE, l.split("▎")[0])
@@ -353,8 +356,11 @@ def check(path):
         if not codes:
             hit(n, "重大提醒行未寫素材代碼（格式：`🔴 重大：{標記}{代碼} {一句話}`）")
         for c in codes:
-            if c not in seen_codes:
-                hit(n, f"重大提醒行的代碼 {c} 在正文找不到對應素材行（漏寫或已被刪）")
+            # ⚠️ 檔頭重大**也可以指向側錄**（2026-08-09 實錯）：側錄不算「素材行」，
+            #    只查 seen_codes 會把 `CNN 08-09 190145` 這種誤報成「正文找不到」。
+            #    側錄照樣可能是今天最重大的一則（那次是自由女神像外船難 2 死）。
+            if c not in seen_codes and c not in seen_side_codes:
+                hit(n, f"重大提醒行的代碼 {c} 在正文找不到對應素材行或側錄段（漏寫或已被刪）")
 
     # 檔頭 🔴 → 正文 🔴 單向檢查（2026-08-03 訂案）：檔頭點名的，正文那行必須也標 🔴，
     # 否則編輯得自己在近百則裡找。

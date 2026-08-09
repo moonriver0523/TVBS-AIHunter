@@ -91,6 +91,11 @@ def collect(state, base_mmdd):
                         "id": it.get("id") or "",
                         "src": src, "kind": kind,
                         "mark": R.mark_for(it.get("first_seen_checkpoint") or "", base_mmdd) or "",
+                        # 重大層級（2026-08-09 使用者要求可篩）：🔴＝檔頭重大、🟡＝重大未進檔頭。
+                        # 從**渲染後的成品**認，不從 raw_entry——render 會依 alerts 補標記，
+                        # 只看 raw_entry 會漏掉那些「檔頭有、正文還沒補」的則。
+                        "alert": ("🔴" if "🔴" in text[:8] else
+                                  ("🟡" if "🟡" in text[:8] else "")),
                         "cp": it.get("first_seen_checkpoint") or "",
                         "dur": f.get("duration") or "",
                         "bite": bool(f.get("bite")),
@@ -282,6 +287,7 @@ main{padding:6px 14px 60px}
   <div class="grip" id="grip"></div>
   <div class="phead">篩選<button class="act" id="closeF">關閉</button></div>
   <div class="fgroup"><div class="flabel">來源</div><div class="bar" id="fsrc"></div></div>
+  <div class="fgroup"><div class="flabel">重大</div><div class="bar" id="falert"></div></div>
   <div class="fgroup"><div class="flabel">時段</div><div class="bar" id="fmark"></div></div>
   <div class="fgroup"><div class="flabel">大分類</div><div class="bar" id="fbig"></div></div>
   <div class="fgroup bar">
@@ -304,7 +310,7 @@ const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■
 const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","YT":"網址素材",
                    "CNN_newsource":"NS","CNN":"NS",
                    "YNA":"韓聯社","CNA":"CNA"};
-const F = {src:new Set(), mark:new Set(), big:new Set(), q:""};
+const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(), q:""};
 
 function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
 
@@ -323,6 +329,7 @@ function pass(r){
   if(F.src.size && !F.src.has(r.src)) return false;
   if(F.mark.size && !F.mark.has(r.mark)) return false;
   if(F.big.size && !F.big.has(r.big)) return false;
+  if(F.alert.size && !F.alert.has(r.alert)) return false;
   if(F.q && !r.q.includes(F.q)) return false;
   return true;
 }
@@ -489,7 +496,7 @@ document.getElementById('copyAll').onclick=()=>{
   copy(rows.map(r=>r.text).join("\\n"),`已複製篩選結果 ${rows.length} 則`);
 };
 document.getElementById('reset').onclick=()=>{
-  F.src.clear();F.mark.clear();F.big.clear();F.q="";
+  F.src.clear();F.mark.clear();F.big.clear();F.alert.clear();F.q="";
   document.getElementById('q').value="";
   document.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'));
   draw();
@@ -505,6 +512,9 @@ chips('fsrc','src',uniq('src').sort((a,b)=>{
   return w(a)-w(b) || a.localeCompare(b);
 }),SRC_LABEL);
 chips('fmark','mark',uniq('mark'),MARK_LABEL);
+// 重大：🔴 在前、🟡 在後（輕重順序，不用字母序）
+chips('falert','alert',uniq('alert').sort((a,b)=>(a==='🔴'?0:1)-(b==='🔴'?0:1)),
+      {"🔴":"🔴 重大","🟡":"🟡 次重大"});
 chips('fbig','big',uniq('big'));
 
 // ── 產出時間：停太久要主動變紅，不能只是印在那裡 ────────────────────
