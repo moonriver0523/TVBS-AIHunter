@@ -10,16 +10,26 @@
 中主題／小分題）與 SUPER 補強由呼叫端的 agent 判斷，本工具只提供線索
 （`--report`），**線索不寫進候選檔**，否則 normalize 會把它當內容行。
 
-觀察到的**三種**產生器變體（2026-08-09 實測 9 支）：
-  A. `### 中文 ###` → `文稿` → TC 段（5/9）
-  B. `### 中文 ###` → **直接** TC 段，**沒有 `文稿` 行**（3/9：150102／150648／160106）
-  C. **完全沒有 `###` 標頭**，重點摘要條列 → `#####` → `文稿` → TC 段（1/9：163927）
-所以錨點要**兩層**：先找 `### 中文 ###`，找不到才退回第一個獨立成行的
-`文稿`；結束點取其後第一個 `時間軸` 或 `### 原文 ###`。
+觀察到的**四種**產生器變體（2026-08-09 實測 10 支）：
+  A. `### 中文 ###` → `文稿` → TC 段（5 支）
+  B. `### 中文 ###` → **直接** TC 段，**沒有 `文稿` 行**（3 支：150102／150648／160106）
+  C. **沒有 `###` 標頭**，重點摘要 → `#####` → `文稿` → TC 段（1 支：163927）
+  D. **沒有 `###` 標頭、也沒有 `文稿` 行**，重點摘要 → `#####` → TC 段
+     （1 支：NHK 170011）
 
-⚠️ 只認 `文稿` 會踩到變體 B——中文段沒有那行，錨點會一路滑到**原文段**的
-`文稿`，然後把英文逐字稿當成中文收進庫存。這不是假設，是本工具第一版
-的實錯（靠下面的 CJK 比例防呆才擋下來）。**兩道防線都要留著。**
+⛔ **所以不要用關鍵字當錨點，用「第一個 TC 行」**。這四種變體唯一的共同點就是
+中文段永遠在最前面、而且一定由 TC 行起頭。`### 中文 ###` 存在時仍優先採用
+（那是明講的），但**沒有它時不准退回找 `文稿`**——
+
+  · 變體 B 的中文段沒有 `文稿`，錨點會滑到**原文段**的 `文稿` → 收到英文（第一版實錯）
+  · 變體 D 同理 → 收到**日文**（第二版實錯，NHK 170011）
+
+## 兩道內容防線（都要留，各擋各的）
+
+  1. **CJK 比例 < 30% → 擋**：擋英文原文段。
+  2. **假名比例過高 → 擋**：擋**日文**原文段。⚠️ 日文漢字也算 CJK，防線 1
+     對日文完全無效——NHK 那次就是這樣整段日文過關的。分辨中文與日文
+     **只能看假名**（ひらがな／カタカナ），不能看漢字。
 
 ⛔ **TC 不再換算**（2026-08-09 使用者定案）：這些檔案裡的 TC 已經是母帶
 絕對時間（實測 `150102`→`15:01:02`、`150648`→`15:06:48`、`151018`→
@@ -82,35 +92,48 @@ def _cjk_ratio(text):
     return cjk / letters if letters else 0.0
 
 
+def _kana_ratio(text):
+    """\u5047\u540d\u4f54 CJK \u7684\u6bd4\u4f8b\u2014\u2014**\u5206\u8fa8\u4e2d\u6587\u8207\u65e5\u6587\u53ea\u80fd\u9760\u9019\u500b**\u3002
+
+    \u65e5\u6587\u6f22\u5b57\u540c\u6a23\u843d\u5728 `\\u4e00-\\u9fff`\uff0c\u6240\u4ee5 `_cjk_ratio` \u5c0d\u65e5\u6587\u5b8c\u5168\u7121\u6548
+    \uff08NHK 170011 \u6574\u6bb5\u65e5\u6587\u5c31\u662f\u9019\u6a23\u904e\u95dc\u7684\uff09\u3002\u4e2d\u6587\u9010\u5b57\u7a3f\u593e\u96dc\u7684\u5047\u540d\u5e7e\u4e4e\u53ea\u6703\u662f
+    \u5c08\u540d\u88e1\u7684\u96f6\u661f\u5e7e\u500b\u5b57\uff0c\u65e5\u6587\u6b63\u6587\u5247\u662f\u6eff\u7bc7\u52a9\u8a5e\uff0c\u5169\u8005\u5dee\u8ddd\u5f88\u5927\uff0c\u9580\u6abb\u597d\u6293\u3002
+    """
+    kana = sum(1 for ch in text
+               if "\u3040" <= ch <= "\u309f" or "\u30a0" <= ch <= "\u30ff")
+    cjk = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    return kana / (kana + cjk) if (kana + cjk) else 0.0
+
+
 def extract_zh(raw):
     """回傳 (中文段的行 list, 錯誤訊息 or None)。"""
     lines = raw.splitlines()
-    # 第一層錨點：`### 中文 ###`。變體 B 的中文段沒有 `文稿` 行，只認 `文稿`
-    # 會滑到原文段去。
+    # 錨點＝**第一個 TC 行**。四種變體唯一的共同點就是中文段永遠在最前面、
+    # 由 TC 行起頭。`### 中文 ###` 存在時優先用它（明講的），但沒有它時
+    # **不准退回找 `文稿`**——變體 B 會滑到英文段、變體 D 會滑到日文段。
     heads = [i for i, l in enumerate(lines) if _ZH_HEAD.match(l.strip())]
-    if heads:
-        b = heads[0]
-        # `### 中文 ###` 後面緊接的 `文稿` 只是標籤，跳過（有沒有都能跑）
-        while b + 1 < len(lines) and (not lines[b + 1].strip()
-                                      or _BEGIN.match(lines[b + 1].strip())):
-            b += 1
-            if _BEGIN.match(lines[b].strip()):
-                break
-    else:
-        starts = [i for i, l in enumerate(lines) if _BEGIN.match(l.strip())]
-        if not starts:
-            return None, "找不到 `### 中文 ###` 或獨立成行的『文稿』錨點"
-        b = starts[0]
+    tcs = [i for i, l in enumerate(lines)
+           if _SEG.match(l.strip()) and _SEG.match(l.strip()).group(1)]
+    if not tcs:
+        return None, "整份找不到任何 TC 行"
+    b = tcs[0] - 1 if not heads else heads[0]
+    if heads and tcs[0] <= heads[0]:
+        # `### 中文 ###` 之前就有 TC 行 → 版面跟認知不符，別硬猜
+        return None, "`### 中文 ###` 之前就出現 TC 行，版面不明"
     ends = [i for i, l in enumerate(lines) if i > b and _END.match(l.strip())]
     e = ends[0] if ends else len(lines)
     body = [l for l in lines[b + 1:e]]
     joined = "\n".join(body)
     if not joined.strip():
         return None, "文稿段是空的"
-    # 防呆：163927 證明區塊順序不是靠標頭保證的。萬一哪天英文段跑到前面，
-    # 要**大聲失敗**，不要默默把英文逐字稿收進庫存。
+    # ── 兩道內容防線，各擋各的（都要留）──────────────────────────
+    # ① 英文原文段：163927 證明區塊順序不是靠標頭保證的。
     if _cjk_ratio(joined) < 0.30:
         return None, f"第一段疑似不是中文（CJK 比例 {_cjk_ratio(joined):.0%}）"
+    # ② 日文原文段：日文漢字也算 CJK，①對日文完全無效（NHK 170011 實錯）。
+    if _kana_ratio(joined) > 0.15:
+        return None, (f"第一段疑似是日文原文（假名佔 CJK "
+                      f"{_kana_ratio(joined):.0%}）")
     return body, None
 
 
