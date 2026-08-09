@@ -194,6 +194,45 @@ try {
     }
     Write-Run ("DONE`t離開碼=$code`t耗時=${mins}分`t本輪新增=$added 則`ttxt=$txtOk" +
                $(if ($bad) { "`t⚠️ $($bad -join '；')" } else { '' }))
+
+    # ── 收工推播（2026-08-09 使用者要求「每一輪掃完也通知」）──────────
+    # ⚠️ **一天 12 輪，每輪都讓手機響就會變成新的雜訊**，然後你開始忽略它——
+    # 那正是我們今天在誤報上反覆學到的教訓。所以：
+    #   正常收工 → `low` 優先度（留在通知列、不出聲）
+    #   有異常   → `high` 優先度（該吵你的時候才吵）
+    # ⛔ 推播失敗絕不可以影響離開碼——通知永遠比不上它在報告的那件事重要。
+    try {
+        . "$PSScriptRoot\s2_notify.ps1"
+        $srcTxt, $missTxt = '', ''
+        if ($statePath) {
+            $mine = @($st.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint })
+            # ⚠️ 外層的 $_ 會被內層 Where-Object 蓋掉，一定要先接成變數
+            $srcTxt = (@('NS', 'AP', 'RT') | ForEach-Object {
+                $s = $_
+                "$s $(@($mine | Where-Object { $_.source -eq $s }).Count)"
+            }) -join '／'
+            # 對帳的「窗內未收」才是真漏收，值得寫進通知
+            $rl = $st.reconcile_log.$Checkpoint
+            if ($rl) {
+                $miss = @('RT', 'AP', 'NS') | ForEach-Object {
+                    $v = $rl.$_
+                    if ($v -and $v.missing -gt 0) { "$_ 漏$($v.missing)" }
+                }
+                $missTxt = if ($miss) { "`n窗內未收：" + ($miss -join '／') } else { "`n窗內零漏收" }
+            } else {
+                $missTxt = "`n⚠️ 沒有對帳留痕"
+            }
+        }
+        $body = "本輪新增 $added 則（$srcTxt）`n耗時 ${mins} 分$missTxt" +
+                $(if ($bad) { "`n⚠️ " + ($bad -join '；') } else { '' })
+        $err = Send-Ntfy -Body $body `
+            -Title "S2 $Checkpoint" `
+            -Tags $(if ($bad) { 'warning' } else { 'white_check_mark' }) `
+            -Priority $(if ($bad) { 'high' } else { 'low' })
+        if ($err) { Write-Run "推播失敗（不影響本輪）：$err" }
+    } catch {
+        Write-Run "推播例外（不影響本輪）：$($_.Exception.Message)"
+    }
     if ($bad) {
         "$stamp`t$Checkpoint`t異常：$($bad -join '；') 見 $runLog" |
             Add-Content -Path $skipLog -Encoding UTF8

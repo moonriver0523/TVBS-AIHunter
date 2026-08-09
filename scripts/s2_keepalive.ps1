@@ -44,19 +44,10 @@ function Log([string]$line) {
 }
 
 function Push-Ntfy([string]$body, [string]$title, [string]$tags, [string]$priority) {
-    if (-not (Test-Path $TopicFile)) { return }
-    $topic = (Get-Content $TopicFile -Raw).Trim()
-    if (-not $topic) { return }
-    try {
-        # ⚠️ HTTP 標頭只吃 ASCII，中文一律放 body（body 是 UTF-8，沒問題）
-        Invoke-RestMethod -Uri "https://ntfy.sh/$topic" -Method Post `
-            -Body ([Text.Encoding]::UTF8.GetBytes($body)) `
-            -Headers @{ Title = $title; Tags = $tags; Priority = $priority } `
-            -TimeoutSec 20 | Out-Null
-    } catch {
-        # ⛔ 推播失敗**絕不可以讓保活整支掛掉**——保活本身比通知重要得多
-        Log "WARN 推播失敗（不影響保活）：$($_.Exception.Message)"
-    }
+    # 實作在 s2_notify.ps1（掃帶收工也要推播，兩邊共用一份，免得分岔）
+    $err = Send-Ntfy -Body $body -Title $title -Tags $tags -Priority $priority -TopicFile $TopicFile
+    # ⛔ 推播失敗**絕不可以讓保活整支掛掉**——保活本身比通知重要得多
+    if ($err) { Log "WARN 推播失敗（不影響保活）：$err" }
 }
 
 # 決策邏輯拆在 s2_notify.ps1（純函式、可測，理由見該檔）。這裡只做 IO。

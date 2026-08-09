@@ -22,6 +22,47 @@
   `ERR`（連不上／逾時）**不計數也不清零**：它既不能證明登出、也不能證明還在。
 #>
 
+function Send-Ntfy {
+    <#
+    .SYNOPSIS
+      往 ntfy 頻道送一則推播。**送不出去絕不可以讓呼叫端掛掉。**
+
+    .DESCRIPTION
+      從 s2_keepalive.ps1 抽出來共用（2026-08-09）——掃帶收工也要推播，
+      兩邊各寫一份遲早會分岔。
+
+      ⛔ **通知永遠比不上它在報告的那件事重要**：保活續期、掃帶收工都不能因為
+      推不出去就失敗。所以整段包在 try 裡，失敗只回傳訊息給呼叫端自己記 log。
+
+      頻道名放 `%USERPROFILE%\.s2-ntfy-topic`（**等同密碼，不進版控**）；
+      檔案不存在＝沒設定，直接跳過、不報錯。
+
+    .OUTPUTS
+      $null＝送出成功或未設定；字串＝失敗原因（呼叫端自行決定要不要記）。
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Body,
+        [string]$Title = 'S2',
+        [string]$Tags = '',
+        [string]$Priority = 'default',
+        [string]$TopicFile = "$env:USERPROFILE\.s2-ntfy-topic"
+    )
+    if (-not (Test-Path $TopicFile)) { return $null }
+    $topic = (Get-Content $TopicFile -Raw -ErrorAction SilentlyContinue).Trim()
+    if (-not $topic) { return $null }
+    try {
+        # ⚠️ HTTP 標頭只吃 ASCII，中文一律放 body（body 是 UTF-8，沒問題）
+        Invoke-RestMethod -Uri "https://ntfy.sh/$topic" -Method Post `
+            -Body ([Text.Encoding]::UTF8.GetBytes($Body)) `
+            -Headers @{ Title = $Title; Tags = $Tags; Priority = $Priority } `
+            -TimeoutSec 20 | Out-Null
+        return $null
+    } catch {
+        return $_.Exception.Message
+    }
+}
+
+
 function Get-NotifyActions {
     <#
     .PARAMETER Now   @{ NS='OK'; AP='LOGGED_OUT'; RT='ERR' }
