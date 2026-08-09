@@ -219,6 +219,45 @@ def side_lines(lines):
     return out
 
 
+def side_units(lines):
+    """側錄合併後的「則數」：連續、同來源、同三層歸位的 TC 段算**一則**。
+
+    ⚠️ **這是網頁版與 txt 檔頭共用的唯一算法**（2026-08-09 抽出）。
+    原本只有網頁版的 JS 有一份；txt 檔頭要報則數時若另寫一份，兩邊遲早算出
+    不同的數字——「txt 說 222 則、網頁說 292 則」那類問題就是這樣來的。
+    **要改合併規則就改這裡，不要在任何一端另外寫。**
+    """
+    big = mid = sub = ""
+    prev, units = None, 0
+    for raw in lines:
+        _, l = strip_mark(raw)
+        s = l.strip()
+        if re.match(r"^=====+.+=====+$", s):
+            big, mid, sub = s.strip("="), "", ""
+            prev = None
+            continue
+        if re.match(r"^【.+】$", s):
+            mid, sub = s, ""
+            prev = None
+            continue
+        if s == "+":
+            prev = None                       # 小分題換了，下一段一定另起一則
+            continue
+        if SIDE_RE.match(l):
+            src = s.split()[0]                # CNN／NHK
+            key = (src, big, mid, sub)
+            if key != prev:
+                units += 1
+            prev = key
+            continue
+        # 不是結構行、也不是側錄 TC 行，且不是通訊社素材行 → 當成小分題標題
+        if s and not LINE_RE.match(l):
+            # 內容行會緊跟在 TC 行後面；小分題標題出現時 prev 必為 None 或剛換過
+            if prev is None:
+                sub = s
+    return units
+
+
 def yt_blocks(lines):
     """回傳 [(網址行號, 網址, 備註行或 None)]。"""
     out = []
@@ -478,7 +517,11 @@ def header_from_lines(lines, window="", date="", mmdd="", alerts=()):
     if any(marked[m] for m in OVERNIGHT_MARKS):
         tail = "；隔夜續掃 " + "／".join(
             f"{m} {marked[m]}則" for m in OVERNIGHT_MARKS if marked[m])
-    out.append(f"收錄外電共{total}則（{'／'.join(parts)}）{tail}")
+    # 側錄則數**分開報、不併進總數**（2026-08-09 使用者選 A）：「共X則」是三站
+    # 清單對帳的依據，側錄沒有清單可對，併進去那個數字就不能拿來對帳了。
+    su = side_units(lines)
+    side_txt = f"　側錄 {su}則" if su else ""
+    out.append(f"收錄外電共{total}則（{'／'.join(parts)}）{side_txt}{tail}")
     # 第 4 行圖例：只要當份有用到任一時段標記就印（含 △），沒用到就不印
     legend = [f"{m}={MARKS[m]}" for m in MARKS if marked[m]]
     # 🟤 已播（2026-08-04）：同樣「有用到才印」——沒標到的日子不要多一段沒用的圖例。

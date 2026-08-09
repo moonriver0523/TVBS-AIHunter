@@ -586,6 +586,22 @@ def main():
             with open(html_out, "w", encoding="utf-8") as f:
                 f.write(rh.build_html(state, base, win))
             print(f"OK 已產出 HTML 檢視版 {html_out}")
+            # ⚠️ 側錄「則數」現在有**兩份算法**：txt 檔頭走 sv.side_units（解析文字），
+            #    網頁版走 JS（篩選會變動，必須在瀏覽器端算）。兩份遲早會漂移，
+            #    而症狀是「txt 說 X 則、網頁說 Y 則」——同一份資料兩個數字，
+            #    這種不一致最傷信任。所以每輪拿狀態檔的欄位再算一次當對照。
+            with open(args.out, encoding="utf-8") as f:
+                txt_units = sv.side_units(f.read().splitlines())
+            rows = [r for r in rh.collect(state, base) if r.get("kind") == "side"]
+            prev, js_units = None, 0
+            for r in rows:
+                k = (r["src"], r["big"], r["mid"], r["sub"])
+                if k != prev:
+                    js_units += 1
+                prev = k
+            if txt_units != js_units:
+                print(f"⚠️ 側錄則數兩邊不一致：txt 檔頭 {txt_units} 則／"
+                      f"網頁版 {js_units} 則——合併規則漂移了，看 sv.side_units")
         except Exception as e:                # noqa: BLE001
             print(f"⚠️ HTML 檢視版產出失敗（不影響 txt）：{type(e).__name__}: {e}")
 

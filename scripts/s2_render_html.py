@@ -124,10 +124,12 @@ TEMPLATE = """<!doctype html>
 <title>__TITLE__</title>
 <style>
 :root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#e3e3e3;--card:#fafafa;
-      --accent:#0b62d0;--chip:#eef2f7;--chipon:#0b62d0;--warn:#c00}
+      --accent:#0b62d0;--chip:#eef2f7;--chipon:#0b62d0;--warn:#c00;
+      --big:#d94a1f;--subbg:#3a3f47}
 @media (prefers-color-scheme:dark){
 :root{--bg:#16181c;--fg:#e8e8e8;--mut:#9aa0a6;--line:#2c3038;--card:#1d2026;
-      --accent:#6aa9ff;--chip:#252a32;--chipon:#2b6cb0;--warn:#ff6b6b}}
+      --accent:#6aa9ff;--chip:#252a32;--chipon:#2b6cb0;--warn:#ff6b6b;
+      --big:#ff7a4d;--subbg:#4a5058}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
      font:15px/1.7 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
@@ -207,10 +209,17 @@ button.act{padding:4px 10px;font-size:12px;border:1px solid var(--line);
   border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
 button.act:hover{border-color:var(--accent);color:var(--accent)}
 main{padding:6px 14px 60px}
-.big{margin:18px 0 6px;padding-bottom:3px;border-bottom:2px solid var(--line);
-     font-size:15px;font-weight:700;letter-spacing:.5px}
+/* 三層各給一種辨識方式（2026-08-09 使用者訂）：
+   大分類＝橘紅色字＋同色底線／中主題＝維持原本的 accent 色／小分題＝深底反白框。
+   ⚠️ 顏色要用 token 定義，深色模式才不會變成黑底上的深橘。 */
+.big{margin:18px 0 6px;padding-bottom:3px;border-bottom:2px solid var(--big);
+     font-size:15px;font-weight:700;letter-spacing:.5px;color:var(--big)}
 .mid{margin:12px 0 4px;font-weight:700;color:var(--accent)}
-.sub{margin:8px 0 2px;color:var(--mut);font-size:13px}
+.sub{margin:8px 0 2px;font-size:13px;color:var(--mut)}  /* 空清單提示沿用這個灰 */
+/* 小分題反白：底色掛在文字本身（inline-block），不是整條橫幅——
+   橫幅會跟上面的大分類底線打架，而且小分題常常很短，整條反白看起來像錯誤訊息。 */
+.sub .subtxt{display:inline-block;padding:2px 8px;border-radius:4px;
+     background:var(--subbg);color:#fff;font-weight:600}
 .hd{display:flex;align-items:center;gap:8px}
 .hd button{visibility:hidden}
 .hd:hover button{visibility:visible}
@@ -355,7 +364,9 @@ function draw(){
   // 混在一起算，就會出現「txt 說 222 則、網頁說 292 則」這種同資料兩個數字。
   const nWire=rows.filter(r=>r.kind!=='side').length, nSide=rows.length-nWire;
   const tWire=ROWS.filter(r=>r.kind!=='side').length;
-  // 側錄合併後「幾則」與原始「幾段」是兩個數字，**兩個都給**，不要讓人猜是哪個
+  // ⛔ 側錄**只報「則」，不准把「段」加回來**（2026-08-09 使用者兩度要求）：
+  // 「段」是資料格式的內部單位，AI 自己知道就好，出現在編輯畫面上只是雜訊。
+  // 要核帳看段數請看 s2_render.py 的對帳行——那個是印給 agent 的，要留著。
   let sideUnits=0, prev=null;
   rows.filter(r=>r.kind==='side').forEach(r=>{
     const k=[r.src,r.big,r.mid,r.sub].join('|');
@@ -363,7 +374,7 @@ function draw(){
     prev=k;
   });
   document.getElementById('cnt').textContent =
-    `${nWire} / ${tWire} 則` + (nSide ? `　側錄 ${sideUnits} 則（${nSide} 段）` : '');
+    `${nWire} / ${tWire} 則` + (nSide ? `　側錄 ${sideUnits} 則` : '');
   // 面板關起來時，光看浮動鈕就要知道有沒有在篩、篩了幾項——
   // 否則使用者會對著變少的清單納悶「東西怎麼變少了」。有篩時連顏色一起換。
   const nf=F.src.size+F.mark.size+F.big.size+(F.q?1:0);
@@ -397,7 +408,9 @@ function draw(){
       subs.forEach((its,sub)=>{
         if(sub){
           const sh=document.createElement('div'); sh.className='sub hd';
-          sh.append(document.createTextNode(sub));
+          // 反白底只包住文字本身，不要吃掉旁邊的「複製」鈕
+          const st=document.createElement('span'); st.className='subtxt'; st.textContent=sub;
+          sh.append(st);
           sh.append(btn(`複製（${its.length}）`,()=>copy(subText(sub,its),`已複製「${sub}」${its.length} 則`)));
           list.append(sh);
         }
