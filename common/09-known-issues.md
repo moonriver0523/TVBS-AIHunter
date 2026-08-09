@@ -56,6 +56,16 @@
 **症狀：** 對「掃帶歐印萬」資料夾（或其他大型雲端同步資料夾）直接下 `ls -la`／`grep -r` 整個目錄，出現大量 `No such file or directory` 錯誤（舊檔案檔名含 emoji／特殊符號，讓 Bash 引號解析失敗），或 `Grep`／`rg` 20 秒逾時。
 **解法：** 不要對整個資料夾做 `ls -la` 或 `grep -r`。**先用 `find -newermt` 按時間窄縮範圍**（例如只抓最近 1~2 天修改的檔案），再對縮小後的結果 `grep` 關鍵字；需要確認特定檔名是否存在時，優先用 `Glob` 工具而非 Bash `ls`（`Glob` 不受檔名特殊字元影響 shell 解析）（2026-07-24「破一百1200」案例，找 210219/210329 對應側錄檔時踩到）。**搜尋範圍一律排除 `Archive` 子資料夾**（2026-07-24 訂定，見 [`01-shared-folders.md`](01-shared-folders.md)）——裡面是舊資料，不但會跟新素材搞混，也會拖慢掃描。
 
+## S2 狀態檔：改素材文字時 `raw_entry` 與 `fields` 要一起改
+
+**症狀：** 改完某則的文字後，txt 看起來完全乾淨，**HTML 的搜尋卻還搜得到舊字**。
+**原因：** 每則同時存 `raw_entry`（成品文字，render 直接輸出）與 `fields`
+（`codes`／`notes`／`summary`／`footage`／`bite` 拆好的欄位，**網頁版的搜尋索引吃的是這個**）。
+只改 `raw_entry` 會留下一份看不見的舊資料。
+**解法：** 改來源名稱、代碼、備註這類會同時出現在兩邊的字串時，兩個欄位一起改再 render。
+（2026-08-09 實例：`(中央社)`→`(CNA)` 只改了 `raw_entry`，`fields.notes` 裡的
+`["中央社","BITE"]` 沒動，txt 是 0 命中、HTML 還搜得到。）
+
 ## validate_sot.py
 
 **症狀：** SOT 稿件裡 CNN 六碼側錄的 SB TC 欄位依 [`common/00-寫稿通則.md`](00-寫稿通則.md) 寫成 `CNN HHMMSS-HHMMSS`（例如 `CNN 210215-210234`），跑 `validate_sot.py` 卻回報「TC 欄位格式無法辨識」。
