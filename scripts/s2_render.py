@@ -528,6 +528,8 @@ def main():
     p.add_argument("--no-check", action="store_true", help="render 後不自動跑品質掃")
     p.add_argument("--no-topic-check", action="store_true",
                    help="render 後不自動跑同名小分題跨大分類重複偵測")
+    p.add_argument("--no-html", action="store_true",
+                   help="不順便產出 HTML 檢視版（預設會產，給編輯用手機看的那份）")
     args = p.parse_args()
 
     state = load_state(args.file)
@@ -565,6 +567,23 @@ def main():
                   f"確認後用 set-category 手動改（純提示，不影響本次已寫入的 txt）")
         else:
             print("OK 主題重複偵測 0 命中")
+
+    # HTML 檢視版：txt 旁邊順手產一份（2026-08-09）。編輯用手機開 Apps Script
+    # 網址看的就是它，所以**每輪都要跟著更新**，否則手機上看到的是舊資料。
+    # ⛔ **失敗絕不可以影響 txt**——txt 是權威產物、HTML 只是衍生檢視層，
+    #    為了一個附屬品讓收工整個失敗是本末倒置。所以整段包在 try 裡。
+    if not args.no_html:
+        try:
+            import s2_render_html as rh
+            html_out = re.sub(r"\.txt$", ".html", args.out)
+            if html_out == args.out:          # --out 不是 .txt 結尾就別亂猜
+                html_out = args.out + ".html"
+            with open(html_out, "w", encoding="utf-8") as f:
+                f.write(rh.build_html(state, base, win))
+            print(f"OK 已產出 HTML 檢視版 {html_out}")
+        except Exception as e:                # noqa: BLE001
+            print(f"⚠️ HTML 檢視版產出失敗（不影響 txt）：{type(e).__name__}: {e}")
+
     warn_unreconciled(state)      # 放最後：收工前最後看到的就是這行
 
 
