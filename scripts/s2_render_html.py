@@ -79,10 +79,17 @@ def collect(state, base_mmdd):
                         continue
                     text = "\n".join(lines)
                     f = it.get("fields") or {}
+                    src = it.get("source") or ""
+                    # 三類要分開算、也要能分開篩（2026-08-09）：
+                    #   wire＝通訊社三段式素材／url＝YouTube 等網址素材／side＝CNN、NHK 側錄
+                    # ⚠️ 檔頭的「收錄外電共 N 則」**含 YT（算「其他」）、不含側錄**
+                    #   （0802 訂案：一段連線常切成十幾個 TC，計入會把則數灌爆）。
+                    #   網頁版的筆數必須照同一套語意，否則同一份資料兩個數字，編輯會困惑。
+                    kind = "side" if src.startswith("SIDE_") else ("url" if src == "YT" else "wire")
                     rows.append({
                         "big": big or "", "mid": mid or "", "sub": sub or "",
                         "id": it.get("id") or "",
-                        "src": it.get("source") or "",
+                        "src": src, "kind": kind,
                         "mark": R.mark_for(it.get("first_seen_checkpoint") or "", base_mmdd) or "",
                         "cp": it.get("first_seen_checkpoint") or "",
                         "dur": f.get("duration") or "",
@@ -218,6 +225,10 @@ main{padding:6px 14px 60px}
       border-radius:6px;align-items:flex-start}
 .item:hover{background:var(--card);border-color:var(--line)}
 .item .txt{flex:1;white-space:pre-wrap;word-break:break-word}
+/* 側錄／網址素材與三段式素材行視覺區隔——側錄是逐字稿、篇幅大得多，
+   不分開的話會在清單裡壓過真正的外電素材（0802 實測占 30%）。 */
+.item.side{border-left:3px solid var(--mut);padding-left:8px}
+.item.url{border-left:3px solid var(--accent);padding-left:8px}
 .mark{flex:none;width:1.4em;text-align:center;font-size:15px}
 .item button{visibility:hidden;flex:none}
 .item:hover button{visibility:visible}
@@ -273,6 +284,9 @@ main{padding:6px 14px 60px}
 <script>
 const ROWS = __ROWS__;
 const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■ 晨班","◆":"◆ 早班"};
+// 篩選鈕上不要出現 SIDE_CNN 這種內部代碼——那是給程式看的，不是給編輯看的
+const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","YT":"網址素材",
+                   "CNN_newsource":"NS","CNN":"NS"};
 const F = {src:new Set(), mark:new Set(), big:new Set(), q:""};
 
 function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
@@ -333,7 +347,12 @@ function btn(label, fn){
 function draw(){
   const list=document.getElementById('list'); list.innerHTML='';
   const rows=ROWS.filter(pass);
-  document.getElementById('cnt').textContent=`${rows.length} / ${ROWS.length} 則`;
+  // 筆數照 txt 檔頭的語意算：素材（含網址素材）與側錄**分開報**。
+  // 混在一起算，就會出現「txt 說 222 則、網頁說 292 則」這種同資料兩個數字。
+  const nWire=rows.filter(r=>r.kind!=='side').length, nSide=rows.length-nWire;
+  const tWire=ROWS.filter(r=>r.kind!=='side').length;
+  document.getElementById('cnt').textContent =
+    `${nWire} / ${tWire} 則` + (nSide ? `　側錄 ${nSide} 段` : '');
   // 面板關起來時，光看浮動鈕就要知道有沒有在篩、篩了幾項——
   // 否則使用者會對著變少的清單納悶「東西怎麼變少了」。有篩時連顏色一起換。
   const nf=F.src.size+F.mark.size+F.big.size+(F.q?1:0);
@@ -372,7 +391,10 @@ function draw(){
           list.append(sh);
         }
         its.forEach(r=>{
-          const d=document.createElement('div'); d.className='item';
+          const d=document.createElement('div');
+          // 側錄是逐字稿、篇幅遠大於三段式素材行，混在一起會壓過真正的素材。
+          // 給一條左邊界當視覺區隔，讓人一眼分得出「這不是外電素材」。
+          d.className='item'+(r.kind==='side'?' side':'')+(r.kind==='url'?' url':'');
           const mk=document.createElement('span'); mk.className='mark'; mk.textContent=r.mark;
           const tx=document.createElement('div'); tx.className='txt';
           tx.textContent=r.text.replace(/^\\s*[△▲■◆●]\\s*/,'');
@@ -410,7 +432,11 @@ document.getElementById('reset').onclick=()=>{
   document.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'));
   draw();
 };
-chips('fsrc','src',uniq('src'));
+// 來源排序：三站在前、側錄與網址素材在後，跟閱讀習慣一致
+chips('fsrc','src',uniq('src').sort((a,b)=>{
+  const w=s=>s.startsWith('SIDE_')?2:(s==='YT'?1:0);
+  return w(a)-w(b) || a.localeCompare(b);
+}),SRC_LABEL);
 chips('fmark','mark',uniq('mark'),MARK_LABEL);
 chips('fbig','big',uniq('big'));
 
