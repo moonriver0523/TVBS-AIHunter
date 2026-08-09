@@ -140,7 +140,54 @@ h1{font-size:17px;margin:0}
 .stamp{margin-left:auto;color:var(--mut);font-size:12px;white-space:nowrap}
 .stamp.stale{color:var(--warn);font-weight:600}
 .off{display:none!important}
-#fToggle.on{background:var(--chipon);color:#fff;border-color:var(--chipon)}
+
+/* ══ 篩選面板 ══════════════════════════════════════════════════
+   桌機：常駐左側欄（橫向空間本來就有，不必開關）
+   手機：下方彈出，**蓋住**下半螢幕而不推擠內容——「一展開就把素材往下推」
+        正是 2026-08-09 使用者回報的痛點，換成側邊只是把方向改成往旁邊推，
+        同樣沒解決，所以用覆蓋式。拇指落點也在螢幕下方，比側邊好按。 */
+#panel{}
+.grip{display:none}
+.phead{display:none}
+.fgroup{margin-bottom:10px}
+.flabel{font-size:12px;color:var(--mut);margin-bottom:2px}
+#scrim{display:none}
+#fab{display:none}
+
+/* ── 桌機：常駐左側欄 ── */
+@media (min-width:820px) and (hover:hover){
+  body{display:grid;grid-template-columns:200px 1fr;grid-template-areas:"panel top" "panel sticky" "panel main"}
+  .top{grid-area:top}
+  .sticky{grid-area:sticky}
+  main{grid-area:main}
+  #panel{grid-area:panel;position:sticky;top:0;align-self:start;max-height:100vh;
+         overflow:auto;padding:12px;border-right:1px solid var(--line)}
+  #panel .bar{margin-top:2px}
+  .chip{font-size:12px;padding:3px 8px}
+}
+
+/* ── 手機／窄螢幕：下方彈出 ── */
+@media (max-width:819px),(hover:none),(pointer:coarse){
+  #panel{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--bg);
+         border-top:1px solid var(--line);border-radius:14px 14px 0 0;
+         padding:6px 14px 18px;max-height:62vh;overflow:auto;
+         box-shadow:0 -6px 24px rgba(0,0,0,.25);
+         transform:translateY(102%);transition:transform .22s ease}
+  #panel.open{transform:translateY(0)}
+  .grip{display:block;width:38px;height:4px;border-radius:2px;background:var(--line);
+        margin:2px auto 8px}
+  .phead{display:flex;align-items:center;justify-content:space-between;
+         font-weight:700;margin-bottom:8px}
+  #scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.35);
+         z-index:59;opacity:0;pointer-events:none;transition:opacity .22s}
+  #scrim.open{opacity:1;pointer-events:auto}
+  /* 浮動鈕放右下角＝拇指自然落點 */
+  #fab{display:block;position:fixed;right:14px;bottom:16px;z-index:58;
+       padding:11px 18px;font-size:14px;font-weight:700;border:none;border-radius:22px;
+       background:var(--accent);color:#fff;box-shadow:0 3px 12px rgba(0,0,0,.3)}
+  #fab.on{background:var(--warn)}
+  main{padding-bottom:76px}   /* 別讓最後一則被浮動鈕蓋住 */
+}
 .alert{color:var(--warn);font-weight:600}
 .bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
 input[type=search]{flex:1;min-width:180px;padding:7px 10px;font-size:14px;
@@ -197,19 +244,25 @@ main{padding:6px 14px 60px}
 <div class="sticky">
   <div class="bar">
     <input type="search" id="q" placeholder="搜尋代碼、摘要、畫面、BITE…">
-    <button class="act" id="fToggle">篩選</button>
     <span id="cnt" class="count"></span>
   </div>
-  <div id="panel">
-    <div class="bar" id="fsrc"></div>
-    <div class="bar" id="fmark"></div>
-    <div class="bar" id="fbig"></div>
-    <div class="bar">
-      <button class="act" id="copyAll">複製目前篩選結果</button>
-      <button class="act" id="reset">清除篩選</button>
-    </div>
-  </div>
 </div>
+
+<!-- 篩選面板：手機＝下方彈出（蓋住下半、不推擠內容）；桌機＝常駐左側欄。
+     兩種版型共用同一段 DOM，差別全在 CSS，避免維護兩套。 -->
+<div id="scrim"></div>
+<aside id="panel">
+  <div class="grip" id="grip"></div>
+  <div class="phead">篩選<button class="act" id="closeF">關閉</button></div>
+  <div class="fgroup"><div class="flabel">來源</div><div class="bar" id="fsrc"></div></div>
+  <div class="fgroup"><div class="flabel">時段</div><div class="bar" id="fmark"></div></div>
+  <div class="fgroup"><div class="flabel">大分類</div><div class="bar" id="fbig"></div></div>
+  <div class="fgroup bar">
+    <button class="act" id="copyAll">複製目前篩選結果</button>
+    <button class="act" id="reset">清除篩選</button>
+  </div>
+</aside>
+<button id="fab">篩選</button>
 <main id="list"></main>
 <div class="toast" id="toast"></div>
 <div id="modal"><div class="box">
@@ -281,10 +334,12 @@ function draw(){
   const list=document.getElementById('list'); list.innerHTML='';
   const rows=ROWS.filter(pass);
   document.getElementById('cnt').textContent=`${rows.length} / ${ROWS.length} 則`;
-  // 篩選面板收起來時，光看鈕就要知道現在有沒有在篩、篩了幾項——
-  // 否則使用者會對著被篩掉的清單納悶「東西怎麼變少了」。
+  // 面板關起來時，光看浮動鈕就要知道有沒有在篩、篩了幾項——
+  // 否則使用者會對著變少的清單納悶「東西怎麼變少了」。有篩時連顏色一起換。
   const nf=F.src.size+F.mark.size+F.big.size+(F.q?1:0);
-  document.getElementById('fToggle').textContent = nf ? `篩選 (${nf})` : '篩選';
+  const fab=document.getElementById('fab');
+  fab.textContent = nf ? `篩選 (${nf})` : '篩選';
+  fab.classList.toggle('on', nf>0);
   // 分組時保持 ROWS 的原順序（那就是 txt 的順序）
   const tree=new Map();
   rows.forEach(r=>{
@@ -379,17 +434,30 @@ function toggle(el, caret){
   if(caret) caret.classList.toggle('open', !el.classList.contains('off'));
 }
 $('metaTgl').onclick=()=>toggle($('meta'), $('metaCaret'));
-$('fToggle').onclick=()=>{
-  toggle($('panel'));
-  $('fToggle').classList.toggle('on', !$('panel').classList.contains('off'));
-};
 
-if(isTouch){                       // 手機：兩塊都先收起來
+// ── 篩選面板開關（手機才需要；桌機是常駐側欄，這些 class 不影響它）──
+function openF(on){
+  $('panel').classList.toggle('open', on);
+  $('scrim').classList.toggle('open', on);
+}
+$('fab').onclick   = ()=>openF(!$('panel').classList.contains('open'));
+$('closeF').onclick= ()=>openF(false);
+$('scrim').onclick = ()=>openF(false);          // 點外面關閉
+// 下滑關閉：手機上比找關閉鈕自然
+let ty0=null;
+$('grip').addEventListener('touchstart',e=>{ty0=e.touches[0].clientY;},{passive:true});
+$('grip').addEventListener('touchmove',e=>{
+  if(ty0!==null && e.touches[0].clientY-ty0>40){ openF(false); ty0=null; }
+},{passive:true});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') openF(false); });
+
+// 檔頭資訊：手機先收起來把螢幕讓給素材；桌機空間夠就攤開。
+// ⚠️ 篩選面板不在這裡控制——它的開關由 CSS 版型決定（桌機常駐、手機彈出），
+//    用 JS 加 .off 會把桌機的側欄也一起藏掉。
+if(isTouch){
   $('meta').classList.add('off');
-  $('panel').classList.add('off');
-}else{                             // 桌機空間夠，維持全開
+}else{
   $('metaCaret').classList.add('open');
-  $('fToggle').classList.add('on');
 }
 draw();
 </script></body></html>
