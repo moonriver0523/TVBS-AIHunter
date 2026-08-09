@@ -297,6 +297,13 @@ def group_items(state, base_mmdd=""):
         big, mid, sub = cat_of(it)
         if not big:
             big = "話題"                              # 沒分類的落到最後一格，不遺失
+            if not mid:
+                # ⚠️ 中主題留白會在交接單印出**一行空標題**，編輯完全看不出那底下是什麼
+                # （0810-0100 實例：`PO-19SU` 稿未到、站方欄位全空，agent 沒給分類，
+                #   話題格底下就冒出一個 `【】`）。給它一個看得懂的名字，
+                #   讓「這則還沒歸位」變成**明講的狀態**而不是版面瑕疵。
+                # ⛔ 不要在這裡猜它該掛哪一格——猜錯比留白更糟，那會讓錯的分類看起來像對的。
+                mid = "未分類"
         groups.setdefault(big, {}).setdefault(mid, {}).setdefault(sub, []).append(it)
     # 中主題重排：相近名稱靠攏（小分題與素材順序完全不動）
     if base_mmdd not in TOPIC_ORDER_SKIP_MMDD:
