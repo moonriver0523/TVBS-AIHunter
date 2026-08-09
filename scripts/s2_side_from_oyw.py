@@ -155,6 +155,19 @@ def segments(body):
     return [tuple(x) for x in out]
 
 
+def source_of(path, fallback="CNN"):
+    """從檔名認來源。⚠️ **不要靠 `--source` 手動給**：一個資料夾裡 CNN 與 NHK
+    混放，用單一 `--source` 跑整個資料夾，另一台的檔案會全部被貼錯前綴——
+    而錯的前綴讓 id 對不上，症狀是「明明入庫了卻判定沒入庫」（2026-08-09 實錯，
+    歸檔腳本用預設 CNN 掃到 NHK 檔，4 支全被判成一段都沒入庫）。
+    """
+    b = os.path.basename(path)
+    for src in ("NHK", "CNN"):
+        if src in b:
+            return src
+    return fallback
+
+
 def hints(raw, path):
     """給 agent 判歸位／小分題用的線索。⚠️ 不寫進候選檔。"""
     base = os.path.basename(path)
@@ -190,7 +203,8 @@ def main():
     ap = argparse.ArgumentParser(description="歐印萬 .wav.txt → S2b 側錄候選 TXT")
     ap.add_argument("--dir", default=DEFAULT_DIR, help="來源資料夾")
     ap.add_argument("--files", nargs="*", help="指定檔案（省略＝掃整個資料夾）")
-    ap.add_argument("--source", default="CNN", help="來源前綴（CNN／NHK）")
+    ap.add_argument("--source", default=None,
+                    help="來源前綴；省略＝從檔名自動認（CNN／NHK），認不出才用 CNN")
     ap.add_argument("--out", help="候選 TXT 輸出路徑（省略＝只印報告不寫檔）")
     ap.add_argument("--since", help="只收 mtime 晚於此時間的檔（HH:MM 或 MM-DD HH:MM）")
     ap.add_argument("--report", action="store_true", help="印出歸位線索")
@@ -228,8 +242,9 @@ def main():
         #    而 dedup id 是 `CNN MM-DD 6碼`，日期錯＝新內容被當成已入庫而靜靜消失。
         d = f"{datetime.fromtimestamp(os.path.getmtime(p)):%m-%d}"
         kw, bullets = hints(raw, p)
+        src = args.source or source_of(p)
         for tc6, role, text in segs:
-            head = f"{args.source} {d} {tc6}"
+            head = f"{src} {d} {tc6}"
             if role:
                 head += f" （{role}）"
             cand.append(head)

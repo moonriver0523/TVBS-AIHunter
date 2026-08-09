@@ -55,7 +55,8 @@ def main():
     ap = argparse.ArgumentParser(description="歐印萬已入庫素材歸檔到日期資料夾")
     ap.add_argument("--dir", default=OYW.DEFAULT_DIR, help="來源資料夾")
     ap.add_argument("--state", required=True, help="狀態檔路徑")
-    ap.add_argument("--source", default="CNN", help="來源前綴（CNN／NHK）")
+    ap.add_argument("--source", default=None,
+                    help="來源前綴；省略＝從檔名自動認（見 OYW.source_of）")
     ap.add_argument("--dry-run", action="store_true", help="只列出要搬什麼，不動檔案")
     ap.add_argument("--max-miss", type=int, default=None,
                     help="容許幾段未入庫仍照搬（省略＝max(1, 總段數×10%%)）")
@@ -78,8 +79,11 @@ def main():
             continue
         d = f"{datetime.fromtimestamp(os.path.getmtime(p)):%m-%d}"
         segs = OYW.segments(body)
-        hit = [t for t, _, _ in segs if f"{args.source} {d} {t}" in ids]
-        miss = [t for t, _, _ in segs if f"{args.source} {d} {t}" not in ids]
+        # ⚠️ 來源要**逐檔**從檔名認，不能整批套同一個 `--source`——CNN 與 NHK
+        #    混在同一個資料夾，套錯前綴 id 就對不上，已入庫的會被判成沒入庫。
+        src = args.source or OYW.source_of(p)
+        hit = [t for t, _, _ in segs if f"{src} {d} {t}" in ids]
+        miss = [t for t, _, _ in segs if f"{src} {d} {t}" not in ids]
         if not hit:
             print(f"⏭ {base}：{len(segs)} 段一段都沒入庫 → 留在根目錄")
             skipped += 1
@@ -102,8 +106,10 @@ def main():
         if not args.dry_run:
             os.makedirs(dest, exist_ok=True)
         for suf in SUFFIXES:
-            src = os.path.join(args.dir, base + suf)
-            if not os.path.exists(src):
+            # ⚠️ 別叫 `src`——上面的來源前綴已經佔用那個名字，撞號現在剛好無害
+            #    （用完才被蓋掉），但下次有人在迴圈後面加一行用到前綴就中招。
+            srcpath = os.path.join(args.dir, base + suf)
+            if not os.path.exists(srcpath):
                 print(f"     ⚠️ 缺 {suf}")
                 continue
             if args.dry_run:
@@ -113,7 +119,7 @@ def main():
             if os.path.exists(tgt):
                 print(f"     ⚠️ 目的地已有同名檔，跳過 {suf}")
                 continue
-            shutil.move(src, tgt)
+            shutil.move(srcpath, tgt)
             print(f"     ✓ {suf}")
         moved += 1
 
