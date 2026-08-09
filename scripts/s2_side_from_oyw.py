@@ -30,7 +30,7 @@ import argparse
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Windows 主控台預設 cp950，印不出 `▸`／`■` 會整支炸掉（不是資料問題卻長得像）
 for _s in (sys.stdout, sys.stderr):
@@ -147,7 +147,12 @@ def hints(raw, path):
 
 
 def role_runs(segs):
-    """角色連續段＝一個小分題的候選（使用者 2026-08-09 定案：換講者就換小分題）。"""
+    """角色連續段＝一個小分題的候選（使用者 2026-08-09 定案：換講者就換小分題）。
+
+    ⚠️ 只比對角色的第一個詞，所以 `記者 A` → `記者 B` 會併成同一段。這是**線索**
+    不是判決，最終切點由 agent 判；實際資料裡角色都是交錯的，沒踩到。
+    不要把它「修」成硬規則。
+    """
     runs = []
     for tc6, role, _ in segs:
         key = re.sub(r"\s+.*$", "", role)          # `記者 Ivan Watson` → `記者`
@@ -173,9 +178,13 @@ def main():
         if f.endswith(".wav.txt")
     )
     if args.since:
-        cut = args.since if " " in args.since else \
-            f"{datetime.now():%m-%d} {args.since}"
-        cutd = datetime.strptime(f"{datetime.now():%Y}-{cut}", "%Y-%m-%d %H:%M")
+        now = datetime.now()
+        cut = args.since if " " in args.since else f"{now:%m-%d} {args.since}"
+        cutd = datetime.strptime(f"{now:%Y}-{cut}", "%Y-%m-%d %H:%M")
+        # ⚠️ 跨夜：01:00 那輪下 `--since 23:00`，配今天的日期會算出**未來時間**，
+        #    於是一支都收不到——不會報錯，只會靜靜空手而回。算出未來就退一天。
+        if " " not in args.since and cutd > now:
+            cutd -= timedelta(days=1)
         paths = [p for p in paths
                  if datetime.fromtimestamp(os.path.getmtime(p)) >= cutd]
 
