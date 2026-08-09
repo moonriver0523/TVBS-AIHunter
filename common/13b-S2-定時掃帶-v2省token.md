@@ -171,7 +171,13 @@ const clean = (h) => decodeEnt(
     src:   it.source,            // CCTV／CNS／第三方判定用
     restr: it.restrictions,      // ⚠️ 純字串不是陣列
     story,
-    sb_count: (story.match(/SOUNDBITE/gi) || []).length   // 🎯 BITE 機械計數
+    // 🎯 BITE 機械計數。⚠️ **不可加 `i` 旗標**（2026-08-09 實錯訂正）：
+    // shotlist 的標記一律大寫 `(SOUNDBITE)`，但**版權樣板用小寫**——
+    // `"2 minutes of soundbites or interviews"` 這句話幾乎每則 SNTV 體育都有，
+    // 帶 `i` 就會把它數進去。AP5467117（Swiatek 網球）因此被算成 2 個 SOUNDBITE，
+    // 但整份稿一句引言都沒有。**這個方向的誤判比漏數更糟**：漏數只是少擋一次，
+    // 多數會讓 agent 硬去湊一段根本不存在的 BITE。
+    sb_count: (story.match(/SOUNDBITE/g) || []).length
   };
   ```
 
@@ -245,7 +251,9 @@ const clean = (h) => decodeEnt(
       rights: s.rightsline, line: s.dateline || s.locationline,
       dur:  (s.shots && s.shots[0] && s.shots[0].end) || '',  // ⚠️ 沒有 duration 欄位，時長由 shots[0].end 推
       comp: s.compositiontype,
-      sb_count: (script.match(/SOUNDBITE/gi) || []).length,   // 🎯 BITE 機械計數
+      // 🎯 BITE 機械計數。⚠️ **不可加 `i` 旗標**，理由同 RT 那段（AP5467117 實錯）：
+      // 版權樣板的小寫 `soundbites` 會被數進去，SNTV 體育幾乎每則都有那句。
+      sb_count: (script.match(/SOUNDBITE/g) || []).length,
       has_sot: /SOT/i.test(s.editorialrole || ''),            // 🎯 VOSOT／SOT 形式＝必有訪問聲音
       prelim: /^\s*\+\+\s*PRELIMINARY SCRIPT/i.test(script)   // 🎯 初稿：只認開頭，內文提到不算
     };

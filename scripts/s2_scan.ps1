@@ -151,12 +151,23 @@ try {
     # `0807-s2-state.json`。拿日曆日 `0808` 去找檔案永遠找不到，
     # 結果是**成功的一輪被誤報成異常**。誤報比漏報更傷——會把警告訓練成雜訊。
     # 改成反過來找：哪一份狀態檔的 checkpoint 等於本輪，那份就是。
+    # ⚠️ **不能只認頂層 checkpoint**（0809-0800 實錯）：那一輪收了 13 則、也做了三站對帳，
+    # 但 agent **忘了 set-top**，頂層仍停在 `0809-0700`。結果這裡找不到檔案 → 誤報
+    # 「本輪 0 則、txt 沒產出」，而實際上東西都在。**誤報比漏報更傷，會把警告訓練成雜訊。**
+    # 改成兩條路都認：頂層 checkpoint 相符 **或** 裡面有本輪寫進去的素材。
+    # 兩者的差別本身就是有用的訊號——見下方 $topStale。
     $statePath = $null
+    $topStale = $false
     foreach ($f in Get-ChildItem $StateDir -Filter '*-s2-state.json' -File |
                    Sort-Object LastWriteTime -Descending) {
         try {
             $j = Get-Content $f.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+            $hasItems = @($j.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint }).Count -gt 0
             if ($j.checkpoint -eq $Checkpoint) { $statePath = $f.FullName; $st = $j; break }
+            if ($hasItems) {
+                # 有本輪的素材、但頂層沒推進＝忘了 set-top
+                $statePath = $f.FullName; $st = $j; $topStale = $true; break
+            }
         } catch { }
     }
     $added = -1
@@ -174,6 +185,13 @@ try {
     if (-not $txtOk) { $bad += 'txt 沒產出' }
     if ($added -eq 0) { $bad += '本輪 0 則——多半是三站都進不去，不是真的沒素材' }
     if ($added -lt 0) { $bad += "找不到 checkpoint=$Checkpoint 的狀態檔——該輪可能整個沒跑完" }
+    # 素材有進來、頂層卻沒推進：東西沒丟，但 render 的對帳查核會去查上一輪的紀錄
+    # 而誤放行（0809-0800 實錯）。單獨列一條，不要跟「整輪沒跑」混在一起。
+    if ($topStale) {
+        $bad += "本輪素材有寫入但**頂層 checkpoint 沒推進**（忘了 set-top）——" +
+                "會讓 render 的對帳查核查到上一輪紀錄而誤放行；補跑 " +
+                "``s2_state.py set-top checkpoint $Checkpoint``"
+    }
     Write-Run ("DONE`t離開碼=$code`t耗時=${mins}分`t本輪新增=$added 則`ttxt=$txtOk" +
                $(if ($bad) { "`t⚠️ $($bad -join '；')" } else { '' }))
     if ($bad) {

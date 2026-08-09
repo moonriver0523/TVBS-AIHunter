@@ -475,6 +475,26 @@ def warn_unreconciled(state):
     # 而誤報的下場是這個警告被當成雜訊、然後被忽略，等於白做。
     top = state.get("_top") if isinstance(state.get("_top"), dict) else state
     cp = top.get("checkpoint") or ""
+
+    # 🔴 **先確認 checkpoint 有推進，否則底下的對帳查核會被騙過去**（2026-08-09 實錯）。
+    # 0809-0800 那輪：agent 收了 13 則、也做了三站對帳，**但忘了 set-top**，
+    # 頂層 checkpoint 停在 `0809-0700`。於是這道防線去查 0700 的紀錄、看到齊全就放行——
+    # **漏做 set-top 會順便讓對帳查核失效**，兩個問題疊在一起變成無聲通過。
+    # 判準：狀態檔裡若存在「比頂層 checkpoint 還新」的 first_seen_checkpoint，
+    # 就代表有輪次寫了東西進來卻沒登記。
+    items = state.get("items") or []
+    seen = {str(i.get("first_seen_checkpoint")) for i in items if isinstance(i, dict)}
+    seen.discard("None")
+    newer = sorted(c for c in seen if c > cp) if cp else []
+    if newer:
+        bar = "!" * 60
+        print(f"\n{bar}\n⚠️  頂層 checkpoint 是 {cp}，但狀態檔裡已有更新的輪次：{'／'.join(newer)}")
+        print("    → 那一輪忘了 set-top。後果有三個，第三個最危險：")
+        print("      ① 外殼查核找不到狀態檔，誤報「本輪 0 則／txt 沒產出」")
+        print("      ② 對帳留痕被記到上一輪的格子裡")
+        print("      ③ **下面的對帳查核會去查上一輪的紀錄，看到齊全就放行**")
+        print(f"    補救：python scripts/s2_state.py set-top checkpoint {newer[-1]}\n{bar}")
+
     log = top.get("reconcile_log")
     log = log if isinstance(log, dict) else {}   # 手改過的狀態檔什麼型別都可能
     done = log.get(cp)

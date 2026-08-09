@@ -99,5 +99,40 @@ for label, s in (("_top 缺", {"items": {}}),
     except Exception as e:                        # noqa: BLE001
         report(f"髒資料不炸（{label}）", False, f"{type(e).__name__}: {e}")
 
+# ── set-top 漏做：對帳查核會被上一輪的成績騙過去（2026-08-09 實錯）────
+# 0809-0800 那輪收了 13 則、也做了三站對帳，但 agent 忘了 set-top，頂層停在
+# 0809-0700。這道查核去查 0700、看到齊全就放行——**漏做 set-top 會順便讓
+# 對帳查核失效**，兩個問題疊起來變成無聲通過。
+def st_items(cp, log, seen):
+    """seen＝狀態檔裡出現過的 first_seen_checkpoint（模擬素材已寫入）"""
+    s = st(cp, log)
+    s["items"] = [{"id": f"X{n}", "first_seen_checkpoint": c} for n, c in enumerate(seen)]
+    return s
+
+
+out = cap(st_items("0809-0700", {"0809-0700": FULL}, ["0809-0700", "0809-0800"]))
+report("素材比頂層 checkpoint 新 → 抓出「忘了 set-top」",
+       "忘了 set-top" in out, out.strip()[:60])
+report("並且點名是哪一輪沒登記", "0809-0800" in out)
+report("補救指令語法正確（set-top checkpoint X，不是 --checkpoint）",
+       "set-top checkpoint 0809-0800" in out and "--checkpoint" not in out)
+
+out = cap(st_items("0809-0800", {"0809-0800": FULL}, ["0809-0700", "0809-0800"]))
+report("checkpoint 有推進時不要誤報", "忘了 set-top" not in out, out.strip()[:60])
+
+out = cap(st_items("0809-0800", {"0809-0800": FULL}, ["0809-0800", None, None]))
+report("first_seen_checkpoint 是 None 的舊資料不觸發誤報",
+       "忘了 set-top" not in out, out.strip()[:60])
+
+for label, s in (("items 是 dict（舊格式）", st("0809-0700", {"0809-0700": FULL})),
+                 ("items 裡混入非 dict",
+                  {"_top": {"checkpoint": "0809-0700"},
+                   "items": ["壞掉的資料", {"first_seen_checkpoint": "0809-0800"}]})):
+    try:
+        cap(s)
+        report(f"髒資料不炸（{label}）", True)
+    except Exception as e:                        # noqa: BLE001
+        report(f"髒資料不炸（{label}）", False, f"{type(e).__name__}: {e}")
+
 print("\n" + ("全部通過" if ok else "有項目失敗"))
 sys.exit(0 if ok else 1)
