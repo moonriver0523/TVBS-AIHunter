@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""s2_side_from_oyw 擷取邏輯測試——三種產生器變體 ＋ 兩道防線。
+
+跑法：python scripts/test_s2_side_from_oyw.py
+"""
+import sys
+
+import s2_side_from_oyw as M
+
+FAIL = []
+
+
+def eq(name, got, want):
+    if got != want:
+        FAIL.append(f"{name}\n    got : {got!r}\n    want: {want!r}")
+
+
+ZH = "15:01:02-15:01:18 （主播）今天先看白宮的回應。"
+EN = "15:01:02-15:01:18 (Host) We start at the White House today, where officials say."
+
+# ── 變體 A：### 中文 ### → 文稿 → TC 段 ──────────────────────────────
+A = f"\n### 中文 ###\n\n文稿\n{ZH}\n\n時間軸\n- 15:01:02\n\n### 原文 ###\n文稿\n{EN}\n"
+# ── 變體 B：### 中文 ### 之後**沒有**『文稿』行（150102／150648／160106）──
+B = f"\n### 中文 ###\n\n{ZH}\n\n時間軸\n- 15:01:02\n\n### 原文 ###\n文稿\n{EN}\n"
+# ── 變體 C：完全沒有 ### 標頭（163927）──────────────────────────────
+C = f"- 重點一。\n\n#####\n\n文稿\n{ZH}\n\n時間軸\n- 15:01:02\n\n#####\n\n文稿\n{EN}\n"
+
+for name, raw in (("變體A", A), ("變體B", B), ("變體C", C)):
+    body, err = M.extract_zh(raw)
+    eq(f"{name} 應擷取成功", err, None)
+    if err:
+        continue
+    segs = M.segments(body)
+    eq(f"{name} 段數", len(segs), 1)
+    eq(f"{name} 內容", segs[0], ("150102", "主播", "今天先看白宮的回應。"))
+
+# ── 防線一：中文段沒 `文稿` 而錨點滑到原文段 → CJK 防呆要擋下 ──────────
+body, err = M.extract_zh(f"### 原文 ###\n文稿\n{EN}\n時間軸\n")
+eq("英文段要被擋下", err is not None and "中文" in err, True)
+
+# ── 防線二：連錨點都沒有 ────────────────────────────────────────────
+_, err = M.extract_zh(f"{ZH}\n")
+eq("無錨點要回報", err is not None, True)
+
+# ── 巢狀括號：外半形、內全形（150118 實例，非配對版會多留一個 `)`）──────
+eq("巢狀括號", M._split_role("(記者 茱莉亞·本布魯克（Julia Benbrook）) 知情人士告訴CNN"),
+   ("記者 茱莉亞·本布魯克（Julia Benbrook）", "知情人士告訴CNN"))
+eq("單純全形", M._split_role("（主播）內容"), ("主播", "內容"))
+eq("沒有角色", M._split_role("內容開頭就是字"), ("", "內容開頭就是字"))
+eq("括號沒收尾", M._split_role("（內容一直沒關起來"), ("", "（內容一直沒關起來"))
+eq("開頭括號但太長不是角色",
+   M._split_role("（" + "字" * 60 + "）尾"), ("", "（" + "字" * 60 + "）尾"))
+
+# ── 單一 TC（無範圍）也要認（162945）────────────────────────────────
+eq("單一TC", M.segments(["16:29:45 (主播) 歡迎回到 CNN。"]),
+   [("162945", "主播", "歡迎回到 CNN。")])
+
+# ── 角色連續段＝小分題候選（換講者就換一段）──────────────────────────
+runs = M.role_runs([("1", "主播", ""), ("2", "主播", ""),
+                    ("3", "記者 A", ""), ("4", "主播", "")])
+eq("角色連續段", [(r[0], r[1]) for r in runs],
+   [("主播", ["1", "2"]), ("記者", ["3"]), ("主播", ["4"])])
+
+if FAIL:
+    print(f"✗ {len(FAIL)} 項失敗：")
+    for f in FAIL:
+        print("  " + f)
+    sys.exit(1)
+print("✓ 全部通過")
