@@ -53,7 +53,7 @@ function Push-Ntfy([string]$body, [string]$title, [string]$tags, [string]$priori
 # 決策邏輯拆在 s2_notify.ps1（純函式、可測，理由見該檔）。這裡只做 IO。
 . "$PSScriptRoot\s2_notify.ps1"
 
-function Notify-IfChanged([hashtable]$now) {
+function Read-LoginState {
     $prev = @{}
     if (Test-Path $StateFile) {
         try {
@@ -70,6 +70,44 @@ function Notify-IfChanged([hashtable]$now) {
             Log "WARN 登入態記憶讀檔失敗，當成全新開始：$($_.Exception.Message)"
         }
     }
+    return $prev
+}
+
+function Write-LoginState([hashtable]$state) {
+    try {
+        $state | ConvertTo-Json -Depth 4 | Set-Content -Path $StateFile -Encoding UTF8
+    } catch {
+        Log "WARN 登入態記憶寫檔失敗：$($_.Exception.Message)"
+    }
+}
+
+function Test-ProfileBusy {
+    <#
+      profile 正被**別的** chromium 佔用嗎？
+
+      2026-08-10 加。`.s2-scan.lock` 只有掃帶與保活會拿，人／agent 手動開瀏覽器不會拿，
+      於是保活會啟第二個 chromium 去搶同一個 user-data-dir，讀不到登入態就誤判成
+      `LOGGED_OUT`——0809 22:20／22:50 兩則假警報就是這樣來的（當下 NS token 還有
+      3591 秒、RT 也導得進 /all）。
+
+      ⚠️ **比對的是 `--user-data-dir` 路徑，不是行程名**：使用者自己開的 Chrome
+      動輒好幾十個 chrome.exe（0810 實測 66 個），只看行程名會全部誤判成佔用。
+    #>
+    $dir = Split-Path (Split-Path (Split-Path $CookieDb -Parent) -Parent) -Parent
+    try {
+        $busy = Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" -ErrorAction Stop |
+                Where-Object { $_.CommandLine -and $_.CommandLine.Contains($dir) }
+        return [bool]$busy
+    } catch {
+        # 查不到就**當成沒被佔用**照常跑：保活本來就是要做事的，
+        # 為了一個偵測失敗而整晚不續期，代價比偶爾一次假警報大得多。
+        Log "WARN profile 佔用偵測失敗，照常執行：$($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Notify-IfChanged([hashtable]$now) {
+    $prev = Read-LoginState
     # 蒐證：0809 04:20 保活異常結束（ERR）→ 04:30 掃帶就發現 cookie 不見了。
     # 若「上次 ERR、這次 LOGGED_OUT」反覆出現，就是「關不乾淨→掉線」的直接證據。
     # 只記錄不下結論——**一個樣本不是規律**。
@@ -80,15 +118,36 @@ function Notify-IfChanged([hashtable]$now) {
     }
 
     $r = Get-NotifyActions -Now $now -Prev $prev
-    foreach ($p in $r.Pushes) {
+    # 這次真的跑起來了 → 清掉「連續跳過」的計數，必要時回報恢復
+    $sk = Get-SkipActions -Skipped $false -Prev $prev
+    foreach ($p in ($r.Pushes + $sk.Pushes)) {
         Push-Ntfy $p.Body $p.Title $p.Tags $p.Priority
         Log $p.Log
     }
-    try {
-        $r.Next | ConvertTo-Json -Depth 4 | Set-Content -Path $StateFile -Encoding UTF8
-    } catch {
-        Log "WARN 登入態記憶寫檔失敗：$($_.Exception.Message)"
+    $next = $r.Next
+    $next['_skip'] = $sk.Next
+    Write-LoginState $next
+}
+
+function Skip-Run([string]$why) {
+    <#
+      跳過這一次保活。**SKIP 既不算成功也不算失敗**——各站的 streak／notified
+      一律不動（`Get-NotifyActions` 根本不會被呼叫），因為這次沒有觀察到登入態，
+      不該拿來推翻或佐證上一次的觀察。
+
+      但**跳過本身要計數**：萬一有 chromium 卡著沒關，保活會永遠跳過、token 到期
+      沒人續、而且一聲不響——**靜默失敗比假警報更糟**。連續 4 次（約 2 小時）就推播。
+    #>
+    Log "SKIP $why"
+    $prev = Read-LoginState
+    $sk = Get-SkipActions -Skipped $true -Prev $prev
+    foreach ($p in $sk.Pushes) {
+        Push-Ntfy $p.Body $p.Title $p.Tags $p.Priority
+        Log $p.Log
     }
+    $prev['_skip'] = $sk.Next
+    Write-LoginState $prev
+    exit 0
 }
 
 $lock = $null
@@ -98,8 +157,13 @@ try {
         [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
 } catch [System.IO.IOException] {
     # 掃帶正在跑＝NS 本來就會被碰到，這次不必做
-    Log 'SKIP 掃帶進行中，保活略過（掃帶第一站就是 NS，它會自己續期）'
-    exit 0
+    Skip-Run '掃帶進行中，保活略過（掃帶第一站就是 NS，它會自己續期）'
+}
+
+# 鎖拿到了，但 profile 仍可能被**沒拿鎖的人**佔著（人工／agent 手動開瀏覽器）。
+# 這時硬跑會讀不到登入態、誤判成 LOGGED_OUT 並推假警報（0809 22:20／22:50 實錯）。
+if (Test-ProfileBusy) {
+    Skip-Run 'profile 被其他 chromium 佔用（有人正在用瀏覽器），保活略過'
 }
 
 try {

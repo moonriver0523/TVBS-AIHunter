@@ -109,3 +109,69 @@ function Get-NotifyActions {
     }
     return @{ Next = $next; Pushes = $pushes }
 }
+
+
+# `_skip` 是登入態記憶檔裡的保留鍵，跟站別（NS／AP／RT）並排放。
+# 底線開頭是刻意的——一眼看得出它不是站名，也不會跟未來新增的站撞名。
+$script:SKIP_KEY = '_skip'
+
+function Get-SkipActions {
+    <#
+    .SYNOPSIS
+      「保活這次跳過了沒」→ 該不該推播的**純決策函式**（同樣沒有 IO）。
+
+    .DESCRIPTION
+      2026-08-09 立案、2026-08-10 實作。背景：`.s2-scan.lock` 只有掃帶與保活會拿，
+      **人／agent 手動用瀏覽器不會拿**，於是保活會啟第二個 chromium 去搶同一個
+      persistent profile，讀不到登入態就誤判成 `LOGGED_OUT`——0809 22:20／22:50
+      連推兩則假警報，而當下兩站都活著（NS token 還有 3591 秒、RT 導向 /all）。
+
+      修法是讓保活自己認得「profile 正被別人佔用」並回報 SKIP。但**SKIP 換來的
+      風險是靜默失敗**：萬一有個 chromium 沒關乾淨卡在那裡，保活就永遠跳過、
+      token 到期沒人續、也沒有任何通知——**那比假警報更糟，因為完全沒有聲音**。
+      所以連續跳過到一定次數就要推播。
+
+      ⚠️ **SKIP 既不算成功也不算失敗**：`Get-NotifyActions` 完全不會被呼叫，
+      各站的 `streak`／`notified` 一律不動。SKIP 沒有觀察到登入態，
+      不該拿它去推翻或佐證上一次的觀察。
+
+    .PARAMETER Skipped   這次是不是跳過了
+    .PARAMETER Prev      上一次的完整記憶（含各站與 `_skip`）
+    .PARAMETER Threshold 連續跳過幾次才推播。預設 4＝保活每 30 分一次 ⇒ 約 2 小時。
+                         NS 的 token 效期 1 小時，2 小時沒續就一定出事了。
+    .OUTPUTS @{ Next=<新的 _skip 記憶>; Pushes=@(...) }
+    #>
+    param([bool]$Skipped, [hashtable]$Prev = @{}, [int]$Threshold = 4)
+
+    $p = $Prev[$script:SKIP_KEY]
+    $streak = if ($p -and $p.ContainsKey('streak')) { [int]$p.streak } else { 0 }
+    $notified = if ($p -and $p.ContainsKey('notified')) { [bool]$p.notified } else { $false }
+    $pushes = @()
+
+    if ($Skipped) {
+        $streak++
+        if ($streak -ge $Threshold -and -not $notified) {
+            $hrs = [math]::Round($streak * 30 / 60, 1)
+            $pushes += @{
+                Body = ("保活連續 $streak 次被跳過（profile 一直被別的 chromium 佔用）。`n" +
+                        "登入態約 $hrs 小時沒有續期，NS 的 token 效期只有 1 小時。`n" +
+                        '請確認是不是有瀏覽器沒關乾淨。')
+                Title = 'S2 keepalive stuck'; Tags = 'warning'; Priority = 'high'
+                Log = "推播：保活被卡住（連續跳過 $streak 次）"
+            }
+            $notified = $true
+        }
+    }
+    else {
+        # 這次真的跑起來了。**只有推播過才回報恢復**——沒吵過人就不必再吵一次。
+        if ($notified) {
+            $pushes += @{
+                Body = '保活已恢復正常執行（profile 不再被佔用）。'
+                Title = 'S2 keepalive recovered'; Tags = 'white_check_mark'; Priority = 'default'
+                Log = '推播：保活已恢復'
+            }
+        }
+        $streak = 0; $notified = $false
+    }
+    return @{ Next = @{ streak = $streak; notified = $notified }; Pushes = $pushes }
+}

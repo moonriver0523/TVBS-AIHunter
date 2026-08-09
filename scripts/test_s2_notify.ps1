@@ -79,6 +79,47 @@ Report "沒掉線的站 streak 保持 0" ($r2.Next['NS'].streak -eq 0 -and $r2.N
 $r = Get-NotifyActions -Now @{ AP = 'OK' } -Prev @{}
 Report "沒有前次記憶時正常運作、不推播" ($r.Pushes.Count -eq 0)
 
+# ── 10. SKIP：連續跳過要推播，但不能太早吵 ─────────────────────────
+#   背景：0809 22:20／22:50 保活推了兩則假警報，因為有人手動開著瀏覽器佔住
+#   profile。修法是偵測到就 SKIP——但 SKIP 換來的風險是**靜默失敗**，
+#   所以連續跳過要能叫醒人。
+function FeedSkip([bool[]]$sequence, [int]$threshold = 4) {
+    $prev = @{}
+    $all = @()
+    foreach ($s in $sequence) {
+        $r = Get-SkipActions -Skipped $s -Prev $prev -Threshold $threshold
+        $all += $r.Pushes
+        $prev = @{ '_skip' = $r.Next }
+    }
+    return @{ Pushes = $all; State = $prev['_skip'] }
+}
+
+$r = FeedSkip @($true, $true, $true)
+Report "連續跳過 3 次還不推（門檻 4，約 2 小時才算異常）" ($r.Pushes.Count -eq 0) "推了 $($r.Pushes.Count) 則"
+$r = FeedSkip @($true, $true, $true, $true)
+Report "連續跳過 4 次推一則" ($r.Pushes.Count -eq 1) "推了 $($r.Pushes.Count) 則"
+$r = FeedSkip @($true, $true, $true, $true, $true, $true)
+Report "持續跳過不會重複推（重複通知＝訓練成雜訊）" ($r.Pushes.Count -eq 1) "推了 $($r.Pushes.Count) 則"
+$r = FeedSkip @($true, $true, $true, $true, $false)
+Report "恢復執行時回報一則恢復（警報1+恢復1=2）" ($r.Pushes.Count -eq 2) "推了 $($r.Pushes.Count) 則"
+Report "恢復後 streak 歸零" ($r.State.streak -eq 0) "streak=$($r.State.streak)"
+$r = FeedSkip @($true, $true, $false)
+Report "沒吵過人就不必回報恢復" ($r.Pushes.Count -eq 0) "推了 $($r.Pushes.Count) 則"
+$r = FeedSkip @($true, $true, $false, $true, $true, $true, $true)
+Report "中間跑成功會把計數清掉，之後要重新累積滿 4 次" ($r.Pushes.Count -eq 1) "推了 $($r.Pushes.Count) 則"
+$r = Get-SkipActions -Skipped $false -Prev @{}
+Report "全新開機（沒有 _skip 記憶）不推播也不炸" ($r.Pushes.Count -eq 0)
+
+# ── 11. SKIP 不可以動到各站的登入態記憶 ─────────────────────────────
+#   這是本次修改的**核心不變式**：SKIP 沒有觀察到登入態，
+#   不該推翻或佐證上一次的觀察。兩個函式各管各的鍵。
+$prev = @{ AP = @{ streak = 1; notified = $false; last = 'LOGGED_OUT' } }
+$sk = Get-SkipActions -Skipped $true -Prev $prev
+Report "SKIP 只回傳 _skip，不碰站別記憶" `
+       ($sk.Next.ContainsKey('streak') -and -not $sk.Next.ContainsKey('AP'))
+Report "SKIP 之後 AP 的 streak 仍是 1（下次 LOGGED_OUT 就能湊滿兩次）" `
+       ($prev['AP'].streak -eq 1) "streak=$($prev['AP'].streak)"
+
 Write-Host ''
 Write-Host $(if ($ok) { '全部通過' } else { '有失敗' })
 exit $(if ($ok) { 0 } else { 1 })
