@@ -54,6 +54,8 @@ DEFAULT_DIR = r"G:\我的雲端硬碟\Autopilot\(掃帶歐印萬) 檔名取TC起
 _ZH_HEAD = re.compile(r"^#+\s*中文\s*#+$")
 _BEGIN = re.compile(r"^文稿[：:]?\s*$")
 _END = re.compile(r"^(?:時間軸[：:]?|#+\s*原文\s*#+)\s*$")
+# 純分隔線（`#####`），中間不夾任何字——夾了字就是標頭，交給 _ZH_HEAD／_END 認
+_SEP_ONLY = re.compile(r"^#{3,}$")
 # 允許 `HH:MM:SS` 與 `HH:MM:SS-HH:MM:SS` 兩種；角色括號另外用配對掃描（見 _split_role）
 _SEG = re.compile(
     r"^(\d{1,2}:\d{2}:\d{2})(?:\s*[-–~]\s*\d{1,2}:\d{2}:\d{2})?\s*(.*)$"
@@ -120,8 +122,19 @@ def extract_zh(raw):
     if heads and tcs[0] <= heads[0]:
         # `### 中文 ###` 之前就有 TC 行 → 版面跟認知不符，別硬猜
         return None, "`### 中文 ###` 之前就出現 TC 行，版面不明"
+    # 中文段的結尾有兩種寫法，**兩種都要認**：
+    #   ① `時間軸`／`### 原文 ###`（明講的，`_END`）
+    #   ② 一整行只有 `#####`（變體 E，2026-08-09 實錯：210130 美伊美國經濟專家分析）
+    # ② 沒認的話中英文會被當成同一段，CJK 比例被稀釋到 19%、整支被防線擋掉。
+    # ⚠️ `#####` 只認**第一個 TC 之後**的：變體 C 的摘要與正文之間也有一個 `#####`，
+    #    但那個在首個 TC 之前，拿來當結尾會把整段切光。
+    # ⛔ 不要改成認 `文稿` 行——變體 A 的 `文稿` 在中文段**開頭**（`### 中文 ###` 的下一行），
+    #    當成結尾會直接回報「文稿段是空的」。
     ends = [i for i, l in enumerate(lines) if i > b and _END.match(l.strip())]
-    e = ends[0] if ends else len(lines)
+    seps = [i for i, l in enumerate(lines)
+            if i > tcs[0] and _SEP_ONLY.match(l.strip())]
+    cands = [x[0] for x in (ends, seps) if x]
+    e = min(cands) if cands else len(lines)
     body = [l for l in lines[b + 1:e]]
     joined = "\n".join(body)
     if not joined.strip():
