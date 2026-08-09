@@ -303,7 +303,7 @@ const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■
 // 篩選鈕上不要出現 SIDE_CNN 這種內部代碼——那是給程式看的，不是給編輯看的
 const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","YT":"網址素材",
                    "CNN_newsource":"NS","CNN":"NS",
-                   "YNA":"韓聯社","CNA":"亞洲新聞台"};
+                   "YNA":"韓聯社","CNA":"CNA"};
 const F = {src:new Set(), mark:new Set(), big:new Set(), q:""};
 
 function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
