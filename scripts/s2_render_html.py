@@ -31,6 +31,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -115,6 +116,10 @@ h1{font-size:17px;margin:0}
 .caret{color:var(--mut);font-size:12px;transition:transform .15s}
 .caret.open{transform:rotate(180deg)}
 .meta{color:var(--mut);font-size:13px;white-space:pre-wrap;margin-top:3px}
+/* 產出時間要**永遠看得到**：它藏在收合的檔頭裡就失去警示作用了。
+   資料若停在幾小時前，編輯一眼就該察覺，而不是照著舊清單發稿。 */
+.stamp{margin-left:auto;color:var(--mut);font-size:12px;white-space:nowrap}
+.stamp.stale{color:var(--warn);font-weight:600}
 .off{display:none!important}
 #fToggle.on{background:var(--chipon);color:#fff;border-color:var(--chipon)}
 .alert{color:var(--warn);font-weight:600}
@@ -166,7 +171,8 @@ main{padding:6px 14px 60px}
 #modal .hint{color:var(--mut);font-size:13px}
 </style></head><body>
 <div class="top">
-  <div class="tgl" id="metaTgl"><h1>__H1__</h1><span class="caret" id="metaCaret">▾</span></div>
+  <div class="tgl" id="metaTgl"><h1>__H1__</h1><span class="caret" id="metaCaret">▾</span>
+    <span class="stamp" id="stamp"></span></div>
   <div class="meta" id="meta">__META__</div>
 </div>
 <div class="sticky">
@@ -334,6 +340,17 @@ chips('fsrc','src',uniq('src'));
 chips('fmark','mark',uniq('mark'),MARK_LABEL);
 chips('fbig','big',uniq('big'));
 
+// ── 產出時間：停太久要主動變紅，不能只是印在那裡 ────────────────────
+// 掃帶最長間隔是 3 小時（13:00→16:00），超過就代表管線停了或 html 沒更新，
+// 而 Apps Script 會**無聲**退回昨天那份——不主動示警，編輯會照著舊清單發稿。
+const BUILT = "__BUILT__";
+(function(){
+  const el=document.getElementById('stamp');
+  el.textContent='更新於 '+BUILT.slice(5);          // 去掉年份，手機省空間
+  const age=(Date.now()-new Date(BUILT.replace(/-/g,'/')).getTime())/36e5;
+  if(age>3.5){ el.classList.add('stale'); el.textContent='⚠ '+el.textContent+`（${age.toFixed(0)} 小時前）`; }
+})();
+
 // ── 收合：手機上預設兩塊都收起來，把螢幕讓給素材 ──────────────────
 const $=id=>document.getElementById(id);
 const isTouch = window.matchMedia('(hover:none),(pointer:coarse)').matches;
@@ -362,6 +379,10 @@ draw();
 
 def build_html(state, base_mmdd, window):
     head = build_header(state, base_mmdd, window)
+    # 🔴 產出時間一定要印在畫面上（2026-08-09）：編輯用的 Apps Script 網址是抓
+    # 「最後修改時間最新」的那份 html，萬一今天的 html 因故沒產出，網址會**無聲
+    # 退回昨天的資料**——編輯照著舊清單發稿卻毫無察覺。有這一行就一眼看得出來。
+    head.append("本頁產出時間：" + datetime.now().strftime("%Y-%m-%d %H:%M"))
     rows = collect(state, base_mmdd)
     title = head[0] if head else "晚班交接"
     meta = "\n".join(head[1:])
@@ -374,6 +395,7 @@ def build_html(state, base_mmdd, window):
             .replace("__TITLE__", html.escape(title))
             .replace("__H1__", html.escape(title))
             .replace("__META__", meta_html)
+            .replace("__BUILT__", datetime.now().strftime("%Y-%m-%d %H:%M"))
             .replace("__ROWS__", json.dumps(rows, ensure_ascii=False)))
 
 
