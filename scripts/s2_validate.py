@@ -534,7 +534,9 @@ def header_from_lines(lines, window="", date="", mmdd="", alerts=()):
     # 🔴 不進圖例：它已經有檔頭「🔴 重大：」那幾行自我說明，再列一次是贅字。
     # 🟡 有用到才印圖例——它沒有檔頭那幾行可以自我說明，編輯不看圖例會不懂
     if any(is_subalert(raw) for raw in lines):
-        legend.append("🔴=檔頭重大　🟡=重大未進檔頭")
+        # 用字與網頁版篩選 chip 一致（2026-08-09 使用者要求）——同一件事兩種說法，
+        # 編輯在 txt 與網頁之間切換時會以為是兩種標記。
+        legend.append("🔴=重大　🟡=次重大")
     if any(is_aired(raw) for raw in lines):
         legend.append("🟤=已做過")
     if legend:

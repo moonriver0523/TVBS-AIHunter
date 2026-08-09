@@ -217,8 +217,9 @@ main{padding:6px 14px 60px}
 /* 三層各給一種辨識方式（2026-08-09 使用者訂）：
    大分類＝橘紅色字＋同色底線／中主題＝維持原本的 accent 色／小分題＝深底反白框。
    ⚠️ 顏色要用 token 定義，深色模式才不會變成黑底上的深橘。 */
-.big{margin:18px 0 6px;padding-bottom:3px;border-bottom:2px solid var(--big);
-     font-size:15px;font-weight:700;letter-spacing:.5px;color:var(--big)}
+.big{margin:22px 0 8px;padding:5px 0;
+     border-top:2px solid var(--big);border-bottom:2px solid var(--big);
+     font-size:16px;font-weight:700;letter-spacing:2px;color:var(--big)}
 .mid{margin:12px 0 4px;font-weight:700;color:var(--accent)}
 .sub{margin:8px 0 2px;font-size:13px;color:var(--mut)}  /* 空清單提示沿用這個灰 */
 /* 小分題反白：底色掛在文字本身（inline-block），不是整條橫幅——
@@ -404,7 +405,10 @@ function draw(){
   });
   tree.forEach((mids,big)=>{
     const bh=document.createElement('div'); bh.className='big hd';
-    bh.append(document.createTextNode(`======${big}======`));
+    bh.append(document.createTextNode(big));   // ⚠️ 不印 `======`：那是 txt 的分隔寫法，
+                                              // 網頁版靠上下兩條橘紅線就夠明顯（2026-08-09 使用者訂）
+                                              // ⛔ 但**複製出去的文字仍要帶 ======**（見 blockText），
+                                              //    編輯是把它貼進別的系統，格式不能少。
     const all=[...mids.values()].flatMap(s=>[...s.values()].flat());
     bh.append(btn(`複製整格（${all.length}）`,()=>copy(blockText(big,mids),`已複製「${big}」${all.length} 則`)));
     list.append(bh);
