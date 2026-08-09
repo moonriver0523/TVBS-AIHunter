@@ -104,10 +104,19 @@ TEMPLATE = """<!doctype html>
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
      font:15px/1.7 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
-header{position:sticky;top:0;z-index:9;background:var(--bg);
-       border-bottom:1px solid var(--line);padding:10px 14px}
-h1{font-size:17px;margin:0 0 2px}
-.meta{color:var(--mut);font-size:13px;white-space:pre-wrap}
+/* 檔頭分兩塊：標題與檔頭資訊**隨頁面捲走**，只有搜尋列釘在頂端。
+   原本整組（標題＋檔頭＋三排篩選＋兩個鈕）都 sticky，手機上吃掉半個螢幕，
+   素材瀏覽空間所剩無幾（2026-08-09 使用者實測回報）。 */
+.top{padding:10px 14px 4px}
+.sticky{position:sticky;top:0;z-index:9;background:var(--bg);
+        border-bottom:1px solid var(--line);padding:6px 14px 8px}
+h1{font-size:17px;margin:0}
+.tgl{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.caret{color:var(--mut);font-size:12px;transition:transform .15s}
+.caret.open{transform:rotate(180deg)}
+.meta{color:var(--mut);font-size:13px;white-space:pre-wrap;margin-top:3px}
+.off{display:none!important}
+#fToggle.on{background:var(--chipon);color:#fff;border-color:var(--chipon)}
 .alert{color:var(--warn);font-weight:600}
 .bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
 input[type=search]{flex:1;min-width:180px;padding:7px 10px;font-size:14px;
@@ -156,21 +165,26 @@ main{padding:6px 14px 60px}
   border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
 #modal .hint{color:var(--mut);font-size:13px}
 </style></head><body>
-<header>
-  <h1>__H1__</h1>
-  <div class="meta">__META__</div>
+<div class="top">
+  <div class="tgl" id="metaTgl"><h1>__H1__</h1><span class="caret" id="metaCaret">▾</span></div>
+  <div class="meta" id="meta">__META__</div>
+</div>
+<div class="sticky">
   <div class="bar">
     <input type="search" id="q" placeholder="搜尋代碼、摘要、畫面、BITE…">
+    <button class="act" id="fToggle">篩選</button>
     <span id="cnt" class="count"></span>
   </div>
-  <div class="bar" id="fsrc"></div>
-  <div class="bar" id="fmark"></div>
-  <div class="bar" id="fbig"></div>
-  <div class="bar">
-    <button class="act" id="copyAll">複製目前篩選結果</button>
-    <button class="act" id="reset">清除篩選</button>
+  <div id="panel">
+    <div class="bar" id="fsrc"></div>
+    <div class="bar" id="fmark"></div>
+    <div class="bar" id="fbig"></div>
+    <div class="bar">
+      <button class="act" id="copyAll">複製目前篩選結果</button>
+      <button class="act" id="reset">清除篩選</button>
+    </div>
   </div>
-</header>
+</div>
 <main id="list"></main>
 <div class="toast" id="toast"></div>
 <div id="modal"><div class="box">
@@ -242,6 +256,10 @@ function draw(){
   const list=document.getElementById('list'); list.innerHTML='';
   const rows=ROWS.filter(pass);
   document.getElementById('cnt').textContent=`${rows.length} / ${ROWS.length} 則`;
+  // 篩選面板收起來時，光看鈕就要知道現在有沒有在篩、篩了幾項——
+  // 否則使用者會對著被篩掉的清單納悶「東西怎麼變少了」。
+  const nf=F.src.size+F.mark.size+F.big.size+(F.q?1:0);
+  document.getElementById('fToggle').textContent = nf ? `篩選 (${nf})` : '篩選';
   // 分組時保持 ROWS 的原順序（那就是 txt 的順序）
   const tree=new Map();
   rows.forEach(r=>{
@@ -315,6 +333,28 @@ document.getElementById('reset').onclick=()=>{
 chips('fsrc','src',uniq('src'));
 chips('fmark','mark',uniq('mark'),MARK_LABEL);
 chips('fbig','big',uniq('big'));
+
+// ── 收合：手機上預設兩塊都收起來，把螢幕讓給素材 ──────────────────
+const $=id=>document.getElementById(id);
+const isTouch = window.matchMedia('(hover:none),(pointer:coarse)').matches;
+
+function toggle(el, caret){
+  el.classList.toggle('off');
+  if(caret) caret.classList.toggle('open', !el.classList.contains('off'));
+}
+$('metaTgl').onclick=()=>toggle($('meta'), $('metaCaret'));
+$('fToggle').onclick=()=>{
+  toggle($('panel'));
+  $('fToggle').classList.toggle('on', !$('panel').classList.contains('off'));
+};
+
+if(isTouch){                       // 手機：兩塊都先收起來
+  $('meta').classList.add('off');
+  $('panel').classList.add('off');
+}else{                             // 桌機空間夠，維持全開
+  $('metaCaret').classList.add('open');
+  $('fToggle').classList.add('on');
+}
 draw();
 </script></body></html>
 """
