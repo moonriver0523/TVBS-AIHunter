@@ -75,6 +75,16 @@ report("AP Live Choice（有 SHOTLIST 無 SOUNDBITE）→ 照樣算數，擋不�
 report("沒有原文可判時維持原行為（不放寬）",
        S.sb_applicable("") is True and S.sb_applicable(None) is True)
 
+# ⚠️ 二次修正（2026-08-09）：第一版用裸字比對，被 agent 寫進 src_text 的中文說明
+# 騙倒——RT4131 的 src_text 尾巴附了判斷備註，裡面有「無 SHOTLIST 段」
+# 「數不到 SOUNDBITE 字樣」，裸字就命中、照樣誤報（連四輪）。只認結構標記。
+POLLUTED = RT_CAPTIONED + "\n[agent備註] 這則 STORY 以「STORY: ::」開頭、無 SHOTLIST 段，" \
+                          "故數不到 SOUNDBITE 字樣；稿內兩位受訪者姓名職銜齊備，屬可掐的談話。"
+report("src_text 被 agent 的中文說明污染時，仍判定為不適用（RT4131 實例）",
+       S.sb_applicable(POLLUTED) is False)
+report("結構標記帶冒號才算（SHOTLIST: ✓）", S.sb_applicable("SHOTLIST:\n1. WIDE") is True)
+report("結構標記帶括號才算（(SOUNDBITE) ✓）", S.sb_applicable("2. (SOUNDBITE) MAN SAYING") is True)
+
 # ── 2. 接上 bite_doubt 的實際效果 ────────────────────────────────────
 report("字幕版 + sb_count=0 → 不再誤報假 BITE",
        S.bite_doubt(BITE_ENTRY, None, None) is None)

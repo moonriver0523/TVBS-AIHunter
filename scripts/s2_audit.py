@@ -271,6 +271,14 @@ def audit(mmdd, state_path, txt_path, scratch):
             # 舊狀態檔沒有這個欄位，退回 batch 值，行為與過去一致。
             st_sb = (items.get(e.get("id")) or {}).get("sb_count")
             sb = st_sb if isinstance(st_sb, int) else e.get("sb_count")
+            # 🎯 跟 add-batch 用同一把尺（2026-08-09 補）：`sb_count=0` 只有在
+            # 「這份稿本來就會寫 SOUNDBITE」時才代表「沒有引言」，路透 captioned／
+            # rough-cut 短片根本不寫，0 是**數不出來**。
+            # ⚠️ 沒有這一段的話，入庫端修好了、稽核端還在報——RT4107／RT4131／RT4125
+            # 就是這樣**連四輪**被重複命中，每一輪都要 agent 再查證、再寫一次備註。
+            # **重複誤報會把警告訓練成雜訊，那比不報還糟。**
+            if not S.sb_applicable(e.get("src_text")):
+                sb = None
             ft = str(e.get("footage_type") or "").strip().upper()
             nb["batch 筆數"] += 1
             if e.get("src_text"):

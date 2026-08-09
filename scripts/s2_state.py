@@ -217,15 +217,24 @@ def sb_applicable(src_text):
     NS 早就撞過同一個問題（NS 稿件不用 SOUNDBITE 這個詞），解法是改看
     `footage_type`（見 FT_MUST_BITE）——這裡是同一個道理的第二次應用。
 
-    ⛔ **判準刻意保守**：只要稿內出現 `SHOTLIST` 或 `SOUNDBITE` 任一個字樣，
-    就代表這份稿子「會寫」，`sb_count=0` 仍然有意義、照樣要擋。這樣才不會
-    把 0805 那批 AP Live Choice 假 BITE（那些是有 SHOTLIST 的）一起放行。
+    ⛔ **判準刻意保守**：只要稿內出現 shotlist 的**結構標記**，就代表這份稿子
+    「會寫」，`sb_count=0` 仍然有意義、照樣要擋。這樣才不會把 0805 那批
+    AP Live Choice 假 BITE（那些是有 SHOTLIST 的）一起放行。
     沒有原文可判時（`src_text` 空）維持原行為。
+
+    ⚠️ **只認結構標記，不認裸字**（2026-08-09 二次修正）：第一版寫成
+    `"SHOTLIST" in t`，結果被 **agent 自己寫進 `src_text` 的中文說明**騙倒——
+    RT4131 的 `src_text` 尾巴被附了一段判斷備註，裡面剛好有「無 SHOTLIST 段」
+    「數不到 SOUNDBITE 字樣」，裸字比對就命中了，於是照樣誤報。
+    真正的標記長這樣：`SHOTLIST:`（帶冒號）、`(SOUNDBITE)`（帶括號），
+    散文提到時不會這樣寫。
+    📌 附帶問題：`src_text` 應該只放站方原文，不該混入 agent 的判斷說明——
+    但偵測本身不該假設上游一定乾淨，所以這裡自己擋住。
     """
     t = (src_text or "").upper()
     if not t:
         return True                       # 沒有原文就照舊，不放寬
-    return ("SHOTLIST" in t) or ("SOUNDBITE" in t)
+    return bool(re.search(r"SHOTLIST\s*:", t) or re.search(r"\(\s*SOUNDBITE", t))
 
 
 def bite_doubt(entry, sb_count=None, footage_type=None):
