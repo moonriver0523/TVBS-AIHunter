@@ -127,6 +127,13 @@ main{padding:6px 14px 60px}
 .hd{display:flex;align-items:center;gap:8px}
 .hd button{visibility:hidden}
 .hd:hover button{visibility:visible}
+/* ⚠️ 手機沒有 hover——只靠 :hover 顯示等於按不到（本檔主要使用情境就是手機），
+   所以觸控裝置一律常駐顯示。 */
+@media (hover:none),(pointer:coarse){
+  .hd button,.item button{visibility:visible!important}
+  body{font-size:16px}          /* 手機閱讀尺寸 */
+  .item{padding:8px 6px}        /* 觸控目標放大 */
+}
 .item{display:flex;gap:8px;padding:6px 8px;border:1px solid transparent;
       border-radius:6px;align-items:flex-start}
 .item:hover{background:var(--card);border-color:var(--line)}
@@ -137,8 +144,17 @@ main{padding:6px 14px 60px}
 .hide{display:none}
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
   background:var(--accent);color:#fff;padding:7px 16px;border-radius:16px;
-  font-size:13px;opacity:0;transition:.2s;pointer-events:none}
+  font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:99}
 .toast.on{opacity:1}
+/* 剪貼簿被擋時的最後退路：把文字攤開、全選好，讓人長按「複製」 */
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;
+  z-index:100;padding:16px;align-items:center;justify-content:center}
+#modal.on{display:flex}
+#modal .box{background:var(--bg);border-radius:8px;padding:12px;width:100%;
+  max-width:680px;max-height:80vh;display:flex;flex-direction:column;gap:8px}
+#modal textarea{width:100%;height:52vh;font:13px/1.6 monospace;padding:8px;
+  border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
+#modal .hint{color:var(--mut);font-size:13px}
 </style></head><body>
 <header>
   <h1>__H1__</h1>
@@ -157,6 +173,11 @@ main{padding:6px 14px 60px}
 </header>
 <main id="list"></main>
 <div class="toast" id="toast"></div>
+<div id="modal"><div class="box">
+  <div class="hint">此環境擋住了自動複製。文字已全選——長按選取區選「複製」即可。</div>
+  <textarea readonly></textarea>
+  <div><button class="act" onclick="document.getElementById('modal').classList.remove('on')">關閉</button></div>
+</div></div>
 <script>
 const ROWS = __ROWS__;
 const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■ 晨班","◆":"◆ 早班"};
@@ -186,11 +207,30 @@ function pass(r){
 function toast(m){const t=document.getElementById('toast');
   t.textContent=m; t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),1300);}
 
+// 複製是本檔的核心用途（拆稿單貼到別的系統），而**它最容易在別的環境壞掉**：
+// file:// 下、Apps Script 的 iframe 沙箱裡、手機瀏覽器上，剪貼簿 API 都可能被權限
+// 政策擋掉。所以做三層退路，最後一層保證「一定拿得到文字」而不是靜默失敗。
 function copy(text, msg){
-  navigator.clipboard.writeText(text).then(()=>toast(msg))
-    .catch(()=>{ // file:// 下 clipboard API 可能被擋，退回舊招
-      const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
-      ta.select(); document.execCommand('copy'); ta.remove(); toast(msg); });
+  const legacy = ()=>{                       // ② 舊招：textarea + execCommand
+    try{
+      const ta=document.createElement('textarea');
+      ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      const ok=document.execCommand('copy'); ta.remove();
+      if(ok){toast(msg);return;}
+    }catch(e){}
+    manual();                                // ③ 都不行就攤開來讓人自己複製
+  };
+  const manual = ()=>{                       // ③ 手動：全選好的文字框＋長按複製
+    const m=document.getElementById('modal');
+    m.querySelector('textarea').value=text;
+    m.classList.add('on');
+    const ta=m.querySelector('textarea');
+    ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);  // iOS 要這行才選得起來
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>toast(msg)).catch(legacy);  // ①
+  }else legacy();
 }
 
 function btn(label, fn){
