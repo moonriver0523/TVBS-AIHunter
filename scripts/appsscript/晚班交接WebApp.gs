@@ -52,7 +52,7 @@ function findLatest_() {
  */
 function 測試找檔() {
   var f = findLatest_();
-  if (!f) { Logger.log('❌ 找不到檔名含「%s」的檔案', NAME_HINT); return; }
+  if (!f) { console.log('❌ 找不到檔名含「%s」的檔案', NAME_HINT); return; }
   var s = f.getBlob().getDataAsString('UTF-8');
   console.log('✅ 檔名：%s', f.getName());
   console.log('   最後修改：%s', f.getLastUpdated());
