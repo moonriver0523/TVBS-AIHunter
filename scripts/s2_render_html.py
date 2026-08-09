@@ -125,11 +125,11 @@ TEMPLATE = """<!doctype html>
 <style>
 :root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#e3e3e3;--card:#fafafa;
       --accent:#0b62d0;--chip:#eef2f7;--chipon:#0b62d0;--warn:#c00;
-      --big:#d94a1f;--subbg:#3a3f47}
+      --big:#d94a1f;--subbg:#e8eaed;--subfg:#2b2f36}
 @media (prefers-color-scheme:dark){
 :root{--bg:#16181c;--fg:#e8e8e8;--mut:#9aa0a6;--line:#2c3038;--card:#1d2026;
       --accent:#6aa9ff;--chip:#252a32;--chipon:#2b6cb0;--warn:#ff6b6b;
-      --big:#ff7a4d;--subbg:#4a5058}}
+      --big:#ff7a4d;--subbg:#333941;--subfg:#e8e8e8}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);
      font:15px/1.7 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
@@ -217,9 +217,12 @@ main{padding:6px 14px 60px}
 .mid{margin:12px 0 4px;font-weight:700;color:var(--accent)}
 .sub{margin:8px 0 2px;font-size:13px;color:var(--mut)}  /* 空清單提示沿用這個灰 */
 /* 小分題反白：底色掛在文字本身（inline-block），不是整條橫幅——
-   橫幅會跟上面的大分類底線打架，而且小分題常常很短，整條反白看起來像錯誤訊息。 */
+   橫幅會跟上面的大分類底線打架，而且小分題常常很短，整條反白看起來像錯誤訊息。
+   ⚠️ 底色**淺灰配深字**（2026-08-09 使用者訂正，原本是深灰配白字太重）：
+   小分題只是第三層標題，配色比大分類還搶眼會把視覺層級整個弄反。
+   深色模式反過來（深底淺字），但同樣是「比背景稍亮一階」而非高對比。 */
 .sub .subtxt{display:inline-block;padding:2px 8px;border-radius:4px;
-     background:var(--subbg);color:#fff;font-weight:600}
+     background:var(--subbg);color:var(--subfg);font-weight:600}
 .hd{display:flex;align-items:center;gap:8px}
 .hd button{visibility:hidden}
 .hd:hover button{visibility:visible}
@@ -299,7 +302,8 @@ const ROWS = __ROWS__;
 const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■ 晨班","◆":"◆ 早班"};
 // 篩選鈕上不要出現 SIDE_CNN 這種內部代碼——那是給程式看的，不是給編輯看的
 const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","YT":"網址素材",
-                   "CNN_newsource":"NS","CNN":"NS"};
+                   "CNN_newsource":"NS","CNN":"NS",
+                   "YNA":"韓聯社","CNA":"亞洲新聞台"};
 const F = {src:new Set(), mark:new Set(), big:new Set(), q:""};
 
 function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
@@ -490,9 +494,14 @@ document.getElementById('reset').onclick=()=>{
   document.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'));
   draw();
 };
-// 來源排序：三站在前、側錄與網址素材在後，跟閱讀習慣一致
+// 來源排序：**明確寫死順序**（2026-08-09 使用者訂）。
+// AP／RT／NS 三站一定排最前面（那是每天的主力、編輯第一眼要找的），
+// 接著側錄 CNN／NHK，再來網址素材 YNA／CNA。名單外的排最後、按字母。
+// ⚠️ 不要改用 localeCompare 之類的「自動排序」——那會讓 AP 之外的來源
+//    隨著當天有沒有收到而跳來跳去，編輯每天看到的位置不一樣。
+const SRC_ORDER=['AP','RT','NS','SIDE_CNN','SIDE_NHK','YNA','CNA'];
 chips('fsrc','src',uniq('src').sort((a,b)=>{
-  const w=s=>s.startsWith('SIDE_')?2:(s==='YT'?1:0);
+  const w=s=>{const i=SRC_ORDER.indexOf(s);return i<0?SRC_ORDER.length:i;};
   return w(a)-w(b) || a.localeCompare(b);
 }),SRC_LABEL);
 chips('fmark','mark',uniq('mark'),MARK_LABEL);
