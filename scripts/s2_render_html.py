@@ -44,6 +44,25 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 
+def ordered_groups(state, base_mmdd):
+    """大分類依**樣板固定順序**回傳，與 txt 完全一致（2026-08-09 訂正）。
+
+    ⚠️ 原本直接吃 `group_items()` 的 dict 順序，那是**素材出現順序**——
+    每輪都可能不一樣，跟 txt 的固定 16 格對不起來（使用者實測發現）。
+    txt 的順序邏輯在 `build_body()`：`[機動格] + FIXED`，樣板外的附在最後。
+    這裡照抄同一套判斷，**不要自己另外排**——兩邊各排各的，遲早又會分岔。
+    """
+    groups = R.group_items(state, base_mmdd)
+    special = (state.get("special_category") or "").strip()
+    if not special:
+        extra = [b for b in groups if b not in R.FIXED]
+        special = extra[0] if extra else ""
+    order = [special or R.SPECIAL_SLOT] + R.FIXED
+    out = [(b, groups[b]) for b in order if groups.get(b)]      # 空格不進 HTML
+    out += [(b, groups[b]) for b in groups if b not in order]   # 樣板外的附在最後
+    return out
+
+
 def collect(state, base_mmdd):
     """把狀態檔攤成 HTML 要的扁平結構。
 
@@ -51,7 +70,7 @@ def collect(state, base_mmdd):
     外加篩選要用的欄位。分組順序完全交給 `R.group_items()`，不自己排。
     """
     rows = []
-    for big, mids in R.group_items(state, base_mmdd).items():
+    for big, mids in ordered_groups(state, base_mmdd):
         for mid, subs in mids.items():
             for sub, its in subs.items():
                 for it in its:
