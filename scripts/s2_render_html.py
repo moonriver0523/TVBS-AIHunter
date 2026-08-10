@@ -26,6 +26,7 @@
   省略 --out 就印到 stdout。
 """
 import argparse
+import base64
 import html
 import json
 import os
@@ -36,6 +37,26 @@ from datetime import datetime
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import s2_render as R  # noqa: E402
+
+
+def logo_data_uri():
+    """左側篩選欄底部的 LOGO（2026-08-11 使用者要求，只在桌機顯示）。
+
+    ⚠️ **一定要 base64 內嵌**，不能寫外部檔案路徑：這份 HTML 會被丟上 Google Drive、
+    由 Apps Script 給編輯開，那個情境下相對路徑抓不到任何檔案，只會變破圖。
+
+    ⚠️ **體積要顧**：HTML 每輪重產、每天十幾份留在 Drive。所以資產存 160px WebP
+    （6.7KB → base64 約 8KB）；同一張圖存 PNG 要 45KB、base64 58KB，差七倍。
+    顯示縮到 80px，等於 2x 圖，高解析螢幕也不糊。
+
+    ⛔ 找不到檔案就回空字串——**LOGO 是裝飾，不能讓它害整份 HTML 產不出來**。
+    """
+    p = os.path.join(HERE, "assets", "logo_miniverse.webp")
+    try:
+        with open(p, "rb") as f:
+            return "data:image/webp;base64," + base64.b64encode(f.read()).decode("ascii")
+    except OSError:
+        return ""
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -169,6 +190,10 @@ h1{font-size:17px;margin:0}
 .flabel{font-size:12px;color:var(--mut);margin-bottom:2px}
 #scrim{display:none}
 #fab{display:none}
+/* LOGO：**預設不顯示**。手機版是下方彈出的操作面板，高度本來就吃緊
+   （max-height:62vh），多一塊裝飾只會把篩選鈕擠出可視範圍——使用者明確說
+   「PC 版就好，手機版不用改」。所以只在桌機那段 media query 裡打開。 */
+.brand{display:none}
 
 /* ── 桌機：常駐左側欄 ── */
 @media (min-width:820px) and (hover:hover){
@@ -180,6 +205,15 @@ h1{font-size:17px;margin:0}
          overflow:auto;padding:12px;border-right:1px solid var(--line)}
   #panel .bar{margin-top:2px}
   .chip{font-size:12px;padding:3px 8px}
+  /* LOGO 收在左欄最下方。`margin-top:auto` 需要 #panel 是 flex 縱向排列，
+     所以這裡一起把它改成 flex——原本是預設 block，不影響上面各群組的排版。
+     圖是圓形構圖、四角是黑底，`border-radius:50%` 把黑角切掉，
+     淺色主題下才不會變成一塊突兀的黑方塊。 */
+  #panel{display:flex;flex-direction:column}
+  .brand{display:block;margin:18px auto 4px;text-align:center;
+         opacity:.85;transition:opacity .2s}
+  .brand:hover{opacity:1}
+  .brand img{width:80px;height:80px;border-radius:50%;display:block;margin:0 auto}
 }
 
 /* ── 手機／窄螢幕：下方彈出 ── */
@@ -302,6 +336,7 @@ main{padding:6px 14px 60px}
     <button class="act" id="copyAll">複製目前篩選結果</button>
     <button class="act" id="reset">清除篩選</button>
   </div>
+__LOGO__
 </aside>
 <button id="fab">篩選</button>
 <main id="list"></main>
@@ -593,11 +628,16 @@ def build_html(state, base_mmdd, window):
     for a in alerts:                       # 重大提醒要跳出來，不要跟一般檔頭同色
         meta_html = meta_html.replace(html.escape(a),
                                       f'<span class="alert">{html.escape(a)}</span>')
+    # LOGO 抓不到就整塊不輸出（而不是留一個 src="" 的破圖）
+    uri = logo_data_uri()
+    logo_html = (f'<div class="brand"><img src="{uri}" alt="Miniverse" '
+                 f'width="80" height="80" loading="lazy"></div>') if uri else ""
     return (TEMPLATE
             .replace("__TITLE__", html.escape(title))
             .replace("__H1__", html.escape(title))
             .replace("__META__", meta_html)
             .replace("__BUILT__", datetime.now().strftime("%Y-%m-%d %H:%M"))
+            .replace("__LOGO__", logo_html)
             .replace("__ROWS__", json.dumps(rows, ensure_ascii=False)))
 
 
