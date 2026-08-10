@@ -40,7 +40,13 @@
 - **`{2 字母}-{數字}{星期兩碼}` 組合碼**（`IN-07SU`／`PO-35TU`／`WE-018FR`…，前綴不固定，見上節）→ CNN Newsource（[`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md)）
 - YouTube／X／Facebook URL → 走 `yt-dlp`／右鍵存圖，見 [`外電批次下載`](../reuters/05-batch-download.md) 的來源分派表
 - DVIDS URL（`dvidshub.net`）→ `yt-dlp` 下載影片本體＋詳情頁抓文稿，見 [`外電批次下載`](../reuters/05-batch-download.md) 的 `DVIDS` 分派
-- `ENEX`／`ABC` → 目前尚無對應的下載來源／流程說明，**遇到這兩種前綴只做編號，不要自行猜測去哪個網站下載**，下載階段要停下來問使用者。
+- `ENEX` → ENEX Members Website。**掃帶／摘要已打通**（2026-08-09 起），規格見
+  [`plans/2026-08-09-ENEX-API掃帶可行性與導入計畫.md`](plans/2026-08-09-ENEX-API掃帶可行性與導入計畫.md)。
+- `ABC` → ABC NewsOne。**掃帶／摘要已打通**（2026-08-10 起），規格見
+  [`plans/2026-08-10-ABC-API掃帶可行性與導入計畫.md`](plans/2026-08-10-ABC-API掃帶可行性與導入計畫.md)。
+  代碼＝`ABC`＋Story Number（例 `ABC080926021`，**前 6 碼是 MMDDYY**）。
+- ⚠️ **兩者的影片下載都還沒打通**——**只做編號，不要自行猜測去哪個網站下載**，下載階段停下來問使用者。
+- ⚠️ **兩者都是人工下令才跑，不進固定掃帶排程**（2026-08-09／2026-08-10 使用者訂）。
 
 ## 編號規則
 
