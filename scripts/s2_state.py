@@ -924,7 +924,13 @@ def cmd_set_topic_order(state, args):
       所以這份順序不必每天重寫。
     - `--clear` 撤掉某格的人工順序，退回全自動。
     """
-    order = state.setdefault("topic_order", {})
+    # ⚠️ 頂層欄位一定要寫進 `state["_top"]`，**不是 `state` 本身**——
+    #    `save()` 是 `out = dict(state.get("_top", {}))`，寫在 state 上的鍵
+    #    根本不會被序列化。2026-08-10 首版寫成 `state.setdefault("topic_order")`，
+    #    結果 13 個大分類全部印「OK 已釘住」但**一個都沒存進檔案**，
+    #    是典型的靜默失敗（同 `cmd_set_alert` 的寫法才對）。
+    top = state.setdefault("_top", {})
+    order = top.setdefault("topic_order", {})
     if args.clear:
         order.pop(args.cat, None)
         save(state, args.file)
@@ -938,9 +944,12 @@ def cmd_set_topic_order(state, args):
     save(state, args.file)
     print(f"OK 「{args.cat}」中主題順序已釘住 {len(mids)} 個：{'／'.join(mids)}")
     # 對照今天實際有的中主題，把落差講清楚——避免「排了卻沒生效」的靜默困惑
-    have = {(it.get("category") or {}).get("中主題")
-            for it in state.get("items", [])
-            if (it.get("category") or {}).get("大分類") == args.cat}
+    # ⚠️ 記憶體裡的 `state["items"]` 是 **dict（id → 內容）**，不是陣列——
+    #    陣列是 `save()` 寫檔時才還原的。直接 `for it in state["items"]`
+    #    會拿到一串 **id 字串**，然後 `it.get(...)` 炸掉（首版實錯）。
+    have = {(v.get("category") or {}).get("中主題")
+            for v in state.get("items", {}).values()
+            if (v.get("category") or {}).get("大分類") == args.cat}
     have.discard(None)
     missing = [m for m in mids if m not in have]
     extra = sorted(have - set(mids))
