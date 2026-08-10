@@ -87,6 +87,66 @@ function Write-Skip([string]$why) {
     Write-Host "SKIP [$Checkpoint] $why"
 }
 
+function New-ShiftState {
+    <#
+      建檔輪專用：確保今天這個班次的狀態檔存在，並把上一班歸檔。
+
+      ⚠️ **冪等**：今天的檔已經在就什麼都不做——補跑 16:00、手動重跑都安全。
+      ⛔ **不碰素材內容**：只建一個空殼，素材照樣由 agent 掃進來。
+      📌 window_start 照 `13b §5a` 第 4 條＝**前一天最後一輪的排定時刻，常態就是 13:00**。
+         這是排程設計上的交界點，**不是「昨天實際跑到哪一輪」**——漏跑時照字面算會
+         少報好幾小時、還把沒人掃過的空窗算進涵蓋範圍（0808 斷電那次的教訓）。
+    #>
+    # ⚠️ 班次日期一律從 **checkpoint** 取，不要用 Get-Date：
+    #    補跑時會傳 `0810-1600-補漏` 這種值，照系統日期算就會建到錯的那天。
+    $mmdd = $Checkpoint.Substring(0, 4)
+    $today = Join-Path $StateDir "$mmdd-s2-state.json"
+    if (Test-Path $today) {
+        Write-Run "NEWDAY`tSKIP 今天的狀態檔已存在，不重建：$mmdd-s2-state.json"
+        return
+    }
+
+    # 上一班＝資料夾裡現有的、檔名不是今天的那份（正常只會有一份）
+    $prev = Get-ChildItem $StateDir -Filter '*-s2-state.json' -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ne "$mmdd-s2-state.json" } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+
+    $body = [ordered]@{
+        window_start  = '{0:yyyy-MM}-{1} 13:00' -f (Get-Date), $mmdd.Substring(2, 2)
+        checkpoint    = $Checkpoint
+        window_local  = ''
+        reconcile_log = @{}
+        alerts        = @()          # 🔴 檔頭重大：新的一天從零開始，不沿用昨天
+        updated_at    = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+        items         = @()
+    }
+    # ⚠️ PowerShell 的 ConvertTo-Json 對空陣列會吐 null，Python 端會炸；用 -Depth 保住結構
+    $json = $body | ConvertTo-Json -Depth 6
+    # 空集合被轉成 null 的兩個欄位補回來（實測 items/alerts 會中招）
+    $json = $json -replace '"alerts":\s*null', '"alerts": []' -replace '"items":\s*null', '"items": []'
+    [System.IO.File]::WriteAllText($today, $json, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Run "NEWDAY`t已建立 $mmdd-s2-state.json（window_start=$($body.window_start)）"
+    Write-Host "NEWDAY 已建立 $mmdd-s2-state.json"
+
+    # ── 上一班歸檔：Archive\{YYYYMMDD}\ ────────────────────────────
+    if ($prev) {
+        $pm = $prev.Name.Substring(0, 4)                       # 0809
+        $yyyy = (Get-Date).Year
+        # 跨年：12 月底建檔時上一班可能還是去年的（例 0101 輪看到 1231）
+        if ($pm -gt $mmdd) { $yyyy-- }
+        $dest = Join-Path $StateDir "Archive\$yyyy$pm"
+        New-Item -ItemType Directory -Force -Path $dest | Out-Null
+        $moved = 0
+        Get-ChildItem $StateDir -File | Where-Object { $_.Name -like "$pm*" } | ForEach-Object {
+            Move-Item $_.FullName -Destination $dest -Force; $moved++
+        }
+        Write-Run "NEWDAY`t上一班 $pm 已歸檔 $moved 個檔 → Archive\$yyyy$pm"
+        Write-Host "NEWDAY $pm 已歸檔（$moved 個檔）"
+    } else {
+        Write-Run "NEWDAY`t⚠️ 找不到上一班的狀態檔，沒有東西可歸檔——第一次啟用才正常"
+    }
+}
+
 # ── 互斥鎖：獨佔握把，OS 保證釋放 ───────────────────────────────────
 $lock = $null
 try {
@@ -103,6 +163,18 @@ try {
     $w = New-Object System.IO.StreamWriter($lock)
     $w.WriteLine("pid=$PID checkpoint=$Checkpoint started=$stamp")
     $w.Flush()
+
+    # ── 建檔輪：新的一天由**腳本**開檔，不交給 agent 判斷（2026-08-10 訂案）──
+    # 🔴 0810-1600 實錯：agent 去開 `0810-s2-state.json` 拿到 FileNotFoundError，
+    #    於是**退回昨天那份繼續寫**，再改名輸出成 `0810晚班交接.txt`——
+    #    昨天的 398 則全部被當成今天的，而且**全程沒有任何一步報錯**。
+    # 📌 根因在 `s2_state.py default_file()`：它回傳「最新修改的那份」，
+    #    而建檔輪那一刻最新的必然是昨天。0809 修過的是同一個位置的**反方向**錯誤
+    #    （當時寫死一個永遠不存在的路徑，害 agent 把還在用的檔案切成兩份）。
+    #    兩次都是靜默失敗——所以這件事不該再靠任何人記得，改由這裡做掉。
+    # ⚠️ 用**前綴**比對，不要錨到結尾：16:00 整輪失敗要補跑時傳的是
+    #    `0811-1600-補漏`，錨結尾就永遠不會建檔——而那正是最需要它的場合。
+    if ($Checkpoint -match '^\d{4}-1600') { New-ShiftState }
 
     if (-not (Test-Path $PromptFile)) { throw "找不到 prompt 範本：$PromptFile" }
     $prompt = (Get-Content $PromptFile -Raw -Encoding UTF8) -replace '\{CHECKPOINT\}', $Checkpoint
