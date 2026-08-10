@@ -299,6 +299,105 @@ def yt_blocks(lines):
     return out
 
 
+def line_issues(l):
+    """單一素材行的格式檢查 → 回傳原因清單（沒問題就是空 list）。
+
+    2026-08-11 從 `check()` 抽出來，讓**寫入當下**也能用同一套判準，見 `check_entry()`。
+    ⚠️ 傳進來的 `l` 必須是**已經剝掉行首標記**的（`strip_mark()` 的第二個回傳值），
+    跟 `material_lines()` 吐出來的一致。
+    """
+    out = []
+
+    def hit(_n, reason):
+        out.append(reason)
+
+    has_bite_tag = "(BITE)" in l
+    has_bite_seg = "▎BITE：" in l or "▎BITE:" in l
+    has_nobite = "無BITE" in l
+    _run_line_checks(l, hit, has_bite_tag, has_bite_seg, has_nobite)
+    return out
+
+
+def check_entry(entry, ident=""):
+    """給 `s2_state.py` 在**寫入當下**呼叫：檢查一則 `raw_entry` 的格式。
+
+    🔴 **為什麼需要這個**：品質掃原本只綁在 `s2_render.py` 上，等於「有人記得 render
+    才會被檢查」。2026-08-11 實例——0811-0100 那輪 01:20 收工並 render 完畢後，
+    **另有 35 則素材在 01:33–01:35 才被寫進狀態檔**，那批完全沒經過任何一次品質掃；
+    交接單就這樣帶著 52 項格式問題掛到隔天早上給編輯看。輪次外寫入等於從側門進來，
+    直接繞過關卡。
+
+    修法是把關卡從「render 時」移到「寫入時」——不管誰寫、有沒有 render 都躲不掉。
+    ⚠️ **只警告不擋下**：擋下會讓整輪掃帶中斷，代價比格式瑕疵大得多；但訊息要夠吵，
+    而且出現在 agent 剛寫完那一刻——那正是它最容易、成本最低的修正時機。
+    側錄（多行、TC 開頭）與空內容一律略過，那是另一套格式。
+    """
+    first = (entry or "").strip().split("\n")[0]
+    if not first:
+        return []
+    _, l = strip_mark(first)
+    if SIDE_RE.match(l) or not LINE_RE.match(l):
+        return []            # 側錄或非素材行（YouTube 兩行式等）不套這套判準
+    return line_issues(l)
+
+
+def _run_line_checks(l, hit, has_bite_tag, has_bite_seg, has_nobite):
+    """`check()` 與 `line_issues()` 共用的逐項判準（行號由呼叫端決定怎麼帶）。"""
+    n = None
+    if has_bite_tag and has_nobite:
+        hit(n, "(BITE) 與 無BITE 矛盾")
+    if has_bite_seg and not has_bite_tag:
+        hit(n, "有 ▎BITE： 但缺 (BITE) 第二括號")
+    if has_bite_tag and not has_bite_seg:
+        hit(n, "有 (BITE) 但缺 ▎BITE： 段")
+    if "▎畫面：" not in l and "▎畫面:" not in l:
+        hit(n, "缺 ▎畫面： 段")
+    if not has_bite_seg and not has_nobite:
+        hit(n, "結尾既非 無BITE 也無 BITE： 段")
+    if not re.search(r"(無BITE。|」|▎\d{1,3}:\d{2})\s*$", l):
+        hit(n, "行尾有多餘內容（應以 無BITE。／」／▎MM:SS 結尾）")
+    if has_bite_seg:
+        bite_seg = l.split("▎BITE：", 1)[-1] if "▎BITE：" in l else l.split("▎BITE:", 1)[-1]
+        for q in re.findall(r"「([^」]*)」", bite_seg):
+            letters = len(re.findall(r"[A-Za-z]", q))
+            cjk = len(re.findall(r"[一-鿿]", q))
+            if letters > 20 and letters > cjk:
+                hit(n, "BITE 引言疑似未翻譯成中文（英文字元多於中文，應為濃縮中文版）")
+                break
+    m_notes = re.match(rf"^{CODE}(?:\s*/\s*{CODE})*\s+(?:\([^)]*\)\s*)+", l)
+    if m_notes:
+        rest = l[m_notes.end():]
+        if not rest.startswith("▎"):
+            hit(n, "摘要前缺 ▎ 標記（應為 (備註)[(BITE)] ▎摘要▎畫面：…）")
+        else:
+            summary = rest[1:].split("▎", 1)[0]
+            if len(summary) > 150:
+                hit(n, f"摘要超過150字硬上限（現{len(summary)}字，WRAP等長文不例外，需分句或移入畫面段）")
+    m = re.match(rf"^{CODE}(?:\s*/\s*{CODE})*\s+\(([^)]*)\)", l)
+    first_note = m.group(1) if m else ""
+    if re.search(r"(?<![A-Za-z])BITE(?![A-Za-z])", first_note):
+        hit(n, "第一備註寫了 BITE")
+    if re.search(r"(?<![A-Za-z])(FILE|File)(?![A-Za-z])", first_note) or "檔案" in first_note:
+        hit(n, "備註用 FILE/檔案（應為 資料畫面）")
+    parens = re.findall(r"\(([^)]*)\)", l.split("▎")[0])
+    if len(parens) >= 2 and parens[1].strip() != "BITE":
+        hit(n, f"第二括號不是 (BITE)：({parens[1]})")
+    if "GMT" in l:
+        hit(n, "素材行出現 GMT")
+    for bad in ("（列表摘要）", "（詳情頁待補）", "（急用請開Shotlist）",
+                "（script待補）", "（完整script待補）", "（early", "（待完整稿）"):
+        if bad in l:
+            hit(n, f"操作/狀態備註寫進素材行：{bad}")
+    m_op = re.search(r"[（(][^）)]*(列表級|未開詳情|列表摘要|詳情頁待補|待補|待確認|待人工|TODO)[^（(]*?[）)]", l)
+    if m_op:
+        hit(n, f"操作備註寫進素材行：{m_op.group(0)}（給 agent 看的註記不進成品）")
+    if re.search(r"▎BITE[：:]\s*「", l):
+        hit(n, "▎BITE：無講者（引號前必須有講者）")
+    wrap_note = "整理包" in first_note
+    if re.search(r"(?<![A-Za-z])WRAP(?![A-Za-z])", l) and not wrap_note:
+        hit(n, "出現 WRAP 但備註未標 整理包")
+
+
 def check(path):
     lines = read(path)
     hits = []
@@ -319,65 +418,10 @@ def check(path):
         has_bite_seg = "▎BITE：" in l or "▎BITE:" in l
         has_nobite = "無BITE" in l
 
-        if has_bite_tag and has_nobite:
-            hit(n, "(BITE) 與 無BITE 矛盾")
-        if has_bite_seg and not has_bite_tag:
-            hit(n, "有 ▎BITE： 但缺 (BITE) 第二括號")
-        if has_bite_tag and not has_bite_seg:
-            hit(n, "有 (BITE) 但缺 ▎BITE： 段")
-        if "▎畫面：" not in l and "▎畫面:" not in l:
-            hit(n, "缺 ▎畫面： 段")
-        if not has_bite_seg and not has_nobite:
-            hit(n, "結尾既非 無BITE 也無 BITE： 段")
-        # 行尾必須是 無BITE。／BITE 引號收尾／時長 ▎M:SS，其後不得再拖其他段
-        if not re.search(r"(無BITE。|」|▎\d{1,3}:\d{2})\s*$", l):
-            hit(n, "行尾有多餘內容（應以 無BITE。／」／▎MM:SS 結尾）")
-
-        # BITE 引言必須是中文濃縮版，不是英文逐字（2026-08-10 補：18:00 那輪
-        # 19 則英文原文照抄漏掃，因為當時完全沒有語言檢查）
-        if has_bite_seg:
-            bite_seg = l.split("▎BITE：", 1)[-1] if "▎BITE：" in l else l.split("▎BITE:", 1)[-1]
-            for q in re.findall(r"「([^」]*)」", bite_seg):
-                letters = len(re.findall(r"[A-Za-z]", q))
-                cjk = len(re.findall(r"[一-鿿]", q))
-                if letters > 20 and letters > cjk:
-                    hit(n, "BITE 引言疑似未翻譯成中文（英文字元多於中文，應為濃縮中文版）")
-                    break
-
-        m_notes = re.match(rf"^{CODE}(?:\s*/\s*{CODE})*\s+(?:\([^)]*\)\s*)+", l)
-        if m_notes:
-            rest = l[m_notes.end():]
-            if not rest.startswith("▎"):
-                hit(n, "摘要前缺 ▎ 標記（應為 (備註)[(BITE)] ▎摘要▎畫面：…）")
-            else:
-                summary = rest[1:].split("▎", 1)[0]
-                if len(summary) > 150:
-                    hit(n, f"摘要超過150字硬上限（現{len(summary)}字，WRAP等長文不例外，需分句或移入畫面段）")
-
-        m = re.match(rf"^{CODE}(?:\s*/\s*{CODE})*\s+\(([^)]*)\)", l)
-        first_note = m.group(1) if m else ""
-        if re.search(r"(?<![A-Za-z])BITE(?![A-Za-z])", first_note):
-            hit(n, "第一備註寫了 BITE")
-        if re.search(r"(?<![A-Za-z])(FILE|File)(?![A-Za-z])", first_note) or "檔案" in first_note:
-            hit(n, "備註用 FILE/檔案（應為 資料畫面）")
-        parens = re.findall(r"\(([^)]*)\)", l.split("▎")[0])
-        if len(parens) >= 2 and parens[1].strip() != "BITE":
-            hit(n, f"第二括號不是 (BITE)：({parens[1]})")
-        if "GMT" in l:
-            hit(n, "素材行出現 GMT")
-        for bad in ("（列表摘要）", "（詳情頁待補）", "（急用請開Shotlist）",
-                    "（script待補）", "（完整script待補）", "（early", "（待完整稿）"):
-            if bad in l:
-                hit(n, f"操作/狀態備註寫進素材行：{bad}")
-        # 操作備註通式（半形或全形括號皆抓）：列表級／未開詳情／待補／待確認…
-        m_op = re.search(r"[（(][^）)]*(列表級|未開詳情|列表摘要|詳情頁待補|待補|待確認|待人工|TODO)[^（(]*?[）)]", l)
-        if m_op:
-            hit(n, f"操作備註寫進素材行：{m_op.group(0)}（給 agent 看的註記不進成品）")
-        if re.search(r"▎BITE[：:]\s*「", l):
-            hit(n, "▎BITE：無講者（引號前必須有講者）")
-        wrap_note = "整理包" in first_note
-        if re.search(r"(?<![A-Za-z])WRAP(?![A-Za-z])", l) and not wrap_note:
-            hit(n, "出現 WRAP 但備註未標 整理包")
+        # 逐項判準抽到 `_run_line_checks()`，與寫入當下的 `check_entry()` 共用同一份，
+        # 免得兩邊各改各的、久了判準就分岔（2026-08-11 重構）
+        _run_line_checks(l, lambda _n, reason: hit(n, reason),
+                         has_bite_tag, has_bite_seg, has_nobite)
 
     for c, ns in seen_codes.items():
         if len(ns) > 1:

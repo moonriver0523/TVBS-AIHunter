@@ -377,8 +377,35 @@ def cmd_add(state, args):
         state["items"][i]["needs_review"] = doubt
     save(state, args.file)
     print(f"OK 已新增 {i}（{args.status}）")
+    report_fmt([f"{i}: {r}" for r in fmt_issues(entry)])
     if doubt:
         print(f"⚠️ BITE 待確認（已入庫，已記進 needs-review）：{doubt}")
+
+
+def fmt_issues(entry):
+    """寫入當下就跑一次素材行格式檢查（2026-08-11 加）。
+
+    🔴 **為什麼要在這裡檢查**：品質掃原本只綁在 `s2_render.py` 上，等於「有人記得
+    render 才會被檢查」。0811-0100 那輪 01:20 收工並 render 完畢後，**另有 35 則素材
+    在 01:33–01:35 才寫進狀態檔**——那批完全沒經過任何一次品質掃，交接單就帶著
+    52 項格式問題掛在那裡給編輯看。輪次外寫入等於從側門進來，直接繞過關卡。
+
+    把關卡挪到寫入當下，不管誰寫、有沒有 render 都躲不掉。
+    ⚠️ 只警告不擋——擋下會中斷整輪掃帶，代價比格式瑕疵大得多。
+    """
+    try:
+        return load_validate().check_entry(entry)
+    except Exception:
+        return []            # 檢查本身壞掉絕不能擋住入庫
+
+
+def report_fmt(fmt):
+    """把寫入當下抓到的格式問題印出來。訊息要吵，因為這是最省成本的修正時機。"""
+    if not fmt:
+        return
+    print(f"⚠️ 格式待修 {len(fmt)} 項（**已入庫**，請直接用 `update-entry` 改掉，"
+          f"不要等 render 才發現）：")
+    print("\n".join("  " + x for x in fmt))
 
 
 def cmd_add_batch(state, args):
@@ -394,7 +421,7 @@ def cmd_add_batch(state, args):
     if not isinstance(data, list):
         print("ERROR: --entries 需為 JSON 陣列（或含 entries 陣列的物件）")
         sys.exit(2)
-    added, skipped, notes, flagged = [], [], [], []
+    added, skipped, notes, flagged, fmt = [], [], [], [], []
     for n, e in enumerate(data, 1):
         if not isinstance(e, dict):
             skipped.append(f"第{n}筆: 不是物件")
@@ -433,10 +460,13 @@ def cmd_add_batch(state, args):
         if doubt:
             state["items"][i]["needs_review"] = doubt
             flagged.append(f"{i}: {doubt}")
+        for reason in fmt_issues(e["entry"]):
+            fmt.append(f"{i}: {reason}")
         added.append(i)
     if added:
         save(state, args.file)
     print(f"OK 新增 {len(added)} 則" + (f"：{','.join(added)}" if added else ""))
+    report_fmt(fmt)
     if flagged:
         print(f"⚠️ BITE 待確認 {len(flagged)} 則（**已入庫**，已記進 needs-review，"
               f"確認後用 `needs-review done --ids …` 結案）：")
@@ -476,6 +506,7 @@ def cmd_update_entry(state, args):
         it.pop("needs_review", None)     # 改好了就自動結案，不用手動 done
     save(state, args.file)
     print(f"OK 已覆寫 {i}（{it['script_status']}）")
+    report_fmt([f"{i}: {r}" for r in fmt_issues(it.get("raw_entry") or "")])
 
 
 # 地區詞 → 樣板上該去的大分類（2026-08-06 訂）。用來抓「中主題放錯大分類」。
