@@ -63,6 +63,45 @@ def ordered_groups(state, base_mmdd):
     return out
 
 
+_DUR_TAIL = re.compile(r"▎(\d{1,2}):(\d{2})\s*$")
+
+
+def derive_tags(text, fields):
+    """從**渲染後的成品**推導可機械判定的標籤（2026-08-10 標籤化試做第一批）。
+
+    ⚠️ **只做「不必判斷就能得到」的兩組**，不是提案裡寫的三組——
+    實測打掉了另外兩組：
+      - **國家／地點**：狀態檔根本沒有這個欄位（`fields` 只有 codes／notes／summary／
+        footage／bite／no_bite／duration）。要標就得做 NER，**那有真實 token 成本**，
+        不屬於「免費」那批。
+      - **事件／影片型態**：拿 notes 比對詞彙表，618 則裡 **516 則判不出（83%）**。
+        原因正是各站沒有共用詞彙（RT 寫 `RAW`、NS 寫 `資料畫面`、AP 寫 `SNTV`），
+        📌 **這反而是「封閉字典要在入庫時打」的正面證據**，不是可以事後補算的東西。
+
+    ⚠️ **一律從 `text` 推，不要用 `fields`**：YNA／側錄的 `fields` 是空的，
+    走 fields 會讓那些列靜靜地沒有標籤。text 是所有列都一定有的東西。
+
+    📌 **側錄兩組都拿不到，這是預期的**：側錄沒有 `▎BITE：`／`▎MM:SS` 結構。
+    而且依「主播／記者 OS 也算 BITE」的訂案，側錄**每一則必然有 BITE**，
+    這個 facet 對它的資訊量是零——篩選時被排除是正確行為，不是漏標。
+    """
+    sound = ""
+    if "▎無BITE。" in text:
+        sound = "無BITE"
+    elif "▎BITE：" in text or "(BITE)" in text:
+        sound = "有BITE"
+
+    m = _DUR_TAIL.search(text.strip())
+    if not m:
+        d = str((fields or {}).get("duration") or "")
+        m = re.match(r"^(\d{1,2}):(\d{2})$", d)
+    length = ""
+    if m:
+        secs = int(m.group(1)) * 60 + int(m.group(2))
+        length = "短(<1分)" if secs < 60 else ("中(1-3分)" if secs <= 180 else "長(>3分)")
+    return sound, length
+
+
 def collect(state, base_mmdd):
     """把狀態檔攤成 HTML 要的扁平結構。
 
@@ -86,6 +125,7 @@ def collect(state, base_mmdd):
                     #   （0802 訂案：一段連線常切成十幾個 TC，計入會把則數灌爆）。
                     #   網頁版的筆數必須照同一套語意，否則同一份資料兩個數字，編輯會困惑。
                     kind = "side" if src.startswith("SIDE_") else ("url" if src == "YT" else "wire")
+                    snd, lng = derive_tags(text, f)
                     rows.append({
                         "big": big or "", "mid": mid or "", "sub": sub or "",
                         "id": it.get("id") or "",
@@ -98,7 +138,10 @@ def collect(state, base_mmdd):
                                   ("🟡" if "🟡" in text[:8] else "")),
                         "cp": it.get("first_seen_checkpoint") or "",
                         "dur": f.get("duration") or "",
-                        "bite": bool(f.get("bite")),
+                        # 標籤化第一批（2026-08-10）：兩組都從 text 推導，見 derive_tags()。
+                        # ⚠️ 原本這裡有個 "bite": bool(f.get("bite"))，已併進 snd——
+                        # 兩套推導並存就是兩個真相源，而且那一套對 YNA／側錄一律回 False。
+                        "snd": snd, "len": lng,
                         "text": text,
                         # 搜尋用：把使用者可能會想找的字全串起來，前端只比對這一欄
                         "q": " ".join([
@@ -297,6 +340,8 @@ main{padding:6px 14px 60px}
   <div class="fgroup"><div class="flabel">來源</div><div class="bar" id="fsrc"></div></div>
   <div class="fgroup"><div class="flabel">重大</div><div class="bar" id="falert"></div></div>
   <div class="fgroup"><div class="flabel">時段</div><div class="bar" id="fmark"></div></div>
+  <div class="fgroup"><div class="flabel">聲音</div><div class="bar" id="fsnd"></div></div>
+  <div class="fgroup"><div class="flabel">長度</div><div class="bar" id="flen"></div></div>
   <div class="fgroup"><div class="flabel">大分類</div><div class="bar" id="fbig"></div></div>
   <div class="fgroup bar">
     <button class="act" id="copyAll">複製目前篩選結果</button>
@@ -318,7 +363,8 @@ const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■
 const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","YT":"網址素材",
                    "CNN_newsource":"NS","CNN":"NS",
                    "YNA":"韓聯社","CNA":"CNA","ENEX":"ENEX","ABC":"ABC"};
-const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(), q:""};
+const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(),
+           snd:new Set(), len:new Set(), q:""};
 
 function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
 
@@ -338,6 +384,10 @@ function pass(r){
   if(F.mark.size && !F.mark.has(r.mark)) return false;
   if(F.big.size && !F.big.has(r.big)) return false;
   if(F.alert.size && !F.alert.has(r.alert)) return false;
+  // ⚠️ 側錄的 snd／len 是空字串，篩這兩組時**必然被排除**——這是預期行為，
+  //    不是漏標（側錄沒有 ▎BITE：／▎MM:SS 結構，且依訂案它必然有 BITE）。
+  if(F.snd.size && !F.snd.has(r.snd)) return false;
+  if(F.len.size && !F.len.has(r.len)) return false;
   if(F.q && !r.q.includes(F.q)) return false;
   return true;
 }
@@ -510,7 +560,8 @@ document.getElementById('copyAll').onclick=()=>{
   copy(rows.map(r=>r.text).join("\\n"),`已複製篩選結果 ${rows.length} 則`);
 };
 document.getElementById('reset').onclick=()=>{
-  F.src.clear();F.mark.clear();F.big.clear();F.alert.clear();F.q="";
+  F.src.clear();F.mark.clear();F.big.clear();F.alert.clear();
+  F.snd.clear();F.len.clear();F.q="";
   document.getElementById('q').value="";
   document.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'));
   draw();
@@ -529,6 +580,12 @@ chips('fmark','mark',uniq('mark'),MARK_LABEL);
 // 重大：🔴 在前、🟡 在後（輕重順序，不用字母序）
 chips('falert','alert',uniq('alert').sort((a,b)=>(a==='🔴'?0:1)-(b==='🔴'?0:1)),
       {"🔴":"🔴 重大","🟡":"🟡 次重大"});
+// 聲音／長度：標籤化試做第一批（2026-08-10）。兩組都是 render 時從成品推導，
+// 不經 agent、不進狀態檔——所以零 token、壞了也只影響這兩排鈕。
+chips('fsnd','snd',uniq('snd').sort((a,b)=>(a==='有BITE'?0:1)-(b==='有BITE'?0:1)));
+// ⚠️ 長度要照**時間**排，不能用字母序（那會變成 中／短／長）
+const LEN_ORDER=['短(<1分)','中(1-3分)','長(>3分)'];
+chips('flen','len',uniq('len').sort((a,b)=>LEN_ORDER.indexOf(a)-LEN_ORDER.indexOf(b)));
 chips('fbig','big',uniq('big'));
 
 // ── 產出時間：停太久要主動變紅，不能只是印在那裡 ────────────────────
