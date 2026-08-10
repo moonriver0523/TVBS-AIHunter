@@ -306,6 +306,17 @@ def check(path):
         if not re.search(r"(無BITE。|」|▎\d{1,3}:\d{2})\s*$", l):
             hit(n, "行尾有多餘內容（應以 無BITE。／」／▎MM:SS 結尾）")
 
+        # BITE 引言必須是中文濃縮版，不是英文逐字（2026-08-10 補：18:00 那輪
+        # 19 則英文原文照抄漏掃，因為當時完全沒有語言檢查）
+        if has_bite_seg:
+            bite_seg = l.split("▎BITE：", 1)[-1] if "▎BITE：" in l else l.split("▎BITE:", 1)[-1]
+            for q in re.findall(r"「([^」]*)」", bite_seg):
+                letters = len(re.findall(r"[A-Za-z]", q))
+                cjk = len(re.findall(r"[一-鿿]", q))
+                if letters > 20 and letters > cjk:
+                    hit(n, "BITE 引言疑似未翻譯成中文（英文字元多於中文，應為濃縮中文版）")
+                    break
+
         m_notes = re.match(rf"^{CODE}(?:\s*/\s*{CODE})*\s+(?:\([^)]*\)\s*)+", l)
         if m_notes:
             rest = l[m_notes.end():]

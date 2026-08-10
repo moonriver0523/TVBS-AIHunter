@@ -105,6 +105,50 @@ def sub_locs_from_txt(path):
     return out
 
 
+# 14-S2b 的形式標記全集。小分題**整個等於**其中一個＝只寫形式、沒有主題內容。
+# ⚠️ 2026-08-10 補：規則（14-S2b「🔴 小分題不准只寫形式」）從 08-09 就寫死了，
+#    但**沒有任何機械檢查**——0810 那批側錄 37 段全寫成 `主播BS`／`專家分析`
+#    這種純形式，品質掃照樣回報 0 命中，是使用者肉眼看出來的。
+#    這裡是那條規則的執法點：只比對「完全相等」，不做模糊比對，零誤報。
+FORM_ONLY = {
+    "主播BS", "主播開場BS", "主播BS+BITE", "主播BS+現場音", "主播訪談",
+    "記者包裝SOT", "記者報導+BITE", "記者連線", "記者解說",
+    "氣象主播分析", "專家分析", "主播開場BS+記者解說",
+}
+
+
+def form_only_hits(state_path):
+    """小分題只寫形式（沒有主題內容）→ [(小分題, [(大分類,中主題,id), ...])]。"""
+    locs = sub_locs_from_state(state_path)
+    if not locs:
+        return []
+    return [(name, ls) for name, ls in locs.items() if name.strip() in FORM_ONLY]
+
+
+def missing_sub_hits(state_path):
+    """完全沒開小分題的素材 → [(大分類, 中主題, [id, ...])]。
+
+    ⚠️ 2026-08-10 補。`sub_locs_from_state()` 對沒有小分題的項目是 `continue` 跳過，
+    於是「整天沒人開小分題」這種**最嚴重**的情況反而完全偵測不到——0810 當天 97 則
+    全裸，品質掃與本支都回報 0 命中，是使用者自己看出來的（根因是 13b 曾把小分題
+    寫成「選填」）。三層骨架見 13「素材行掛在小分題底下」。
+    """
+    if not os.path.exists(state_path):
+        return []
+    try:
+        with open(state_path, encoding="utf-8-sig") as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+    grouped = {}
+    for it in raw.get("items", []):
+        big, mid, sub = cat_of(it)
+        if not big or sub:      # 沒歸類的（needs-review 備註列）不算漏，有小分題的也不算
+            continue
+        grouped.setdefault((big, mid), []).append(it.get("id", "?"))
+    return [(b, m, ids) for (b, m), ids in grouped.items()]
+
+
 def check(state_path, yesterday_path=""):
     """回傳 (today_hits, cross_day_hits)，兩者都是 [(小分題, [(大分類,中主題,id), ...])]。"""
     today = sub_locs_from_state(state_path)
@@ -171,9 +215,28 @@ def main():
         yday_str = "／".join(f"{b}／{m}" for b, m, _ in yloc)
         print(f"⚠️ 「{name}」昨天在 {yday_str}，今天卻在 {today_str}，請覆核是否為延續故事被拆開")
 
+    miss_hits = missing_sub_hits(args.file)
     print("-" * 60)
-    print(f"共 {len(today_hits) + len(cross_hits)} 組命中（純提示，不改 state；"
-          f"確認後用 s2_state.py set-category 手動改）")
+    print("【沒開小分題】素材直接掛在中主題底下（13 三層骨架要求）")
+    if not miss_hits:
+        print("0 命中")
+    for b, m, ids in miss_hits:
+        shown = "、".join(ids[:6]) + ("…" if len(ids) > 6 else "")
+        print(f"⚠️ {b}／{m}：{len(ids)} 則沒有小分題（{shown}）")
+
+    form_hits = form_only_hits(args.file)
+    print("-" * 60)
+    print("【只寫形式】小分題沒有主題內容（14-S2b 明文禁止）")
+    if not form_hits:
+        print("0 命中")
+    for name, locs in form_hits:
+        loc_str = "／".join(f"{b}／{m}（如 {i}）" for b, m, i in locs)
+        print(f"⚠️ 「{name}」只有形式標記沒有主題內容：{loc_str}，"
+              f"應改成「主題內容 ＋ 形式」（如 女兒控卡斯楚殺害 主播開場BS）")
+
+    print("-" * 60)
+    print(f"共 {len(today_hits) + len(cross_hits) + len(form_hits) + len(miss_hits)} 組命中"
+          f"（純提示，不改 state；確認後用 s2_state.py set-category 手動改）")
 
 
 if __name__ == "__main__":

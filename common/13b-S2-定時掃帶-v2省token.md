@@ -521,13 +521,17 @@ python scripts/s2_state.py update-entry --id RT2333 --status has_script --entry 
                                                            #    ISO長帶/裸SOT/音軌等天生無旁白稿的＝has_script＋備註形態，不是 pending
                                                            # add／update-entry 短內容用 --entry 行內；長內容（如CNN連線全文）才用 --entry-file
 python scripts/s2_state.py pending                         # 稿未到清單（最終整併清查用）
-python scripts/s2_state.py set-category --pairs "RT2333=社會/休達移民/岸際動態;RT2360=天氣/野火"
+python scripts/s2_state.py set-category --pairs "RT2333=社會/休達移民/岸際動態;RT2360=天氣/野火動態"
 python scripts/s2_audit.py --mmdd 0805                     # ⭐ 交班前必跑：七項離線稽核（抓漏、抓誤判），見 §2a-2
 python scripts/s2_state.py list-topics                     # ⭐ 開新中主題前必跑：列出各大分類現有的中主題與則數
                                                            # 順帶提示「中主題放錯大分類」（名稱含地區詞但樣板有專屬格）
                                                            # --subs 連小分題一起列；只讀狀態檔、零瀏覽器呼叫
                                                            # ⭐ 批次設分類（預設路徑）；單筆仍可 --id RT2333 --cat "社會/休達移民"
-                                                           # 第三段＝小分題（選填）：render 會產出裸行標題＋`+` 分隔
+                                                           # 第三段＝小分題（🔴 2026-08-10 訂正：必填，不是選填——13 的三層骨架寫明
+                                                           #   「素材行掛在小分題底下」，只給大分類/中主題會讓素材直接懸在中主題下，
+                                                           #   render 出來的 txt 少一層。相似素材共用同一個小分題，不要一則一個；
+                                                           #   0810 當天 97 則因為這裡曾誤寫「選填」全數漏開，回填見 needs-review）
+                                                           # render 會產出裸行標題＋`+` 分隔
 python scripts/s2_state.py add-side --txt "…/0803 CNN側錄.txt" --source CNN --checkpoint 22:00 \
        --homes "天氣/華州野火/州長宣布緊急=160106,160151"
                                                            # 側錄入庫（SIDE_CNN／SIDE_NHK），見 14-S2b「暫定辦法」
@@ -574,6 +578,16 @@ python scripts/s2_state.py needs-review done --ids RT2333    # 處理完就結�
   - **成本可忽略**：瘦身後 AP 詳情單則約 5KB、RT 約 1.5KB、NS 約 1KB，一輪 25 則約 40–100KB，一晚十幾輪約 1–2MB。本來就歸檔在日期資料夾、隔天可清，不佔長期空間。
   - ⛔ **存的是「瘦身後」不是「原始 API 回應」**——原始回應 6–9 成是 `renditions`／計價規則／向量嵌入等雜訊（見 §1a-0-1），存那個等於把省下來的空間又浪費掉。也**不准存 token／cookie**（回傳值黑名單一樣適用）。
 - **整併流程（2026-08-03 WP1 改版）＝ `pending` 全量重查（見下）→ `add-batch`／`update-entry` 更新狀態檔 → `set-category --pairs` 批次設分類（含小分題）→ 側錄 `add-side` → 重大素材 `set-alert` → `s2_render.py` 全量渲染 txt。agent 輸出趨近 0，不再手寫整份 txt。**
+- 🔴 **23:00 定版時做一次「只看主題層」的分類收斂（2026-08-10 使用者訂案）**：
+  跑 `list-topics --subs`（**只讀狀態檔、零瀏覽器呼叫**），拿到的是各大分類底下的
+  中主題／小分題名稱與則數，**約 5K token**。要處理的只有三件事：
+  ① 同一件事被拆成兩個中主題 → 併（0810 實例：「塞爾維亞多瑙河水位」併進【歐洲乾旱】）；
+  ② 小分題過碎、幾個幾乎同義的 → 併（判準見 `13`「小分題要夠粗、不要一則一個」）；
+  ③ 中主題語意已經漂掉、底下素材其實分成兩類 → 拆（0810 實例：【俄烏軍事動態】
+     拆成【俄炸烏】／【烏炸俄】，另把軍援外交那批獨立成【烏克蘭軍援與外交】）。
+  ⛔ **不要逐則重讀內文重分類**——那要 4–5 萬 token，是本步驟的 8～10 倍，而且
+  逐輪已經開過小分題了，這一步只補「跨輪才看得出來」的一致性問題。
+  ⚠️ 必須**在輪次之間**做（狀態檔沒有檔案鎖），23:00 定版是最佳時機。
 - ⚠️ **pending 每輪都要主動清查，不只 23:00（2026-08-03 訂正，見 `13` 決策 4）**：跑 `pending` 看目前清單，逐則走 §1a API 批次重查（NS 整批一次查；RT／AP guid／itemid 一次 `Promise.all` 打 N 則，同一個 `browser_evaluate` 裡做，工具呼叫仍算 1 次）。稿已到就 `update-entry` 覆寫；稿仍未到維持原樣。**查完照規則直接處理，不要停下來問使用者「要不要清」**——這不是需要裁決的事，是每輪固定要做的步驟。pending 為 0 的輪次跳過，不必空跑。
   - 🎟️ **搭便車：這次重查順手把 `sb_count` 記下來（2026-08-04 訂案，近乎零成本）**：pending 清查本來就要打 API 拿全文，**同一份回應順手數一次 `SOUNDBITE`**，`update-entry` 時用 `--sb-count N` 帶入即可——不另外開一趟、不多一次呼叫。轉正那一刻正是最容易漏標 BITE 的時機（見 §1「誤判的真正形狀」），搭這班順風車等於免費補上兜底。
 - ⚠️ **`to-compile`／`mark-compiled`／`compiled` 欄位已廢除**：它們存在的唯一理由是「讓 agent 不用每輪重寫整份」，render 讓重寫免費，增量反而多一次呼叫又會漏（0803 標籤字串比較實錯漏 50 則）。`resume` 的「待整併」改成「上次 render 後有變動」，只是參考值，不影響產出。
