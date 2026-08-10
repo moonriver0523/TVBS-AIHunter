@@ -125,6 +125,34 @@ def form_only_hits(state_path):
     return [(name, ls) for name, ls in locs.items() if name.strip() in FORM_ONLY]
 
 
+# 操作備註／向使用者提問，被寫進**分類名稱**的痕跡（2026-08-10 補）。
+# ⚠️ 0810 實例：側錄 agent 不確定新主題該不該併，就把問題寫進中主題名稱——
+#   `美籍退伍軍人吉爾曼遭俄羈押安危】（新題，不確定是否已有既有子題可併，請裁定）`
+#   三個中主題中招、共 20 段素材，render 照樣把整串印進交接單當標題。
+#   `13` 早就禁止「操作備註寫進素材行」且 `s2_validate` 有查，但**分類名稱是另一條路徑**，
+#   完全沒人看——不確定就寫 `needs-review`，不要寫進成品欄位。
+NOTE_IN_NAME = re.compile(r"(請裁定|待裁定|待確認|待人工|待補|不確定|新題|暫定|TODO|待議|請確認)"
+                          r"|[】\]]\s*[（(]|^[^【]*】")
+
+
+def note_in_name_hits(state_path):
+    """分類名稱裡混進操作備註／提問 → [(層級, 名稱, [id, ...])]。"""
+    if not os.path.exists(state_path):
+        return []
+    try:
+        with open(state_path, encoding="utf-8-sig") as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
+    bad = {}
+    for it in raw.get("items", []):
+        big, mid, sub = cat_of(it)
+        for lvl, name in (("大分類", big), ("中主題", mid), ("小分題", sub)):
+            if name and NOTE_IN_NAME.search(name):
+                bad.setdefault((lvl, name), []).append(it.get("id", "?"))
+    return [(lvl, name, ids) for (lvl, name), ids in bad.items()]
+
+
 def missing_sub_hits(state_path):
     """完全沒開小分題的素材 → [(大分類, 中主題, [id, ...])]。
 
@@ -215,6 +243,15 @@ def main():
         yday_str = "／".join(f"{b}／{m}" for b, m, _ in yloc)
         print(f"⚠️ 「{name}」昨天在 {yday_str}，今天卻在 {today_str}，請覆核是否為延續故事被拆開")
 
+    note_hits = note_in_name_hits(args.file)
+    print("-" * 60)
+    print("【備註寫進分類名稱】不確定要寫 needs-review，不要寫進成品欄位")
+    if not note_hits:
+        print("0 命中")
+    for lvl, name, ids in note_hits:
+        shown = "、".join(ids[:4]) + ("…" if len(ids) > 4 else "")
+        print(f"⚠️ {lvl}「{name}」共 {len(ids)} 則（{shown}）")
+
     miss_hits = missing_sub_hits(args.file)
     print("-" * 60)
     print("【沒開小分題】素材直接掛在中主題底下（13 三層骨架要求）")
@@ -235,8 +272,9 @@ def main():
               f"應改成「主題內容 ＋ 形式」（如 女兒控卡斯楚殺害 主播開場BS）")
 
     print("-" * 60)
-    print(f"共 {len(today_hits) + len(cross_hits) + len(form_hits) + len(miss_hits)} 組命中"
-          f"（純提示，不改 state；確認後用 s2_state.py set-category 手動改）")
+    total = (len(today_hits) + len(cross_hits) + len(form_hits)
+             + len(miss_hits) + len(note_hits))
+    print(f"共 {total} 組命中（純提示，不改 state；確認後用 s2_state.py set-category 手動改）")
 
 
 if __name__ == "__main__":
