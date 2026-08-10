@@ -317,7 +317,7 @@ const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■
 // 篩選鈕上不要出現 SIDE_CNN 這種內部代碼——那是給程式看的，不是給編輯看的
 const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","YT":"網址素材",
                    "CNN_newsource":"NS","CNN":"NS",
-                   "YNA":"韓聯社","CNA":"CNA","ENEX":"ENEX"};
+                   "YNA":"韓聯社","CNA":"CNA","ENEX":"ENEX","ABC":"ABC"};
 const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(), q:""};
 
 function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
@@ -517,10 +517,10 @@ document.getElementById('reset').onclick=()=>{
 };
 // 來源排序：**明確寫死順序**（2026-08-09 使用者訂）。
 // AP／RT／NS 三站一定排最前面（那是每天的主力、編輯第一眼要找的），
-// 接著側錄 CNN／NHK，再來網址素材 YNA／CNA／ENEX。名單外的排最後、按字母。
+// 接著側錄 CNN／NHK，再來網址素材 YNA／CNA、交換平台 ENEX／ABC。名單外的排最後、按字母。
 // ⚠️ 不要改用 localeCompare 之類的「自動排序」——那會讓 AP 之外的來源
 //    隨著當天有沒有收到而跳來跳去，編輯每天看到的位置不一樣。
-const SRC_ORDER=['AP','RT','NS','SIDE_CNN','SIDE_NHK','YNA','CNA','ENEX'];
+const SRC_ORDER=['AP','RT','NS','SIDE_CNN','SIDE_NHK','YNA','CNA','ENEX','ABC'];
 chips('fsrc','src',uniq('src').sort((a,b)=>{
   const w=s=>{const i=SRC_ORDER.indexOf(s);return i<0?SRC_ORDER.length:i;};
   return w(a)-w(b) || a.localeCompare(b);

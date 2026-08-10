@@ -41,6 +41,8 @@ for _s in (sys.stdout, sys.stderr):
 CODE = (r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2,6}-\d{1,4}[A-Z]{2}"
         r"|(?:YNA|CNA)\d{2,3}"                     # 韓聯社／CNA 網址素材（2026-08-09）
         r"|ENEX\d{4,8}"                            # ENEX（2026-08-09，人工下令才跑、不進固定掃帶）
+        r"|ABC\d{6,12}"                            # ABC NewsOne（2026-08-10，同樣人工下令才跑）
+                                                   # 代碼＝ABC＋Story Number，前 6 碼是 MMDDYY
         r"|(?:CNN|NHK) (?:\d{2}-\d{2} )?\d{6})")   # 側錄的日期段可有可無（2026-08-09）
 LINE_RE = re.compile(rf"^{CODE}(?:\s*/\s*{CODE})*\s")
 
