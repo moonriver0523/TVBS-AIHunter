@@ -140,6 +140,42 @@ function New-ShiftState {
         Get-ChildItem $StateDir -File | Where-Object { $_.Name -like "$pm*" } | ForEach-Object {
             Move-Item $_.FullName -Destination $dest -Force; $moved++
         }
+
+        # ── 當日暫存夾 → Archive\{YYYYMMDD}\_暫存\（2026-08-11 加）────────
+        # 🔴 **這裡是「雙包」的根因**：`s2_state.py` 的 `scratch_dir()` 把暫存夾也命名成
+        #    `{YYYYMMDD}`，跟這裡的定版歸檔夾**同名同層**。以前是人工把暫存夾搬進
+        #    `Archive\`，於是同一層出現兩個 `20260808`——Google Drive 允許同層同名，
+        #    Windows 用戶端只好把第二個改名成 `20260808 (1)`。0805～0808 四天全中。
+        #    修法不是改名字，是**收成子資料夾**：定版產物在 `{YYYYMMDD}\`，
+        #    暫存進 `{YYYYMMDD}\_暫存\`，永遠不會再同名。
+        # ⚠️ 用 `-LiteralPath`：資料夾名純數字，但沿用同一套寫法比較不會踩萬用字元。
+        $scratch = Join-Path $StateDir "$yyyy$pm"
+        if (Test-Path -LiteralPath $scratch) {
+            $sDest = Join-Path $dest "_暫存"
+            New-Item -ItemType Directory -Force -Path $sDest | Out-Null
+            $sN = (Get-ChildItem -LiteralPath $scratch -Recurse -File -EA SilentlyContinue).Count
+            Get-ChildItem -LiteralPath $scratch -Force | Move-Item -Destination $sDest -Force
+            Remove-Item -LiteralPath $scratch -Recurse -Force
+            Write-Run "NEWDAY`t暫存夾 $yyyy$pm 已歸檔 $sN 個檔 → Archive\$yyyy$pm\_暫存"
+        }
+
+        # ── `_待整併` 的當日殘檔 → Archive\{YYYYMMDD}\_待整併\（2026-08-11 加）──
+        # `_待整併` 是**跨天共用**一個資料夾、靠 `{MMDD}-` 前綴區分，入庫後沒人清，
+        # 於是舊交件檔一直堆著；下一輪 agent 看到它們無從判斷「這是今天要整併的，
+        # 還是昨天已經入庫的」——0810 就靠人工比對 239 筆才敢刪。
+        # 交班時把當日的一起收進母資料夾，`_待整併` 每天自然回到空的。
+        # ⚠️ **只搬前綴符合的那天**，不要整夾清空——當下可能已經有今天的新交件。
+        $pend = Join-Path $StateDir "_待整併"
+        if (Test-Path -LiteralPath $pend) {
+            $old = @(Get-ChildItem -LiteralPath $pend -File | Where-Object { $_.Name -like "$pm*" })
+            if ($old.Count) {
+                $pDest = Join-Path $dest "_待整併"
+                New-Item -ItemType Directory -Force -Path $pDest | Out-Null
+                $old | ForEach-Object { Move-Item $_.FullName -Destination $pDest -Force }
+                Write-Run "NEWDAY`t_待整併 $pm 殘檔已歸檔 $($old.Count) 個 → Archive\$yyyy$pm\_待整併"
+            }
+        }
+
         Write-Run "NEWDAY`t上一班 $pm 已歸檔 $moved 個檔 → Archive\$yyyy$pm"
         Write-Host "NEWDAY $pm 已歸檔（$moved 個檔）"
     } else {
