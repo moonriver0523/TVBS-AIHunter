@@ -911,6 +911,45 @@ def cmd_set_aired(state, args):
     print(f"OK {len(ids)} 則{verb}：{','.join(ids)}")
 
 
+def cmd_set_topic_order(state, args):
+    """人工指定某個大分類底下的中主題順序（2026-08-10 使用者訂案）。
+
+    🔴 **為什麼要有這個欄位**：中主題順序原本**完全是 render 當下推導的**
+    （到貨順序＋`order_topics()` 相近名稱靠攏），**沒有任何地方存**。
+    所以「幫我重排一次」排完就沒了——下一輪 render 照舊演算法重算就蓋掉，
+    跟「不要手改 txt」是同一個道理：render 是狀態檔的單向投影。
+
+    - 清單裡**今天不存在**的中主題自動略過，不會憑空生出空標題。
+    - 今天**新出現、清單裡沒有**的中主題仍走自動排（插到名稱相近的旁邊），
+      所以這份順序不必每天重寫。
+    - `--clear` 撤掉某格的人工順序，退回全自動。
+    """
+    order = state.setdefault("topic_order", {})
+    if args.clear:
+        order.pop(args.cat, None)
+        save(state, args.file)
+        print(f"OK 已撤掉「{args.cat}」的人工順序，退回自動排")
+        return
+    mids = [x.strip() for x in re.split(r"[;；]", args.order or "") if x.strip()]
+    if not mids:
+        print("ERROR 需要 --order（用分號分隔）或 --clear", file=sys.stderr)
+        raise SystemExit(2)
+    order[args.cat] = mids
+    save(state, args.file)
+    print(f"OK 「{args.cat}」中主題順序已釘住 {len(mids)} 個：{'／'.join(mids)}")
+    # 對照今天實際有的中主題，把落差講清楚——避免「排了卻沒生效」的靜默困惑
+    have = {(it.get("category") or {}).get("中主題")
+            for it in state.get("items", [])
+            if (it.get("category") or {}).get("大分類") == args.cat}
+    have.discard(None)
+    missing = [m for m in mids if m not in have]
+    extra = sorted(have - set(mids))
+    if missing:
+        print(f"  · 清單有、今天沒有（本輪自動略過）：{'／'.join(missing)}")
+    if extra:
+        print(f"  · 今天有、清單沒有（走自動排，插到相近主題旁）：{'／'.join(extra)}")
+
+
 def cmd_set_alert(state, args):
     """檔頭 🔴 重大提醒行（WP1 前提四）。
 
@@ -1093,6 +1132,11 @@ def main():
     sa.add_argument("--set", action="append", help="整組取代（可重複，最多3則）")
     sa.add_argument("--add", help="追加一則（超過3則丟最舊的）")
     sa.add_argument("--clear", action="store_true", help="全部撤掉")
+    sto = sub.add_parser("set-topic-order",
+                         help="釘住某大分類的中主題順序（render 每輪照用；沒釘的走自動排）")
+    sto.add_argument("--cat", required=True, help="大分類，如 天氣")
+    sto.add_argument("--order", help="中主題順序，分號分隔")
+    sto.add_argument("--clear", action="store_true", help="撤掉人工順序，退回自動排")
     c = sub.add_parser("set-category")
     c.add_argument("--id")
     c.add_argument("--cat", help="大分類/中主題[/小分題]")
@@ -1117,6 +1161,7 @@ def main():
         "add-batch": cmd_add_batch,
         "update-entry": cmd_update_entry, "pending": cmd_pending,
         "add-side": cmd_add_side, "set-alert": cmd_set_alert,
+        "set-topic-order": cmd_set_topic_order,
         "set-mark": cmd_set_mark, "set-aired": cmd_set_aired,
         "set-category": cmd_set_category, "get": cmd_get, "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,

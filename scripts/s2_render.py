@@ -248,8 +248,15 @@ def _lcs_len(a, b):
 _TOPIC_SIM_MIN = 2
 
 
-def order_topics(mids):
+def order_topics(mids, pinned=()):
     """中主題排序：**維持到貨順序，但新主題插到名稱最相近的既有主題旁邊**。
+
+    `pinned`＝狀態檔 `topic_order[大分類]` 指定的人工順序（2026-08-10 加）。
+    給了就**先照它排**，其餘（今天新出現、清單裡沒有的）再走下面的自動邏輯插進去。
+    為什麼要存進狀態檔：中主題順序原本**完全是 render 當下推導的**，沒有任何地方
+    存——手動排完，下一輪 render 照舊演算法重算就蓋掉了（跟「不要手改 txt」同一個
+    道理，render 是狀態檔的單向投影）。要讓人工排序留得住，就得有個欄位。
+    ⚠️ `pinned` 裡今天不存在的中主題**自動略過**，不會憑空生出空標題。
 
     2026-08-05 使用者訂案。原本純粹依素材到貨順序排，跨輪的相關主題必然散開——
     0804 實測【歐洲野火】(18:00 到) 與【野火】(22:00 到) 中間隔了 4 個不相干的主題，
@@ -259,8 +266,11 @@ def order_topics(mids):
     達門檻就插在**該族最後一個**的後面（插在最後一個而不是第一個，多個同族才會連成一片），
     沒達門檻就照舊接在最後。純顯示層調整，不動任何資料。
     """
-    out = []
+    have = set(mids)
+    out = [p for p in (pinned or ()) if p in have]      # 人工順序優先，不存在的跳過
     for m in mids:
+        if m in out:                                     # 已被 pinned 放好
+            continue
         best, best_at = 0, -1
         for idx, seen in enumerate(out):
             sc = _lcs_len(m, seen)
@@ -305,11 +315,14 @@ def group_items(state, base_mmdd=""):
                 # ⛔ 不要在這裡猜它該掛哪一格——猜錯比留白更糟，那會讓錯的分類看起來像對的。
                 mid = "未分類"
         groups.setdefault(big, {}).setdefault(mid, {}).setdefault(sub, []).append(it)
-    # 中主題重排：相近名稱靠攏（小分題與素材順序完全不動）
+    # 中主題重排：人工指定的 `topic_order` 優先，其餘相近名稱靠攏
+    #（小分題與素材順序完全不動）
     if base_mmdd not in TOPIC_ORDER_SKIP_MMDD:
+        pinned_all = state.get("topic_order") or {}
         for big in groups:
             mids = groups[big]
-            groups[big] = {m: mids[m] for m in order_topics(list(mids))}
+            order = order_topics(list(mids), pinned_all.get(big, ()))
+            groups[big] = {m: mids[m] for m in order}
     return groups
 
 
