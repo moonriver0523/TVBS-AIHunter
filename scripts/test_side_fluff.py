@@ -11,9 +11,16 @@ import s2_side_from_oyw as m
 D = r"G:\我的雲端硬碟\Autopilot\(掃帶歐印萬) 檔名取TC起頭 6位數\0810"
 TRUTH = {"153446", "161625", "162545", "163620", "164112", "164945", "170933"}
 
+# ⚠️ **基準集要釘死在校準當時那 10 支**。來源資料夾是活的，晚上還會有新檔進來——
+#    0810 20:30 就從 79 段長到 175 段，而新檔裡的 `194451`
+#    （主播 John「我們來談談——」）是**真廢話**，卻因為不在 TRUTH 裡被算成假陽性，
+#    害測試假性失敗。回歸測試比對的是**固定樣本**，不是「資料夾現在有什麼」。
+BASELINE = ("152933", "153905", "160108", "161224", "162445",
+            "163336", "164433", "173628", "174751", "170012")
+
 flagged, all_tc = set(), set()
 for p in sorted(os.listdir(D)):
-    if not p.endswith(".wav.txt"):
+    if not p.endswith(".wav.txt") or not any(k in p for k in BASELINE):
         continue
     raw = io.open(os.path.join(D, p), encoding="utf-8-sig", errors="replace").read()
     body, err = m.extract_zh(raw)
