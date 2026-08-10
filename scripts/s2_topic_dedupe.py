@@ -170,8 +170,22 @@ def missing_sub_hits(state_path):
         return []
     grouped = {}
     for it in raw.get("items", []):
+        if it.get("script_status") == "note":
+            continue            # needs-review 備註殼，本來就沒有內容要分類
+        if not (it.get("raw_entry") or "").strip():
+            continue            # 沒有內容的殼同理
         big, mid, sub = cat_of(it)
-        if not big or sub:      # 沒歸類的（needs-review 備註列）不算漏，有小分題的也不算
+        # 🔴 **完全沒分類的要單獨大聲報**（2026-08-10 補）。
+        #    舊版寫 `if not big: continue`——沒有大分類的直接跳過，於是
+        #    「整輪忘了呼叫 set-category」這種**最嚴重**的情況反而完全偵測不到。
+        #    0810-2200 實錯：那輪 `add-batch` 三次、`set-category` **0 次**，
+        #    46 則素材連大分類都沒有；render 把它們默默丟進「話題／未分類」，
+        #    品質掃、本支、`s2_topic_review` 全數 0 命中，是使用者自己發現的。
+        if not big:
+            grouped.setdefault(("（完全沒分類）", "⚠️ 這輪可能漏跑 set-category"), []) \
+                   .append(it.get("id", "?"))
+            continue
+        if sub:
             continue
         grouped.setdefault((big, mid), []).append(it.get("id", "?"))
     return [(b, m, ids) for (b, m), ids in grouped.items()]
