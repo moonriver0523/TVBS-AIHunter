@@ -483,34 +483,108 @@ def cmd_add_batch(state, args):
         print("\n".join("  " + s for s in skipped))
 
 
-def cmd_update_entry(state, args):
-    i = norm_id(args.id)
-    if i not in state["items"]:
-        print(f"ERROR: {i} 不存在，請先 add")
-        sys.exit(2)
+def apply_update(state, i, entry, sb_count=None, status=None, checkpoint=None,
+                 footage_type=None):
+    """把一則的 raw_entry 覆寫掉。單筆與批次共用同一份邏輯，回傳 (doubt, fmt問題清單)。
+
+    ⚠️ **不在這裡 save**：批次要的是「全部改完只寫一次檔」，寫檔次數等於
+    Google Drive 同步次數，逐筆存在遠端資料夾上很慢（同 add-batch 的做法）。
+    """
     it = state["items"][i]
-    entry = read_entry(args)
     # 🎯 BITE 兜底（同 add-batch，2026-08-05 由「直接擋」改為「照收＋標記」）：
     # 覆寫時擋下更危險——舊內容已經在庫存裡，擋下只會讓它停在舊版本，
     # 而 agent 以為自己更新過了。
-    doubt = bite_doubt(entry, args.sb_count, getattr(args, "footage_type", None))
+    doubt = bite_doubt(entry, sb_count, footage_type)
     it["raw_entry"] = entry
     # 站方補上完整稿後 sb_count 會變（0→5），**這條路就是唯一的回寫時機**——
     # 沒帶就別動舊值（`None` ＝ 沒帶，不是 0；見下方 argparse 的 default 說明）。
-    if isinstance(args.sb_count, int):
-        it["sb_count"] = args.sb_count
-    if args.status:
-        it["script_status"] = args.status
-    it["entry_updated"] = args.checkpoint or it.get("last_checked_checkpoint", "")
+    if isinstance(sb_count, int):
+        it["sb_count"] = sb_count
+    if status:
+        it["script_status"] = status
+    it["entry_updated"] = checkpoint or it.get("last_checked_checkpoint", "")
     it["entry_updated_ts"] = now_ts()
     sp.derive(it)                        # 內容變了，結構化欄位跟著重推（見 s2_parse）
     if doubt:
         it["needs_review"] = doubt
     else:
         it.pop("needs_review", None)     # 改好了就自動結案，不用手動 done
+    return doubt, [f"{i}: {r}" for r in fmt_issues(it.get("raw_entry") or "")]
+
+
+def cmd_update_entry(state, args):
+    """單筆覆寫；帶 `--batch` 就走批次（見 cmd_update_batch 的說明）。"""
+    if getattr(args, "batch", None):
+        return cmd_update_batch(state, args)
+    # ⚠️ 順序不能顛倒：`norm_id(None)` 會炸。先確認有帶 id 再正規化。
+    if not args.id:
+        print("ERROR: 需要 --id（單筆）或 --batch（批次）")
+        sys.exit(2)
+    i = norm_id(args.id)
+    if i not in state["items"]:
+        print(f"ERROR: {i} 不存在，請先 add")
+        sys.exit(2)
+    doubt, fmt = apply_update(state, i, read_entry(args), args.sb_count,
+                              args.status, args.checkpoint,
+                              getattr(args, "footage_type", None))
     save(state, args.file)
-    print(f"OK 已覆寫 {i}（{it['script_status']}）")
-    report_fmt([f"{i}: {r}" for r in fmt_issues(it.get("raw_entry") or "")])
+    print(f"OK 已覆寫 {i}（{state['items'][i]['script_status']}）")
+    report_fmt(fmt)
+
+
+def cmd_update_batch(state, args):
+    """整批覆寫既有素材的 raw_entry（2026-08-11 加）。
+
+    🔴 **為什麼要有這支**：`add-batch` 有批次、`set-category --pairs` 有批次，
+    **唯獨「修正既有稿子」只能一則一則來**。於是每次品質閘擋下 N 則要改，
+    agent 就自己寫一支 python subprocess 迴圈去跑 N 次 update-entry——
+    0811-2000 那輪 67 次 Bash 裡有 12 次是這種臨時腳本，而臨時腳本每輪重寫一次、
+    每次都可能寫錯（0811 就修了兩次路徑）。缺工具就會長出即興腳本，
+    這是工具箱的缺口，不是 agent 的紀律問題。
+
+    檔案格式：JSON 陣列，每筆 `{"id", "entry"}`，可選 `sb_count`／`status`／
+    `checkpoint`／`footage_type`。不存在的 id 跳過並回報（要新增請用 `add-batch`），
+    其餘照樣改完——單筆失敗不中斷整批，同 `add-batch` 的一貫做法。
+    """
+    try:
+        with open(args.batch, encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"ERROR: --batch 檔讀取失敗（{e}）")
+        sys.exit(2)
+    if isinstance(data, dict):
+        data = data.get("entries")
+    if not isinstance(data, list):
+        print("ERROR: --batch 需為 JSON 陣列（或含 entries 陣列的物件）")
+        sys.exit(2)
+    done, skipped, flagged, fmt = [], [], [], []
+    for n, e in enumerate(data, 1):
+        if not isinstance(e, dict) or not e.get("id") or not isinstance(e.get("entry"), str):
+            skipped.append(f"第{n}筆({e.get('id','?') if isinstance(e, dict) else '?'}): "
+                           f"需要 id 與字串 entry")
+            continue
+        i = norm_id(str(e["id"]))
+        if i not in state["items"]:
+            skipped.append(f"{i}: 不存在（要新增請用 add-batch）")
+            continue
+        doubt, issues = apply_update(
+            state, i, e["entry"].strip(), e.get("sb_count"), e.get("status"),
+            e.get("checkpoint") or getattr(args, "checkpoint", None),
+            e.get("footage_type"))
+        if doubt:
+            flagged.append(f"{i}: {doubt}")
+        fmt += issues
+        done.append(i)
+    if done:
+        save(state, args.file)           # 全部改完只寫一次檔
+    print(f"OK 已覆寫 {len(done)} 則" + (f"：{','.join(done)}" if done else ""))
+    report_fmt(fmt)
+    if flagged:
+        print(f"⚠️ BITE 待確認 {len(flagged)} 則（**已寫入**，已記進 needs-review）：")
+        print("\n".join("  " + x for x in flagged))
+    if skipped:
+        print(f"跳過 {len(skipped)} 則：")
+        print("\n".join("  " + s for s in skipped))
 
 
 # 地區詞 → 樣板上該去的大分類（2026-08-06 訂）。用來抓「中主題放錯大分類」。
@@ -1070,6 +1144,89 @@ def cmd_get(state, args):
     print(json.dumps(v, ensure_ascii=False, indent=1))
 
 
+# `show` 的欄位取法。多半是巢狀的（category／fields 底下），所以用取值函式而不是
+# 直接 `it[key]`——agent 最常要問的就是分類與摘要，那兩個都不在頂層。
+SHOW_FIELDS = {
+    "id":     lambda i, it: i,
+    "cat":    lambda i, it: "/".join(x for x in cat_tuple(it) if x),
+    "大分類":  lambda i, it: cat_tuple(it)[0],
+    "中主題":  lambda i, it: cat_tuple(it)[1],
+    "小分題":  lambda i, it: cat_tuple(it)[2],
+    "entry":  lambda i, it: (it.get("raw_entry") or "").replace("\n", " "),
+    "source": lambda i, it: it.get("source") or "",
+    "status": lambda i, it: it.get("script_status") or "",
+    "cp":     lambda i, it: it.get("first_seen_checkpoint") or "",
+    "sb":     lambda i, it: it.get("sb_count"),
+    "review": lambda i, it: it.get("needs_review") or "",
+    "summary": lambda i, it: (it.get("fields") or {}).get("summary") or "",
+    "bite":   lambda i, it: "；".join((it.get("fields") or {}).get("bite") or []),
+    "dur":    lambda i, it: (it.get("fields") or {}).get("duration") or "",
+}
+DEFAULT_SHOW = ("id", "cat", "source", "cp", "status")
+
+
+def cat_tuple(it):
+    c = it.get("category")
+    if isinstance(c, dict):
+        return (c.get("大分類") or "", c.get("中主題") or "", c.get("小分題") or "")
+    if isinstance(c, str) and "/" in c:
+        p = [x.strip() for x in c.split("/", 2)] + ["", ""]
+        return p[0], p[1], p[2]
+    return "", "", ""
+
+
+def cmd_show(state, args):
+    """批次查看多則的**指定欄位**（2026-08-11 加）。
+
+    🔴 **為什麼要有這支**：`get` 一次只吃一個 id、而且整包 JSON 全 dump。
+    所以「這 20 則各自的分類是什麼」這種最常見的問題，用 `get` 要叫 20 次、
+    每次還噴一大包無關欄位——agent 於是理性地選擇自己寫
+    `python -c "import json; d=json.load(...)"`。0811-2000 那輪 67 次 Bash 裡
+    **有 22 次是這種臨時查詢腳本**，是單一最大宗的可消除呼叫。
+
+    用法：
+      show --ids RT4519,AP4677743                     # 預設欄位
+      show --ids RT4519 --fields cat,entry,bite       # 指定欄位
+      show --cat 烏俄 --fields id,中主題               # 依大分類篩，不必先知道 id
+      show --checkpoint 0811-2000 --fields id,cat     # 依本輪 checkpoint 篩
+    ⚠️ 不給任何篩選條件會列出**全部**，量大時請務必帶 `--fields` 只取要用的欄位——
+       這支的意義就是少搬東西進 context，整包倒出來就白費了。
+    """
+    bad = [f for f in (args.fields or "").split(",") if f.strip() and f.strip() not in SHOW_FIELDS]
+    if bad:
+        print(f"ERROR: 不認得的欄位 {','.join(bad)}；可用："
+              f"{'／'.join(SHOW_FIELDS)}", file=sys.stderr)
+        sys.exit(2)
+    fields = [f.strip() for f in (args.fields or "").split(",") if f.strip()] or list(DEFAULT_SHOW)
+
+    if args.ids:
+        want = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+        missing = [i for i in want if i not in state["items"]]
+        rows = [(i, state["items"][i]) for i in want if i in state["items"]]
+    else:
+        missing = []
+        rows = list(state["items"].items())
+        if args.cat:
+            rows = [(i, it) for i, it in rows if cat_tuple(it)[0] == args.cat]
+        if args.mid:
+            rows = [(i, it) for i, it in rows if cat_tuple(it)[1] == args.mid]
+        if args.checkpoint:
+            rows = [(i, it) for i, it in rows
+                    if it.get("first_seen_checkpoint") == args.checkpoint]
+        if args.needs_review:
+            rows = [(i, it) for i, it in rows if it.get("needs_review")]
+
+    if args.json:
+        print(json.dumps([{f: SHOW_FIELDS[f](i, it) for f in fields} for i, it in rows],
+                         ensure_ascii=False))
+    else:
+        for i, it in rows:
+            print("\t".join(str(SHOW_FIELDS[f](i, it)) for f in fields))
+    print(f"（{len(rows)} 則）", file=sys.stderr)
+    if missing:
+        print(f"⚠️ 不存在 {len(missing)} 則：{','.join(missing)}", file=sys.stderr)
+
+
 def cmd_remove(state, args):
     """整則刪除（誤收、排除白名單命中等）——與 needs-review 不同：這裡是真的不要，
     不是留著待人工。刪除後 render 那則就不會再出現，不留殼。
@@ -1164,7 +1321,10 @@ def main():
     ab.add_argument("--entries", required=True,
                     help="JSON 陣列檔，每筆含 id/source/checkpoint/status/entry")
     u = sub.add_parser("update-entry")
-    u.add_argument("--id", required=True)
+    # ⚠️ `--id` 不再 required：批次走 `--batch`，兩者擇一（函式裡檢查）。
+    u.add_argument("--id")
+    u.add_argument("--batch", help="批次覆寫：JSON 陣列檔，每筆 {id, entry[, sb_count,"
+                                   "status, checkpoint, footage_type]}。改 N 則不必寫迴圈")
     u.add_argument("--status", choices=["has_script", "pending"])
     u.add_argument("--checkpoint")
     u.add_argument("--entry", help="行內短內容（與 --entry-file 擇一）")
@@ -1226,6 +1386,16 @@ def main():
     st.add_argument("value")
     g = sub.add_parser("get")
     g.add_argument("--id", required=True)
+    sh = sub.add_parser("show",
+                        help="批次查多則的指定欄位（取代自己寫 python 讀狀態檔）")
+    sh.add_argument("--ids", help="逗號分隔；不給就用下面的條件篩")
+    sh.add_argument("--cat", help="只看某大分類")
+    sh.add_argument("--mid", help="只看某中主題")
+    sh.add_argument("--checkpoint", help="只看某輪收進來的")
+    sh.add_argument("--needs-review", action="store_true", help="只看有 needs_review 的")
+    sh.add_argument("--fields", help=f"逗號分隔，預設 {','.join(DEFAULT_SHOW)}；"
+                                     f"可用：{','.join(SHOW_FIELDS)}")
+    sh.add_argument("--json", action="store_true", help="輸出 JSON 而非 TSV")
     rm = sub.add_parser("remove", help="整則刪除（誤收、排除白名單命中等），不是留待人工")
     rm.add_argument("--ids", required=True)
     r = sub.add_parser("needs-review")
@@ -1244,7 +1414,8 @@ def main():
         "set-topic-order": cmd_set_topic_order,
         "set-resident-topics": cmd_set_resident_topics,
         "set-mark": cmd_set_mark, "set-aired": cmd_set_aired,
-        "set-category": cmd_set_category, "get": cmd_get, "remove": cmd_remove,
+        "set-category": cmd_set_category, "get": cmd_get, "show": cmd_show,
+        "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,
         "scratch-dir": cmd_scratch_dir, "list-topics": cmd_list_topics,
     }[args.cmd](state, args)

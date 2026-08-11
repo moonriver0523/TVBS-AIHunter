@@ -356,6 +356,9 @@ python scripts/s2_state.py add --id RT2333 --source RT --checkpoint 16:00 --stat
 python scripts/s2_state.py update-entry --id RT2333 --status has_script --entry "改寫後內容"
                                 # ⚠️ 標 pending 前先讀 13「有稿判準」；ISO長帶/裸SOT/音軌等
                                 #    天生無旁白稿的＝has_script＋備註形態，不是 pending
+python scripts/s2_state.py update-entry --batch fix.json    # ⭐ 批次覆寫（改 N 則就用這個）
+                                # fix.json＝陣列，每筆 {"id","entry"[,"sb_count","status"]}
+                                # ⛔ 不要自己寫 subprocess 迴圈跑 N 次 update-entry
 python scripts/s2_state.py pending
 python scripts/s2_state.py set-category --pairs "RT2333=社會/休達移民/岸際動態;RT2360=天氣/野火動態/加州"
                                 # 🔴 第三段小分題**必填**（13 的三層骨架：素材行掛在小分題下；
@@ -368,12 +371,30 @@ python scripts/s2_state.py add-side --txt "…/0803 CNN側錄.txt" --source CNN 
 python scripts/s2_state.py set-alert --set "▲ AP4676262 …"  # 檔頭 🔴 ≤3則；--add 追加/--clear 撤
 python scripts/s2_state.py set-aired --ids RT2995           # 🟤 已播；⛔ 只有使用者下令才標
 python scripts/s2_state.py set-mark --ids RT2754 --mark ▲   # 補掃輪寫死時段標記
-python scripts/s2_state.py get --id RT2333
+python scripts/s2_state.py get --id RT2333                  # 單則、整包 JSON（查一則的全貌才用）
+python scripts/s2_state.py show --ids RT2333,AP4675135 --fields id,cat,entry
+                                # ⭐ 批次查、只取要用的欄位（TSV；--json 出 JSON）
+                                # 篩選：--cat 烏俄／--mid 某中主題／--checkpoint 0811-2000／--needs-review
+                                # 欄位：id,cat,大分類,中主題,小分題,entry,source,status,cp,sb,review,summary,bite,dur
 python scripts/s2_state.py needs-review add --id RT2333 --note "疑似UGC，待人工"
 python scripts/s2_state.py needs-review list
 python scripts/s2_state.py needs-review done --ids RT2333   # 處理完就結案，別讓清單只進不出
 ```
 
+- 🔴 **⛔ 不准自己寫 python 去讀／改狀態檔**（2026-08-11 立規，實測最大宗的浪費）：
+  `python -c "import json; d=json.load(...)"` 這種臨時查詢、以及 `python - << PYEOF`
+  跑 subprocess 迴圈批次改，**一律改用 `show`／`update-entry --batch`**。
+  - **實測**：0811-2000 那輪 67 次 Bash 裡，**22 次是臨時查詢腳本、12 次是臨時批改腳本**，
+    合計佔六成。而每一次工具呼叫都要把整個 context 重讀一遍——**呼叫次數才是成本主因**，
+    不是規則檔多長（同輪精簡規則只降 16%，還被呼叫次數上升吃掉）。
+  - **為什麼以前會這樣**：不是紀律問題，是**工具箱缺口**——`get` 只吃單一 id 又整包 dump，
+    要查 20 則的分類就得叫 20 次，自己寫 python 反而便宜。`show`／`--batch` 補掉這個缺口後，
+    正規指令永遠比臨時腳本省，**沒有理由再自己寫**。
+  - ⚠️ **臨時腳本還特別容易自傷**：0811-2000 第 14–18 次連續 5 次卡在 `/tmp` 路徑
+    （Windows 沒有 `/tmp`，寫失敗→sed 想補救→又失敗→最後才改 heredoc）。
+    五次呼叫全部白費，什麼事都沒做成。
+  - 📌 真的遇到 `show` 查不到的欄位：**回報說缺什麼**，不要繞路自己寫——
+    補一個欄位進 `SHOW_FIELDS` 是一次性的，每輪重寫臨時腳本是永久成本。
 - 📌 **`needs-review` 是「待辦」不是「日誌」**：`add` 對不存在的 id 會建 `script_status="note"` 備註殼（不算素材、不進 render）；**`done --ids` 是唯一結案出口**（備註殼→刪掉；真素材→只脫旗標）；批次全有全無（任一 id 不對就整批報錯）。不結案的話 `resume` 每輪重印舊項目，清單失去警示作用。
 - **批次擷取流程**＝收本輪列表 ID → `diff` → 只對新的取文稿（§1a）→ **邊看邊累積 `batch.json`，看完一次 `add-batch`**。⛔ 不要一則一次 `add`（呼叫次數是變慢主因：25 則從 52 次降到 4 次）。
 - **批次規則**：`batch.json` 是 JSON 陣列，每筆 `{"id","source","checkpoint","status","entry"}`。撞 id 或格式錯的單筆自動跳過並回報（已存在→改 `update-entry`；格式錯→修後單筆補）。`--pairs` 分隔符用分號 `;`。
