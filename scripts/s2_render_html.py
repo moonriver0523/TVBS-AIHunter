@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""晚班交接 HTML 檢視版——搜尋／篩選／分層複製（2026-08-09）。
+"""晚班交接 HTML 檢視版——搜尋／篩選／分層複製（2026-08-09）／歷史瀏覽（2026-08-11）。
 
 **這是第二個投影，不是第二份真相。** WP1 之後 txt 已經是「從狀態檔全量渲染」，
 這支只是多一個輸出目標：
@@ -180,7 +180,7 @@ body{margin:0;background:var(--bg);color:var(--fg);
    原本整組（標題＋檔頭＋三排篩選＋兩個鈕）都 sticky，手機上吃掉半個螢幕，
    素材瀏覽空間所剩無幾（2026-08-09 使用者實測回報）。 */
 .top{padding:10px 14px 4px}
-.sticky{position:sticky;top:0;z-index:9;background:var(--bg);
+.sticky{position:sticky;top:var(--histh);z-index:9;background:var(--bg);
         border-bottom:1px solid var(--line);padding:6px 14px 8px}
 h1{font-size:17px;margin:0}
 .tgl{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
@@ -192,6 +192,20 @@ h1{font-size:17px;margin:0}
 .stamp{margin-left:auto;color:var(--mut);font-size:12px;white-space:nowrap}
 .stamp.stale{color:var(--warn);font-weight:600}
 .off{display:none!important}
+
+/* 歷史列（2026-08-11 上線）：跟會收合的檔頭（.top）是兩件事——檔頭捲走就捲走，
+   歷史列跟下面的搜尋列一樣永遠釘頂。兩條 sticky 疊在一起不能都用 top:0（會互相
+   蓋住），下面的搜尋列要讓出「歷史列的高度」——用行內 script 量測實際高度寫進
+   --histh，不是猜一個 px 值，字級／螢幕寬度變動時才不會兩者間出現縫隙或重疊。 */
+:root{--histh:0px}
+.histbar{display:flex;gap:6px;overflow-x:auto;padding:6px 14px 10px;
+         border-bottom:1px solid var(--line);-webkit-overflow-scrolling:touch;
+         position:sticky;top:0;z-index:11;background:var(--bg)}
+.histbar::-webkit-scrollbar{height:4px}
+.hlabel{flex:none;font-size:12px;color:var(--mut);align-self:center;margin-right:2px}
+.dpill{flex:none;padding:4px 11px;font-size:12px;border:1px solid var(--line);
+       border-radius:12px;color:var(--mut);text-decoration:none;white-space:nowrap}
+.dpill.on{background:var(--chipon);color:#fff;border-color:var(--chipon);font-weight:600}
 
 /* ══ 篩選面板 ══════════════════════════════════════════════════
    桌機：常駐左側欄（橫向空間本來就有，不必開關）
@@ -212,8 +226,10 @@ h1{font-size:17px;margin:0}
 
 /* ── 桌機：常駐左側欄 ── */
 @media (min-width:820px) and (hover:hover){
-  body{display:grid;grid-template-columns:200px 1fr;grid-template-areas:"panel top" "panel sticky" "panel main"}
+  body{display:grid;grid-template-columns:200px 1fr;
+       grid-template-areas:"panel top" "panel hist" "panel sticky" "panel main"}
   .top{grid-area:top}
+  .histbar{grid-area:hist}
   .sticky{grid-area:sticky}
   main{grid-area:main}
   #panel{grid-area:panel;position:sticky;top:0;align-self:start;max-height:100vh;
@@ -330,6 +346,7 @@ main{padding:6px 14px 60px}
     <span class="stamp" id="stamp"></span></div>
   <div class="meta" id="meta">__META__</div>
 </div>
+__DATEBAR__
 <div class="sticky">
   <div class="bar">
     <input type="search" id="q" placeholder="搜尋代碼、摘要、畫面、BITE…">
@@ -635,7 +652,49 @@ draw();
 """
 
 
-def build_html(state, base_mmdd, window):
+def find_archive_dates(live_dir, n=6):
+    """live_dir/Archive/{YYYYMMDD}/{MMDD}-s2-state.json 裡找過去 n 天，回傳新到舊。
+
+    只認「有狀態檔」的日期——html 沒產出但 state 在的日子仍可用（渲染邏輯本來就
+    只需要 state），state 也沒有的日子代表那天沒掃過，不列進歷史選單。
+    """
+    archive_dir = os.path.join(live_dir, "Archive")
+    out = []
+    if not os.path.isdir(archive_dir):
+        return out
+    for name in sorted(os.listdir(archive_dir), reverse=True):
+        if not re.match(r"^\d{8}$", name):
+            continue
+        mmdd = name[4:]
+        if os.path.isfile(os.path.join(archive_dir, name, f"{mmdd}-s2-state.json")):
+            out.append(mmdd)
+        if len(out) >= n:
+            break
+    return out
+
+
+def build_datebar(today_mmdd, archive_mmdds):
+    """歷史列 HTML（2026-08-11 上線）。連結用 `?date=MMDD` 查詢參數——網頁是靠
+    Google Apps Script 代管（`scripts/appsscript/晚班交接WebApp.gs`），同一個固定
+    網址接受這個參數時改抓指定日期那份檔案，不然一律抓「最新」。**沒有歷史檔案
+    時整塊不輸出**（不是空殼），開站頭幾天 Archive 還沒累積起來不會冒出一條空列。
+    """
+    if not archive_mmdds:
+        return ""
+    parts = ['<div class="histbar" id="histbar"><span class="hlabel">歷史：</span>',
+             f'<a class="dpill on" href="">今天 {today_mmdd[:2]}/{today_mmdd[2:]}</a>']
+    for mmdd in archive_mmdds:
+        parts.append(f'<a class="dpill" href="?date={mmdd}">{mmdd[:2]}/{mmdd[2:]}</a>')
+    parts.append('</div>')
+    parts.append(
+        '<script>(function(){var h=document.getElementById("histbar");'
+        'if(h)document.documentElement.style.setProperty("--histh",h.offsetHeight+"px");'
+        '})();</script>'
+    )
+    return "".join(parts)
+
+
+def build_html(state, base_mmdd, window, datebar_html=""):
     head = build_header(state, base_mmdd, window)
     # 🔴 產出時間一定要印在畫面上（2026-08-09）：編輯用的 Apps Script 網址是抓
     # 「最後修改時間最新」的那份 html，萬一今天的 html 因故沒產出，網址會**無聲
@@ -659,6 +718,7 @@ def build_html(state, base_mmdd, window):
             .replace("__META__", meta_html)
             .replace("__BUILT__", datetime.now().strftime("%Y-%m-%d %H:%M"))
             .replace("__LOGO__", logo_html)
+            .replace("__DATEBAR__", datebar_html)
             .replace("__ROWS__", json.dumps(rows, ensure_ascii=False)))
 
 
@@ -676,7 +736,9 @@ def main():
         m = re.search(r"(\d{4})-s2-state", os.path.basename(args.file))
         base = m.group(1) if m else state.get("date", "")
     win = args.window or R.window_from_state(state, base) or state.get("window_local", "")
-    out = build_html(state, base, win)
+    live_dir = os.path.dirname(os.path.abspath(args.file))
+    datebar = build_datebar(base, find_archive_dates(live_dir))
+    out = build_html(state, base, win, datebar)
 
     if not args.out:
         sys.stdout.write(out)
