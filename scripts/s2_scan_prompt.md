@@ -5,7 +5,9 @@
 規則幾乎每天都在改（0805–0806 就改了二十幾處）。照順序讀完再動手：
 
 1. `E:\GitHub\TVBS-AIHunter\common\13-S2-定時掃帶.md`
-2. `E:\GitHub\TVBS-AIHunter\common\13b-S2-定時掃帶-v2省token.md`
+2. `E:\GitHub\TVBS-AIHunter\common\13c-S2-定時掃帶-v3省token.md`
+   （2026-08-11 起改讀 V3 精簡版；⛔ 不要再讀 `13b` V2——那份已改為歷史檔案，
+   內容含大量已被推翻的舊版規則，讀了會照著錯的做）
 
 重點節次：§0（三站入口＋NS 白名單＋掃描順序）、§1a（API 直查）、§2a-2（收工前稽核）、
 §5（防卡）、§5a（建檔輪七項）。
