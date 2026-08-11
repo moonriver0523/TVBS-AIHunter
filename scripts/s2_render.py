@@ -315,6 +315,15 @@ def group_items(state, base_mmdd=""):
                 # ⛔ 不要在這裡猜它該掛哪一格——猜錯比留白更糟，那會讓錯的分類看起來像對的。
                 mid = "未分類"
         groups.setdefault(big, {}).setdefault(mid, {}).setdefault(sub, []).append(it)
+    # 常駐中主題（2026-08-11 使用者訂案）：`_top.resident_topics` 指定的中主題
+    # 不論今天有沒有素材，都要在對應大分類底下出現空字典——render_block 遇到
+    # 空字典只印【中主題】標題、不印任何素材行，跟真的有素材時同一套排版邏輯，
+    # 不必另外處理。⚠️ 用 setdefault 不覆蓋：今天若已經有真素材掛在這個中主題，
+    # 維持原本內容，不要把它清空。
+    for big, resident_mids in (state.get("resident_topics") or {}).items():
+        bucket = groups.setdefault(big, {})
+        for mid in resident_mids:
+            bucket.setdefault(mid, {})
     # 中主題重排：人工指定的 `topic_order` 優先，其餘相近名稱靠攏
     #（小分題與素材順序完全不動）
     if base_mmdd not in TOPIC_ORDER_SKIP_MMDD:

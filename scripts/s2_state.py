@@ -93,7 +93,11 @@ TOP_FIELDS = ("checkpoint", "updated_at", "window_local",
               # 起點，如 `2026-08-04 13:00`），**建檔那一輪寫一次就不要再動**。
               # 檔頭時間窗＝window_start → 目前 checkpoint，才看得出累計掃了多久；
               # window_local 是單輪區間、每輪覆蓋，不能拿來當檔頭（0804 實錯）。
-              "alerts", "special_category", "last_render_ts", "window_start")
+              "alerts", "special_category", "last_render_ts", "window_start",
+              # resident_topics（2026-08-11）＝{大分類: [中主題,…]}，指定的中主題
+              # 不論當天有沒有素材，render 都要印出空標題（跟 topic_order 不同——
+              # topic_order 只管排序，沒素材的中主題照樣自動略過）。見 cmd_set_resident_topics。
+              "resident_topics")
 
 
 def load(path):
@@ -990,6 +994,37 @@ def cmd_set_topic_order(state, args):
         print(f"  · 今天有、清單沒有（走自動排，插到相近主題旁）：{'／'.join(extra)}")
 
 
+def cmd_set_resident_topics(state, args):
+    """人工指定某大分類底下「每天都要列出、即使 0 則」的中主題（2026-08-11 使用者訂案）。
+
+    跟 `set-topic-order` 是兩件事：那個只管「有出現時排哪」，清單裡今天不存在的
+    中主題自動略過、不會生空標題。這個反過來——**指定的中主題不論當天有沒有
+    素材，render 都要印出【中主題】空標題**，讓編輯知道這條線每天都在追、
+    不是漏看或漏歸類。
+
+    實作見 `s2_render.group_items()`（txt／html 共用同一份分組）：對
+    `resident_topics` 裡列的每個大分類，把指定的中主題當空字典塞進分組結果，
+    render_block 遇到空字典只印標題、不印任何素材行——跟真的有素材時完全同一套
+    排版邏輯，不必另外處理。
+
+    例：`set-resident-topics --cat 烏俄 --topics "俄轟烏;烏轟俄"`
+    """
+    top = state.setdefault("_top", {})
+    resident = top.setdefault("resident_topics", {})
+    if args.clear:
+        resident.pop(args.cat, None)
+        save(state, args.file)
+        print(f"OK 已撤掉「{args.cat}」的常駐中主題，不再強制顯示空標題")
+        return
+    mids = [x.strip() for x in re.split(r"[;；]", args.topics or "") if x.strip()]
+    if not mids:
+        print("ERROR 需要 --topics（用分號分隔）或 --clear", file=sys.stderr)
+        raise SystemExit(2)
+    resident[args.cat] = mids
+    save(state, args.file)
+    print(f"OK 「{args.cat}」常駐中主題：{'、'.join(mids)}（0 則也會列出空標題）")
+
+
 def cmd_set_alert(state, args):
     """檔頭 🔴 重大提醒行（WP1 前提四）。
 
@@ -1177,6 +1212,11 @@ def main():
     sto.add_argument("--cat", required=True, help="大分類，如 天氣")
     sto.add_argument("--order", help="中主題順序，分號分隔")
     sto.add_argument("--clear", action="store_true", help="撤掉人工順序，退回自動排")
+    srt = sub.add_parser("set-resident-topics",
+                         help="釘住某大分類每天都要列出的中主題（0 則也印空標題，跟 set-topic-order 不同）")
+    srt.add_argument("--cat", required=True, help="大分類，如 烏俄")
+    srt.add_argument("--topics", help="中主題清單，分號分隔")
+    srt.add_argument("--clear", action="store_true", help="撤掉常駐設定")
     c = sub.add_parser("set-category")
     c.add_argument("--id")
     c.add_argument("--cat", help="大分類/中主題[/小分題]")
@@ -1202,6 +1242,7 @@ def main():
         "update-entry": cmd_update_entry, "pending": cmd_pending,
         "add-side": cmd_add_side, "set-alert": cmd_set_alert,
         "set-topic-order": cmd_set_topic_order,
+        "set-resident-topics": cmd_set_resident_topics,
         "set-mark": cmd_set_mark, "set-aired": cmd_set_aired,
         "set-category": cmd_set_category, "get": cmd_get, "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,

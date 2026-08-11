@@ -106,6 +106,18 @@ def collect(state, base_mmdd):
     rows = []
     for big, mids in ordered_groups(state, base_mmdd):
         for mid, subs in mids.items():
+            if not subs:
+                # 常駐中主題（2026-08-11）：今天 0 則，group_items() 塞了空字典進來。
+                # HTML 是純資料驅動（前端只認 rows），不塞一個佔位 row 這個空標題
+                # 在網頁版就會直接消失——kind='empty' 讓前端只印標題、不算則數、
+                # 不出項目行，跟 txt 的 render_block 行為對齊。
+                rows.append({
+                    "big": big or "", "mid": mid or "", "sub": "", "id": "",
+                    "src": "", "kind": "empty", "mark": "", "alert": "", "hilite": "",
+                    "cp": "", "dur": "", "bite": False, "text": "",
+                    "q": f"{big} {mid}".strip().lower(),
+                })
+                continue
             for sub, its in subs.items():
                 for it in its:
                     lines = R.render_item(it, base_mmdd)
@@ -451,8 +463,11 @@ function draw(){
   const rows=ROWS.filter(pass);
   // 筆數照 txt 檔頭的語意算：素材（含網址素材）與側錄**分開報**。
   // 混在一起算，就會出現「txt 說 222 則、網頁說 292 則」這種同資料兩個數字。
-  const nWire=rows.filter(r=>r.kind!=='side').length, nSide=rows.length-nWire;
-  const tWire=ROWS.filter(r=>r.kind!=='side').length;
+  // kind='empty'＝常駐中主題的佔位標題，不是真素材，兩邊筆數都要排除，
+  // 否則「N 則」會因為掛了幾個常駐空標題而多報。
+  const nWire=rows.filter(r=>r.kind!=='side'&&r.kind!=='empty').length;
+  const nSide=rows.filter(r=>r.kind==='side').length;
+  const tWire=ROWS.filter(r=>r.kind!=='side'&&r.kind!=='empty').length;
   // ⛔ 側錄**只報「則」，不准把「段」加回來**（2026-08-09 使用者兩度要求）：
   // 「段」是資料格式的內部單位，AI 自己知道就好，出現在編輯畫面上只是雜訊。
   // 要核帳看段數請看 s2_render.py 的對帳行——那個是印給 agent 的，要留著。
@@ -486,7 +501,8 @@ function draw(){
                                               // 網頁版靠上下兩條橘紅線就夠明顯（2026-08-09 使用者訂）
                                               // ⛔ 但**複製出去的文字仍要帶 ======**（見 blockText），
                                               //    編輯是把它貼進別的系統，格式不能少。
-    const all=[...mids.values()].flatMap(s=>[...s.values()].flat());
+    // 常駐空標題（kind='empty'）不算則數，只在版面上占一行標題
+    const all=[...mids.values()].flatMap(s=>[...s.values()].flat()).filter(r=>r.kind!=='empty');
     bh.append(btn(`複製整格（${all.length}）`,()=>copy(blockText(big,mids),`已複製「${big}」${all.length} 則`)));
     list.append(bh);
     mids.forEach((subs,mid)=>{
@@ -496,11 +512,12 @@ function draw(){
         const mt=document.createElement('span'); mt.className='midtxt';
         mt.textContent=` ${mid} `;
         mh.append(mt);
-        const n=[...subs.values()].flat().length;
+        const n=[...subs.values()].flat().filter(r=>r.kind!=='empty').length;
         mh.append(btn(`複製（${n}）`,()=>copy(midText(mid,subs),`已複製「${mid}」${n} 則`)));
         list.append(mh);
       }
       subs.forEach((its,sub)=>{
+        if(its.length===1 && its[0].kind==='empty') return;   // 常駐標題今天 0 則：只留標題，不出空白項目
         if(sub){
           const sh=document.createElement('div'); sh.className='sub hd';
           // 反白底只包住文字本身，不要吃掉旁邊的「複製」鈕
@@ -754,7 +771,9 @@ def main():
         return
     with open(args.out, "w", encoding="utf-8") as f:
         f.write(out)
-    n = out.count('"id":')
+    # 常駐中主題（2026-08-11）的佔位 row 也帶 "id" 鍵（值是空字串），
+    # 用 kind:"empty" 出現次數扣掉，不然這行診斷數字會比真正則數多報。
+    n = out.count('"id":') - out.count('"kind": "empty"')
     print(f"OK 已產出 {args.out}（{n} 則 / {len(out)} 字元）")
     print("⚠️ 從 Google Drive 網頁預覽開不會執行 JS，要開本機同步的那份檔案。")
 
