@@ -681,10 +681,14 @@ def build_datebar(today_mmdd, archive_mmdds):
     """
     if not archive_mmdds:
         return ""
+    # ⚠️ target="_top"：Apps Script 網頁版把內容包在 iframe 裡吐出來（見 .gs 檔的
+    # setXFrameOptionsMode(ALLOWALL) 那行），相對連結不加這個會在 iframe 內部導航，
+    # 跑去 Google 沙盒網域一個不存在的路徑——點下去是空白頁，不是「沒反應」，
+    # 而且要等部署後才會發作，本機測試版當初沒有 iframe 所以沒抓到這個坑。
     parts = ['<div class="histbar" id="histbar"><span class="hlabel">歷史：</span>',
-             f'<a class="dpill on" href="">今天 {today_mmdd[:2]}/{today_mmdd[2:]}</a>']
+             f'<a class="dpill on" href="" target="_top">今天 {today_mmdd[:2]}/{today_mmdd[2:]}</a>']
     for mmdd in archive_mmdds:
-        parts.append(f'<a class="dpill" href="?date={mmdd}">{mmdd[:2]}/{mmdd[2:]}</a>')
+        parts.append(f'<a class="dpill" href="?date={mmdd}" target="_top">{mmdd[:2]}/{mmdd[2:]}</a>')
     parts.append('</div>')
     parts.append(
         '<script>(function(){var h=document.getElementById("histbar");'
