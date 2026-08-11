@@ -38,6 +38,20 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import s2_render as R  # noqa: E402
 
+# 畫面亮點標籤：只認第一個備註括號**最前面**的那個詞（13「畫面亮點標記 🔖」定版位置）。
+# 全形／半形括號都吃——兩種都在實際產出裡出現過。
+HILITE_RE = re.compile(r"[（(]\s*(畫面好|搖晃瞬間)")
+
+
+def hilite_of(text):
+    """從渲染後的素材行認出畫面亮點標籤，認不出就回空字串。
+
+    ⚠️ 只看**第一行**：素材行是單行，多行的是側錄；往下多看只會把摘要裡
+    偶然出現的「畫面好」當成標記。
+    """
+    m = HILITE_RE.search((text or "").split("\n")[0])
+    return m.group(1) if m else ""
+
 
 def logo_data_uri():
     """左側篩選欄底部的 LOGO（2026-08-11 使用者要求，只在桌機顯示）。
@@ -117,6 +131,11 @@ def collect(state, base_mmdd):
                         # 只看 raw_entry 會漏掉那些「檔頭有、正文還沒補」的則。
                         "alert": ("🔴" if "🔴" in text[:8] else
                                   ("🟡" if "🟡" in text[:8] else "")),
+                        # 畫面亮點（2026-08-11 使用者要求可篩）：🔖 標在素材代碼前面，
+                        # 實際內容寫在第一個備註括號最前面（`(畫面好 …)`／`(搖晃瞬間 …)`）。
+                        # ⚠️ 認的是**括號裡的標籤**、不是 🔖 本身——側錄兩行式沒有備註括號，
+                        #   它的 🔖 帶不出畫面好／搖晃瞬間，硬要從 🔖 反推只會猜錯。
+                        "hilite": hilite_of(text),
                         "cp": it.get("first_seen_checkpoint") or "",
                         "dur": f.get("duration") or "",
                         "bite": bool(f.get("bite")),
@@ -330,6 +349,7 @@ main{padding:6px 14px 60px}
   <div class="phead">篩選<button class="act" id="closeF">關閉</button></div>
   <div class="fgroup"><div class="flabel">來源</div><div class="bar" id="fsrc"></div></div>
   <div class="fgroup"><div class="flabel">重大</div><div class="bar" id="falert"></div></div>
+  <div class="fgroup"><div class="flabel">畫面亮點</div><div class="bar" id="fhilite"></div></div>
   <div class="fgroup"><div class="flabel">時段</div><div class="bar" id="fmark"></div></div>
   <div class="fgroup"><div class="flabel">大分類</div><div class="bar" id="fbig"></div></div>
   <div class="fgroup bar">
@@ -353,7 +373,8 @@ const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■
 const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","YT":"網址素材",
                    "CNN_newsource":"NS","CNN":"NS",
                    "YNA":"韓聯社","CNA":"CNA","ENEX":"ENEX","ABC":"ABC"};
-const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(), q:""};
+const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(),
+           hilite:new Set(), q:""};
 
 function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
 
@@ -373,6 +394,7 @@ function pass(r){
   if(F.mark.size && !F.mark.has(r.mark)) return false;
   if(F.big.size && !F.big.has(r.big)) return false;
   if(F.alert.size && !F.alert.has(r.alert)) return false;
+  if(F.hilite.size && !F.hilite.has(r.hilite)) return false;
   if(F.q && !r.q.includes(F.q)) return false;
   return true;
 }
@@ -545,7 +567,7 @@ document.getElementById('copyAll').onclick=()=>{
   copy(rows.map(r=>r.text).join("\\n"),`已複製篩選結果 ${rows.length} 則`);
 };
 document.getElementById('reset').onclick=()=>{
-  F.src.clear();F.mark.clear();F.big.clear();F.alert.clear();F.q="";
+  F.src.clear();F.mark.clear();F.big.clear();F.alert.clear();F.hilite.clear();F.q="";
   document.getElementById('q').value="";
   document.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'));
   draw();
@@ -564,6 +586,10 @@ chips('fmark','mark',uniq('mark'),MARK_LABEL);
 // 重大：🔴 在前、🟡 在後（輕重順序，不用字母序）
 chips('falert','alert',uniq('alert').sort((a,b)=>(a==='🔴'?0:1)-(b==='🔴'?0:1)),
       {"🔴":"🔴 重大","🟡":"🟡 次重大"});
+// 畫面亮點：「畫面好」永遠排前面——編輯找畫面時是來挑好素材的，
+// 「搖晃瞬間」是提醒，順位在後。沒有這兩種標記的日子就不會長出鈕。
+chips('fhilite','hilite',uniq('hilite').sort((a,b)=>(a==='畫面好'?0:1)-(b==='畫面好'?0:1)),
+      {"畫面好":"🔖 畫面好","搖晃瞬間":"🔖 搖晃瞬間"});
 chips('fbig','big',uniq('big'));
 
 // ── 產出時間：停太久要主動變紅，不能只是印在那裡 ────────────────────
