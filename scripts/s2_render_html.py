@@ -681,14 +681,19 @@ def build_datebar(today_mmdd, archive_mmdds):
     """
     if not archive_mmdds:
         return ""
-    # ⚠️ target="_top"：Apps Script 網頁版把內容包在 iframe 裡吐出來（見 .gs 檔的
-    # setXFrameOptionsMode(ALLOWALL) 那行），相對連結不加這個會在 iframe 內部導航，
-    # 跑去 Google 沙盒網域一個不存在的路徑——點下去是空白頁，不是「沒反應」，
-    # 而且要等部署後才會發作，本機測試版當初沒有 iframe 所以沒抓到這個坑。
+    # ⚠️ target="_top" 不夠（2026-08-11 實測訂正）：Apps Script 的 /exec 網址載入後
+    # 會把「最上層瀏覽環境」導向一個 Google 沙盒網域（*.googleusercontent.com/
+    # userCodeAppPanel），不是內容本身所在的那層——所以就算 target="_top" 正確跳出
+    # 了 iframe，相對連結 `?date=0810` 解析基準也已經是那個沙盒網址，點下去變成
+    # `.../userCodeAppPanel?date=0810`（doGet() 完全接不到），不是原本以為的
+    # iframe 內部導航問題。改用絕對網址：`%%EXEC_URL%%` 是佔位字串，doGet() 會用
+    # `ScriptApp.getService().getUrl()`（這個部署自己的固定網址）換掉它再回傳——
+    # 不管當下最上層在哪個網域，都能導回正確的入口。本機雙擊測試沒有 Apps Script
+    # 可以做這個換字，佔位字串會原樣留著、點了沒反應，這是已知限制，不是迴歸。
     parts = ['<div class="histbar" id="histbar"><span class="hlabel">歷史：</span>',
-             f'<a class="dpill on" href="" target="_top">今天 {today_mmdd[:2]}/{today_mmdd[2:]}</a>']
+             f'<a class="dpill on" href="%%EXEC_URL%%" target="_top">今天 {today_mmdd[:2]}/{today_mmdd[2:]}</a>']
     for mmdd in archive_mmdds:
-        parts.append(f'<a class="dpill" href="?date={mmdd}" target="_top">{mmdd[:2]}/{mmdd[2:]}</a>')
+        parts.append(f'<a class="dpill" href="%%EXEC_URL%%?date={mmdd}" target="_top">{mmdd[:2]}/{mmdd[2:]}</a>')
     parts.append('</div>')
     parts.append(
         '<script>(function(){var h=document.getElementById("histbar");'

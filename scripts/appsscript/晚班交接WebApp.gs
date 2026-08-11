@@ -18,6 +18,13 @@
  *    列，連結是 `?date=MMDD`（例：`?date=0810`）。這支加了 `findByDate_()` 接住這個
  *    參數——不帶參數（或帶了但找不到）一律退回原本的「抓最新」，行為不變、
  *    網址本身仍然不用換，只是同一個網址現在能多接一個可選參數。
+ *
+ * ⚠️ **連結一定要是絕對網址，不能用相對的 `?date=0810`（2026-08-11 實測訂正）**：
+ *    `/exec` 網址載入後，最上層瀏覽環境會被導向一個 Google 沙盒網域
+ *    （`*.googleusercontent.com/userCodeAppPanel`），相對連結的解析基準是那個
+ *    網域，不是 `/exec`——點下去會變成沙盒網域底下一個 `doGet()` 完全接不到的
+ *    路徑，網頁一片空白。所以 html 裡的連結用 `%%EXEC_URL%%` 佔位，doGet() 用
+ *    `ScriptApp.getService().getUrl()`（這個部署自己的固定網址）換字後才送出。
  */
 
 /** 檔名的搜尋關鍵字。改檔名規則時這裡要一起改。 */
@@ -26,16 +33,18 @@ var NAME_HINT = '晚班交接.html';
 function doGet(e) {
   var date = e && e.parameter && e.parameter.date;
   var file = date ? findByDate_(date) : findLatest_();
+  var execUrl = ScriptApp.getService().getUrl();
   if (!file) {
     var msg = date
       ? ('找不到 ' + date + ' 的晚班交接檔案（可能還沒掃到那天，或已經搬出 Archive 保留範圍）。' +
-         '<br><a href="?">回到今天</a>')
+         '<br><a href="' + execUrl + '" target="_top">回到今天</a>')
       : ('找不到檔名含「' + NAME_HINT + '」的檔案。<br>' +
          '請確認：①檔案已同步到這個 Google 帳號的雲端硬碟 ②檔案沒有被丟到垃圾桶。');
     return HtmlService.createHtmlOutput(
       '<meta charset="utf-8"><p style="font:16px sans-serif;padding:20px">' + msg + '</p>');
   }
-  var html = file.getBlob().getDataAsString('UTF-8');
+  var html = file.getBlob().getDataAsString('UTF-8')
+    .split('%%EXEC_URL%%').join(execUrl);   // 歷史列連結的絕對網址佔位字串
   return HtmlService.createHtmlOutput(html)
     .setTitle(file.getName().replace(/\.html$/i, ''))
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
