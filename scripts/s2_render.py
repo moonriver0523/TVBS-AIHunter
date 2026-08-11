@@ -612,8 +612,15 @@ def main():
             html_out = re.sub(r"\.txt$", ".html", args.out)
             if html_out == args.out:          # --out 不是 .txt 結尾就別亂猜
                 html_out = args.out + ".html"
+            # 🔴 歷史列一定要在這裡算（2026-08-11 實錯）：歷史列上線那天只驗了
+            #    `python s2_render_html.py` 那條獨立入口，**但排程每輪走的是這裡**，
+            #    而這裡當時直接呼叫 `build_html(state, base, win)`、沒帶 datebar——
+            #    結果功能「上線」了卻在正式流程裡從來沒生效過，每輪產出的 html
+            #    都沒有歷史列。⛔ 兩條路都會產出正式檔案，**新功能兩邊都要接**。
+            live_dir = os.path.dirname(os.path.abspath(args.file))
+            datebar = rh.build_datebar(base, rh.find_archive_dates(live_dir))
             with open(html_out, "w", encoding="utf-8") as f:
-                f.write(rh.build_html(state, base, win))
+                f.write(rh.build_html(state, base, win, datebar))
             print(f"OK 已產出 HTML 檢視版 {html_out}")
             # ⚠️ 側錄「則數」現在有**兩份算法**：txt 檔頭走 sv.side_units（解析文字），
             #    網頁版走 JS（篩選會變動，必須在瀏覽器端算）。兩份遲早會漂移，
