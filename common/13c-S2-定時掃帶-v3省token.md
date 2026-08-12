@@ -163,7 +163,34 @@ const clean = (h) => decodeEnt(
 - **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`——**照抄頁面實際發出的 request body**，自己拼的排序會偏 relevance 抓舊素材。
 - ⚠️ **`PageNumber` 不可靠**（實測回錯頁還自稱正確）。
 - 🔴🔴 **`PageSize` 只能照抄 `16`，一個字不准改**：調大調小都會**靜默換排序**、回一批舊素材且無錯誤訊息（0803/0804 實測，先前「50/100 驗過」是誤判已推翻）。要多筆就 `PageSize=16` 分批，或走 §1b DOM 直撈。
-- **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。逗號串多則不支援（回空），一則一次；同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則仍算 1 次呼叫。
+  - 🔴 **2026-08-12 複驗（0430／0730 兩輪）發現這條規則存在但沒被守住**：0430 清單查詢打了
+    `16、16、50` 三次，0730 打了 `16、100、16、20` 四次——**同一輪內 `PageSize` 自己換來換去**，
+    伴隨每次都重新 `browser_navigate` 回首頁。**這不只是白燒 token（單輪多花 5~7 次呼叫、
+    約單輪 5~10%），是正確性風險：換 `PageSize` 拿到的是靜默錯位的舊資料，不會報錯，
+    agent 也未必發現自己拿錯了。** 下面補一份「照抄即用」的完整範本，目的就是讓 agent
+    沒有自己重打／改參數的空間——直接複製整段，`TopicId` 換成本輪從頁面照抄的值即可，
+    其餘一個字不改。
+  - ⭐ **AP 清單查詢：照抄即用範本**（`browser_evaluate` 一次呼叫，含 navigate 後的完整流程；
+    **不要分好幾次呼叫、不要自己另拼 `PageSize`**）：
+    ```js
+    async () => {
+      const body = {
+        SearchType: 'keyword', PageNumber: 1, PageSize: 16, MediaTypes: ['video'],
+        TopicId: '{本輪從頁面照抄}', isTopicSearch: true, ProductGroup: '',
+        language: '', digitizationType: null, isSemanticItemIdSearch: false,
+        Semantic: null, MyPlanSearch: false,
+      };
+      const r = await fetch('https://api.newsroom.ap.org/v1/nrsearch/search/topic', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify(body),
+      });
+      return await r.json();
+    }
+    ```
+    - 需要超過 16 則：**翻頁用 `PageNumber` 遞增（1→2→3…），`PageSize` 永遠是 `16`**，
+      不准用調大 `PageSize` 的方式一次拿更多——那正是靜默換排序的觸發點。
+    - `browser_navigate` 回 `/home` 只需要開工時做**一次**，同一輪內清單查詢不必每次重新導覽。
+- **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。逗號串多則不支援（回空），一則一次；同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則仍算 1 次呼叫。**批次一律用 `Promise.all`，不要為了「保險」逐則單獨呼叫**——單則呼叫沒有比較安全，純粹多花呼叫次數。
 - `TopicId` 跨 session 穩定，仍建議每輪從頁面請求照抄。
 - ⭐ **抽取白名單（實測定版）**：
 
@@ -293,6 +320,10 @@ const clean = (h) => decodeEnt(
 - API 回 401／403／空清單，重試一次仍失敗。
 - 回應欄位對不上（缺 `script`／`itemid`／`editnumber`），連 2 則皆然。
 - **同站累計失敗 2 次即退**，不死磕。§1b 再失敗才退 §5。
+- 🔴 **AP `PageSize` 偏離 `16` ── 本身就算一次失敗，不是「換個參數再試試」**
+  （2026-08-12 立規，理由見 §2 AP）：查詢結果看起來不對（筆數對不上、內容像舊素材）
+  時，**正確反應是照抄範本重打一次一模一樣的請求**，不是把 `PageSize` 調大調小去猜。
+  調了就已經觸發這條守門，算失敗一次計入上面「同站累計失敗 2 次即退」。
 
 ## 1b. AP＋RT 清單直開流程（§1a 失敗時的第一層退路）
 

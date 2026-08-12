@@ -36,8 +36,16 @@
       依 `message.id` 去重、拆 `tool_calls_by_name`（含 `s2_state:<子指令>` 細分）。
       已補齊 0030/0430/0730/1000 四輪，數字與手算一致。`s2_scan.ps1` 收工自動呼叫
       （非阻斷，失敗只記警告）。輸出 `G:\...\自動掃帶系統\S2掃帶log\_token_metrics.jsonl`
+- [x] **⑤AP `PageSize` 違規 + 照抄範本** — 三站拆解分析發現 AP 每則呼叫成本是
+      NS／RT 的 3~4 倍（0.44 vs 0.10／0.13，五輪一致），根因是清單查詢在同一輪內
+      被重打、`PageSize` 每次不一樣（0430：16/16/**50**；0730：16/**100**/16/**20**），
+      踩既有紅線且拿到**靜默錯位的舊資料**——正確性風險，不只是浪費 token。
+      `13c` §2 補「照抄即用」`browser_evaluate` 範本（固定 `PageSize:16`、翻頁用
+      `PageNumber`）；§4 守門補「`PageSize` 偏離即算違規，不准調參數再試」。
+      **待下一輪複驗：AP navigate／清單查詢次數能不能收斂到 1~2 次**
 - [ ] **Task 2 最小 Claude Code 啟動設定** — 預估省 16%，八個 CLI 旗標已確認存在
-- [ ] **②`scripts/s2_batch_prep.py`** — 收掉三站各 5 步的臨時 python，預估省 10%
+- [ ] **②`scripts/s2_batch_prep.py`** — 收掉三站各 5 步的臨時 python，預估省 10%；
+      優先做 AP adapter（⑤發現 AP 是三站裡呼叫成本最高的一站）
 - [ ] **③ntfy 推播修復**（ASCII header）
 - [ ] **Task 3 清理 prompt 衝突**
 - [ ] **Task 4 規則分片** — 單獨排期，完整性對照測試不准省
