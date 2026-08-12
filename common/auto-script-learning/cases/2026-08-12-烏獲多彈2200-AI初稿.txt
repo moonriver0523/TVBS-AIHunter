@@ -1,0 +1,140 @@
+【素材編號對照】
+#19　許岱軒CNN 042844 烏俄.wav　母帶起始時間碼 04:28:44（歐印萬側錄，純音檔；同一則 CNN 包裝的畫面見 #09，剪接可對位取用）
+#20　許岱軒CNN 063320 烏俄.wav　母帶起始時間碼 06:33:20（歐印萬側錄，純音檔）
+※ #19／#20 的 TC 為已套用檔名偏移的 6 碼母帶真實時間；其餘 #01～#18 為外電下載檔，TC 為 4 碼檔內時間。
+
+【主播稿頭】
+戰火正在往俄羅斯境內燒。烏克蘭一夜出動無人機，把俄羅斯最大電商Wildberries在沃羅涅日的物流中心炸成火海；南方的度假勝地索契，民眾為了加油排了12個小時。而在基輔，俄羅斯的回敬是一枚落進兒童醫院院區的彈道飛彈。美聯社統計，烏克蘭已經癱瘓俄羅斯35%的燃油產能，只是這一刀，還沒能逼普欽收手。
+
+【主標題】
+烏軍深入俄境炸油 札波羅熱挨北韓飛彈
+
+【次標題】
+無人機夜襲沃羅涅日 俄版亞馬遜燒成火海
+索契加油排12小時 烏軍癱瘓35%燃油產能
+飛彈落兒童醫院院區 基輔炸出2個大彈坑
+愛國者攔截彈用盡 基輔人聽到警報就開跑
+土耳其賣70枚ATACMS 烏克蘭手上多把長矛
+最高法院除名亞博盧 普欽選前先掃掉反戰
+
+【記者OS內文與對應畫面】
+
+NS #01 0002-0006 夜空防空砲火曳光
+
+黑海邊的夜空被曳光彈劃開，俄羅斯南部大港新羅西斯克，防空砲火整晚沒停。
+#01 畫面來源: X/wartranslated
+#01 TC0002 "夜空曳光彈劃過"
+#01 TC0008 "空中爆閃"
+
+再往北，沃羅涅日州的天空燒成橘紅色。烏克蘭用自製的FP-1無人機，打上俄羅斯最大電商Wildberries的物流中心，這座倉庫能放9000萬件商品。
+#02 TC0000 "巨大火柱與濃煙竄起"
+#02 TC0041 "整排倉庫外牆陷入火海"
+
+俄方說當晚擊落15架無人機，殘骸引燃大火，造成1死2傷，兩處火場燒掉3.6萬平方公尺。這家俄羅斯版亞馬遜，被打的不只一次。
+#03 TC0005 "遠處倉庫火光與濃煙"
+#03 TC0007 "濃煙火柱竄天"
+
+SB
+CNN首席國際安全記者 Nick Paton Walsh
+這只是Wildberries近幾週被擊中的眾多目標之一，(該公司)可能因此損失大約10%的產能。烏克蘭說，這些倉庫是俄軍後勤樞紐的一部分。另外在俄羅斯境內縱深1500公里的奧爾斯克，一座煉油廠同樣遭到烏克蘭攻擊。
+#19 043109-043126
+But one of many such targets of Wildberries hit in the past weeks, potentially losing 10% of their capabilities. Ukraine saying that they're formed part of the military logistical hub. And also, too, in Orsk, 1,500 kilometres deep inside Russia, a refinery also hit by Ukrainian strikes.
+
+單看零打碎敲，加起來卻打進俄羅斯人的日常。度假勝地索契已經排不到油。美聯社分析今年上百次攻擊，歸納出四類目標：石油、國防生產、零售倉儲和防空陣地。
+#04 TC0000 "夜間加油站前大排長龍"
+#04 TC0015 "民眾表示已在加油站等12小時"
+#05 TC0028 "川普與澤倫斯基白宮會面資料畫面"
+#05 TC0154 "聖彼得堡遇襲濃煙資料畫面"
+
+SB
+美聯社記者 Emma Burrows
+專家說，烏克蘭現在已經癱瘓大約35%的俄羅斯燃油產能。問題是，烏克蘭這些攻擊，足不足以讓普欽總統停下這場戰爭。
+#05 0246-0257
+Experts say Ukraine's now disrupted around 35 percent of Russian fuel production. The question is, are Ukraine's strikes enough to make President Vladimir Putin stop his war?
+
+答案，俄羅斯用飛彈寫了回來。
+
+NS #07 0033-0037 消防員持水線灌救
+
+11號夜裡，彈道飛彈打進基輔舍甫琴科區，一發落在兒童醫院院區，炸出兩個彈坑，震碎窗戶、扯破瓦斯管線。孩子和醫護早一步下到避難所，無人受傷。
+#07 TC0008 "消防員在街口拉水線"
+#07 TC0041 "建物大火全景"
+#06 TC0006 "火場全景與消防車"
+#08 TC0030 "消防員近距離灌救"
+
+六天前，同樣是彈道飛彈，打中的是一座購物中心。CNN記者就站在那裡。
+#09 TC0000 "CNN記者尼克帕頓沃爾許在受損建物內出鏡"
+
+SB
+CNN首席國際安全記者 Nick Paton Walsh
+基輔民眾的安全感正在劇烈改變。戰爭打了這麼久，這裡一直像一個相對安全的泡泡，就像我現在所在的位置，六天前還是一座購物中心，結果被俄羅斯現在越來越頻繁的彈道飛彈攻擊擊中。
+#19 042919-042936
+Well, the radical change in how safe people feel in Kiev for so long in the war, a kind of bubble of comparative safety you can feel in places like here. Six days ago, this was a shopping mall and it was hit by one of the now increasingly frequent Russian ballistic missile attacks.
+
+讓基輔人開始跑的，不只是飛彈變多，而是能攔的變少了。
+#09 TC0125 "CNN記者出鏡分析"
+
+SB
+CNN首席國際安全記者 Nick Paton Walsh
+因為烏克蘭的愛國者攔截飛彈基本上已經用光，那本來是用來打下俄羅斯彈道飛彈的。現在民眾一聽到空襲警報，就往地鐵、往防空洞裡跑。
+#19 042942-042955
+Because Ukraine is basically out of the Patriot interceptor missiles that used to take down the Russian ballistic missile threat, people are now running for safety into subways, into shelter when they hear those air raid sirens.
+
+攔不下來的代價，同一天在南方兌現。札波羅熱至少7死24傷，澤倫斯基指控，用的是北韓製飛彈。
+#09 TC0208 "CNN記者出鏡說明札波羅熱攻擊"
+
+SB
+CNN首席國際安全記者 Nick Paton Walsh
+同一家民營企業的七名員工，正跑向避難所的時候，全被一枚俄羅斯彈道飛彈奪走性命。那很可能是北韓製的KN-23，這代表俄羅斯越來越倚賴外來的援助。
+#19 043035-043050
+There are seven employees of the same civilian enterprise were running to the shelter when they were all killed by a Russian ballistic missile. A North Korean one, it may well have been, a KN-23, a sign of the outside help that Russia is increasingly relying upon.
+
+北韓給的不只飛彈，還可能有3萬名士兵。幾個月前一整個月60枚彈道飛彈，現在一晚就好幾十枚。防空攔不住，就得有打回去的矛。矛從土耳其來。
+#06 TC0053 "消防員在火場中拉水線"
+
+==AICG==
+ATACMS陸軍戰術飛彈系統
+研製單位:美國洛克希德馬丁／發射平台:M270多管火箭系統・M142海馬斯高機動性多管火箭系統／射程:約165至300公里／最高速度:約3馬赫／導引方式:慣性導航與GPS導引／打擊目標:指揮所 防空陣地 彈藥庫 機場 後方集結區／實戰運用:烏克蘭用以攻擊俄軍縱深重要軍事設施
+
+ATACMS的價值不在威力，在射程。不必派飛機越過前線，就能把俄軍機場、彈藥庫和防空陣地放進射程。兩年多前烏克蘭第一次動用它，一夜打壞兩座機場，兩年前也打上克里米亞的海灘。
+#10 畫面來源: 部分畫面須標 Commander-in-Chief of the Ukrainian Armed Forces via Telegram
+#10 TC0011 + 0151 "夜間ATACMS發射軌跡與飛彈升空特寫"
+#11 TC0000 + 0016 "烏軍首次使用ATACMS與別爾江斯克港"
+#12 TC0010 "克里米亞海灘竄起黑煙"
+
+土耳其打算把剩下的12套M270發射系統和70枚ATACMS賣給烏克蘭，總值約2.8億美元、折合新台幣約88億元，美國國務院已經知會國會。
+#13 TC0002 "UATV主播播報土耳其軍售"
+#10 TC0128 "展場中的ATACMS飛彈本體"
+
+矛和盾都在談，桌上還擺著另一份東西。
+#14 TC0002 "澤倫斯基發表夜間談話"
+
+SB
+烏克蘭總統 澤倫斯基
+還有一件事，談判團隊做了簡報。我們已經把我們的提案轉交給美方，美國可以協助強化我們的防衛，尤其是防空，並且對俄羅斯施壓，讓它的盤算改變，去準備結束戰爭，而不是拖延戰爭。
+#14 0005-0025
+There was a briefing by the negotiating team. We have conveyed our proposals to the American side. And the United States can help strengthen our defence, first and foremost with air defence, and put pressure on Russia so that its plans are different, to prepare for an end to the war rather than prolonging it.
+
+提案送出去了，澤倫斯基卻不信對面想結束。他說國防情報已經掌握，普欽準備在選舉後再啟動一波動員。而選舉，普欽先動了手。
+#15 TC0016 "澤倫斯基發表談話"
+
+最高法院裁定取消唯一反戰政黨「亞博盧」（Yabloko）的候選人名單登記，直接把它從下個月的選票上拿掉。
+#16 TC0000 "亞博盧代表在法庭起立聽判"
+#16 TC0040 "法官宣讀裁定"
+
+NS #16 0140-0144 支持者聚集在法院外
+
+支持者手上拿著蘋果，因為亞博盧在俄語裡就是蘋果。黨主席雷巴科夫（Nikolai Rybakov）說會上訴，還撂下一句：我們是和平的政黨。
+#16 TC0220 "支持者手拿蘋果"
+#17 TC0016 "黨主席雷巴科夫對媒體發言"
+#17 TC0050 "鎮暴警車停在街上"
+
+莫斯科街頭分成兩邊，有人說不該打壓民主，也有人說收外國錢的政黨不該進國會。同一棵蘋果樹，有人看見民主，有人看見境外勢力。一邊準備選後動員，一邊等著70枚飛彈交貨。
+#18 TC0000 "國家杜馬外觀街景"
+#18 TC0042 "受訪女性認為不該限制民主"
+#18 TC0111 "受訪男性表達支持禁令"
+#18 TC0125 "結實累累的蘋果樹"
+
+這場仗要坐上談判桌，還是再加一輪碼，恐怕還沒到揭曉的時候。
+
+TVBS 許岱軒
