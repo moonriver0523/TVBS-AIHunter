@@ -453,6 +453,17 @@ python scripts/s2_state.py needs-review done --ids RT2333   # 處理完就結案
   - ⚠️ **臨時腳本還特別容易自傷**：0811-2000 第 14–18 次連續 5 次卡在 `/tmp` 路徑
     （Windows 沒有 `/tmp`，寫失敗→sed 想補救→又失敗→最後才改 heredoc）。
     五次呼叫全部白費，什麼事都沒做成。
+  - 🔴 **這台機器的主控台是 cp950，臨時 python 印中文／emoji（🔴🟡 這些代碼常用符號）
+    會直接崩潰**（2026-08-12 實錯：0812-1600 輪一支寫 fix 的臨時腳本印 `🔴` 時
+    `UnicodeEncodeError: 'cp950' codec can't encode`，整段白跑，逼著重來一次）。
+    真的不得不寫臨時 python（例如上面兩條都繞不掉的場合）時，**開頭一定要加**：
+    ```python
+    import sys, io
+    if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    ```
+    這正是 `s2_batch_prep.py`／`s2_token_metrics.py` 開頭都有的同一段防護——
+    不是新發明，是既有工具已經踩過的坑，臨時腳本沒有理由不帶。
   - 📌 真的遇到 `show` 查不到的欄位：**回報說缺什麼**，不要繞路自己寫——
     補一個欄位進 `SHOW_FIELDS` 是一次性的，每輪重寫臨時腳本是永久成本。
 - 🔴 **⛔ 改狀態檔的子指令，一輪只准呼叫一次**（2026-08-12 立規）：
