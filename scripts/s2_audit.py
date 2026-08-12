@@ -236,15 +236,30 @@ def audit(mmdd, state_path, txt_path, scratch):
         ok("全部含 4 位數字群，時段可正確推算")
 
     # ── ② 時段標記 ────────────────────────────────────────────────
+    # 🔴 2026-08-12 修過一次誤報：`mark_for()` 的規則是「跟建檔基準日同一天
+    # （day==0，也就是 16:00～23:00 這段晚班）本來就固定回 △」，不是「同一天
+    # 收太多則就可疑」。原本 `len(items) > 60` 這個判準完全沒對齊這條規則——
+    # 0812-1600（剛建檔，window_start=13:00）66 則全部落在 day==0，全部 △
+    # 是**設計上唯一可能的結果**，不是資料壞了；卻連續誤報 3 次逼 agent 花時間
+    # 去讀 s2_state.py／s2_render.py 原始碼排查一個根本不存在的問題。
+    # 真正該抓的是：**有 item 的 checkpoint 明明落在 day>=1（跨夜之後）卻標成 △**
+    # ——那才是「checkpoint 格式認錯日期」的真實故障形狀。
     sec("② 時段標記")
     marks = collections.Counter()
-    for v in items.values():
+    mis_tagged = []   # day>=1 卻仍是 △ 的異常項目：checkpoint 格式判日失敗的真訊號
+    for k, v in items.items():
         mk = v.get("mark") if v.get("mark") in ("△", "▲", "■", "◆", "●") \
             else R.mark_for(v.get("first_seen_checkpoint"), mmdd)
         marks[mk] += 1
+        day, _ = R.checkpoint_time(v.get("first_seen_checkpoint"), mmdd)
+        if day >= 1 and mk == "△":
+            mis_tagged.append(k)
     print(f"     分佈：{dict(marks)}")
-    if len(marks) == 1 and "△" in marks and len(items) > 60:
-        red("全部都是 △——跨夜輪次應該要有 ▲／■／◆，多半是 checkpoint 格式問題（見 ①）")
+    if mis_tagged:
+        red(f"{len(mis_tagged)} 則的 checkpoint 明明是隔天卻標成 △（checkpoint 格式判日失敗，見 ①）："
+            + "／".join(mis_tagged[:10]))
+    elif len(marks) == 1 and "△" in marks:
+        ok("全部都是 △——本班還在同一天（16:00～23:00），這是 mark_for() 設計上唯一可能的結果，不是問題")
     else:
         ok("有多種時段標記，未見全部塌陷成 △")
 

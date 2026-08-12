@@ -54,8 +54,18 @@ SRC_TEXT_LIMIT = 4000
 
 
 def truncate(s, limit=SRC_TEXT_LIMIT):
+    """截斷標記絕對不能含中文。
+
+    2026-08-12 0812-1600 輪實錯：原本用「…(截斷)」，直接踩到
+    `s2_state.strip_agent_note()` 的判準——那條規則是 RT4131 連錯四輪換來的鐵律
+    （三站原文一律英／西文，出現中文幾乎必然是 agent 混進去的判斷）。
+    `strip_agent_note` 是整行砍，不是只砍標記本身，所以中文標記把它接上的
+    整個最後一行（最長可達近 250 字的真實原文）一起當「agent 污染」剝掉，
+    稽核（`s2_audit.py` §3）因此對 13 筆全部誤判成「混入中文說明」——
+    查證後 13 筆全部是純英文站方原文被我這個標記拖累，沒有一筆是真的污染。
+    """
     s = s or ''
-    return s if len(s) <= limit else s[:limit] + '…(截斷)'
+    return s if len(s) <= limit else s[:limit] + '...[TRUNCATED]'
 
 
 def load_json(path):
