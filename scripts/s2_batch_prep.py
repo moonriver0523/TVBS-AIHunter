@@ -111,9 +111,26 @@ SITE_SPEC = {
 }
 
 
+def dedup_by_id(spec, items):
+    """raw 裡不該有重複 id（13c：逐字完全相同才准跳過，抽取階段就該濾掉），但抽取端
+    萬一分頁重疊、agent 重複收錄還是可能發生。保留第一次出現的那筆，其餘丟棄並警告，
+    避免兩筆同 id 原樣送進 add-batch（下游行為未定義）。"""
+    seen, kept, dups = set(), [], []
+    for it in items:
+        item_id = spec['id_of'](it)
+        if item_id in seen:
+            dups.append(item_id)
+            continue
+        seen.add(item_id)
+        kept.append(it)
+    if dups:
+        print(f'⚠️ raw 裡有重複 id，只保留第一次出現的那筆：{", ".join(dups)}', file=sys.stderr)
+    return kept
+
+
 def cmd_dump(args):
     spec = SITE_SPEC[args.site]
-    items = load_json(args.raw)
+    items = dedup_by_id(spec, load_json(args.raw))
     lines = []
     kept = skipped = 0
     for it in items:
@@ -138,7 +155,7 @@ def cmd_dump(args):
 
 def cmd_build(args):
     spec = SITE_SPEC[args.site]
-    items = load_json(args.raw)
+    items = dedup_by_id(spec, load_json(args.raw))
     entries = load_json(args.entries)
 
     batch = []
