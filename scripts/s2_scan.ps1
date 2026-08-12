@@ -36,6 +36,18 @@ param(
     # 只改一處會變成「手動跑是 sonnet、排程跑是 opus」這種查半天的不一致。
     [string]$Model = 'sonnet',
 
+    # 2026-08-12 明寫 effort。**不要拿掉改回繼承全域預設**——全域 `effortLevel` 會被
+    # 使用者在互動 session 打 `/effort` 順手改掉（0812 就發生過，掃帶其實一直跑在 high
+    # 而沒人知道）。
+    #
+    # ⚠️ **medium 已經試過了，沒效，不要再試一次**：0812 的 0430／0730 兩輪跑 medium，
+    # output 不減反增（high 的 0030 輪是 149k，medium 兩輪是 195k／185k）。原因是
+    # effort 只縮短「每次思考多深」，但工作量大的輪次思考「次數」變多，直接抵銷掉。
+    # 真正的成本變數是**工具呼叫次數**（實測 ≈ 0.47M cache_read/次），不是 effort。
+    # 既然 medium 都沒好處，low 只會拿分類品質去換一個沒被證實的節省——**維持 high**。
+    [ValidateSet('low', 'medium', 'high')]
+    [string]$Effort = 'high',
+
     # 開工 prompt 範本；{CHECKPOINT} 會被代換掉。
     [string]$PromptFile = "$PSScriptRoot\s2_scan_prompt.md",
 
@@ -232,8 +244,8 @@ try {
         Write-Host "*** TestMode：每站上限 $TestLimit 則 ***"
     }
 
-    Write-Run "START`tmodel=$Model$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
-    Write-Host "START [$Checkpoint] model=$Model log=$runLog"
+    Write-Run "START`tmodel=$Model`teffort=$Effort$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
+    Write-Host "START [$Checkpoint] model=$Model effort=$Effort log=$runLog"
     if ($DryRun) {
         Write-Host "--- DryRun：以下是會送出的 prompt 前 400 字 ---"
         Write-Host $prompt.Substring(0, [Math]::Min(400, $prompt.Length))
@@ -244,6 +256,7 @@ try {
     claude -p $prompt `
         --permission-mode bypassPermissions `
         --model $Model `
+        --effort $Effort `
         --mcp-config $McpConfig `
         --add-dir $Repo --add-dir $StateDir `
         --output-format stream-json --verbose *> $runLog

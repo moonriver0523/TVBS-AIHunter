@@ -2,6 +2,44 @@
 
 跨 session 待辦清單。規則本身的變更歷史見 `common/auto-script-learning/CHANGELOG.md`／`RULES.md`；這裡只放「還沒做、下次要接著做」的項目。
 
+## 🟡 省 token 三條待辦（2026-08-12 立案，使用者指定列管）
+
+背景：0812 實測建立了成本公式 —— **cache_read ≈ 0.47M × 工具呼叫次數**
+（同日三輪高度一致：94 次/43.8M、117 次/53.3M、119 次/62.4M）。
+則數幾乎不影響成本，**呼叫次數才是唯一的變數**。同日另外驗證了兩件事：
+`--effort` 由 high 降 medium **沒有省到 output**（149k → 195k／185k，反而上升，
+當日即改回 `high` 並在 `s2_scan.ps1` 明寫，**不要再試 medium／low**），
+排程由 12 輪砍到 9 輪實際約省 15%（不是原估的 25%，因為窗口拉長後單輪呼叫數上升）。
+
+- [x] **①強制批次寫入**（2026-08-12 已做）：`13c-S2-定時掃帶-v3省token.md` 加硬規則，
+      `set-category`／`update-entry`／`add-batch` 一輪各只准呼叫一次。
+      0730 輪實測 9+6 次單筆呼叫應收斂成 3 次，省 ~12 次呼叫 ≈ 5.6M/輪。
+      **待驗證**：下一輪起看 `set-category`／`update-entry` 呼叫數有沒有真的降到 1。
+
+- [ ] **②把三站的臨時 python 收成 `scripts/s2_batch_prep.py`**（省 ~12 次呼叫 ≈ 5.6M/輪）
+      0730 輪 15 次 `python -c` 拆開看，是**同一組 5 步驟在 NS／AP／RT 各做一遍**：
+      ①印 raw json 欄位確認 →②換格式再印一次（純重複）→③dump 成 .txt 供閱讀 →
+      ④把 raw 併回 entries →⑤抽出盤點用清單。
+      其中 RT #12/#13 是同一條指令只差分隔符、NS #2/#3 是同一個 dump 寫兩次，
+      **這三次是純粹的重打**。
+      介面：`python scripts/s2_batch_prep.py --site ns|ap|rt --checkpoint 0730`，一次做完 ①~⑤。
+      ⚠️ **三站 raw json 欄位名不統一**，要設計成 per-site adapter：
+      NS＝`id/ft/dur_ms/created`、AP＝`id/role/sb_count/has_sot/dur`、
+      RT＝`code/head/sb_count/dur/src`（RT 用 `code` 不是 `id`）。
+      **上線前先拿 `20260811/` 底下現成的 `*_batch_0730_raw.json` 測過**，不要直接上排程。
+
+- [ ] **③ntfy 推播失敗：`Request headers must contain only ASCII characters`**
+      0811-1800-補漏 那輪起就在報，**不影響掃帶本身**，但等於「跑完沒人知道」——
+      0811-2200 外殼異常終止那次，就是因為沒推播才拖到使用者自己發現。
+      研判是標題／內文的中文塞進 HTTP header。**解法：標題壓成純 ASCII，
+      中文改放 body**（ntfy body 走 UTF-8 沒問題）。改完手動觸發一次確認收得到。
+
+- [ ] **④`-DryRun` 會污染 `_輪次紀錄.txt`**
+      `Write-Run "START..."` 寫在 DryRun 的 `exit 0` **之前**，所以每跑一次 DryRun
+      就多一筆假的 START 行（還會生一個 0 bytes 的 log 檔）。
+      0812-01:47 那次已手動清掉，但程式沒改。**解法：把 DryRun 的出口移到 `Write-Run` 之前**，
+      或 DryRun 時不呼叫 `Write-Run`。小瑕疵，但會讓輪次紀錄長期失真、干擾日後成本比對。
+
 ## 🔥🔥🔥 S2 全自動化總清點（2026-08-08 夜，使用者要求「明天起完全無人介入」）
 
 目標：**明天起每一輪掃帶都不需要人為介入**。以下依「不解決就會讓這個目標失敗」排序。
