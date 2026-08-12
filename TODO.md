@@ -2,6 +2,10 @@
 
 跨 session 待辦清單。規則本身的變更歷史見 `common/auto-script-learning/CHANGELOG.md`／`RULES.md`；這裡只放「還沒做、下次要接著做」的項目。
 
+> 🗂️ **S2 改進項目自 2026-08-12 起統一列管於 `common/plans/S2-MASTER-追蹤清單.md`**——
+> 狀態、優先序、裁決、驗收都以 MASTER 表為準，agent 之間以它交接；
+> 本檔以下的 S2 段落保留當歷史紀錄，不再更新。
+
 ## 🟡 省 token 優化（2026-08-12 立案）
 
 📄 **規格、理由、優先順序、成本模型一律看 `common/20260812-S2省Token優化計畫-修訂版.md`。**
