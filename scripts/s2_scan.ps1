@@ -433,5 +433,11 @@ catch {
     throw
 }
 finally {
-    if ($lock) { $lock.Dispose() }   # 正常結束、丟例外、Ctrl+C 都會走到這裡
+    if ($lock) {
+        $lock.Dispose()   # 正常結束、丟例外、Ctrl+C 都會走到這裡
+        # 互斥靠的是上面的獨佔握把，檔案本身只是留痕。但留著舊 pid 內容
+        # 會被誤讀成「鎖沒釋放」（0811-1800補漏／0812-1800／0812-2000 三次誤判），
+        # 所以釋放後順手刪掉。刪不掉＝已被下一輪拿走，正是該留下的時候。
+        Remove-Item $LockFile -Force -ErrorAction SilentlyContinue
+    }
 }
