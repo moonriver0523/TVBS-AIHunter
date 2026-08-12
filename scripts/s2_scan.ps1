@@ -58,7 +58,17 @@ param(
 
     [string]$Repo = 'E:\GitHub\TVBS-AIHunter',
     [string]$StateDir = 'G:\我的雲端硬碟\Claude共用\自動掃帶系統',
+    # 大檔 stream-json（掃帶log-*.txt，一輪約 1.2MB、整輪持續 append）留本機。
+    # ⚠️ **不要搬到 Google Drive**：那是持續串流寫入，Drive 不做差分，
+    # 一輪會被反覆整檔重傳幾十次；而且它只是除錯用暫存，分析成本要讀
+    # session transcript 而不是這個檔（外殼一死重導向就斷、log 會被截斷）。
     [string]$LogDir = 'D:\Downloads\S2掃帶log',
+
+    # 小檔遙測（_輪次紀錄／_跳過紀錄，合計 <10KB、一輪只 append 幾行）放雲端，
+    # 方便跨機查閱與存檔（2026-08-12）。同步壓力等於零。
+    # 🔴 寫這裡**一定要走 Write-Run／Write-Skip**——它們有 try/catch，
+    #    Drive 鎖檔或 G: 沒掛載時只會警告，不會把整輪弄死。
+    [string]$TelemetryDir = 'G:\我的雲端硬碟\Claude共用\自動掃帶系統\S2掃帶log',
 
     # 鎖檔放本機，不要放 Google Drive——同步延遲會讓互斥失效。
     [string]$LockFile = "$env:USERPROFILE\.s2-scan.lock",
@@ -79,22 +89,51 @@ $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $runLog = Join-Path $LogDir "掃帶log-$Checkpoint.txt"
-$skipLog = Join-Path $LogDir '_跳過紀錄.txt'
+
+# 遙測檔改放雲端（2026-08-12）。建目錄失敗（G: 沒掛載）就整組退回本機 $LogDir，
+# **不准讓它中斷掃帶**——這裡是紀錄，不是掃帶本體。
+try {
+    New-Item -ItemType Directory -Force -Path $TelemetryDir -ErrorAction Stop | Out-Null
+} catch {
+    Write-Warning "遙測目錄不可用（$TelemetryDir），本輪改寫本機：$($_.Exception.Message)"
+    $TelemetryDir = $LogDir
+}
+$skipLog = Join-Path $TelemetryDir '_跳過紀錄.txt'
 # 每一輪的開工／收工都寫這裡（2026-08-09）。在此之前**只有異常才留痕**，
 # 成功的 DONE 只印在主控台視窗上——0808 加了 -WindowStyle Hidden 之後那個視窗
 # 不再出現，等於「跑完沒有、收了幾則」完全無從得知。**成功也要留痕**，
 # 而且要能一眼看完一整天，所以是單一檔案逐行 append，不是每輪一個檔。
-$runsLog = Join-Path $LogDir '_輪次紀錄.txt'
+$runsLog = Join-Path $TelemetryDir '_輪次紀錄.txt'
+
+# 🔴 **這個函式不准往外丟例外**（2026-08-12 立規）。
+# 全域是 $ErrorActionPreference='Stop'，遙測檔又搬到了 Google Drive；
+# 只要 Drive 在同步當下鎖住檔案，一個 Add-Content 失敗就會**整輪中斷**。
+# 寫 log 失敗只是少一行紀錄，絕對不該比掃帶本身重要。
+# 鎖檔是暫時的，所以退避重試三次；三次都不行就印警告收工。
+function Write-Line([string]$path, [string]$text) {
+    for ($i = 1; $i -le 3; $i++) {
+        try {
+            $text | Add-Content -Path $path -Encoding UTF8 -ErrorAction Stop
+            return
+        } catch {
+            if ($i -eq 3) {
+                Write-Warning "寫紀錄失敗（已重試 3 次，不影響本輪）：$path — $($_.Exception.Message)"
+                Write-Warning "遺失的內容：$text"
+                return
+            }
+            Start-Sleep -Milliseconds (300 * $i)
+        }
+    }
+}
 
 function Write-Run([string]$line) {
-    "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$Checkpoint`t$line" |
-        Add-Content -Path $runsLog -Encoding UTF8
+    Write-Line $runsLog "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$Checkpoint`t$line"
 }
 
 function Write-Skip([string]$why) {
     # ⚠️ 跳過一定要留痕。0806 的教訓：只在終端機講一句等於沒發生過，
     # 而排程根本沒有終端機可看。
-    "$stamp`t$Checkpoint`t$why" | Add-Content -Path $skipLog -Encoding UTF8
+    Write-Line $skipLog "$stamp`t$Checkpoint`t$why"
     Write-Run "SKIP`t$why"
     Write-Host "SKIP [$Checkpoint] $why"
 }
@@ -244,13 +283,19 @@ try {
         Write-Host "*** TestMode：每站上限 $TestLimit 則 ***"
     }
 
-    Write-Run "START`tmodel=$Model`teffort=$Effort$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
-    Write-Host "START [$Checkpoint] model=$Model effort=$Effort log=$runLog"
+    # 🔴 DryRun 的出口要在 Write-Run 之前（2026-08-12 修）。
+    # 原本順序相反，每跑一次 DryRun 就在 _輪次紀錄.txt 留一行假的 START
+    # （後面永遠不會有對應的 DONE），還順手生一個 0 bytes 的 掃帶log-*.txt。
+    # 手動清過兩次。驗測試設定時 DryRun 要跑很多次，這條不修就等於紀錄檔報廢。
     if ($DryRun) {
-        Write-Host "--- DryRun：以下是會送出的 prompt 前 400 字 ---"
+        Write-Host "--- DryRun [$Checkpoint] model=$Model effort=$Effort（不寫 _輪次紀錄）---"
+        Write-Host "以下是會送出的 prompt 前 400 字："
         Write-Host $prompt.Substring(0, [Math]::Min(400, $prompt.Length))
         exit 0
     }
+
+    Write-Run "START`tmodel=$Model`teffort=$Effort$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
+    Write-Host "START [$Checkpoint] model=$Model effort=$Effort log=$runLog"
 
     $t0 = Get-Date
     claude -p $prompt `
@@ -355,8 +400,7 @@ try {
         Write-Run "推播例外（不影響本輪）：$($_.Exception.Message)"
     }
     if ($bad) {
-        "$stamp`t$Checkpoint`t異常：$($bad -join '；') 見 $runLog" |
-            Add-Content -Path $skipLog -Encoding UTF8
+        Write-Line $skipLog "$stamp`t$Checkpoint`t異常：$($bad -join '；') 見 $runLog"
         Write-Host "*** 異常：$($bad -join '；') ***"
     }
     exit $code

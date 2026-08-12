@@ -4,7 +4,7 @@
 # 每日觸發器的 StartBoundary——那是**永久性**的，不改回來的話往後每天都變 00:30。
 # 跟 s2_reenable_2300.ps1 同一個道理：異動的當下就把還原排進去，不要靠人記得。
 $ErrorActionPreference = 'Stop'
-$log = 'D:\Downloads\S2掃帶log\_跳過紀錄.txt'
+$log = 'G:\我的雲端硬碟\Claude共用\自動掃帶系統\S2掃帶log\_跳過紀錄.txt'  # 2026-08-12 遙測搬雲端
 try {
     $tr = (Get-ScheduledTask -TaskName 'S2掃帶').Triggers
     $tr[5].StartBoundary = '2026-08-06T01:00:00'

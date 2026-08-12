@@ -28,11 +28,16 @@
 param(
     [string]$FlagFile = "$env:USERPROFILE\.s2-watchdog-enabled",
     [string]$Repo = 'E:\GitHub\TVBS-AIHunter',
+    # 大檔 stream-json 留本機（跟 s2_scan.ps1 的 -LogDir 一致）
     [string]$LogDir = 'D:\Downloads\S2掃帶log',
-    [string]$WatchdogLog = 'D:\Downloads\S2掃帶log\_看門狗紀錄.txt',
+    # 小檔遙測放雲端（2026-08-12，跟 s2_scan.ps1 的 -TelemetryDir 一致）
+    [string]$WatchdogLog = 'G:\我的雲端硬碟\Claude共用\自動掃帶系統\S2掃帶log\_看門狗紀錄.txt',
 
-    # 排程時刻表——跟 S2掃帶.xml 的 12 個 StartBoundary 要保持一致，改排程記得同步改這裡
-    [string[]]$Slots = @('16:00','18:00','20:00','22:00','23:00','01:00','04:30','07:00','08:00','10:00','12:00','13:00'),
+    # 排程時刻表——跟 S2掃帶.xml 的 StartBoundary 要保持一致，改排程記得同步改這裡。
+    # 2026-08-12 省 token：12 輪 → 9 輪（07:00+08:00 併成 07:30，取消 13:00、23:00）。
+    # ⚠️ 這裡沒同步改的話，看門狗會在已取消的時段判定「這輪沒開」而去代打，
+    #    等於把取消的輪次又跑回來。
+    [string[]]$Slots = @('01:00','04:30','07:30','10:00','12:00','16:00','18:00','20:00','22:00'),
 
     # 過了幾分鐘還沒開始才算「沒開」
     [int]$GraceMinutes = 30,
@@ -49,8 +54,27 @@ param(
 $ErrorActionPreference = 'Stop'
 $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
+# G: 沒掛載就把紀錄退回本機，不要讓看門狗變成啞巴
+try { New-Item -ItemType Directory -Force -Path (Split-Path $WatchdogLog) -ErrorAction Stop | Out-Null }
+catch {
+    Write-Warning "看門狗紀錄目錄不可用，改寫本機：$($_.Exception.Message)"
+    $WatchdogLog = Join-Path $LogDir '_看門狗紀錄.txt'
+    New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+}
+
+# 🔴 寫紀錄不准弄死看門狗（2026-08-12）：全域是 -ErrorAction Stop，
+# 而紀錄檔已改放 Google Drive，同步鎖檔會讓 Add-Content 丟終止性錯誤。
+# 少一行紀錄無所謂，看門狗掛掉才嚴重。
 function Write-Log([string]$msg) {
-    "$stamp`t$msg" | Add-Content -Path $WatchdogLog -Encoding UTF8
+    for ($i = 1; $i -le 3; $i++) {
+        try {
+            "$stamp`t$msg" | Add-Content -Path $WatchdogLog -Encoding UTF8 -ErrorAction Stop
+            return
+        } catch {
+            if ($i -eq 3) { Write-Warning "看門狗寫紀錄失敗（不影響判斷）：$($_.Exception.Message)"; return }
+            Start-Sleep -Milliseconds (300 * $i)
+        }
+    }
 }
 
 if (-not (Test-Path $FlagFile)) {

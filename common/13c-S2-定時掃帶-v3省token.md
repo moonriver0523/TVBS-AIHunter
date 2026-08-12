@@ -214,7 +214,7 @@ const clean = (h) => decodeEnt(
 - **登入態**：Bearer token 在 `localStorage.newsourceSession.token`，**1 小時滑動時效**——沒過期時每次載入頁面就自動續 1 小時；一旦過期**沒有任何後備憑證**（NS 連一顆認證 cookie 都沒有），只能人工重登。
 - 🎫 **保活由獨立排程做（`S2-NS保活`，每 30 分鐘跑 `scripts/s2_keepalive.ps1` 載入 `/landing` 續期），agent 不必自管**：
   - **鎖優先序：掃帶 > 保活**，共用 `.s2-scan.lock`，撞到時**保活直接放棄不排隊**（寧可漏一次保活，不可卡一輪掃帶）。因此**長輪次收工前要照 `s2_scan_prompt.md` 第 7 步最後摸一次 NS**。
-  - NS 登出時寫進 `D:\Downloads\S2掃帶log\_NS保活.log` 標記需人工重登。
+  - NS 登出時寫進 `G:\我的雲端硬碟\Claude共用\自動掃帶系統\S2掃帶log\_NS保活.log` 標記需人工重登。
   - 腳本必須用 MCP 同一個 `--user-data-dir` 與同一個 chromium 版本，否則讀不到登入態。
   - （手動掃帶、無排程時才由 agent 自管：等待期距上次接觸 NS 接近 **58 分鐘**就 navigate `/landing` 續一次；基準點＝本輪開工時刻（NS 是第一站）。⛔ 不可另開獨立 agent 去做，profile 會互鎖。）
 - ⚠️ **回應是 NDJSON**，不能 `r.json()`——取含 `"stories"` 的那一行再 parse。

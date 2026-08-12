@@ -20,7 +20,8 @@
 param(
     [string]$Script = "$PSScriptRoot\s2_keepalive.js",
     [string]$LockFile = "$env:USERPROFILE\.s2-scan.lock",
-    [string]$LogFile = 'D:\Downloads\S2掃帶log\_NS保活.log',
+    # 小檔遙測放雲端（2026-08-12，跟 s2_scan.ps1 的 -TelemetryDir 一致）
+    [string]$LogFile = 'G:\我的雲端硬碟\Claude共用\自動掃帶系統\S2掃帶log\_NS保活.log',
 
     # ntfy.sh 推播頻道。**刻意放在 repo 外**——頻道名等於密碼（知道的人都能訂閱／發送），
     # 不該進版控。檔案不存在＝不推播，其餘功能照跑。
@@ -36,10 +37,24 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-New-Item -ItemType Directory -Force -Path (Split-Path $LogFile) | Out-Null
+# G: 沒掛載就退回本機，不要中斷保活
+try { New-Item -ItemType Directory -Force -Path (Split-Path $LogFile) -ErrorAction Stop | Out-Null }
+catch {
+    Write-Warning "紀錄目錄不可用，改寫本機：$($_.Exception.Message)"
+    $LogFile = 'D:\Downloads\S2掃帶log\_NS保活.log'
+    New-Item -ItemType Directory -Force -Path (Split-Path $LogFile) | Out-Null
+}
 
+# 🔴 寫紀錄不准弄死保活（2026-08-12）：全域是 -ErrorAction Stop，
+# 而紀錄檔已改放 Google Drive，同步鎖檔會讓 Add-Content 丟終止性錯誤。
 function Log([string]$line) {
-    "$stamp`t$line" | Add-Content -Path $LogFile -Encoding UTF8
+    for ($i = 1; $i -le 3; $i++) {
+        try { "$stamp`t$line" | Add-Content -Path $LogFile -Encoding UTF8 -ErrorAction Stop; break }
+        catch {
+            if ($i -eq 3) { Write-Warning "保活寫紀錄失敗（不影響保活）：$($_.Exception.Message)" }
+            else { Start-Sleep -Milliseconds (300 * $i) }
+        }
+    }
     Write-Host $line
 }
 

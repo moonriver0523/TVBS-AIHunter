@@ -4,7 +4,7 @@
 # 停用容易、**記得還原很難**——忘了就等於 23:00 那輪從此永久消失，而且不會有任何
 # 錯誤訊息（跟 0811-1800 那種無聲死法一樣）。所以取消的當下就把還原也排進去。
 $ErrorActionPreference = 'Stop'
-$log = 'D:\Downloads\S2掃帶log\_跳過紀錄.txt'
+$log = 'G:\我的雲端硬碟\Claude共用\自動掃帶系統\S2掃帶log\_跳過紀錄.txt'  # 2026-08-12 遙測搬雲端
 try {
     $t  = Get-ScheduledTask -TaskName 'S2掃帶'
     $tr = $t.Triggers
