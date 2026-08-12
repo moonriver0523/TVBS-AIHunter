@@ -59,34 +59,19 @@ NS 登入態是 1 小時滑動時效，NS 排第一站＝「上次接觸 NS」�
 
 > 📄 完整配方（可直接抄的 JS、body、欄位表）：[`investigation-logs/2026-08-03-三站API破解總表.txt`](investigation-logs/2026-08-03-三站API破解總表.txt)＋NS 專篇 [`2026-08-03-NS掃帶卡點報告-回覆.txt`](investigation-logs/2026-08-03-NS掃帶卡點報告-回覆.txt)。
 
-🔴 **從 raw 抽取結果湊出 `batch.json` ── 用 `scripts/s2_batch_prep.py`，不要手打 `python -c`**
-（2026-08-12 立規；理由：0730 那輪三站合計打了 15 次臨時 python，同一組「印欄位確認→
-換格式再印一次→dump→併回 entries→抽清單」五步在三站各做一遍，還有兩次是純重複）：
+⚠️ **`scripts/s2_batch_prep.py` 存在，但 2026-08-12 實測「規定要用」反而更貴，已撤回強制**：
 
-```bash
-# ① 把 browser_evaluate 抽出的 raw 陣列存成 raw.json 後：
-python scripts/s2_batch_prep.py dump --site ns|ap|rt --raw {site}_raw_{cp}.json
-#   → 印出每則的機械欄位（sb_count／has_sot／footage_type／dur／…），供你判斷要不要收、
-#     哪些要標 BITE。這一步只印，不下判斷。
+原本 14:38 在這裡立了一條 🔴 規則，要求走 `raw.json → dump → entries.json → build`
+三步流程取代手打 `python -c`。0812-1600／1800 兩輪實測結果相反——
+臨時 python 從 **6 次 → 30 次 → 54 次**，總呼叫 90 → 177 → 203，成本 24.0M → 56.9M。
+根因：`dump`／`build` 要吃固定 schema 的 `raw.json`，而把 `browser_evaluate` 的輸出
+轉成那個 schema，本身就得寫臨時 python；流程多一層中介契約，省下的少於逼出來的。
 
-# ② 你自己判斷完、寫好中文三段式摘要後，存成 entries.json：{"AP4677941": "◆ AP4677941 (…) …"}
-#   （這步就是你本來就在做的編輯判斷，工具不會、也不該幫你寫）
-
-# ③ 機械併成 add-batch 吃得下的格式：
-python scripts/s2_batch_prep.py build --site ns|ap|rt --raw {site}_raw_{cp}.json \
-    --entries {site}_entries_{cp}.json --checkpoint {CHECKPOINT} --out {site}_batch_{cp}.json
-python scripts/s2_state.py --file <state> add-batch --entries {site}_batch_{cp}.json
-```
-
-- ⛔ **`entry`（中文摘要、BITE 判斷、分類措辭）永遠是你自己寫**，這支工具不生成、不翻譯、
-  不判斷 BITE——那是編輯判斷，機械做不到。工具只管「把你判斷完的結果，跟 raw 裡本來就有
-  的機械欄位對好、湊成格式」。
-- NS 的 `skip`／AP 的 `prelim`／RT 的 `early` 這些機械排除／狀態推導，`build` 已經處理，
-  不必自己再判斷一次；`dump` 輸出裡排除的項目會標 `[排除:原因]`。
-- `build` 印出的 `⚠️ entries.json 沒寫的 id` 是**提醒不是錯誤**——那是你判斷完不收的則，
-  照樣不會進 batch，只是要你確認不是漏判。
-- 上線前已用 `20260811\*_batch_0730_raw.json` 對照既有手做結果驗證過：`id`／`status`／
-  `entry` 完全一致，差異只在 `src_text`（截斷格式）跟少數靠人工覆寫的判斷欄位。
+- **現行做法回到 1200 那輪**：`browser_evaluate` 抽完直接邊看邊累積 `batch.json`，
+  看完一次 `add-batch`（見下方 §1a／批次規則）。這是實測最省的路徑（90 次／24.0M）。
+- `s2_batch_prep.py` 保留為**選用工具**，只在 raw 本來就已經是它吃得下的格式時才划算，
+  不要為了用它而先寫 python 轉檔。
+- ⛔ 不管走哪條路，`entry`（中文摘要、BITE 判斷、分類措辭）永遠是你自己寫。
 
 ### 0-1) ⭐ 抽取白名單：`page.evaluate()` 裡先瘦身，只回傳需要的欄位
 
@@ -453,17 +438,14 @@ python scripts/s2_state.py needs-review done --ids RT2333   # 處理完就結案
   - ⚠️ **臨時腳本還特別容易自傷**：0811-2000 第 14–18 次連續 5 次卡在 `/tmp` 路徑
     （Windows 沒有 `/tmp`，寫失敗→sed 想補救→又失敗→最後才改 heredoc）。
     五次呼叫全部白費，什麼事都沒做成。
-  - 🔴 **這台機器的主控台是 cp950，臨時 python 印中文／emoji（🔴🟡 這些代碼常用符號）
-    會直接崩潰**（2026-08-12 實錯：0812-1600 輪一支寫 fix 的臨時腳本印 `🔴` 時
-    `UnicodeEncodeError: 'cp950' codec can't encode`，整段白跑，逼著重來一次）。
-    真的不得不寫臨時 python（例如上面兩條都繞不掉的場合）時，**開頭一定要加**：
-    ```python
-    import sys, io
-    if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    ```
-    這正是 `s2_batch_prep.py`／`s2_token_metrics.py` 開頭都有的同一段防護——
-    不是新發明，是既有工具已經踩過的坑，臨時腳本沒有理由不帶。
+  - ⚠️ **這台機器的主控台是 cp950，臨時 python 印中文／emoji 會直接崩潰**
+    （`UnicodeEncodeError: 'cp950' codec can't encode`，整段白跑）。
+    這裡**不給防護樣板**——2026-08-12 的教訓是：給了樣板等於發許可證。
+    當天 17:13 在這裡放了一段 UTF-8 防護樣板，18:00 那輪臨時 python 立刻從
+    30 次衝到 **54 次**（樣板本身被抄了 58 次），呼叫總數 177→203、
+    成本 54.3M→56.9M。**這條規則是「不要寫」，不是「怎麼寫得安全」。**
+    正規腳本（`s2_batch_prep.py`／`s2_token_metrics.py`）開頭已有這段防護，
+    走正規指令就不會遇到這個問題。
   - 📌 真的遇到 `show` 查不到的欄位：**回報說缺什麼**，不要繞路自己寫——
     補一個欄位進 `SHOW_FIELDS` 是一次性的，每輪重寫臨時腳本是永久成本。
 - 🔴 **⛔ 改狀態檔的子指令，一輪只准呼叫一次**（2026-08-12 立規）：
