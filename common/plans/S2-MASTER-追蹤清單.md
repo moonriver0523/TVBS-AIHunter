@@ -48,6 +48,9 @@
 | R8 | audit 其餘輸出補完：各清單 shown/total/more（P0-5）＋ --json-report（P0-6） | 複核 | 8 | ⬜ | §4 已做一處（384d9de），其餘清單未補 |
 | R9 | update-entry 同步 src_text／footage_type（P1） | 複核 | 9 | ⬜ | 配合 dd0e95f（new_item 已修）補齊另一半 |
 | R10 | BITE 三態 CONFIRMED／NO_BITE／REVIEW_REQUIRED（P1） | 複核 | 10 | ⬜ | |
+| R11 | 0812-2200 輪 65 則新增**全數缺 src_text** | 2200健檢 | 3.5 | ⬜ | dd0e95f 修過 new_item()，1600~2000 的 batch 都有帶，2200 突然全缺→事後查證得重開瀏覽器（audit 🟡152筆沒帶）。查 2200 的 batch json 是否漏欄位、還是走了別條入庫路徑；可用 update-entry 回補 |
+| R12 | truncate 3000 字截斷 SOUNDBITE 段→BITE 無法驗證 | RT9878 實例 | 4.5 | ⬜ | RT9878 sb_count 機械數到 9，但 truncate 只取前 3000 字未含逐字引言，agent 只能標無BITE 待人工。修法與 R4 同區：truncate 應保證 SOUNDBITE/SUPERS 段落優先保留，不是傻取前 N 字 |
+| R13 | batch 檔寫錯位置→雙重搬運（浪費 ~3 分/輪） | 2200健檢 | 6.5 | ⬜ | 2200 輪把 rt/ap batch 先寫 repo 根目錄，再 Read 回來重 Write 到 scratch 目錄（卡點 91s+102s 就在這）。repo 根目錄已累積 9 個各輪殘留 json（0700/0100/1500/2000…）。修法：規則明示 batch 一律直接寫 `scratch-dir` 路徑＋清一次現存殘留 |
 
 ## T — 省 Token（既有計畫未完成項）
 
