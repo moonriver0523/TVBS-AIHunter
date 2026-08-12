@@ -68,11 +68,41 @@ def classify_bash_tool(cmd):
     return 'Bash（其他）'
 
 
+PHASES = ('稽核', 'render', '分類', 'NS', 'AP', 'RT', '其他')
+
+
+def classify_phase(name, input_str):
+    """P2 分段遙測（2026-08-12）：依 tool input 內容把呼叫標到階段。
+    這是把 0812 事後手工爬 2MB log 拆階段的方法寫死成程式——
+    沒有它，每次異常都得重新手工拆，而且第一次就因此答錯方向。
+    判斷順序有意義：稽核／render／分類的指令裡常夾著站名（--rt-list、
+    _rt_batch），所以**流程階段先判、站別後判**。"""
+    s = input_str.lower()
+    if 's2_audit' in s:
+        return '稽核'
+    if 's2_render' in s:
+        return 'render'
+    if any(k in s for k in ('set-category', 's2_topic_dedupe', 'list-topics',
+                            'set-topic-order', 'set-resident-topics')):
+        return '分類'
+    if any(k in s for k in ('reuters', '_rt_', 'rt_list')):
+        return 'RT'
+    if any(k in s for k in ('newsroom.ap.org', 'apnewsroom', '_ap_')):
+        return 'AP'
+    if any(k in s for k in ('ns.cnn.com', 'newsource', '_ns_', 'cnn.com')):
+        return 'NS'
+    return '其他'
+
+
 def measure(session_path):
     last_usage = {}  # message.id -> usage dict（保留最後一筆）
     tool_calls = 0
     tool_by_name = {}
+    events = []  # (timestamp_iso, phase) 每個 tool_use 一筆，for 分段遙測
     n = 0
+    last_ts = None
+    prev_phase = None  # 沿用「連續區段」假設：無標記的呼叫（click／snapshot／
+    #                    讀寫暫存檔）繼承前一個呼叫的階段，跟手工拆帳同一套邏輯
     with open(session_path, encoding='utf-8') as f:
         for line in f:
             line = line.strip()
@@ -82,6 +112,9 @@ def measure(session_path):
                 d = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            ts = d.get('timestamp')
+            if ts:
+                last_ts = ts
             msg = d.get('message') or {}
             usage = msg.get('usage')
             if usage:
@@ -93,10 +126,41 @@ def measure(session_path):
                     continue
                 tool_calls += 1
                 name = block.get('name') or '?'
+                raw_input = json.dumps(block.get('input') or {}, ensure_ascii=False)
                 if name == 'Bash':
                     cmd = (block.get('input') or {}).get('command', '')
                     name = classify_bash_tool(cmd)
                 tool_by_name[name] = tool_by_name.get(name, 0) + 1
+                if ts:
+                    ph = classify_phase(name, raw_input)
+                    if ph == '其他' and prev_phase:
+                        ph = prev_phase
+                    prev_phase = ph
+                    events.append((ts, ph))
+
+    # 分段耗時：呼叫 i 的「時段」＝t[i]～t[i+1]（含工具執行＋下一步思考），
+    # 歸給呼叫 i 的階段；最後一個呼叫用 transcript 末行時間戳收尾。
+    # 邊界歸屬跟手工拆帳的口徑不完全相同（手工版把整備／組稿時間留白，
+    # 本版沿連續區段全額歸給所屬階段），絕對值差 1～3 分；但方法每輪一致，
+    # **跨輪比較**才是這個遙測的用途（實測 0812-2000：AP 7.0/23 vs 手工 6.6/22、
+    # RT 14.3/70 vs 11.4/58，異常階段一眼可辨）。
+    phase_stat = {}
+    if events:
+        from datetime import datetime
+
+        def parse(ts):
+            return datetime.fromisoformat(ts.replace('Z', '+00:00'))
+
+        times = [parse(ts) for ts, _ in events]
+        times.append(parse(last_ts) if last_ts else times[-1])
+        for i, (_, ph) in enumerate(events):
+            sec = max(0.0, (times[i + 1] - times[i]).total_seconds())
+            st = phase_stat.setdefault(ph, {'calls': 0, 'minutes': 0.0})
+            st['calls'] += 1
+            st['minutes'] += sec / 60
+        for st in phase_stat.values():
+            st['minutes'] = round(st['minutes'], 1)
+        phase_stat = {ph: phase_stat[ph] for ph in PHASES if ph in phase_stat}
 
     cache_read = sum(u.get('cache_read_input_tokens', 0) for u in last_usage.values())
     cache_creation = sum(u.get('cache_creation_input_tokens', 0) for u in last_usage.values())
@@ -112,6 +176,7 @@ def measure(session_path):
         'output_tokens': output,
         'input_tokens': input_tok,
         'cache_read_per_tool_call': round(cache_read / tool_calls, 3) if tool_calls else None,
+        'phases': phase_stat,
         'tool_calls_by_name': dict(sorted(tool_by_name.items(), key=lambda kv: -kv[1])),
     }
 

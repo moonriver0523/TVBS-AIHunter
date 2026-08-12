@@ -56,7 +56,9 @@ param(
     # 維持 high 的理由是「量不出好處就不要拿分類品質去換」，不是「medium 較差」。
     # 要再動 effort 之前，先把 Task 1 基線量測器做出來，否則 5% 級的差異看不出來。
     [ValidateSet('low', 'medium', 'high')]
-    [string]$Effort = 'high',
+    # 2026-08-12 使用者裁定改回 medium：1000 輪起用 high 後每輪 30 分上下，
+    # 而 0430/0730 用 medium 收 138/75 則也只要 22~24 分，high 沒換到對等品質。
+    [string]$Effort = 'medium',
 
     # 開工 prompt 範本；{CHECKPOINT} 會被代換掉。
     [string]$PromptFile = "$PSScriptRoot\s2_scan_prompt.md",
