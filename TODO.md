@@ -32,7 +32,10 @@
       （持續串流寫入，Drive 不做差分會整檔重傳幾十次）。
       三支腳本的寫紀錄函式都加了 try/catch＋退避重試＋目錄退回本機，
       **寫 log 失敗不再會弄死整輪**。順手修好看門狗 `$Slots` 還停在 12 輪的問題。
-- [ ] **Task 1 基線量測器** — ⚠️ 讀 session transcript、依 `message.id` 去重
+- [x] **Task 1 基線量測器** — `scripts/s2_token_metrics.py`。讀 session transcript、
+      依 `message.id` 去重、拆 `tool_calls_by_name`（含 `s2_state:<子指令>` 細分）。
+      已補齊 0030/0430/0730/1000 四輪，數字與手算一致。`s2_scan.ps1` 收工自動呼叫
+      （非阻斷，失敗只記警告）。輸出 `G:\...\自動掃帶系統\S2掃帶log\_token_metrics.jsonl`
 - [ ] **Task 2 最小 Claude Code 啟動設定** — 預估省 16%，八個 CLI 旗標已確認存在
 - [ ] **②`scripts/s2_batch_prep.py`** — 收掉三站各 5 步的臨時 python，預估省 10%
 - [ ] **③ntfy 推播修復**（ASCII header）

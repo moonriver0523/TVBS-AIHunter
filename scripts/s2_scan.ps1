@@ -371,6 +371,16 @@ try {
     Write-Run ("DONE`t離開碼=$code`t耗時=${mins}分`t本輪新增=$added 則`ttxt=$txtOk" +
                $(if ($bad) { "`t⚠️ $($bad -join '；')" } else { '' }))
 
+    # ── Task 1 基線量測（2026-08-12）：讀剛跑完的 transcript 記 token/工具呼叫數 ──
+    # 不帶 -session：剛跑完 claude，這一刻 transcript 目錄裡最新的檔案就是它。
+    # ⛔ 量測失敗絕不可以影響離開碼——這只是事後記帳，不是掃帶本體。
+    try {
+        python "$PSScriptRoot\s2_token_metrics.py" --checkpoint $Checkpoint 2>&1 |
+            Out-Null
+    } catch {
+        Write-Run "量測失敗（不影響本輪）：$($_.Exception.Message)"
+    }
+
     # ── 收工推播（2026-08-09 使用者要求「每一輪掃完也通知」）──────────
     # ⚠️ **一天 12 輪，每輪都讓手機響就會變成新的雜訊**，然後你開始忽略它——
     # 那正是我們今天在誤報上反覆學到的教訓。所以：
