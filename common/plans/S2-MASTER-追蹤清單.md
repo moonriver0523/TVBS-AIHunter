@@ -62,11 +62,34 @@
 
 | ID | 項目 | 來源 | 優先 | 狀態 | 說明／驗收 |
 |----|------|------|-----:|------|------------|
-| A1 | Phase 0 剩餘：metrics 細分＋報表 | 全流§4.5 | 1 | 🔶部分 | 站別/階段分類已上線（093c713 `phases` 欄位）。剩：`s2_state:?` 歸零、`python -c` 依用途分桶、每輪記 prompt_sha/13c_sha/launcher flags、`s2_metrics_report.py` 趨勢報表。驗收：報表能解釋任一輪多出的呼叫去了哪裡 |
-| A2 | Phase 1：`s2_batch_prep.py` 擴充 unwrap/inspect/search/snapshot/compare | 全流§4.1-4.2 | 2 | 🗳見D2 | 最高投報（保守省 10~22% 呼叫）。只讀或寫 scratch 不動 state；先拿 1600/1800 已保存 raw replay。驗收：tool-result 一次 unwrap、`python -c` 30/54→≤10/≤15 |
-| A3 | Phase 2：`s2_state show` 篩選擴充＋`s2_round_gate.py` preflight/postflight | 全流§4.3/4.6 | 3 | ⬜ | 唯讀優先、不做第二套 parser、初版只報告不阻斷。驗收：postflight 對 0811-1800/2200 類異常能命中 |
+| A1 | Phase 0 剩餘：metrics 細分＋報表 | 全流§4.5 | 1 | 🔶部分 | 驗收：報表能解釋任一輪多出的呼叫去了哪裡。子項見下 |
+| A2 | Phase 1：`s2_batch_prep.py` 擴充成 raw 工具層 | 全流§4.1-4.2 | 2 | 🗳見D2 | 最高投報（保守省 10~22% 呼叫）。只讀或寫 scratch 不動 state；先拿 1600/1800 已保存 raw replay。驗收：tool-result 一次 unwrap、`python -c` 30/54→≤10/≤15。子項見下 |
+| A3 | Phase 2：state 查詢擴充＋輪次閘門 | 全流§4.3/4.6 | 3 | ⬜ | 唯讀優先、不做第二套 parser、初版只報告不阻斷。驗收：postflight 對 0811-1800/2200 類異常能命中。子項見下 |
 | A4 | Phase 4a：`s2_schedule_check.py` 排程一致性唯讀比對 | 全流§4.8 | 4 | ⬜ | XML 與 watchdog $Slots/model/TestMode 多真相源，曾險發生取消輪被看門狗補跑。只報不改 |
 | A5 | Phase 4b：watchdog「START 無 DONE」中途死亡偵測 | 全流§4.7 | 5 | ⬜ | 第一版只推播不代打（自動代打見 D5）。不可只看 0-byte log、鎖被占時絕不重跑 |
+
+**A1 子項**（各自可勾）：
+- [x] 站別/階段分類（`phases` 欄位，093c713）
+- [ ] `s2_state:?` 子指令認齊（resume/pending/scratch-dir/set-top/needs-review/remove/set-mark/set-aired），驗收：`s2_state:?` 歸零
+- [ ] `python -c` 依用途分桶（read-state/inspect-raw/unwrap-tool-result/write-json/length-check/time-convert/other），驗收：other <10%
+- [ ] 每輪記 `prompt_sha`／`13_sha`／`13c_sha`／launcher flags（規則改了不誤判為腳本效益）
+- [ ] `s2_metrics_report.py` 趨勢報表（每輪/每站/每類工具）
+- [ ] 用 0030~1800 歷史 transcript replay 驗證：分類總數＝原工具呼叫數
+
+**A2 子項**（各自可勾；動工前先過 D2 裁決）：
+- [ ] `unwrap` — tool-result 卸載檔一次解包成規範化 raw（失敗回報外層格式與原始錯誤，不靜默）
+- [ ] `inspect --ids/--fields/--limit` — 精準查 raw，取代「印整批→agent 再寫 python -c 篩」
+- [ ] `search --contains --field script|story|head`
+- [ ] `snapshot --out _audit_{site}_{HHMM}.txt` — 稽核快照
+- [ ] `compare --raw --batch` — 只印缺 ID/欄位差
+- 護欄：per-site adapter（RT 用 `code` 不是 `id`）；冪等；不覆寫舊 snapshot；子步獨立 status
+
+**A3 子項**（各自可勾）：
+- [ ] `s2_state show` 補 `--source/--status/--id-prefix/--unclassified/--missing-field/--contains`
+- [ ] `resume --json`（供其他工具組合，開工查詢至少取代 3 個）
+- [ ] `s2_round_gate.py` preflight（state 路徑/班次日/掃描窗/pending/needs-review/scratch/待整併/既有中主題）
+- [ ] `s2_round_gate.py` postflight（頂層 checkpoint/三站 reconcile/本輪 snapshot/未結案嚴重項/last render/txt+html hash）
+- [ ] （後步）launcher 記 gate 結果→依結果決定通知級別；**不以 gate 阻斷正式輪**
 
 ## D — 待使用者裁決（未裁定前不得動工）
 
@@ -96,6 +119,21 @@ state mutation 不比文字回覆；不覆寫舊 snapshot；錯誤帶原始訊�
 欄位全空必須明確失敗；新路徑跑完一個完整班次＋人工確認前，不刪現行規則與腳本。
 
 ---
+
+## 附錄：來源文件 → MASTER 對照（防漏收查核表）
+
+| 全流程分析 | MASTER | | 省T計畫 | MASTER |
+|---|---|---|---|---|
+| §4.1 unwrap | A2 | | Task 2 A0-A3 | T1 |
+| §4.2 inspect/search/snapshot/compare | A2 | | Task 3 prompt 衝突 | T3 |
+| §4.3 show 篩選＋resume --json | A3 | | Task 4 規則分片 | T4 |
+| §4.4 排除 Task 工具（A4 實驗） | T2 | | ② batch_prep 路線 | D2→A2 |
+| §4.5 遙測細分＋版本 hash | A1 | | Task 5 | 併A2 |
+| §4.6 round gate | A3 | | Task 6/7/9、Haiku、caching | ❌不做 |
+| §4.7 watchdog 中途死亡 | A5＋D5 | | Task 8 effort | D1 |
+| §4.8 schedule check | A4 | | 複核 P0-1~P0-6/P1 | R2~R5/R8~R10 |
+| Phase 5 快速路徑/S2b/collector | D4/D6/❌ | | 交接§6-1 RT/§6-2 推播/§6-3 漏收 | R1/歸檔/歸檔 |
+| §九 護欄 | 護欄段 | | 交接§6-4 稽核/§6-5 P0 | R3/R2~R10 |
 
 ## ✅ 已完成歸檔
 
