@@ -127,20 +127,72 @@ def parse_sot_sb_blocks(text: str):
             "tc": tc,
             "english": english,
             "raw_lines": [l.strip() for l in lines[start:i] if l.strip()],
+            # 半開區間 [start, i)，供 OS 計字精準跳過整個區塊，見 count_sot_os_chars()
+            "line_span": (start, i),
         })
     return blocks
 
-# TC field: "#XX MMSS-MMSS" (numbered material), "CNN [M/D] HHMMSS-HHMMSS"
-# (CNN 六碼側錄；2026-07-28 P-025 起帶母帶錄製日期，舊稿無日期仍相容，
-# see common/00-寫稿通則.md TC 欄位寫法表), or plain "MMSS-MMSS" /
-# "HHMMSS-HHMMSS" (side-recorded / no-number material).
-TC_RE = re.compile(r"^(?:#(?P<num>\d+)\s+|CNN\s+(?:\d{1,2}/\d{1,2}\s+)?)?(?P<start>\d{4,6})-(?P<end>\d{4,6})\s*$")
+# TC field: "#XX MMSS-MMSS" (numbered material), "{來源} [M/D] HHMMSS-HHMMSS"
+# (側錄素材；2026-07-28 P-025 起帶母帶錄製日期，舊稿無日期仍相容；2026-08-12
+# P-047 起前綴不再限 CNN——CNN／NHK／本台側錄一律「來源＋日期＋6碼」且不編
+# #XX，故來源 token 放寬為 1~8 個英數或中文字。see common/00-寫稿通則.md
+# TC 欄位寫法表), or plain "MMSS-MMSS" / "HHMMSS-HHMMSS" (no-number material).
+_TC_SRC = r"[A-Za-z一-鿿][A-Za-z0-9一-鿿]{0,7}"
+TC_RE = re.compile(
+    r"^(?:#(?P<num>\d+)\s+"
+    rf"|(?P<src>{_TC_SRC})\s+(?:\d{{1,2}}/\d{{1,2}}\s+)?)?"
+    r"(?P<start>\d{4,6})-(?P<end>\d{4,6})\s*$"
+)
 
-# NS line: "NS #01 0050-0053 球員登巴士歡呼" or "NS 0050-0053 現場歡聲".
-# Trailing free-text description is allowed and ignored.
-NS_RE = re.compile(r"^NS\b\s*(?P<tc>(?:#\d+\s+)?\d{4,6}-\d{4,6})\b")
+# NS line: "NS #01 0050-0053 球員登巴士歡呼"、"NS CNN 8/12 042919-042936 空襲警報"
+# 或 "NS 0050-0053 現場歡聲"。Trailing free-text description is allowed and ignored.
+NS_RE = re.compile(
+    rf"^NS\b\s*(?P<tc>(?:#\d+\s+|{_TC_SRC}\s+(?:\d{{1,2}}/\d{{1,2}}\s+)?)?"
+    r"\d{4,6}-\d{4,6})\b"
+)
 
 SECTION_MARKERS = ("【", "##", "＃＃")
+
+# 只有記者旁白（OS）要換算朗讀秒數。以下是同樣落在 OS 區塊裡、但不會被唸出來的
+# 格式行，計字時整行跳過：
+#   `#XX TC0005 "畫面內容"`         畫面標注（P-032／P-043）
+#   `#XX 畫面來源: X/帳號`          社群素材版權署名（P-024）
+#   `圖#XX ...`                     圖片素材編號（05-material-numbering）
+#   `NS ...`／TC 欄位               另外單獨計時
+#   `==AICG==`                      圖卡標記本身；⚠️ 它的**下一行**是圖卡文字＝
+#                                   OS 口白一行兩用（P-048），必須照常計入
+#   `TVBS 許岱軒`                   全篇署名（P-036）
+_OS_SKIP_RE = re.compile(
+    r"^(?:#\d+\s+(?:TC|畫面來源)|圖#|NS\b|==AICG==$|TVBS\s+許岱軒$)"
+)
+
+
+def count_sot_os_chars(os_block: str) -> float:
+    """算 SOT 記者 OS 的全形字數，SB 區塊整段跳過。
+
+    舊版是「先把所有行加起來，再把 SB 的講者／中文／英文逐行扣掉」，只要
+    `parse_sot_sb_blocks()` 少認一行（例如中文翻譯換行、英文原句缺漏）就會有殘留，
+    害總長度虛胖。改成用 `line_span` 直接跳過整個 SB 區塊，不會再有加減不對稱。
+    """
+    if not os_block:
+        return 0
+    lines = os_block.splitlines()
+    in_sb = [False] * len(lines)
+    for blk in parse_sot_sb_blocks(os_block):
+        start, end = blk["line_span"]
+        for idx in range(start, min(end, len(lines))):
+            in_sb[idx] = True
+    total = 0
+    for idx, line in enumerate(lines):
+        if in_sb[idx]:
+            continue
+        stripped = line.strip()
+        if not stripped or stripped == "SB":
+            continue
+        if TC_RE.match(stripped) or _OS_SKIP_RE.match(stripped):
+            continue
+        total += full_width_len(stripped)
+    return total
 
 # --- CTV (cnn/01-auto-script-writing.md) ---
 CTV_BAR_MIN = 16.5          # BAR 字卡下限
@@ -438,34 +490,7 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
 
     # --- OS reading time ---
     os_block = extract_section(text, "記者OS內文") or extract_section(text, "記者OS")
-    os_chars = 0
-    if os_block:
-        for line in os_block.splitlines():
-            stripped = line.strip()
-            if not stripped:
-                continue
-            if stripped == "SB":
-                continue
-            if TC_RE.match(stripped):
-                continue
-            if re.match(r"^NS\b", stripped):
-                continue
-            if re.match(r"^#\d+\s+TC", stripped) or stripped.startswith("圖#"):
-                continue
-            # skip lines that look like they belong to an SB block (speaker/
-            # translation/english) — heuristic: lines immediately following
-            # "SB" are already excluded via the SB regex sweep below.
-            os_chars += full_width_len(stripped)
-    # Subtract characters already counted as part of SB blocks (speaker name /
-    # translation / english line), since extract_section can't perfectly
-    # distinguish them from OS paragraphs.
-    # 扣掉已被算進 SB 區塊的字（講者／中文／英文），因為 extract_section 沒辦法
-    # 把它們和 OS 段落分開。中文可能多行，逐行扣（上面 os_chars 也是逐行加的）。
-    for blk in parse_sot_sb_blocks(os_block or ""):
-        os_chars -= full_width_len(blk["speaker"])
-        for zh in blk["zh_lines"]:
-            os_chars -= full_width_len(zh)
-        os_chars -= full_width_len(blk["english"])
+    os_chars = count_sot_os_chars(os_block)
 
     os_seconds = max(os_chars, 0) / CHARS_PER_MINUTE * 60.0
 
