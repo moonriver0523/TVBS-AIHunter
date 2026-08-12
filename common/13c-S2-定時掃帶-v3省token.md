@@ -59,6 +59,35 @@ NS 登入態是 1 小時滑動時效，NS 排第一站＝「上次接觸 NS」�
 
 > 📄 完整配方（可直接抄的 JS、body、欄位表）：[`investigation-logs/2026-08-03-三站API破解總表.txt`](investigation-logs/2026-08-03-三站API破解總表.txt)＋NS 專篇 [`2026-08-03-NS掃帶卡點報告-回覆.txt`](investigation-logs/2026-08-03-NS掃帶卡點報告-回覆.txt)。
 
+🔴 **從 raw 抽取結果湊出 `batch.json` ── 用 `scripts/s2_batch_prep.py`，不要手打 `python -c`**
+（2026-08-12 立規；理由：0730 那輪三站合計打了 15 次臨時 python，同一組「印欄位確認→
+換格式再印一次→dump→併回 entries→抽清單」五步在三站各做一遍，還有兩次是純重複）：
+
+```bash
+# ① 把 browser_evaluate 抽出的 raw 陣列存成 raw.json 後：
+python scripts/s2_batch_prep.py dump --site ns|ap|rt --raw {site}_raw_{cp}.json
+#   → 印出每則的機械欄位（sb_count／has_sot／footage_type／dur／…），供你判斷要不要收、
+#     哪些要標 BITE。這一步只印，不下判斷。
+
+# ② 你自己判斷完、寫好中文三段式摘要後，存成 entries.json：{"AP4677941": "◆ AP4677941 (…) …"}
+#   （這步就是你本來就在做的編輯判斷，工具不會、也不該幫你寫）
+
+# ③ 機械併成 add-batch 吃得下的格式：
+python scripts/s2_batch_prep.py build --site ns|ap|rt --raw {site}_raw_{cp}.json \
+    --entries {site}_entries_{cp}.json --checkpoint {CHECKPOINT} --out {site}_batch_{cp}.json
+python scripts/s2_state.py --file <state> add-batch --entries {site}_batch_{cp}.json
+```
+
+- ⛔ **`entry`（中文摘要、BITE 判斷、分類措辭）永遠是你自己寫**，這支工具不生成、不翻譯、
+  不判斷 BITE——那是編輯判斷，機械做不到。工具只管「把你判斷完的結果，跟 raw 裡本來就有
+  的機械欄位對好、湊成格式」。
+- NS 的 `skip`／AP 的 `prelim`／RT 的 `early` 這些機械排除／狀態推導，`build` 已經處理，
+  不必自己再判斷一次；`dump` 輸出裡排除的項目會標 `[排除:原因]`。
+- `build` 印出的 `⚠️ entries.json 沒寫的 id` 是**提醒不是錯誤**——那是你判斷完不收的則，
+  照樣不會進 batch，只是要你確認不是漏判。
+- 上線前已用 `20260811\*_batch_0730_raw.json` 對照既有手做結果驗證過：`id`／`status`／
+  `entry` 完全一致，差異只在 `src_text`（截斷格式）跟少數靠人工覆寫的判斷欄位。
+
 ### 0-1) ⭐ 抽取白名單：`page.evaluate()` 裡先瘦身，只回傳需要的欄位
 
 原始 API 回應 6–9 成是雜訊（媒體變體、計價規則、向量嵌入），**同一個 `browser_evaluate` 裡抽完再回傳**（實測省 79–96%）。

@@ -43,9 +43,15 @@
       `13c` §2 補「照抄即用」`browser_evaluate` 範本（固定 `PageSize:16`、翻頁用
       `PageNumber`）；§4 守門補「`PageSize` 偏離即算違規，不准調參數再試」。
       **待下一輪複驗：AP navigate／清單查詢次數能不能收斂到 1~2 次**
+- [x] **②`scripts/s2_batch_prep.py`** — `dump`／`build` 兩個子指令，收掉三站各 5 步的
+      臨時 python（0730 那輪合計 15 次）。三站欄位不統一已做 per-site adapter
+      （RT 用 `code` 不是 `id`）。拿 `20260811\*_batch_0730_raw.json` 對照既有手做結果
+      反推驗證：`id`／`status`／`entry` 完全一致，差異只在 `src_text` 截斷格式跟
+      少數人工覆寫欄位（SNTV `has_sot`、archival raw 本身欄位缺漏，都不是腳本問題）。
+      `13c` §1a 已加使用說明取代手打 `python -c`。
+      ⛔ `entry`（中文摘要／BITE 判斷）仍是 agent 自己寫，工具只管機械併欄位。
+      **待下一輪實測：三站 python 呼叫能不能從 15 次收到接近 6 次**
 - [ ] **Task 2 最小 Claude Code 啟動設定** — 預估省 16%，八個 CLI 旗標已確認存在
-- [ ] **②`scripts/s2_batch_prep.py`** — 收掉三站各 5 步的臨時 python，預估省 10%；
-      優先做 AP adapter（⑤發現 AP 是三站裡呼叫成本最高的一站）
 - [ ] **③ntfy 推播修復**（ASCII header）
 - [ ] **Task 3 清理 prompt 衝突**
 - [ ] **Task 4 規則分片** — 單獨排期，完整性對照測試不准省
