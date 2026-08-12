@@ -40,11 +40,21 @@ param(
     # 使用者在互動 session 打 `/effort` 順手改掉（0812 就發生過，掃帶其實一直跑在 high
     # 而沒人知道）。
     #
-    # ⚠️ **medium 已經試過了，沒效，不要再試一次**：0812 的 0430／0730 兩輪跑 medium，
-    # output 不減反增（high 的 0030 輪是 149k，medium 兩輪是 195k／185k）。原因是
-    # effort 只縮短「每次思考多深」，但工作量大的輪次思考「次數」變多，直接抵銷掉。
-    # 真正的成本變數是**工具呼叫次數**（實測 ≈ 0.47M cache_read/次），不是 effort。
-    # 既然 medium 都沒好處，low 只會拿分類品質去換一個沒被證實的節省——**維持 high**。
+    # ⚠️ **effort 量不出差別，不要再拿它當省 token 的手段**（0812 四輪實測）：
+    #
+    #   effort   cache_read        output          工具呼叫
+    #   high     24.6M / 35.2M     76k / 128k      94 / 125     （0030、1000）
+    #   medium   33.0M / 29.9M     99k / 95k      119 / 117     （0430、0730）
+    #   平均     high 29.9M/102k        medium 31.5M/97k
+    #
+    # **同一個 effort 內的落差（24.6M ↔ 35.2M）比兩個 effort 之間的落差還大**——
+    # 那不是「high 比較好」，是雜訊蓋過訊號、根本量不出來。
+    # ⛔ 註：0812 稍早這裡曾寫「medium 實測 output 不減反增」，那是拿 medium 兩輪
+    #    去比**只有一輪**的 high；1000 輪（high、output 128k）進來就翻掉了。**已更正。**
+    #
+    # 真正的成本變數是**工具呼叫次數**（實測 ≈ 0.25M cache_read/次，五輪一致）。
+    # 維持 high 的理由是「量不出好處就不要拿分類品質去換」，不是「medium 較差」。
+    # 要再動 effort 之前，先把 Task 1 基線量測器做出來，否則 5% 級的差異看不出來。
     [ValidateSet('low', 'medium', 'high')]
     [string]$Effort = 'high',
 
