@@ -341,7 +341,7 @@ def bite_doubt(entry, sb_count=None, footage_type=None):
     return None
 
 
-def new_item(source, checkpoint, status, entry, sb_count=None):
+def new_item(source, checkpoint, status, entry, sb_count=None, src_text=None, footage_type=None):
     it = {
         "source": source,
         "first_seen_checkpoint": checkpoint,
@@ -360,6 +360,13 @@ def new_item(source, checkpoint, status, entry, sb_count=None):
     # 狀態檔＝唯一真相源，機械事實也該存在這裡。
     if isinstance(sb_count, int):
         it["sb_count"] = sb_count
+    # src_text／footage_type 也要進狀態檔（2026-08-12 修，實錯：兩者原本只活在
+    # batch 中間檔裡，new_item() 沒有對應參數，add-batch／add 送進來的值全被丟棄——
+    # §2「每筆必帶 src_text／footage_type」形同虛設，離線查證與稽核③失去依據）。
+    if src_text:
+        it["src_text"] = src_text
+    if footage_type:
+        it["footage_type"] = footage_type
     # 結構化欄位由腳本推導（2026-08-04 新增，見 s2_parse）：agent 完全無感、
     # 不必多寫一份。解析失敗只標 parse_ok:false，**不擋入庫**。
     sp.derive(it)
@@ -372,7 +379,9 @@ def cmd_add(state, args):
         print(f"ERROR: {i} 已存在，要更新內容請用 update-entry")
         sys.exit(2)
     entry = read_entry(args)
-    state["items"][i] = new_item(args.source, args.checkpoint, args.status, entry)
+    state["items"][i] = new_item(args.source, args.checkpoint, args.status, entry,
+                                  args.sb_count, src_text=args.src_text,
+                                  footage_type=args.footage_type)
     # BITE 疑慮判斷與 add-batch 一致（2026-08-05 補）：原本單筆完全不檢查，
     # 是意外留下的後門——0805 那則被 add-batch 擋掉的素材就是靠 `add` 繞過收進來的。
     # 兩條路徑行為不一致時，人會往阻力小的那條走，兜底等於形同虛設。
@@ -460,7 +469,8 @@ def cmd_add_batch(state, args):
         # 存 `sb` 不是 `e["sb_count"]`：數不出來的格式要存成「沒有這個欄位」，
         # 否則稽核③ 讀狀態檔時又會拿 0 去報一次假 BITE（誤報只是換個地方出現）。
         state["items"][i] = new_item(e["source"], e["checkpoint"], e["status"],
-                                     e["entry"].strip(), sb)
+                                     e["entry"].strip(), sb,
+                                     src_text=e.get("src_text"), footage_type=ft)
         if doubt:
             state["items"][i]["needs_review"] = doubt
             flagged.append(f"{i}: {doubt}")
@@ -1317,6 +1327,7 @@ def main():
     a.add_argument("--entry-file", help="長內容檔案路徑（與 --entry 擇一）")
     a.add_argument("--sb-count", type=int, help="SOUNDBITE 段數（BITE 疑慮判斷用，同 add-batch）")
     a.add_argument("--footage-type", help="NS footageType（BITE 疑慮判斷用，同 add-batch）")
+    a.add_argument("--src-text", help="瘦身後的站方原文（離線查證用，同 add-batch）")
     ab = sub.add_parser("add-batch")
     ab.add_argument("--entries", required=True,
                     help="JSON 陣列檔，每筆含 id/source/checkpoint/status/entry")
