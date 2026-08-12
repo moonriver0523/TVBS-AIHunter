@@ -354,10 +354,15 @@ def audit(mmdd, state_path, txt_path, scratch):
     cross = [(m, bs) for m, bs in where.items() if len(bs) > 1 and m]
     if cross:
         red("同名中主題跨大分類：" + "／".join(f"【{m}】→{'+'.join(sorted(bs))}" for m, bs in cross[:6]))
+    # 🔴 2026-08-12 修過一次漏抓：只印前 6 組又不提示「還有更多」，人工／agent 照著
+    # 顯示出來的名字去修，會漏掉沒被印出來的那幾組（實例：0812-1600 顯示 6 組全是
+    # 「美國」系列，修完才發現總數 11 組裡還藏了 5 組「中國／台灣」系列從沒被看到）。
     mis = S.misplaced_topics(st)
     if mis:
-        red(f"疑似放錯大分類 {len(mis)} 組：" +
-            "／".join(f"{b}【{m}】×{n}→{h}" for b, m, n, _w, h in mis[:6]))
+        shown = "／".join(f"{b}【{m}】×{n}→{h}" for b, m, n, _w, h in mis[:6])
+        more = f"（還有 {len(mis) - 6} 組未列出，全部清單見 s2_state.misplaced_topics()）" \
+            if len(mis) > 6 else ""
+        red(f"疑似放錯大分類 {len(mis)} 組：{shown}{more}")
     if not dup and not cross and not mis:
         ok("未見重複、跨格同名或放錯格")
 
