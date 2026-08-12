@@ -1,4 +1,4 @@
-#Requires -Version 7
+﻿#Requires -Version 7
 <#
 .SYNOPSIS
   登入態變化 → 該不該推播的**純決策函式**（沒有任何 IO，好測）。
@@ -52,11 +52,29 @@ function Send-Ntfy {
     if (-not $topic) { return $null }
     try {
         # ⚠️ HTTP 標頭只吃 ASCII，中文一律放 body（body 是 UTF-8，沒問題）
-        Invoke-RestMethod -Uri "https://ntfy.sh/$topic" -Method Post `
-            -Body ([Text.Encoding]::UTF8.GetBytes($Body)) `
-            -Headers @{ Title = $Title; Tags = $Tags; Priority = $Priority } `
-            -TimeoutSec 20 | Out-Null
-        return $null
+        # ⚠️ 2026-08-12：這台機器的 .NET（Invoke-RestMethod／HttpClient）以主機名稱連
+        #    ntfy.sh 必逾時、走 IP 卻正常；curl.exe 完全沒事。故改用 Windows 內建 curl.exe。
+        #    body 走暫存檔（--data-binary @file），避免換行與引號在命令列上出事。
+        $tmp = [IO.Path]::GetTempFileName()
+        [IO.File]::WriteAllBytes($tmp, [Text.Encoding]::UTF8.GetBytes($Body))
+        try {
+            $curlArgs = @(
+                '-sS', '--max-time', '20', '-X', 'POST'
+                '--data-binary', "@$tmp"
+                '-H', "Title: $Title"
+                '-H', "Priority: $Priority"
+                '-o', 'NUL', '-w', '%{http_code}'
+                "https://ntfy.sh/$topic"
+            )
+            if ($Tags) { $curlArgs = @('-H', "Tags: $Tags") + $curlArgs }
+            $httpCode = & curl.exe @curlArgs 2>&1 | Out-String
+            $httpCode = $httpCode.Trim()
+            if ($LASTEXITCODE -ne 0) { return "curl 離開碼 $LASTEXITCODE：$httpCode" }
+            if ($httpCode -notmatch '^2\d\d$') { return "HTTP $httpCode" }
+            return $null
+        } finally {
+            Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        }
     } catch {
         return $_.Exception.Message
     }
