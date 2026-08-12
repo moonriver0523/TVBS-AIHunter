@@ -51,7 +51,12 @@
       `13c` §1a 已加使用說明取代手打 `python -c`。
       ⛔ `entry`（中文摘要／BITE 判斷）仍是 agent 自己寫，工具只管機械併欄位。
       **待下一輪實測：三站 python 呼叫能不能從 15 次收到接近 6 次**
-- [ ] **Task 2 最小 Claude Code 啟動設定** — 預估省 16%，八個 CLI 旗標已確認存在
+- [ ] **Task 2 最小 Claude Code 啟動設定** — 預估省 16%，八個 CLI 旗標已確認存在。
+      🟡 **前置作業已完成，故意不執行**：①安全閘門已過（查官方文件確認
+      `--setting-sources` 不影響 `~/.claude.json` 的 OAuth，always read）；
+      ②測試骨架 `scripts/test_s2_launcher.ps1` 已備妥（A0→A3 遞增疊加，
+      不帶 `-Live` 只印指令不花錢，已驗過疊加邏輯正確）。
+      **刻意等 16:00 那輪驗完 ①b／⑤／② 再開始跑**，同時疊會讓歸因不可能
 - [ ] **③ntfy 推播修復**（ASCII header）
 - [ ] **Task 3 清理 prompt 衝突**
 - [ ] **Task 4 規則分片** — 單獨排期，完整性對照測試不准省
