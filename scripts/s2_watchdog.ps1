@@ -1,4 +1,4 @@
-#Requires -Version 7
+﻿#Requires -Version 7
 <#
 .SYNOPSIS
   S2 看門狗——固定排程沒開起來就代打，開關預設關閉。
