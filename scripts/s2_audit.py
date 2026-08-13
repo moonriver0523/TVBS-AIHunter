@@ -62,6 +62,25 @@ def sec(title):
     print(f"\n── {title} " + "─" * max(0, 56 - len(title) * 2))
 
 
+def split_logged(items, ids):
+    """把已在 needs_review 留痕（且未結案）的 id 從一批問題 id 裡篩掉。
+
+    去重不另建 fingerprint 檔——`needs_review` 欄位本身就是留痕：`needs-review add`
+    寫入、`needs-review done` 才會 pop 掉。同一則同一類問題只要留痕還在，就不再
+    重複列 🔴，改成集中一行 🟡「已留痕待人工」；結案後問題若還在，下一輪自動恢復紅燈
+    （因為 needs_review 已被清空，id 會回到「仍紅」那一邊）。
+
+    回傳 (仍紅, 已留痕)，兩份都是原本傳入的 id list 的子集，順序不變。
+    """
+    still, logged = [], []
+    for i in ids:
+        if (items.get(i) or {}).get("needs_review"):
+            logged.append(i)
+        else:
+            still.append(i)
+    return still, logged
+
+
 
 def parse_list_file(path):
     """讀 agent 撈回來的清單快照。兩種格式都吃：
@@ -107,17 +126,73 @@ def _hhmm(t):
     return int(m.group(1)) * 60 + int(m.group(2)) if m else None
 
 
+def _cp_mmdd(cp):
+    """checkpoint（`{MMDD}-{HHMM}`）開頭的 4 位數字 → 'MMDD' 字串，抓不到回 None。"""
+    m = re.match(r"(\d{4})", cp or "")
+    return m.group(1) if m else None
+
+
+def _list_mmdd(t):
+    """清單快照時間戳（`MM/DD/YYYY HH:MM`）裡的日期 → 'MMDD' 字串。
+    只有 `HH:MM`（沒有日期）的舊格式抓不到，回 None——這種格式判不出跨日撞號。"""
+    m = re.search(r"(\d{1,2})/(\d{1,2})/\d{4}", t or "")
+    if not m:
+        return None
+    return f"{int(m.group(1)):02d}{int(m.group(2)):02d}"
+
+
+def _first_seen_index(cur_items, archive_glob):
+    """id → 目前已知最新的 first_seen 'MMDD'（跨當前檔＋Archive 彙整，同 id 取較新日期）。
+    只用來判斷「站方清單這筆的日期是不是比我們收過的還新」，不是精確歷史記錄。"""
+    idx = {}
+
+    def feed(items):
+        for k, v in items.items():
+            fs = _cp_mmdd(v.get("first_seen_checkpoint"))
+            if fs and (k not in idx or fs > idx[k]):
+                idx[k] = fs
+
+    feed(cur_items)
+    for f in glob.glob(archive_glob, recursive=True):
+        try:
+            feed(S.load(f)["items"])
+        except Exception:
+            pass
+    return idx
+
+
 def reconcile(st, mmdd, path, label):
     """清單 vs 狀態檔對帳：算出**窗內該收而未收**的。"""
     rows = parse_list_file(path)
     cur = set(st["items"])
+    archive_glob = os.path.join(BASE, "Archive", "**", "[01]*-s2-state.json")
     prev = set()
-    for f in glob.glob(os.path.join(BASE, "Archive", "**", "[01]*-s2-state.json"), recursive=True):
+    for f in glob.glob(archive_glob, recursive=True):
         try:
             prev |= set(S.load(f)["items"])
         except Exception:
             pass
     prev -= cur
+
+    # R2（2026-08-13）：RT 的 Edit No 會跨日重複使用，同 id 不等於同一則素材。
+    # 原本 prev/cur 只看 id 有沒有出現過——昨天收過 RT3609、今天站方又出一個全新的
+    # RT3609，會被當成「前幾天收過」（或「已收」）**靜默吞掉**。這裡只對 RT 開這條路
+    # （NS／AP 的 id 不重複使用，不動）：清單快照這筆的日期比我們收過的 first_seen
+    # 晚一天以上 → 視為新素材，不算「前幾天收過」，照樣走窗內漏收判斷＋⚠️ 跨日同號。
+    # 清單快照沒帶日期（舊版純 `HH:MM`）判不出跨日，維持原行為並提醒改善清單格式。
+    cross_day, cross_day_seen = set(), set()
+    if label == "RT":
+        has_dates = any(_list_mmdd(t) for _, t in rows)
+        if has_dates:
+            fs_idx = _first_seen_index(st["items"], archive_glob)
+            for code, t in rows:
+                ld = _list_mmdd(t)
+                fs = fs_idx.get(code)
+                if ld and fs and ld > fs:
+                    (cross_day_seen if code in cur else cross_day).add(code)
+        elif rows:
+            yel(f"{label} 清單快照沒有日期（純 HH:MM）——跳過跨日同號判斷，"
+                f"Edit No 撞號時可能靜默漏收；清單改存 `CODE|MM/DD/YYYY HH:MM` 才驗得出來")
 
     # 窗：window_start → 目前 checkpoint（都取 HH:MM，跨夜用 +24h 折算）
     ws = _hhmm(st["_top"].get("window_start") or "")
@@ -146,9 +221,13 @@ def reconcile(st, mmdd, path, label):
             if code in note or code == k:
                 ruled.add(code)
 
+    # 跨日撞號的 code 不算「前幾天收過」——當作沒被 prev 蓋到，重新走窗內判斷。
+    effective_prev = prev - cross_day
+
     got = [c for c, _t in rows if c in cur]
-    old_ = [c for c, _t in rows if c not in cur and c in prev]
-    rest = [(c, t) for c, t in rows if c not in cur and c not in prev and c not in ruled]
+    old_ = [c for c, _t in rows if c not in cur and c in effective_prev]
+    rest = [(c, t) for c, t in rows
+            if c not in cur and c not in effective_prev and c not in ruled]
     inw = [(c, t) for c, t in rest if ws is None or we is None
            or (norm(t) is not None and ws <= norm(t) <= we)]
     after = [(c, t) for c, t in rest if (c, t) not in inw]
@@ -158,16 +237,25 @@ def reconcile(st, mmdd, path, label):
           f"｜已裁定不收 {len(hit)}｜窗內未收 {len(inw)}｜窗外 {len(after)}")
     if hit:
         print(f"        （已裁定不收，不重複報：{'／'.join(hit[:8])}）")
+    if cross_day:
+        red(f"{label} 跨日同號 {len(cross_day)} 則（Edit No 跟舊素材撞號，但站方清單日期"
+            f"較新，已視為新素材列入漏收判斷，不算靜默吞掉）：⚠️ " +
+            "／".join(sorted(cross_day)[:12]))
+    if cross_day_seen:
+        yel(f"{label} 跨日同號 {len(cross_day_seen)} 則但今天已收（同天內已在庫，非漏收，"
+            f"僅提醒覆核是不是把新素材誤記到舊筆記錄上）：" +
+            "／".join(sorted(cross_day_seen)[:12]))
     if inw:
         red(f"{label} 窗內漏收 {len(inw)} 則：" +
-            "／".join(f"{c}({t[-5:]})" for c, t in inw[:12]))
+            "／".join(f"{c}({t[-5:]})" + ("⚠️跨日同號" if c in cross_day else "")
+                      for c, t in inw[:12]))
     else:
         ok(f"{label} 窗內零漏收")
     if after:
         print(f"        （窗外 {len(after)} 則屬下一輪，不算漏：" +
               "／".join(c for c, _t in after[:8]) + "）")
     return {"list": len(rows), "got": len(got), "missing": len(inw),
-            "missing_ids": [c for c, _t in inw[:20]]}
+            "missing_ids": [c for c, _t in inw[:20]], "cross_day": sorted(cross_day)}
 
 
 def _log_reconcile(state_path, checkpoint, done):
@@ -256,8 +344,13 @@ def audit(mmdd, state_path, txt_path, scratch):
             mis_tagged.append(k)
     print(f"     分佈：{dict(marks)}")
     if mis_tagged:
-        red(f"{len(mis_tagged)} 則的 checkpoint 明明是隔天卻標成 △（checkpoint 格式判日失敗，見 ①）："
-            + "／".join(mis_tagged[:10]))
+        still_mt, logged_mt = split_logged(items, mis_tagged)
+        if still_mt:
+            red(f"{len(still_mt)} 則的 checkpoint 明明是隔天卻標成 △（checkpoint 格式判日失敗，見 ①）："
+                + "／".join(still_mt[:10]))
+        if logged_mt:
+            yel(f"已留痕待人工 {len(logged_mt)} 則（checkpoint 判日問題，略）："
+                + "／".join(logged_mt[:10]))
     elif len(marks) == 1 and "△" in marks:
         ok("全部都是 △——本班還在同一天（16:00～23:00），這是 mark_for() 設計上唯一可能的結果，不是問題")
     else:
@@ -325,9 +418,19 @@ def audit(mmdd, state_path, txt_path, scratch):
                 f"——src_text 只放站方原文（13b §543），它是事後離線查證的唯一依據；"
                 f"判斷寫進 needs-review，不要寫進原文（RT4131 曾害假 BITE 判準誤判連四輪）")
         if fake:
-            red(f"標了 (BITE) 但 sb_count=0（假 BITE，0805 實錯 7 則）：{fake}")
+            still_fk, logged_fk = split_logged(items, fake)
+            if still_fk:
+                red(f"標了 (BITE) 但 sb_count=0（假 BITE，0805 實錯 7 則）：{still_fk}")
+            if logged_fk:
+                yel(f"已留痕待人工 {len(logged_fk)} 則（假 BITE，略）："
+                    + "／".join(str(x) for x in logged_fk[:8]))
         if missed:
-            red(f"該有 BITE 卻標無BITE：{missed}")
+            still_ms, logged_ms = split_logged(items, missed)
+            if still_ms:
+                red(f"該有 BITE 卻標無BITE：{still_ms}")
+            if logged_ms:
+                yel(f"已留痕待人工 {len(logged_ms)} 則（該有 BITE 卻標無BITE，略）："
+                    + "／".join(str(x) for x in logged_ms[:8]))
         if healed:
             print(f"     （送出時標錯、狀態檔已修好 {len(healed)} 則，不用再處理："
                   f"{'／'.join(str(x) for x in healed[:8])}）")

@@ -76,8 +76,14 @@ def sim(a, b, dull=frozenset()):
 
 
 def collect(state):
-    """大分類 → 中主題 → 小分題 → 則數（保持狀態檔原順序）。"""
+    """大分類 → 中主題 → 小分題 → 則數（保持狀態檔原順序）。
+
+    同時回傳 `anomalies`：category 缺大分類／中主題的逐條 id（0812 T5 修——
+    以前只有統計數字「1 則(無中主題)」，agent 得自己反查是哪個 id，
+    `show --cat "?"` 又查不到空分類，白追好幾輪。這裡直接把 id 帶出來。
+    """
     tree = OrderedDict()
+    anomalies = []
     for it in state.get("items", []):
         if it.get("script_status") == "note":
             continue
@@ -88,7 +94,9 @@ def collect(state):
         mid = c.get("中主題") or "(無中主題)"
         sub = c.get("小分題") or ""
         tree.setdefault(big, OrderedDict()).setdefault(mid, defaultdict(int))[sub] += 1
-    return tree
+        if big == "(未分類)" or mid == "(無中主題)":
+            anomalies.append((it.get("id") or "?", big, mid))
+    return tree, anomalies
 
 
 def pairs_in(names):
@@ -107,24 +115,27 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--file", default=R.DEFAULT_FILE)
     p.add_argument("--quiet", action="store_true", help="只印候選，不印完整檢視表")
+    p.add_argument("--compact", action="store_true",
+                   help="精簡輸出（0812 T6）：同 --quiet，只列異常條目與統計，正常主題不逐條印")
     args = p.parse_args()
+    brief = args.quiet or args.compact
 
-    tree = collect(R.load_state(args.file))
+    tree, anomalies = collect(R.load_state(args.file))
     cands, singles = [], []
 
-    if not args.quiet:
+    if not brief:
         print("=" * 64)
         print("中／小分題檢視表——render 前看過一次，發現同義就用 set-category 合併")
         print("=" * 64)
 
     for big, mids in tree.items():
         total = sum(sum(s.values()) for s in mids.values())
-        if not args.quiet:
+        if not brief:
             print(f"\n====== {big}（{total} 則 / {len(mids)} 個中主題）======")
         for mid, subs in mids.items():
             n = sum(subs.values())
             names = [s for s in subs if s]
-            if not args.quiet:
+            if not brief:
                 tail = "｜".join(f"{s}({subs[s]})" for s in names) if names else "(無小分題)"
                 print(f"  【{mid}】{n} 則　{tail}")
             # 同一中主題底下的小分題兩兩比
@@ -147,6 +158,12 @@ def main():
     if singles:
         print(f"\n📌 只有 1 則的中主題 {len(singles)} 個（過度細分的訊號，看看能不能併）：")
         print("   " + "、".join(singles[:20]) + ("…" if len(singles) > 20 else ""))
+
+    if anomalies:
+        print(f"\n🆔 分類異常逐條列出（{len(anomalies)} 則，無大分類／無中主題）：")
+        for aid, big, mid in anomalies:
+            print(f"  {aid}：大分類={big}／中主題={mid}")
+        print("   查詢／補分類：`s2_state.py show --uncat` 或 `set-category --id <id> ...`")
 
     print("\n⚠️ 機械只認字面。**同義不同名（例如港譯「美斯」vs 台譯「梅西」）零共同字，"
           "永遠挑不出來**——整張表還是要自己看過一遍。")

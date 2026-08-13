@@ -132,7 +132,16 @@ def measure(session_path):
                     name = classify_bash_tool(cmd)
                 tool_by_name[name] = tool_by_name.get(name, 0) + 1
                 if ts:
-                    ph = classify_phase(name, raw_input)
+                    # Task 類工具（TaskCreate/TaskUpdate/TaskList/TaskGet/
+                    # TaskOutput/TaskStop……)一律不看 input 內容分類——
+                    # 0813-0430 實例：TaskCreate 待辦描述文字含「set-category」
+                    # 字樣，被關鍵字比對誤判成「分類」階段，把後面 NS 寫摘要的
+                    # 長思考全記歪（顯示 7.2 分，真值約 2.5 分）。直接當「其他」
+                    # 走繼承前一階段的路徑，跟 click／snapshot 等無標記呼叫同一套邏輯。
+                    if name.startswith('Task'):
+                        ph = '其他'
+                    else:
+                        ph = classify_phase(name, raw_input)
                     if ph == '其他' and prev_phase:
                         ph = prev_phase
                     prev_phase = ph

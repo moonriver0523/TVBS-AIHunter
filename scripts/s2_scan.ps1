@@ -91,7 +91,11 @@ param(
     # 測試模式：真的跑，但**每站只收前 N 則**。驗管線用，不是正式掃帶。
     # ⚠️ 用完記得把排程的 -TestMode 拿掉，否則每輪都只收 5 則還不會報錯。
     [switch]$TestMode,
-    [int]$TestLimit = 5
+    [int]$TestLimit = 5,
+
+    # 2026-08-13 單變因實驗：硬排除 Task 系列工具（開待辦清單零產出，見下方 --disallowedTools 註解）。
+    # 預設就是排除；要回退對照時傳 -NoToolBan 關掉。
+    [switch]$NoToolBan
 )
 
 $ErrorActionPreference = 'Stop'
@@ -295,12 +299,30 @@ try {
         Write-Host "*** TestMode：每站上限 $TestLimit 則 ***"
     }
 
+    # 2026-08-13 硬排除 Task 系列工具＋Agent：0812-1600 輪呼叫 26 次、0813-0430 輪 12 次，
+    # 全部是開待辦清單（TaskCreate/TaskUpdate...），零產出。靠 prompt 自律會漂移，
+    # 這裡用 --disallowedTools 在工具層擋掉。-NoToolBan 可關掉此排除做回退對照。
+    $claudeArgs = @(
+        '-p', $prompt,
+        '--permission-mode', 'bypassPermissions',
+        '--model', $Model,
+        '--effort', $Effort,
+        '--mcp-config', $McpConfig,
+        '--add-dir', $Repo, '--add-dir', $StateDir,
+        '--output-format', 'stream-json', '--verbose'
+    )
+    if (-not $NoToolBan) {
+        $claudeArgs += @('--disallowedTools', 'TaskCreate,TaskUpdate,TaskList,TaskGet,TaskOutput,TaskStop,Agent')
+    }
+
     # 🔴 DryRun 的出口要在 Write-Run 之前（2026-08-12 修）。
     # 原本順序相反，每跑一次 DryRun 就在 _輪次紀錄.txt 留一行假的 START
     # （後面永遠不會有對應的 DONE），還順手生一個 0 bytes 的 掃帶log-*.txt。
     # 手動清過兩次。驗測試設定時 DryRun 要跑很多次，這條不修就等於紀錄檔報廢。
     if ($DryRun) {
-        Write-Host "--- DryRun [$Checkpoint] model=$Model effort=$Effort（不寫 _輪次紀錄）---"
+        Write-Host "--- DryRun [$Checkpoint] model=$Model effort=$Effort NoToolBan=$NoToolBan（不寫 _輪次紀錄）---"
+        Write-Host "組出來的 claude 參數："
+        Write-Host ($claudeArgs -join ' ')
         Write-Host "以下是會送出的 prompt 前 400 字："
         Write-Host $prompt.Substring(0, [Math]::Min(400, $prompt.Length))
         exit 0
@@ -310,13 +332,7 @@ try {
     Write-Host "START [$Checkpoint] model=$Model effort=$Effort log=$runLog"
 
     $t0 = Get-Date
-    claude -p $prompt `
-        --permission-mode bypassPermissions `
-        --model $Model `
-        --effort $Effort `
-        --mcp-config $McpConfig `
-        --add-dir $Repo --add-dir $StateDir `
-        --output-format stream-json --verbose *> $runLog
+    claude @claudeArgs *> $runLog
     $code = $LASTEXITCODE
     $mins = [Math]::Round(((Get-Date) - $t0).TotalMinutes, 1)
 

@@ -35,11 +35,40 @@ entries.json 格式：`{"AP4677906": "◆ AP4677906 (…) …"}`；
 以 13c 規則檔為準（NS: id/ft/dur_ms/desc/script/skip；
 AP: id/head/cap/script/role/sb_count/has_sot/prelim；
 RT: code/head/story/sb_count/early）。
+
+── raw 檢查工具層（③，2026-08-13）──────────────────────────
+掃帶 agent 每輪要反覆檢查 scratch 目錄裡的 raw json（站方清單／詳情／
+batch 檔），實測發現三站清單原始檔各包一層不同的站方外殼：
+    AP 清單：dict，實際陣列在 `Items` 鍵下（AP Newsroom API 原生回應）。
+    RT 清單：dict，實際陣列在 `items` 鍵下（`{boxFound,count,items}`）。
+    NS 清單：常常根本不是 JSON，是 `id|日期` 逐行純文字（.json 副檔名誤導）。
+    已抽取的 detail／batch 檔則多半已經是裸陣列，不必卸殼。
+這三個子指令把「先搞清楚這份檔案的殼長什麼樣」跟「從一堆欄位裡挑出要看的
+那幾筆」收成固定流程，取代逐輪用 Read 整檔／PowerShell 切片／`python -c`
+即興重寫。
+
+    unwrap  <檔> [--out 檔]
+        自動偵測外殼（Items／items／裸陣列／NS 純文字清單）並卸成規範化
+        的裸陣列，寫回同目錄、檔名加 `_unwrapped`（或用 --out 指定）。
+        偵測不出已知殼型時，回報實際看到的頂層型別／鍵，不靜默假裝成功。
+
+    inspect <檔> [--ids A,B] [--fields f1,f2] [--limit N] [--index i]
+        讀取（會自動卸殼，不必先跑 unwrap）並精準印出指定項目／欄位。
+        不給 --ids/--index/--fields 時預設印摘要：筆數＋每筆 id＋標題行。
+
+    search  <檔> --contains 關鍵字 [--field script|story|head|all]
+        列出命中項的 id＋命中欄位裡關鍵字前後片段。
+
+    python s2_batch_prep.py unwrap _ap_list_1000.json
+    python s2_batch_prep.py inspect _rt_batch_1000.json --limit 5
+    python s2_batch_prep.py inspect ap_detail_0430.json --ids AP4678110 --fields head,script
+    python s2_batch_prep.py search rt_raw_1600.json --contains "Milei" --field all
 """
 import argparse
 import io
 import json
 import os
+import re
 import sys
 
 # Windows 主控台常是 cp950，print() 中文欄位（entry／script 原文）會直接炸掉。
@@ -53,6 +82,17 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
 SRC_TEXT_LIMIT = 4000
 
 
+# RT 站方稿的引言區段結構標記，跟 s2_state.sb_applicable() 用同一組判準
+# （只認結構標記如 `SHOTLIST:`／`(SOUNDBITE`，不認裸字——RT4131 教訓：裸字比對
+# 會被 agent 自己寫進 src_text 的中文說明騙倒）。SUPERS 是 CNN/NS 側常見的同類欄位，
+# 一併收，行為對 NS/AP 沒有 SOUNDBITE 段的稿子不影響（下面找不到就直接走原本截斷）。
+SOUNDBITE_RE = re.compile(r"\(\s*SOUNDBITE|SOUNDBITE\s*:|SUPERS\s*:", re.IGNORECASE)
+
+# 硬保留的頭段長度：SOUNDBITE 區段太靠前面時直接原樣收（走 plain cut 那條路即可），
+# 只有「頭段還沒截到就會先把 SOUNDBITE 砍掉」時才切換成保留策略。
+HEAD_KEEP = 500
+
+
 def truncate(s, limit=SRC_TEXT_LIMIT):
     """截斷標記絕對不能含中文。
 
@@ -63,9 +103,36 @@ def truncate(s, limit=SRC_TEXT_LIMIT):
     整個最後一行（最長可達近 250 字的真實原文）一起當「agent 污染」剝掉，
     稽核（`s2_audit.py` §3）因此對 13 筆全部誤判成「混入中文說明」——
     查證後 13 筆全部是純英文站方原文被我這個標記拖累，沒有一筆是真的污染。
+
+    2026-08-13 R4/R12 修正：
+    - R4：原本 `s[:limit] + '...[TRUNCATED]'` 是「取滿 limit 字再加標記」，
+      含標記總長會超過 limit（實錯 4014>4000）。改成標記也算在 limit 裡。
+    - R12：RT 稿的 SOUNDBITE／SUPERS 段（逐字引言，寫稿驗 BITE 的唯一依據）
+      常常落在 4000 字之後，傻取前 N 字會把它整段砍光（RT9878：sb_count=9
+      但截斷文字內無任何引言，agent 只能標無BITE 送人工）。這種情況改成
+      「頭段＋中段標記＋SOUNDBITE 起的區段」，SOUNDBITE 段本身超長時只保留
+      它的前段——全部含標記仍 ≤ limit。中段標記同樣不能含中文（同上一條）。
     """
     s = s or ''
-    return s if len(s) <= limit else s[:limit] + '...[TRUNCATED]'
+    if len(s) <= limit:
+        return s
+    end_marker = '...[TRUNCATED]'
+    plain_cut = max(limit - len(end_marker), 0)
+
+    m = SOUNDBITE_RE.search(s)
+    if m and m.start() >= plain_cut:
+        # 頭段截斷本來就會把 SOUNDBITE 段砍在外面，改保留策略
+        mid_marker = '...[SNIP]...'
+        head = s[:min(HEAD_KEEP, plain_cut)]
+        budget_for_tail = limit - len(head) - len(mid_marker)
+        tail = s[m.start():]
+        if len(tail) > budget_for_tail:
+            tail_cut = max(budget_for_tail - len(end_marker), 0)
+            tail = tail[:tail_cut] + end_marker
+        result = head + mid_marker + tail
+        return result[:limit]  # 保險：理論上不會超過，但不賭
+
+    return s[:plain_cut] + end_marker
 
 
 def load_json(path):
@@ -213,6 +280,193 @@ def cmd_build(args):
         print(f'機械排除 {excluded} 則（見 dump 輸出的排除原因）', file=sys.stderr)
 
 
+# ── raw 檢查工具層：卸殼／inspect／search ──────────────────────
+
+# 已知的站方外殼：頂層是 dict、實際陣列包在這些鍵之一底下。
+# 依序嘗試，第一個「值是非空 list」的鍵勝出。
+KNOWN_WRAPPER_KEYS = ['Items', 'items', 'PeopleItems', 'results', 'data', 'entries']
+
+
+def _load_raw_any(path):
+    """讀 raw 檔，回傳 (items, shell_desc)。
+
+    items：規範化後的裸陣列（list of dict）。
+    shell_desc：人看得懂的殼型描述，供 unwrap/inspect 回報用；
+    偵測不出已知殼型時丟 ValueError，附上實際看到的型別／鍵，不猜、不吞錯。
+    """
+    with open(path, encoding='utf-8') as f:
+        text = f.read()
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        # NS 清單常見：不是 JSON，是 `id|日期` 逐行純文字（.json 副檔名誤導）。
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if lines and all('|' in ln for ln in lines[:5]):
+            items = []
+            for ln in lines:
+                parts = ln.split('|', 1)
+                items.append({'id': parts[0].strip(),
+                              'created': parts[1].strip() if len(parts) > 1 else ''})
+            return items, f'非 JSON，NS 純文字清單（id|日期），共 {len(items)} 行'
+        raise ValueError(
+            f'{path} 不是合法 JSON，也不像 NS 的 id|日期 純文字清單。'
+            f'原始錯誤：{e}；前 200 字元：{text[:200]!r}'
+        )
+
+    if isinstance(data, list):
+        return data, f'裸陣列（無殼），{len(data)} 筆'
+
+    if isinstance(data, dict):
+        for key in KNOWN_WRAPPER_KEYS:
+            val = data.get(key)
+            if isinstance(val, list) and val:
+                return val, f'dict 殼，陣列在 "{key}" 鍵下，{len(val)} 筆'
+        raise ValueError(
+            f'{path} 頂層是 dict，但已知殼鍵 {KNOWN_WRAPPER_KEYS} 都沒有非空陣列。'
+            f'實際頂層鍵：{list(data.keys())}'
+        )
+
+    raise ValueError(f'{path} 頂層既非 list 也非 dict：{type(data)}')
+
+
+def cmd_unwrap(args):
+    try:
+        items, shell_desc = _load_raw_any(args.raw)
+    except ValueError as e:
+        print(f'✗ 卸殼失敗：{e}', file=sys.stderr)
+        sys.exit(1)
+
+    if shell_desc.startswith('裸陣列'):
+        note = '無殼，原樣複製'
+    else:
+        note = f'已卸殼（{shell_desc}）'
+
+    out = args.out
+    if not out:
+        base, ext = os.path.splitext(args.raw)
+        out = f'{base}_unwrapped{ext or ".json"}'
+    with open(out, 'w', encoding='utf-8') as f:
+        json.dump(items, f, ensure_ascii=False, indent=2)
+    print(f'{note} → 已寫入 {out}（{len(items)} 筆）')
+
+
+def _id_of_any(item, index):
+    for key in ('id', 'code', '_id', 'itemid', 'guid'):
+        if item.get(key):
+            return str(item[key])
+    return f'#{index}'
+
+
+def _title_of_any(item):
+    # AP 清單原始檔（Items 殼卸完後）是 Elasticsearch 風格，實際欄位包在
+    # `_source` 底下（`_source.caption.nitf` 才是標題），不是頂層。
+    candidates = [item]
+    if isinstance(item.get('_source'), dict):
+        candidates.append(item['_source'])
+    for cand in candidates:
+        for key in ('head', 'title', 'desc', 'story', 'cap', 'entry', 'src_text', 'text'):
+            v = cand.get(key)
+            if isinstance(v, str) and v:
+                return v if len(v) <= 100 else v[:100] + '...'
+            if isinstance(v, dict) and v.get('nitf'):
+                return v['nitf'][:100]
+    return ''
+
+
+def cmd_inspect(args):
+    try:
+        items, shell_desc = _load_raw_any(args.raw)
+    except ValueError as e:
+        print(f'✗ 讀取失敗：{e}', file=sys.stderr)
+        sys.exit(1)
+    print(f'# {args.raw}：{shell_desc}', file=sys.stderr)
+
+    indexed = list(enumerate(items))
+
+    if args.index is not None:
+        if not (0 <= args.index < len(items)):
+            print(f'✗ --index {args.index} 超出範圍（共 {len(items)} 筆，0-based）', file=sys.stderr)
+            sys.exit(1)
+        indexed = [(args.index, items[args.index])]
+    elif args.ids:
+        want = set(x.strip() for x in args.ids.split(','))
+        indexed = [(i, it) for i, it in indexed if _id_of_any(it, i) in want]
+        found = set(_id_of_any(it, i) for i, it in indexed)
+        missing = want - found
+        if missing:
+            print(f'⚠️ 找不到這些 id：{", ".join(sorted(missing))}', file=sys.stderr)
+
+    fields = [f.strip() for f in args.fields.split(',')] if args.fields else None
+    full_detail = fields is not None and len(indexed) <= 3  # 少量精準查詢時不截斷
+
+    limit = args.limit or 100
+    shown, total = indexed[:limit], len(indexed)
+
+    lines = []
+    for i, it in shown:
+        item_id = _id_of_any(it, i)
+        if fields:
+            picked = {}
+            for k in fields:
+                v = it.get(k, '<無此欄位>')
+                if isinstance(v, str) and not full_detail and len(v) > 200:
+                    v = v[:200] + '...[略]'
+                picked[k] = v
+            lines.append(f'{item_id}\t{json.dumps(picked, ensure_ascii=False)}')
+        else:
+            lines.append(f'{item_id}\t{_title_of_any(it)}')
+
+    print('\n'.join(lines))
+    if total > limit:
+        print(f'…另 {total - limit} 筆略，用 --limit 調整', file=sys.stderr)
+    print(f'共 {len(items)} 筆，本次顯示 {min(total, limit)} 筆', file=sys.stderr)
+
+
+def cmd_search(args):
+    try:
+        items, shell_desc = _load_raw_any(args.raw)
+    except ValueError as e:
+        print(f'✗ 讀取失敗：{e}', file=sys.stderr)
+        sys.exit(1)
+    print(f'# {args.raw}：{shell_desc}', file=sys.stderr)
+
+    if args.field == 'all':
+        field_candidates = None  # 每筆的所有字串欄位都搜
+    elif args.field == 'script':
+        field_candidates = ['script', 'story']  # RT 用 story 取代 script
+    else:
+        field_candidates = {
+            'story': ['story', 'script'],
+            'head': ['head', 'title'],
+        }.get(args.field, [args.field])
+
+    needle = args.contains.lower()
+    hits = []
+    for i, it in enumerate(items):
+        item_id = _id_of_any(it, i)
+        fields_to_check = (
+            [(k, v) for k, v in it.items() if isinstance(v, str)]
+            if field_candidates is None
+            else [(k, it.get(k)) for k in field_candidates if isinstance(it.get(k), str)]
+        )
+        for field_name, text in fields_to_check:
+            pos = text.lower().find(needle)
+            if pos == -1:
+                continue
+            start = max(0, pos - 40)
+            end = min(len(text), pos + len(args.contains) + 40)
+            snippet = text[start:end].replace('\n', ' ')
+            hits.append(f'{item_id}\t[{field_name}]\t...{snippet}...')
+
+    limit = args.limit or 100
+    shown = hits[:limit]
+    print('\n'.join(shown) if shown else '（無命中）')
+    if len(hits) > limit:
+        print(f'…另 {len(hits) - limit} 筆命中略，用 --limit 調整', file=sys.stderr)
+    print(f'共 {len(items)} 筆項目，命中 {len(hits)} 處', file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -230,6 +484,26 @@ def main():
     p_build.add_argument('--checkpoint', required=True)
     p_build.add_argument('--out')
     p_build.set_defaults(func=cmd_build)
+
+    p_unwrap = sub.add_parser('unwrap', help='自動偵測外殼並卸成規範化裸陣列')
+    p_unwrap.add_argument('raw')
+    p_unwrap.add_argument('--out')
+    p_unwrap.set_defaults(func=cmd_unwrap)
+
+    p_inspect = sub.add_parser('inspect', help='精準印出 raw 檔的指定項目/欄位')
+    p_inspect.add_argument('raw')
+    p_inspect.add_argument('--ids', help='逗號分隔的 id 清單')
+    p_inspect.add_argument('--fields', help='逗號分隔的欄位名清單')
+    p_inspect.add_argument('--limit', type=int, help='最多顯示幾筆，預設 100')
+    p_inspect.add_argument('--index', type=int, help='只看第 i 筆（0-based）')
+    p_inspect.set_defaults(func=cmd_inspect)
+
+    p_search = sub.add_parser('search', help='在 raw 檔的指定欄位裡找關鍵字')
+    p_search.add_argument('raw')
+    p_search.add_argument('--contains', required=True)
+    p_search.add_argument('--field', default='all', choices=['script', 'story', 'head', 'all'])
+    p_search.add_argument('--limit', type=int, help='最多顯示幾筆命中，預設 100')
+    p_search.set_defaults(func=cmd_search)
 
     args = ap.parse_args()
     args.func(args)

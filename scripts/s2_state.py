@@ -206,6 +206,15 @@ def cmd_diff(state, args):
     if pend_seen:
         print("已在庫但稿未到（順手可補）: " + ",".join(pend_seen))
     print(f"已在庫 {len(seen)} 則已更新 last_checked={args.checkpoint}")
+    # R2（2026-08-13）：這裡只吃 id，判不出「RT Edit No 跨日撞號」——RT 的號碼
+    # 會跨日重複使用，同 id 不等於同一則素材，這條指令只看 id 有沒有出現過，
+    # 撞號時「已在庫」會靜默蓋掉真正的新素材。真正查得出跨日撞號的是
+    # `s2_audit.py --rt-list <帶日期時間戳的清單快照>`（reconcile 那條路，吃得到
+    # `CODE|MM/DD/YYYY HH:MM` 格式），RT 收單那輪務必也跑一次那個。
+    rt_seen = [i for i in seen if i.startswith("RT")]
+    if rt_seen:
+        print("⚠️ RT 的 Edit No 會跨日重複使用，上面「已在庫」不保證真的是同一則——"
+              "跨日撞號要靠 s2_audit.py --rt-list（帶日期時間戳的清單）才驗得出來。")
 
 
 def read_entry(args):
@@ -673,13 +682,20 @@ def cmd_list_topics(state, args):
         mids = rows[big]
         n = sum(len(v) for v in mids.values())
         total += n
+        if args.compact:
+            # 0812 T6：每主題一行、不列小分題明細——agent 一輪只需要「有哪些中主題」
+            # 這個事實，小分題細節等真的要合併時再用 topic_review 看。
+            for m in order_topics(list(mids)):
+                print(f"{big}｜{m}｜{len(mids[m])}")
+            continue
         print(f"■ {big}（{n} 則 / {len(mids)} 個中主題）")
         for m in order_topics(list(mids)):
             subs = [x for x in mids[m] if x]
             tail = f"　└ {'／'.join(sorted(set(subs)))}" if args.subs and subs else ""
             print(f"    【{m}】×{len(mids[m])}{tail}")
     print(f"\n合計 {total} 則 / {sum(len(v) for v in rows.values())} 個中主題")
-    print("⚠️ 要開新中主題前先看這份：同一事件已經有名字就沿用，不要另起爐灶。")
+    if not args.compact:
+        print("⚠️ 要開新中主題前先看這份：同一事件已經有名字就沿用，不要另起爐灶。")
     mis = misplaced_topics(state)
     if mis:
         print(f"\n🔴 疑似放錯大分類 {len(mis)} 組（名稱含地區詞、但樣板上有專屬格）：")
@@ -1225,6 +1241,12 @@ def cmd_show(state, args):
                     if it.get("first_seen_checkpoint") == args.checkpoint]
         if args.needs_review:
             rows = [(i, it) for i, it in rows if it.get("needs_review")]
+        if args.uncat:
+            # 0812 T5：空分類（category={} 或大分類缺）不等於 `--cat "?"` 查得到——
+            # `--cat` 只認非空字串，要單獨開一條路才找得到真正沒分類的素材。
+            # 排除 script_status=note 的備註殼——那本來就不進分類流程，不算異常。
+            rows = [(i, it) for i, it in rows
+                    if not cat_tuple(it)[0] and it.get("script_status") != "note"]
 
     if args.json:
         print(json.dumps([{f: SHOW_FIELDS[f](i, it) for f in fields} for i, it in rows],
@@ -1313,6 +1335,8 @@ def main():
     sub.add_parser("resume")
     lt = sub.add_parser("list-topics", help="列出目前各大分類的中主題與則數（開新中主題前必跑）")
     lt.add_argument("--subs", action="store_true", help="連小分題一起列出")
+    lt.add_argument("--compact", action="store_true",
+                     help="精簡輸出：每主題一行（大分類｜中主題｜則數），不列小分題明細")
     sc = sub.add_parser("scratch-dir", help="印出並建立今晚班次的暫存檔資料夾（{YYYYMMDD}/）")
     sc.add_argument("--mmdd", required=True, help="晚班起始日 MMDD（不是實際掃帶當下的日曆日）")
     d = sub.add_parser("diff")
@@ -1404,6 +1428,8 @@ def main():
     sh.add_argument("--mid", help="只看某中主題")
     sh.add_argument("--checkpoint", help="只看某輪收進來的")
     sh.add_argument("--needs-review", action="store_true", help="只看有 needs_review 的")
+    sh.add_argument("--uncat", action="store_true",
+                     help="只看大分類為空的（排除 script_status=note 的備註殼）")
     sh.add_argument("--fields", help=f"逗號分隔，預設 {','.join(DEFAULT_SHOW)}；"
                                      f"可用：{','.join(SHOW_FIELDS)}")
     sh.add_argument("--json", action="store_true", help="輸出 JSON 而非 TSV")
