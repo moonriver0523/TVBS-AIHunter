@@ -95,11 +95,37 @@ def split_logged(items, ids):
 
 
 
+def _norm_snapshot_ts(t):
+    """快照時間戳正規化成本地 `MM/DD/YYYY HH:MM`。
+
+    0814-0100 實錯：R6 之後 agent 用 API 撈 AP 清單，時間欄是 ISO UTC
+    （`2026-08-13T17:07:29Z`＝台北 0814 01:07）。不轉時區的話 `_hhmm`
+    會把 17:07 當本地時間、`_list_mmdd` 把日期算成 0813——窗判斷與
+    跨日判斷雙雙全錯。非 ISO 格式（本來的 MM/DD/YYYY、純 HH:MM）原樣回傳。
+    """
+    m = re.match(
+        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?$",
+        (t or "").strip())
+    if not m:
+        return t
+    try:
+        dt = datetime.fromisoformat((t or "").strip().replace("Z", "+00:00"))
+    except ValueError:
+        return t
+    if dt.tzinfo is not None:
+        dt = dt.astimezone()          # UTC／帶時區 → 本機時區（台北）
+    return dt.strftime("%m/%d/%Y %H:%M")
+
+
 def parse_list_file(path):
-    """讀 agent 撈回來的清單快照。兩種格式都吃：
+    """讀 agent 撈回來的清單快照。三種格式都吃：
 
     ① 純文字，每行 `CODE|MM/DD/YYYY HH:MM` 或 `CODE|HH:MM`（多餘欄位忽略）
+    ②' 純文字 tab 分隔，每行 `CODE\\tFT\\tISO時間\\t標題…`（0814-0100 起
+       agent 走 API 撈清單的實際落地格式；`total:N` 表頭行跳過）
     ② JSON 陣列，每筆 {"code": "...", "at": "..."}／{"id": ..., "time": ...}
+
+    時間欄一律過 `_norm_snapshot_ts()`（ISO UTC → 本地 MM/DD/YYYY HH:MM）。
     """
     raw = open(path, encoding="utf-8-sig").read().strip()
     rows = []
@@ -123,14 +149,22 @@ def parse_list_file(path):
             c = it.get("code") or it.get("id") or ""
             t = it.get("at") or it.get("time") or ""
             if c:
-                rows.append((c.strip(), str(t)))
+                rows.append((c.strip(), _norm_snapshot_ts(str(t))))
     else:
         for line in raw.split("\n"):
-            if not line.strip():
+            line = line.strip()
+            if not line:
                 continue
-            parts = [x.strip() for x in line.split("|")]
-            if parts[0]:
-                rows.append((parts[0], parts[1] if len(parts) > 1 else ""))
+            if re.match(r"^total\s*[:=]\s*\d+$", line, re.IGNORECASE):
+                continue                      # tab 格式的表頭行，不是素材
+            sep = "|" if "|" in line else "\t"
+            parts = [x.strip() for x in line.split(sep)]
+            if not parts[0]:
+                continue
+            # 時間欄不固定在第 2 欄（tab 格式是 CODE、FT、時間、標題）——
+            # 取第一個「看得出時間」的欄位，找不到就空字串維持舊行為。
+            t = next((f for f in parts[1:] if re.search(r"\d{1,2}:\d{2}", f)), "")
+            rows.append((parts[0], _norm_snapshot_ts(t)))
     return rows
 
 
