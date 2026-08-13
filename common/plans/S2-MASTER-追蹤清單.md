@@ -50,7 +50,7 @@
 | R10 | BITE 三態 CONFIRMED／NO_BITE／REVIEW_REQUIRED（P1） | 複核 | 10 | ⬜ | |
 | R11 | 0812-2200 輪 65 則新增**全數缺 src_text** | 2200健檢 | 3.5 | ⬜ | dd0e95f 修過 new_item()，1600~2000 的 batch 都有帶，2200 突然全缺→事後查證得重開瀏覽器（audit 🟡152筆沒帶）。查 2200 的 batch json 是否漏欄位、還是走了別條入庫路徑；可用 update-entry 回補。**0813-0100 續驗：該輪 71 則 src_text 全有→只有 2200 一輪異常；65 則待回補未動** |
 | R12 | truncate 3000 字截斷 SOUNDBITE 段→BITE 無法驗證 | RT9878 實例 | 4.5 | ⬜ | RT9878 sb_count 機械數到 9，但 truncate 只取前 3000 字未含逐字引言，agent 只能標無BITE 待人工。修法與 R4 同區：truncate 應保證 SOUNDBITE/SUPERS 段落優先保留，不是傻取前 N 字 |
-| R13 | batch 檔寫錯位置→雙重搬運（浪費 ~3 分/輪） | 2200健檢 | 6.5 | ⬜ | 2200 輪把 rt/ap batch 先寫 repo 根目錄，再 Read 回來重 Write 到 scratch 目錄（卡點 91s+102s 就在這）。repo 根目錄已累積 9 個各輪殘留 json（0700/0100/1500/2000…）。修法：規則明示 batch 一律直接寫 `scratch-dir` 路徑＋清一次現存殘留。**0813-0100 再犯：ns/ap/rt_new_0813.json 又先落 repo 根（該輪三個 >60s 停頓 345s/136s/148s 全在這組檔的 Read 之後），事後有自清但雙重搬運照舊——已連兩輪，建議優先度上調** |
+| R13 | batch 檔寫錯位置→雙重搬運（浪費 ~3 分/輪） | 2200健檢 | 6.5 | ⬜ | 2200 輪把 rt/ap batch 先寫 repo 根目錄，再 Read 回來重 Write 到 scratch 目錄（卡點 91s+102s 就在這）。repo 根目錄已累積 9 個各輪殘留 json（0700/0100/1500/2000…）。修法：規則明示 batch 一律直接寫 `scratch-dir` 路徑＋清一次現存殘留。**0813-0100 再犯：ns/ap/rt_new_0813.json 又先落 repo 根（該輪三個 >60s 停頓 345s/136s/148s 全在這組檔的 Read 之後），事後有自清但雙重搬運照舊——已連兩輪，建議優先度上調**。1000 輪第三種變體：ns/ap/rt_list_1000.json 先落 repo 根、就地 python -c 檢查、再 `mv` 進 scratch（比 Read+Write 便宜但同病） |
 
 ## T — 省 Token（既有計畫未完成項）
 
@@ -60,7 +60,7 @@
 | T2 | A4 實驗：排除 Agent／TaskCreate／TaskUpdate 工具 | 全流§4.4 | 2 | ⬜ | 1600/1800 輪 Task 類 26/17 次呼叫零產出。併入 T1 流程但**單獨一輪測**，一次一個變因。**0813-0430 復發：TaskCreate 4＋TaskUpdate 8＝12 次純開銷（2200/0100 兩輪原本歸零）——行為靠 agent 自律會漂移，硬排除的必要性再添一證** |
 | T3 | Task 3 清理 prompt 衝突 | 省T | 3 | ⬜ | 檢查表含：window_start 誰設（全流已確認 prompt 與 launcher 說法不一致）、23:00 輪已取消要同步、assert「不准 taskkill」鐵律仍在 |
 | T4 | Task 4 規則分片（八片＋manifest） | 省T | 延後 | ⬜ | ~16% 但中風險 3–5 天，單獨排期。完整性對照測試與 A/B replay 比 state mutation 兩條不准省 |
-| T5 | topic_review 誤報時直接印出 id | 0100分類健檢 | 4 | ⏸觀察 | 0100 輪 topic_review 報「1 則(無中主題)」但沒印 id，agent 燒 6 次呼叫/40s 翻 state 檔追兇，最後查無收場（needs-review 已留痕）。一行工具修改可消滅整段白追查。**先多收幾輪資料再動工（使用者 0813 裁定）** |
+| T5 | topic_review 誤報時直接印出 id | 0100分類健檢 | 4 | ⏸觀察 | 0100 輪 topic_review 報「1 則(無中主題)」但沒印 id，agent 燒 6 次呼叫/40s 翻 state 檔追兇，最後查無收場（needs-review 已留痕）。一行工具修改可消滅整段白追查。**先多收幾輪資料再動工（使用者 0813 裁定）**。**1000 輪健檢破案：鬼＝AP4678031（2200 輪入庫、category 空 dict），空分類項用 `show --cat \"?\"` 查不到→懸置 4 輪；已於 0813 人工補分類（哥倫比亞強震/佩雷拉生還者救援）＋重 render。修 T5 時順帶讓 show 支援查空分類** |
 | T6 | list-topics／topic_review 長輸出精簡模式 | 0100分類健檢 | 5 | ⏸觀察 | 兩工具輸出過長，agent 拆 head/tail 各讀兩次（0100 輪合計 ~88s、4 次呼叫）；主題樹隨當日累積成長，晚輪更肥（2200 輪 list-topics 後接 270s 長思考）。加 --compact 或保證單次可讀。**先多收幾輪資料再動工**。0730 續證：list-topics --sub 後接 244s 長思考（隔夜主題樹 300+ 則最肥時段）、topic_review 又拆 head/tail 兩讀 |
 | T7 | 「set-category 一輪一次」規則改「一站一批」 | 0100分類健檢 | 6 | ⏸觀察 | 實際流程是邊掃邊分類（NS/AP/RT 各一批＋零星補刀），規則與流程天生打架，E4 每輪都「未達標」是量錯了尺。改規則同時更新 E4 驗收口徑（目標：一站一批＋補刀 ≤1）。**先多收幾輪資料再動工** |
 
@@ -69,7 +69,7 @@
 | ID | 項目 | 來源 | 優先 | 狀態 | 說明／驗收 |
 |----|------|------|-----:|------|------------|
 | A1 | Phase 0 剩餘：metrics 細分＋報表 | 全流§4.5 | 1 | 🔶部分 | 驗收：報表能解釋任一輪多出的呼叫去了哪裡。子項見下 |
-| A2 | Phase 1：`s2_batch_prep.py` 擴充成 raw 工具層 | 全流§4.1-4.2 | 2 | 🗳見D2 | 最高投報（保守省 10~22% 呼叫）。只讀或寫 scratch 不動 state；先拿 1600/1800 已保存 raw replay。驗收：tool-result 一次 unwrap、`python -c` 30/54→≤10/≤15。子項見下 |
+| A2 | Phase 1：`s2_batch_prep.py` 擴充成 raw 工具層 | 全流§4.1-4.2 | 2 | 🗳見D2 | 最高投報（保守省 10~22% 呼叫）。只讀或寫 scratch 不動 state；先拿 1600/1800 已保存 raw replay。驗收：tool-result 一次 unwrap、`python -c` 30/54→≤10/≤15。子項見下。**0813 三輪鐵證：同一個「檢查 scratch raw」需求，0430 用 Read×16、0730 用 PowerShell×29、1000 用 python -c×45——每輪換工具即興發揮，正是缺 `inspect` 標準工具的症狀** |
 | A3 | Phase 2：state 查詢擴充＋輪次閘門 | 全流§4.3/4.6 | 3 | ⬜ | 唯讀優先、不做第二套 parser、初版只報告不阻斷。驗收：postflight 對 0811-1800/2200 類異常能命中。子項見下 |
 | A4 | Phase 4a：`s2_schedule_check.py` 排程一致性唯讀比對 | 全流§4.8 | 4 | ⬜ | XML 與 watchdog $Slots/model/TestMode 多真相源，曾險發生取消輪被看門狗補跑。只報不改 |
 | A5 | Phase 4b：watchdog「START 無 DONE」中途死亡偵測 | 全流§4.7 | 5 | ⬜ | 第一版只推播不代打（自動代打見 D5）。不可只看 0-byte log、鎖被占時絕不重跑 |
