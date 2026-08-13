@@ -365,11 +365,13 @@ def audit(mmdd, state_path, txt_path, scratch):
     cur_entry = {k: (v.get("raw_entry") or "") for k, v in items.items()}
     nb = collections.Counter()
     fake, missed, healed, polluted = [], [], [], []
+    whole_missing = []   # R11（2026-08-13）：單一 batch 檔「整批」漏 src_text＝組批漏欄位
     for f in sorted(glob.glob(os.path.join(scratch, "*batch*.json"))):
         try:
             data = json.load(open(f, encoding="utf-8-sig"))
         except Exception:
             continue
+        f_total = f_src = 0
         for e in data if isinstance(data, list) else []:
             was = e.get("entry", "")
             ent = cur_entry.get(e.get("id"), was)   # 狀態檔優先；已刪除的才退回 batch
@@ -389,8 +391,10 @@ def audit(mmdd, state_path, txt_path, scratch):
                 sb = None
             ft = str(e.get("footage_type") or "").strip().upper()
             nb["batch 筆數"] += 1
+            f_total += 1
             if e.get("src_text"):
                 nb["帶 src_text"] += 1
+                f_src += 1
                 # src_text 只該有站方原文。混進 agent 的中文說明，會讓每一個
                 # 讀它的機制都不可靠——RT4131 就是這樣害假 BITE 判準誤判連四輪。
                 if S.strip_agent_note(e["src_text"])[1]:
@@ -407,9 +411,19 @@ def audit(mmdd, state_path, txt_path, scratch):
                 healed.append(e.get("id"))     # 送出時有問題、狀態檔已修好——不是待辦
             if "無BITE" in ent and ((isinstance(sb, int) and sb > 0) or ft in S.FT_MUST_BITE):
                 missed.append(e.get("id"))
+        # 迴圈外、檔案內：≥3 筆而一筆 src_text 都沒有＝整批漏帶（散發個案仍走下面的 🟡）。
+        # update／fix 用途的批次檔（修稿子、回補欄位）本來就不必帶 src_text，不算。
+        if f_total >= 3 and f_src == 0 and not any(
+                k in os.path.basename(f).lower() for k in ("update", "fix")):
+            whole_missing.append(f"{os.path.basename(f)}（{f_total} 筆）")
     if nb:
         print(f"     {dict(nb)}")
         n = nb["batch 筆數"]
+        if whole_missing:
+            # R11 升紅（2026-08-13）：0812-2200（65 則）／0813-1200（80 則）兩輪整批
+            # 漏帶才發現黃燈會被略過——整批漏＝組 batch 時漏了欄位，是行為漂移不是個案。
+            red(f"整批漏帶 src_text：{'／'.join(whole_missing)}——趁瀏覽器還開著用 "
+                f"`update-entry --batch`（每筆 {{id, src_text}}）回補，越晚素材越難撈")
         if nb["帶 src_text"] < n:
             yel(f"{n - nb['帶 src_text']} 筆沒帶 src_text——事後查證就得重開瀏覽器")
         if polluted:

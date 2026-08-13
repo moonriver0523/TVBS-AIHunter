@@ -444,6 +444,7 @@ def cmd_add_batch(state, args):
         print("ERROR: --entries 需為 JSON 陣列（或含 entries 陣列的物件）")
         sys.exit(2)
     added, skipped, notes, flagged, fmt = [], [], [], [], []
+    no_src = []   # R11 防呆（2026-08-13）：漏帶 src_text 要當場喊，不能等稽核翻舊帳
     for n, e in enumerate(data, 1):
         if not isinstance(e, dict):
             skipped.append(f"第{n}筆: 不是物件")
@@ -480,6 +481,8 @@ def cmd_add_batch(state, args):
         state["items"][i] = new_item(e["source"], e["checkpoint"], e["status"],
                                      e["entry"].strip(), sb,
                                      src_text=e.get("src_text"), footage_type=ft)
+        if not e.get("src_text"):
+            no_src.append(i)
         if doubt:
             state["items"][i]["needs_review"] = doubt
             flagged.append(f"{i}: {doubt}")
@@ -489,6 +492,12 @@ def cmd_add_batch(state, args):
     if added:
         save(state, args.file)
     print(f"OK 新增 {len(added)} 則" + (f"：{','.join(added)}" if added else ""))
+    if no_src:
+        print(f"⚠️ {len(no_src)} 則沒帶 src_text（站方原文＝事後離線查證的唯一依據，13b §543）："
+              f"{','.join(no_src[:8])}{'…' if len(no_src) > 8 else ''}")
+        print("   趁本輪瀏覽器還開著回補最便宜：`update-entry --batch <檔>`，每筆只要 "
+              "{id, src_text}。整批都缺＝組 batch 時漏了欄位"
+              "（0812-2200／0813-1200 實錯各 65／80 則）。")
     report_fmt(fmt)
     if flagged:
         print(f"⚠️ BITE 待確認 {len(flagged)} 則（**已入庫**，已記進 needs-review，"
@@ -503,7 +512,7 @@ def cmd_add_batch(state, args):
 
 
 def apply_update(state, i, entry, sb_count=None, status=None, checkpoint=None,
-                 footage_type=None):
+                 footage_type=None, src_text=None):
     """把一則的 raw_entry 覆寫掉。單筆與批次共用同一份邏輯，回傳 (doubt, fmt問題清單)。
 
     ⚠️ **不在這裡 save**：批次要的是「全部改完只寫一次檔」，寫檔次數等於
@@ -521,6 +530,10 @@ def apply_update(state, i, entry, sb_count=None, status=None, checkpoint=None,
         it["sb_count"] = sb_count
     if status:
         it["script_status"] = status
+    if src_text:
+        # R9（2026-08-13）：站方補完整稿／整批漏帶的回補時機。沒帶就不動舊值，
+        # 跟 sb_count 同一套「None＝沒帶」約定。
+        it["src_text"] = src_text
     it["entry_updated"] = checkpoint or it.get("last_checked_checkpoint", "")
     it["entry_updated_ts"] = now_ts()
     sp.derive(it)                        # 內容變了，結構化欄位跟著重推（見 s2_parse）
@@ -543,9 +556,13 @@ def cmd_update_entry(state, args):
     if i not in state["items"]:
         print(f"ERROR: {i} 不存在，請先 add")
         sys.exit(2)
+    src = getattr(args, "src_text", None)
+    if getattr(args, "src_text_file", None):
+        with open(args.src_text_file, encoding="utf-8-sig") as f:
+            src = f.read().strip()
     doubt, fmt = apply_update(state, i, read_entry(args), args.sb_count,
                               args.status, args.checkpoint,
-                              getattr(args, "footage_type", None))
+                              getattr(args, "footage_type", None), src_text=src)
     save(state, args.file)
     print(f"OK 已覆寫 {i}（{state['items'][i]['script_status']}）")
     report_fmt(fmt)
@@ -578,18 +595,25 @@ def cmd_update_batch(state, args):
         sys.exit(2)
     done, skipped, flagged, fmt = [], [], [], []
     for n, e in enumerate(data, 1):
-        if not isinstance(e, dict) or not e.get("id") or not isinstance(e.get("entry"), str):
+        if not isinstance(e, dict) or not e.get("id") or not (
+                isinstance(e.get("entry"), str) or e.get("src_text")):
             skipped.append(f"第{n}筆({e.get('id','?') if isinstance(e, dict) else '?'}): "
-                           f"需要 id 與字串 entry")
+                           f"需要 id 與字串 entry（或只帶 src_text 走回補）")
             continue
         i = norm_id(str(e["id"]))
         if i not in state["items"]:
             skipped.append(f"{i}: 不存在（要新增請用 add-batch）")
             continue
+        if not isinstance(e.get("entry"), str):
+            # 只回補 src_text、不動稿子本體——R11 整批漏帶的回補路徑（2026-08-13）。
+            # 不走 apply_update：那條會覆寫 raw_entry＋重推結構化欄位，回補原文不該動這些。
+            state["items"][i]["src_text"] = e["src_text"]
+            done.append(i)
+            continue
         doubt, issues = apply_update(
             state, i, e["entry"].strip(), e.get("sb_count"), e.get("status"),
             e.get("checkpoint") or getattr(args, "checkpoint", None),
-            e.get("footage_type"))
+            e.get("footage_type"), src_text=e.get("src_text"))
         if doubt:
             flagged.append(f"{i}: {doubt}")
         fmt += issues
@@ -1364,6 +1388,10 @@ def main():
     u.add_argument("--checkpoint")
     u.add_argument("--entry", help="行內短內容（與 --entry-file 擇一）")
     u.add_argument("--entry-file", help="長內容檔案路徑（與 --entry 擇一）")
+    # R9（2026-08-13）：回寫站方原文。批次檔每筆也可帶 src_text；只帶 {id, src_text}
+    # 的批次筆＝純回補原文，不動 raw_entry（R11 整批漏帶的救援路徑）。
+    u.add_argument("--src-text", help="站方原文（行內；與 --src-text-file 擇一）")
+    u.add_argument("--src-text-file", help="站方原文檔案路徑")
     # ⚠️ default 由 0 改為 None（2026-08-09）：0 是**有意義的值**（真的沒有 SOUNDBITE），
     # 拿它當「沒帶參數」的預設，會讓每一次沒帶 --sb-count 的 update-entry 都撞上
     # bite_doubt 的反向判準（`(BITE)` 且 sb_count==0 → 假 BITE），憑空生出 needs_review
