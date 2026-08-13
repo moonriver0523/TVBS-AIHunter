@@ -20,6 +20,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 TRANSCRIPT_DIR = os.path.expanduser(
@@ -58,17 +59,50 @@ def resolve_session_path(session_arg, transcript_dir=None):
     return p
 
 
+# s2_state.py 的完整 subparser 名單（2026-08-13 對照 s2_state.py 逐一抓齊，
+# 而非憑印象列——之前漏掉的子指令全部落到 's2_state:?'，看不出實際熱點）。
+# 'needs-review' 要放在 'add' 前面：`needs-review add` 這種帶次動詞（add/list/
+# done）的呼叫要記成 's2_state:needs-review'，不能被次動詞 'add' 搶先比對到。
+S2_STATE_SUBCOMMANDS = (
+    'needs-review', 'resume', 'pending', 'scratch-dir', 'diff', 'add-batch',
+    'add-side', 'update-entry', 'set-mark', 'set-aired', 'set-alert',
+    'set-topic-order', 'set-resident-topics', 'set-category', 'set-top',
+    'remove', 'list-topics', 'show', 'get', 'add',
+)
+
+
+def _has_subcommand_token(cmd, sub):
+    """精確比對子指令 token，不吃子字串——避免 'add' 誤配到 'add-batch'／
+    'set-top' 誤配到 'set-topic-order'（兩者都以該字串開頭）。"""
+    return re.search(r'(?<![\w-])' + re.escape(sub) + r'(?![\w-])', cmd) is not None
+
+
+def classify_python_c(cmd):
+    """python -c 依用途分桶（2026-08-13）——原本全部記成一桶
+    '臨時腳本'，看不出 other 佔比，也就看不出還有多少沒被歸類的用途。
+    判斷順序有意義：先認生產狀態檔（最重、最該留意的一類），
+    再認一般 json 讀寫，其餘依關鍵字歸類，都不中才落 other。"""
+    if '-s2-state.json' in cmd:
+        return 'python -c:read-state'
+    if 'json.load' in cmd or 'json.dump' in cmd:
+        return 'python -c:json'
+    if 'len(' in cmd or 'wc' in cmd or '字數' in cmd or '長度' in cmd:
+        return 'python -c:length-check'
+    if 'strftime' in cmd or 'datetime' in cmd or 'timedelta' in cmd:
+        return 'python -c:time-convert'
+    return 'python -c:other'
+
+
 def classify_bash_tool(cmd):
     """把 Bash 呼叫依實際做的事分桶，而不是全部算 'Bash'——
     呼叫次數是主要成本變數，混在一起看不出是哪個指令在爆。"""
     if 's2_state.py' in cmd or 's2_state ' in cmd:
-        for sub in ('set-category', 'update-entry', 'add-batch', 'add-side',
-                    'set-alert', 'done', 'show', 'diff', 'get', 'list-topics'):
-            if f' {sub}' in cmd or cmd.strip().endswith(sub):
+        for sub in S2_STATE_SUBCOMMANDS:
+            if _has_subcommand_token(cmd, sub):
                 return f's2_state:{sub}'
         return 's2_state:?'
     if 'python -c' in cmd or 'python3 -c' in cmd:
-        return 'python -c（臨時腳本）'
+        return classify_python_c(cmd)
     if 's2_batch_prep' in cmd:
         return 's2_batch_prep.py'
     if 's2_render' in cmd:

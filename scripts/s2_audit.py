@@ -62,6 +62,19 @@ def sec(title):
     print(f"\n── {title} " + "─" * max(0, 56 - len(title) * 2))
 
 
+def more_note(total, shown, unit="則", bare=False):
+    """R8（2026-08-13）：清單超過顯示上限時補「還有 N 未列出」，跟 ④ 既有寫法
+    （384d9de）保持一致——只列前幾筆又不提示還有更多，人工／agent 照著顯示的
+    修完就以為修好了，其實還有沒被看到的那幾筆（0812-1600 的教訓）。
+    total<=shown 時回傳空字串；`bare=True` 給已經包在自家括號裡的訊息用
+    （不再套一層括號，改成逗號接的短句），其餘情形回傳帶括號的獨立提示。
+    """
+    if total <= shown:
+        return ""
+    n = total - shown
+    return f"，其餘 {n} {unit}未列出" if bare else f"（還有 {n} {unit}未列出）"
+
+
 def split_logged(items, ids):
     """把已在 needs_review 留痕（且未結案）的 id 從一批問題 id 裡篩掉。
 
@@ -236,24 +249,26 @@ def reconcile(st, mmdd, path, label):
     print(f"     {label}：清單 {len(rows)}｜已收 {len(got)}｜前幾天收過 {len(old_)}"
           f"｜已裁定不收 {len(hit)}｜窗內未收 {len(inw)}｜窗外 {len(after)}")
     if hit:
-        print(f"        （已裁定不收，不重複報：{'／'.join(hit[:8])}）")
+        print(f"        （已裁定不收，不重複報：{'／'.join(hit[:8])}"
+              f"{more_note(len(hit), 8, bare=True)}）")
     if cross_day:
         red(f"{label} 跨日同號 {len(cross_day)} 則（Edit No 跟舊素材撞號，但站方清單日期"
             f"較新，已視為新素材列入漏收判斷，不算靜默吞掉）：⚠️ " +
-            "／".join(sorted(cross_day)[:12]))
+            "／".join(sorted(cross_day)[:12]) + more_note(len(cross_day), 12))
     if cross_day_seen:
         yel(f"{label} 跨日同號 {len(cross_day_seen)} 則但今天已收（同天內已在庫，非漏收，"
             f"僅提醒覆核是不是把新素材誤記到舊筆記錄上）：" +
-            "／".join(sorted(cross_day_seen)[:12]))
+            "／".join(sorted(cross_day_seen)[:12]) + more_note(len(cross_day_seen), 12))
     if inw:
         red(f"{label} 窗內漏收 {len(inw)} 則：" +
             "／".join(f"{c}({t[-5:]})" + ("⚠️跨日同號" if c in cross_day else "")
-                      for c, t in inw[:12]))
+                      for c, t in inw[:12]) + more_note(len(inw), 12))
     else:
         ok(f"{label} 窗內零漏收")
     if after:
         print(f"        （窗外 {len(after)} 則屬下一輪，不算漏：" +
-              "／".join(c for c, _t in after[:8]) + "）")
+              "／".join(c for c, _t in after[:8]) +
+              more_note(len(after), 8, bare=True) + "）")
     return {"list": len(rows), "got": len(got), "missing": len(inw),
             "missing_ids": [c for c, _t in inw[:20]], "cross_day": sorted(cross_day)}
 
@@ -336,21 +351,27 @@ def audit(mmdd, state_path, txt_path, scratch):
     marks = collections.Counter()
     mis_tagged = []   # day>=1 卻仍是 △ 的異常項目：checkpoint 格式判日失敗的真訊號
     for k, v in items.items():
-        mk = v.get("mark") if v.get("mark") in ("△", "▲", "■", "◆", "●") \
-            else R.mark_for(v.get("first_seen_checkpoint"), mmdd)
+        # P0-3（2026-08-13）：`mark` 欄位若存在，就是 set-mark 寫死的合法 override
+        # （見 s2_state.cmd_set_mark）——使用者／agent 已經人工判過該則實際屬哪個時段，
+        # 不是 mark_for() 自動推算的。就算覆寫後的值剛好也是 △，那也是「人工判定
+        # 就是 △」，不是「checkpoint 判日失敗、自動退回預設 △」，兩者形狀不同，
+        # 不該混在一起報。只有**沒有 override、純靠 mark_for() 自動推算出 △**
+        # 時才可能是判日失敗的訊號。
+        explicit = v.get("mark") if v.get("mark") in ("△", "▲", "■", "◆", "●") else None
+        mk = explicit if explicit is not None else R.mark_for(v.get("first_seen_checkpoint"), mmdd)
         marks[mk] += 1
         day, _ = R.checkpoint_time(v.get("first_seen_checkpoint"), mmdd)
-        if day >= 1 and mk == "△":
+        if day >= 1 and mk == "△" and explicit is None:
             mis_tagged.append(k)
     print(f"     分佈：{dict(marks)}")
     if mis_tagged:
         still_mt, logged_mt = split_logged(items, mis_tagged)
         if still_mt:
             red(f"{len(still_mt)} 則的 checkpoint 明明是隔天卻標成 △（checkpoint 格式判日失敗，見 ①）："
-                + "／".join(still_mt[:10]))
+                + "／".join(still_mt[:10]) + more_note(len(still_mt), 10))
         if logged_mt:
             yel(f"已留痕待人工 {len(logged_mt)} 則（checkpoint 判日問題，略）："
-                + "／".join(logged_mt[:10]))
+                + "／".join(logged_mt[:10]) + more_note(len(logged_mt), 10))
     elif len(marks) == 1 and "△" in marks:
         ok("全部都是 △——本班還在同一天（16:00～23:00），這是 mark_for() 設計上唯一可能的結果，不是問題")
     else:
@@ -427,8 +448,10 @@ def audit(mmdd, state_path, txt_path, scratch):
         if nb["帶 src_text"] < n:
             yel(f"{n - nb['帶 src_text']} 筆沒帶 src_text——事後查證就得重開瀏覽器")
         if polluted:
+            _pol = sorted(set(polluted))
             yel(f"{len(polluted)} 筆的 src_text 混入 agent 的中文說明："
-                f"{'／'.join(str(x) for x in sorted(set(polluted))[:8])}"
+                f"{'／'.join(str(x) for x in _pol[:8])}"
+                f"{more_note(len(_pol), 8, unit='筆')}"
                 f"——src_text 只放站方原文（13b §543），它是事後離線查證的唯一依據；"
                 f"判斷寫進 needs-review，不要寫進原文（RT4131 曾害假 BITE 判準誤判連四輪）")
         if fake:
@@ -437,17 +460,18 @@ def audit(mmdd, state_path, txt_path, scratch):
                 red(f"標了 (BITE) 但 sb_count=0（假 BITE，0805 實錯 7 則）：{still_fk}")
             if logged_fk:
                 yel(f"已留痕待人工 {len(logged_fk)} 則（假 BITE，略）："
-                    + "／".join(str(x) for x in logged_fk[:8]))
+                    + "／".join(str(x) for x in logged_fk[:8]) + more_note(len(logged_fk), 8))
         if missed:
             still_ms, logged_ms = split_logged(items, missed)
             if still_ms:
                 red(f"該有 BITE 卻標無BITE：{still_ms}")
             if logged_ms:
                 yel(f"已留痕待人工 {len(logged_ms)} 則（該有 BITE 卻標無BITE，略）："
-                    + "／".join(str(x) for x in logged_ms[:8]))
+                    + "／".join(str(x) for x in logged_ms[:8]) + more_note(len(logged_ms), 8))
         if healed:
             print(f"     （送出時標錯、狀態檔已修好 {len(healed)} 則，不用再處理："
-                  f"{'／'.join(str(x) for x in healed[:8])}）")
+                  f"{'／'.join(str(x) for x in healed[:8])}"
+                  f"{more_note(len(healed), 8, bare=True)}）")
         if not fake and not missed:
             ok("未見漏標或假 BITE")
     else:
@@ -466,11 +490,14 @@ def audit(mmdd, state_path, txt_path, scratch):
     dup = [(a, b, big) for (big, a) in bm for (bb, b) in bm
            if big == bb and a != b and a and b and a in b]
     if dup:
-        yel("同格內名稱互相包含（語意可能重複）：" +
-            "／".join(f"{big}【{a}】⊂【{b}】" for a, b, big in dup[:6]))
+        yel(f"同格內名稱互相包含（語意可能重複，共 {len(dup)} 組）：" +
+            "／".join(f"{big}【{a}】⊂【{b}】" for a, b, big in dup[:6]) +
+            more_note(len(dup), 6, unit="組"))
     cross = [(m, bs) for m, bs in where.items() if len(bs) > 1 and m]
     if cross:
-        red("同名中主題跨大分類：" + "／".join(f"【{m}】→{'+'.join(sorted(bs))}" for m, bs in cross[:6]))
+        red(f"同名中主題跨大分類（共 {len(cross)} 組）：" +
+            "／".join(f"【{m}】→{'+'.join(sorted(bs))}" for m, bs in cross[:6]) +
+            more_note(len(cross), 6, unit="組"))
     # 🔴 2026-08-12 修過一次漏抓：只印前 6 組又不提示「還有更多」，人工／agent 照著
     # 顯示出來的名字去修，會漏掉沒被印出來的那幾組（實例：0812-1600 顯示 6 組全是
     # 「美國」系列，修完才發現總數 11 組裡還藏了 5 組「中國／台灣」系列從沒被看到）。
@@ -505,16 +532,22 @@ def audit(mmdd, state_path, txt_path, scratch):
     pend = [i for i, v in items.items() if v.get("script_status") == "pending"]
     rev = [(i, str(v.get("needs_review"))[:46]) for i, v in items.items() if v.get("needs_review")]
     if nofield:
-        yel(f"{len(nofield)} 則沒有 fields：{nofield[:8]}")
+        yel(f"{len(nofield)} 則沒有 fields：{nofield[:8]}{more_note(len(nofield), 8)}")
     if parsebad:
-        yel(f"{len(parsebad)} 則 parse_ok=False：{parsebad[:8]}")
+        yel(f"{len(parsebad)} 則 parse_ok=False：{parsebad[:8]}{more_note(len(parsebad), 8)}")
     if not nofield and not parsebad:
         ok("fields／parse_ok 全數正常")
-    print(f"     pending {len(pend)} 則{'：' + ','.join(pend[:8]) if pend else ''}")
+    pend_note = ""
+    if pend:
+        pend_note = "：" + ",".join(pend[:8]) + more_note(len(pend), 8, bare=True)
+    print(f"     pending {len(pend)} 則{pend_note}")
     if rev:
         yel(f"待人工 {len(rev)} 則（處理完要 needs-review done 結案）")
         for i, m in rev[:8]:
             print(f"        {i}: {m}")
+        note = more_note(len(rev), 8)
+        if note:
+            print(f"        {note}")
     else:
         ok("沒有待人工項目")
 
@@ -538,6 +571,9 @@ def audit(mmdd, state_path, txt_path, scratch):
             red(f"品質掃 {len(hits)} 命中：")
             for h in hits[:8]:
                 print(f"        {h.strip()}")
+            note = more_note(len(hits), 8)
+            if note:
+                print(f"        {note}")
         else:
             ok("品質掃 0 命中")
     else:
