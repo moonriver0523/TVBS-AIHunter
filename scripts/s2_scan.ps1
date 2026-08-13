@@ -299,6 +299,26 @@ try {
         Write-Host "*** TestMode：每站上限 $TestLimit 則 ***"
     }
 
+    # ── D7（2026-08-13 使用者裁定）：claude 的工作目錄直接設成本班 scratch 夾 ──
+    # R13（暫存檔先落 repo 根再搬）規則寫進 13d §1 後首輪照犯、連四輪，證明規則文字
+    # 管不住相對路徑的落點。cwd 改到 scratch 夾後，agent 隨手寫的相對路徑檔案自動落對。
+    # ⚠️ 兩個已知連動：
+    #   1. transcript 目錄跟著 cwd 命名（~\.claude\projects\{sanitized-cwd}），
+    #      每天換資料夾——所以收工量測 hook 要帶 --transcript-dir 明講（見下方）。
+    #   2. MCP 已用 --mcp-config 明講（不看 cwd 臉色）、權限走 bypassPermissions、
+    #      repo 用 --add-dir 掛著，agent 呼叫 repo 腳本本來就慣用絕對路徑或先 cd。
+    $liveState = Get-ChildItem $StateDir -Filter '*-s2-state.json' -File -ErrorAction SilentlyContinue |
+                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $scratchCwd = $null
+    if ($liveState) {
+        $shiftMmdd = $liveState.Name.Substring(0, 4)
+        $sy = (Get-Date).Year
+        if ($shiftMmdd -gt (Get-Date -Format 'MMdd')) { $sy-- }   # 跨年（0101 輪看到 1231）
+        $scratchCwd = Join-Path $StateDir "$sy$shiftMmdd"
+        New-Item -ItemType Directory -Force -Path $scratchCwd | Out-Null
+        Set-Location -LiteralPath $scratchCwd
+    }
+
     # 2026-08-13 硬排除 Task 系列工具＋Agent：0812-1600 輪呼叫 26 次、0813-0430 輪 12 次，
     # 全部是開待辦清單（TaskCreate/TaskUpdate...），零產出。靠 prompt 自律會漂移，
     # 這裡用 --disallowedTools 在工具層擋掉。-NoToolBan 可關掉此排除做回退對照。
@@ -320,7 +340,7 @@ try {
     # （後面永遠不會有對應的 DONE），還順手生一個 0 bytes 的 掃帶log-*.txt。
     # 手動清過兩次。驗測試設定時 DryRun 要跑很多次，這條不修就等於紀錄檔報廢。
     if ($DryRun) {
-        Write-Host "--- DryRun [$Checkpoint] model=$Model effort=$Effort NoToolBan=$NoToolBan（不寫 _輪次紀錄）---"
+        Write-Host "--- DryRun [$Checkpoint] model=$Model effort=$Effort NoToolBan=$NoToolBan cwd=$scratchCwd（不寫 _輪次紀錄）---"
         Write-Host "組出來的 claude 參數："
         Write-Host ($claudeArgs -join ' ')
         Write-Host "以下是會送出的 prompt 前 400 字："
@@ -393,7 +413,14 @@ try {
     # 不帶 -session：剛跑完 claude，這一刻 transcript 目錄裡最新的檔案就是它。
     # ⛔ 量測失敗絕不可以影響離開碼——這只是事後記帳，不是掃帶本體。
     try {
-        python "$PSScriptRoot\s2_token_metrics.py" --checkpoint $Checkpoint 2>&1 |
+        # D7 連動：cwd 改到 scratch 夾後，transcript 落在 ~\.claude\projects\{sanitized-cwd}
+        # （路徑裡的 `:` 與 `\` 全換成 `-`，中文保留），每天換資料夾，要明講給量測器。
+        $metricsArgs = @('--checkpoint', $Checkpoint)
+        if ($scratchCwd) {
+            $sanitized = $scratchCwd -replace '[:\\]', '-'
+            $metricsArgs += @('--transcript-dir', "$env:USERPROFILE\.claude\projects\$sanitized")
+        }
+        python "$PSScriptRoot\s2_token_metrics.py" @metricsArgs 2>&1 |
             Out-Null
     } catch {
         Write-Run "量測失敗（不影響本輪）：$($_.Exception.Message)"

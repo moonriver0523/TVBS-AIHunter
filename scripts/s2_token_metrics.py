@@ -31,22 +31,30 @@ METRICS_FILE = (
 METRICS_FILE_FALLBACK = r'D:\Downloads\S2掃帶log\_token_metrics.jsonl'
 
 
-def find_latest_session():
-    files = glob.glob(os.path.join(TRANSCRIPT_DIR, '*.jsonl'))
+def find_latest_session(tdir):
+    files = glob.glob(os.path.join(tdir, '*.jsonl'))
     if not files:
         return None
     return max(files, key=os.path.getmtime)
 
 
-def resolve_session_path(session_arg):
+def resolve_session_path(session_arg, transcript_dir=None):
+    # D7（2026-08-13）：launcher 把掃帶 cwd 設到 scratch 夾後，transcript 目錄
+    # 跟著 cwd 命名、每天換資料夾——launcher 會帶 --transcript-dir 明講。
+    # 指定目錄不存在／沒檔案時退回舊預設（repo cwd 時代的目錄）並警告，不硬炸。
+    tdir = transcript_dir or TRANSCRIPT_DIR
+    if transcript_dir and not glob.glob(os.path.join(transcript_dir, '*.jsonl')):
+        print(f'警告：--transcript-dir 無 transcript（{transcript_dir}），'
+              f'退回預設 {TRANSCRIPT_DIR}', file=sys.stderr)
+        tdir = TRANSCRIPT_DIR
     if session_arg:
-        p = os.path.join(TRANSCRIPT_DIR, f'{session_arg}.jsonl')
+        p = os.path.join(tdir, f'{session_arg}.jsonl')
         if not os.path.exists(p):
             sys.exit(f'找不到 session transcript：{p}')
         return p
-    p = find_latest_session()
+    p = find_latest_session(tdir)
     if not p:
-        sys.exit(f'{TRANSCRIPT_DIR} 底下沒有任何 .jsonl')
+        sys.exit(f'{tdir} 底下沒有任何 .jsonl')
     return p
 
 
@@ -194,10 +202,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--checkpoint', required=True, help='輪次代號，例如 0812-1200')
     ap.add_argument('--session', help='session id（不帶副檔名）。不帶則自動抓最新修改的 transcript')
+    ap.add_argument('--transcript-dir', help='transcript 目錄（D7 之後 launcher 每輪帶入；不帶用舊預設）')
     ap.add_argument('--dry-run', action='store_true', help='只印結果，不寫入 _token_metrics.jsonl')
     args = ap.parse_args()
 
-    session_path = resolve_session_path(args.session)
+    session_path = resolve_session_path(args.session, args.transcript_dir)
     result = measure(session_path)
     result = {'checkpoint': args.checkpoint, **result}
 
