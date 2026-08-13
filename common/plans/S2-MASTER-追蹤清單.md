@@ -46,18 +46,18 @@
 | R6 | AP 對帳清單抓到 page 2（≥32 則） | 接手查證 | 6 | ⬜ | 現況 list=16 恰為 page 1 容量，被擠出 page 1 的素材對帳網接不到（AP5467302 實例）。掃描本身有翻頁（三輪 log 均有 PageNumber=2），弱的是對帳快照 |
 | R7 | src_text 混入中文說明 9 筆清洗（RT1395/RT3501/RT3613/RT3657/RT4161/RT4631/RT4641/RT4820＋截斷標記） | audit③ | 7 | ⬜ | 要回站方抓原文，成本較高；影響事後離線查證依據 |
 | R8 | audit 其餘輸出補完：各清單 shown/total/more（P0-5）＋ --json-report（P0-6） | 複核 | 8 | ⬜ | §4 已做一處（384d9de），其餘清單未補 |
-| R9 | update-entry 同步 src_text／footage_type（P1） | 複核 | 9 | ⬜ | 配合 dd0e95f（new_item 已修）補齊另一半 |
+| R9 | update-entry 同步 src_text／footage_type（P1） | 複核 | 9 | ✅6ecfc17 | src_text 已補（--src-text/--src-text-file/批次每筆可帶；{id,src_text} 純回補不動稿）；footage_type 原本就會傳入 apply_update |
 | R10 | BITE 三態 CONFIRMED／NO_BITE／REVIEW_REQUIRED（P1） | 複核 | 10 | ⬜ | |
-| R11 | 0812-2200 輪 65 則新增**全數缺 src_text** | 2200健檢 | 3.5 | ⬜ | dd0e95f 修過 new_item()，1600~2000 的 batch 都有帶，2200 突然全缺→事後查證得重開瀏覽器（audit 🟡152筆沒帶）。查 2200 的 batch json 是否漏欄位、還是走了別條入庫路徑；可用 update-entry 回補。**0813-0100 續驗：該輪 71 則 src_text 全有→只有 2200 一輪異常；65 則待回補未動** |
+| R11 | 0812-2200 輪 65 則新增**全數缺 src_text** | 2200健檢 | 3.5 | ⬜ | dd0e95f 修過 new_item()，1600~2000 的 batch 都有帶，2200 突然全缺→事後查證得重開瀏覽器（audit 🟡152筆沒帶）。查 2200 的 batch json 是否漏欄位、還是走了別條入庫路徑；可用 update-entry 回補。**0813-0100 續驗：該輪 71 則 src_text 全有→只有 2200 一輪異常；65 則待回補未動**。**0813-1200 再犯 80 則→破案：batch 檔本身就沒 src_text 欄位（agent 組批漏欄位，非工具 bug）。防呆已上線（6ecfc17：add-batch 當場警告＋稽核整批漏帶升🔴＋update-entry 回補路徑）。待辦只剩：2200 的 65 則＋1200 的 80 則要不要人工回補（素材會老化），交使用者裁決** |
 | R12 | truncate 3000 字截斷 SOUNDBITE 段→BITE 無法驗證 | RT9878 實例 | 4.5 | ✅281d380 | RT9878 sb_count 機械數到 9，但 truncate 只取前 3000 字未含逐字引言，agent 只能標無BITE 待人工。修法與 R4 同區：truncate 應保證 SOUNDBITE/SUPERS 段落優先保留，不是傻取前 N 字 |
-| R13 | batch 檔寫錯位置→雙重搬運（浪費 ~3 分/輪） | 2200健檢 | 6.5 | ✅281d380 | 2200 輪把 rt/ap batch 先寫 repo 根目錄，再 Read 回來重 Write 到 scratch 目錄（卡點 91s+102s 就在這）。repo 根目錄已累積 9 個各輪殘留 json（0700/0100/1500/2000…）。修法：規則明示 batch 一律直接寫 `scratch-dir` 路徑＋清一次現存殘留。**0813-0100 再犯：ns/ap/rt_new_0813.json 又先落 repo 根（該輪三個 >60s 停頓 345s/136s/148s 全在這組檔的 Read 之後），事後有自清但雙重搬運照舊——已連兩輪，建議優先度上調**。1000 輪第三種變體：ns/ap/rt_list_1000.json 先落 repo 根、就地 python -c 檢查、再 `mv` 進 scratch（比 Read+Write 便宜但同病） |
+| R13 | batch 檔寫錯位置→雙重搬運（浪費 ~3 分/輪） | 2200健檢 | 6.5 | ✅281d380 | 2200 輪把 rt/ap batch 先寫 repo 根目錄，再 Read 回來重 Write 到 scratch 目錄（卡點 91s+102s 就在這）。repo 根目錄已累積 9 個各輪殘留 json（0700/0100/1500/2000…）。修法：規則明示 batch 一律直接寫 `scratch-dir` 路徑＋清一次現存殘留。**0813-0100 再犯：ns/ap/rt_new_0813.json 又先落 repo 根（該輪三個 >60s 停頓 345s/136s/148s 全在這組檔的 Read 之後），事後有自清但雙重搬運照舊——已連兩輪，建議優先度上調**。1000 輪第三種變體：ns/ap/rt_list_1000.json 先落 repo 根、就地 python -c 檢查、再 `mv` 進 scratch（比 Read+Write 便宜但同病）。**0813-1200（13d §1 硬規則生效首輪）仍再犯**（detail 檔先落 repo 根再 mv）——規則文字管不住，剩下的硬解是 launcher 把工作目錄設成 scratch-dir（候補案，需裁決，見 D7） |
 
 ## T — 省 Token（既有計畫未完成項）
 
 | ID | 項目 | 來源 | 優先 | 狀態 | 說明／前置 |
 |----|------|------|-----:|------|------------|
 | T1 | Task 2 最小啟動設定（A0→A3 逐旗標實驗） | 省T | 1 | ⬜ | 預估 ~4.7M/16%，最大單筆在 `--setting-sources`。⚠️ 唯一有實質風險的一刀：先確認 auth 不來自 user scope；`--tools` 先不砍 Write。骨架 `test_s2_launcher.ps1` 從未執行過。前置：④已修（DryRun 不再污染紀錄） |
-| T2 | A4 實驗：排除 Agent／TaskCreate／TaskUpdate 工具 | 全流§4.4 | 2 | 🔶281d380 上線待實戰 | 1600/1800 輪 Task 類 26/17 次呼叫零產出。併入 T1 流程但**單獨一輪測**，一次一個變因。**0813-0430 復發：TaskCreate 4＋TaskUpdate 8＝12 次純開銷（2200/0100 兩輪原本歸零）——行為靠 agent 自律會漂移，硬排除的必要性再添一證** |
+| T2 | A4 實驗：排除 Agent／TaskCreate／TaskUpdate 工具 | 全流§4.4 | 2 | ✅281d380 | **0813-1200 首戰：Task 類工具歸零**（前一輪 0430 還有 12 次），硬排除生效 | 1600/1800 輪 Task 類 26/17 次呼叫零產出。併入 T1 流程但**單獨一輪測**，一次一個變因。**0813-0430 復發：TaskCreate 4＋TaskUpdate 8＝12 次純開銷（2200/0100 兩輪原本歸零）——行為靠 agent 自律會漂移，硬排除的必要性再添一證** |
 | T3 | Task 3 清理 prompt 衝突 | 省T | 3 | ⬜ | 檢查表含：window_start 誰設（全流已確認 prompt 與 launcher 說法不一致）、23:00 輪已取消要同步、assert「不准 taskkill」鐵律仍在 |
 | T4 | Task 4 規則分片（八片＋manifest） | 省T | 延後 | ⬜ | ~16% 但中風險 3–5 天，單獨排期。完整性對照測試與 A/B replay 比 state mutation 兩條不准省 |
 | T5 | topic_review 誤報時直接印出 id | 0100分類健檢 | 4 | ✅281d380 | 0100 輪 topic_review 報「1 則(無中主題)」但沒印 id，agent 燒 6 次呼叫/40s 翻 state 檔追兇，最後查無收場（needs-review 已留痕）。一行工具修改可消滅整段白追查。**先多收幾輪資料再動工（使用者 0813 裁定）**。**1000 輪健檢破案：鬼＝AP4678031（2200 輪入庫、category 空 dict），空分類項用 `show --cat \"?\"` 查不到→懸置 4 輪；已於 0813 人工補分類（哥倫比亞強震/佩雷拉生還者救援）＋重 render。修 T5 時順帶讓 show 支援查空分類** |
@@ -108,6 +108,8 @@
 | D4 | 無變動快速路徑（diff=0 輪跳過語意分類與全量 topic review） | 全流§Phase5 | 🗳 | 中高風險，改變執行行為 |
 | D5 | watchdog 自動代打（A5 第二階段） | 全流§4.7 | 🗳 | 累積 3 次真實「中途死亡」樣本後再議 |
 | D6 | S2b C 通道排程化 | 全流§Phase5 | 🗳 | 使用者已明示先人工跑幾天，觀察期未結束不接進 22:00 |
+| D7 | launcher 把 agent 工作目錄設成 scratch-dir（R13 硬解） | 1200驗收 | 🗳 | 規則文字（13d §1）生效首輪仍再犯（連四輪）。把 cwd 設到 scratch-dir 後相對路徑落檔自動正確；風險：規則/腳本裡的相對路徑引用要盤點一遍（腳本呼叫多用絕對路徑，預期低風險） |
+| D8 | 2200 的 65 則＋1200 的 80 則 src_text 人工回補 | R11 | 🗳 | 防呆已上線、之後不會再發生；這 145 則要不要回補（重開瀏覽器逐則抓、高 token）。素材會老化，越晚越難撈 |
 
 ## ❌ 明文不做（防止後人重提）
 
