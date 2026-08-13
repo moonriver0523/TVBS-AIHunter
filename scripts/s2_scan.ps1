@@ -413,11 +413,15 @@ try {
     # 不帶 -session：剛跑完 claude，這一刻 transcript 目錄裡最新的檔案就是它。
     # ⛔ 量測失敗絕不可以影響離開碼——這只是事後記帳，不是掃帶本體。
     try {
-        # D7 連動：cwd 改到 scratch 夾後，transcript 落在 ~\.claude\projects\{sanitized-cwd}
-        # （路徑裡的 `:` 與 `\` 全換成 `-`，中文保留），每天換資料夾，要明講給量測器。
+        # D7 連動：cwd 改到 scratch 夾後，transcript 落在 ~\.claude\projects\{sanitized-cwd}，
+        # 每天換資料夾，要明講給量測器。
+        # ⚠️ 淨化規則是「**非英數一律換成 `-`**」，不是只換 `:` 與 `\`——0813-1600 實錯：
+        # 原本以為中文會保留，猜出來的目錄不存在，量測器退回舊目錄、把 1200 輪的數字
+        # 記成 1600 輪（退回保護讓它沒炸，但記了錯的帳，更難發現）。實測目錄名：
+        # `G:\我的雲端硬碟\Claude共用\自動掃帶系統\20260813` → `G---------Claude----------20260813`
         $metricsArgs = @('--checkpoint', $Checkpoint)
         if ($scratchCwd) {
-            $sanitized = $scratchCwd -replace '[:\\]', '-'
+            $sanitized = $scratchCwd -replace '[^a-zA-Z0-9]', '-'
             $metricsArgs += @('--transcript-dir', "$env:USERPROFILE\.claude\projects\$sanitized")
         }
         python "$PSScriptRoot\s2_token_metrics.py" @metricsArgs 2>&1 |
