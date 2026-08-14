@@ -275,8 +275,19 @@ def reconcile(st, mmdd, path, label):
     old_ = [c for c, _t in rows if c not in cur and c in effective_prev]
     rest = [(c, t) for c, t in rows
             if c not in cur and c not in effective_prev and c not in ruled]
-    inw = [(c, t) for c, t in rest if ws is None or we is None
-           or (norm(t) is not None and ws <= norm(t) <= we)]
+
+    def before_window(t):
+        """0814-0100 實錯：窗判斷原本只看 HH:MM 不看日期——快照裡一則
+        08/12 16:00 的舊素材（AP4678173）被當成本班（0813 起）窗內漏收。
+        快照時間戳帶日期且早於班次日 → 開窗前的舊素材，不算窗內。
+        跨夜（0814 凌晨）的日期 > 班次日，不受影響；跨年極端狀況與 R2
+        同樣不處理（MMDD 字串比較的既知限制）。"""
+        ld = _list_mmdd(t)
+        return ld is not None and ld < mmdd
+
+    inw = [(c, t) for c, t in rest if not before_window(t)
+           and (ws is None or we is None
+                or (norm(t) is not None and ws <= norm(t) <= we))]
     after = [(c, t) for c, t in rest if (c, t) not in inw]
 
     hit = sorted(c for c in ruled if c in {x for x, _ in rows} and c not in cur)
