@@ -50,7 +50,7 @@
 | R10 | BITE 三態 CONFIRMED／NO_BITE／REVIEW_REQUIRED（P1） | 複核 | 10 | ⬜ | |
 | R11 | 0812-2200 輪 65 則新增**全數缺 src_text** | 2200健檢 | 3.5 | ⬜ | dd0e95f 修過 new_item()，1600~2000 的 batch 都有帶，2200 突然全缺→事後查證得重開瀏覽器（audit 🟡152筆沒帶）。查 2200 的 batch json 是否漏欄位、還是走了別條入庫路徑；可用 update-entry 回補。**0813-0100 續驗：該輪 71 則 src_text 全有→只有 2200 一輪異常；65 則待回補未動**。**0813-1200 再犯 80 則→破案：batch 檔本身就沒 src_text 欄位（agent 組批漏欄位，非工具 bug）。防呆已上線（6ecfc17：add-batch 當場警告＋稽核整批漏帶升🔴＋update-entry 回補路徑）。待辦只剩：2200 的 65 則＋1200 的 80 則要不要人工回補（素材會老化），交使用者裁決** |
 | R12 | truncate 3000 字截斷 SOUNDBITE 段→BITE 無法驗證 | RT9878 實例 | 4.5 | ✅281d380 | RT9878 sb_count 機械數到 9，但 truncate 只取前 3000 字未含逐字引言，agent 只能標無BITE 待人工。修法與 R4 同區：truncate 應保證 SOUNDBITE/SUPERS 段落優先保留，不是傻取前 N 字 |
-| R14 | browser_evaluate 大回應落檔＝資料遺失：MCP 回 `[Evaluation result](./檔)` 連結但檔案從未寫出，agent 全機找檔 | 0813-2200健檢 | 2.5 | ✅2026-08-13（13d §6） | 0813-2200 NS 站兩踩（ns_probe/ns_full_2200.json）：一次抓 60 則回應過大→MCP 聲稱落檔→實際連自家 output-dir（D:\Downloads\PlaywrightMCP）都沒有→agent 燒約 9＋4 分鐘搜檔（含 `find /` 全磁碟 120s timeout）。該輪 NS 15.8分/46次（正常約3分），整輪 33.7 分。agent 最後自己用分段回傳解掉＝正解。修法：13d 新章節硬規則（見連結視同資料遺失、禁找檔、禁 `find /`、立即分段重抓） |
+| R14 | browser_evaluate 大回應落檔＝資料遺失：MCP 回 `[Evaluation result](./檔)` 連結但檔案從未寫出，agent 全機找檔 | 0813-2200健檢 | 2.5 | ✅2026-08-13（13d §6）；**0814-1000 首戰驗收過**：agent 遇到同款連結自述「per V4 §6 資料沒落地」直接分段重抓，前天 13 分鐘的坑這次 ~20 秒繞過 | 0813-2200 NS 站兩踩（ns_probe/ns_full_2200.json）：一次抓 60 則回應過大→MCP 聲稱落檔→實際連自家 output-dir（D:\Downloads\PlaywrightMCP）都沒有→agent 燒約 9＋4 分鐘搜檔（含 `find /` 全磁碟 120s timeout）。該輪 NS 15.8分/46次（正常約3分），整輪 33.7 分。agent 最後自己用分段回傳解掉＝正解。修法：13d 新章節硬規則（見連結視同資料遺失、禁找檔、禁 `find /`、立即分段重抓） |
 | R13 | batch 檔寫錯位置→雙重搬運（浪費 ~3 分/輪） | 2200健檢 | 6.5 | ✅281d380 | 2200 輪把 rt/ap batch 先寫 repo 根目錄，再 Read 回來重 Write 到 scratch 目錄（卡點 91s+102s 就在這）。repo 根目錄已累積 9 個各輪殘留 json（0700/0100/1500/2000…）。修法：規則明示 batch 一律直接寫 `scratch-dir` 路徑＋清一次現存殘留。**0813-0100 再犯：ns/ap/rt_new_0813.json 又先落 repo 根（該輪三個 >60s 停頓 345s/136s/148s 全在這組檔的 Read 之後），事後有自清但雙重搬運照舊——已連兩輪，建議優先度上調**。1000 輪第三種變體：ns/ap/rt_list_1000.json 先落 repo 根、就地 python -c 檢查、再 `mv` 進 scratch（比 Read+Write 便宜但同病）。**0813-1200（13d §1 硬規則生效首輪）仍再犯**（detail 檔先落 repo 根再 mv）——規則文字管不住，剩下的硬解是 launcher 把工作目錄設成 scratch-dir（候補案，需裁決，見 D7） |
 
 ## T — 省 Token（既有計畫未完成項）
@@ -74,7 +74,7 @@
 | A2 | Phase 1：`s2_batch_prep.py` 擴充成 raw 工具層 | 全流§4.1-4.2 | 2 | 🔶核心已上線 | 最高投報（保守省 10~22% 呼叫）。只讀或寫 scratch 不動 state；先拿 1600/1800 已保存 raw replay。驗收：tool-result 一次 unwrap、`python -c` 30/54→≤10/≤15。子項見下。**0813 三輪鐵證：同一個「檢查 scratch raw」需求，0430 用 Read×16、0730 用 PowerShell×29、1000 用 python -c×45——每輪換工具即興發揮，正是缺 `inspect` 標準工具的症狀**。inspect 上線後續觀：0813-2000 輪仍有 `python -c`×14（13d §4 未被完全遵守），1800/2200 輪已收斂——再觀察 |
 | A3 | Phase 2：state 查詢擴充＋輪次閘門 | 全流§4.3/4.6 | 3 | ⬜ | 唯讀優先、不做第二套 parser、初版只報告不阻斷。驗收：postflight 對 0811-1800/2200 類異常能命中。子項見下 |
 | A4 | Phase 4a：`s2_schedule_check.py` 排程一致性唯讀比對 | 全流§4.8 | 4 | ⬜ | XML 與 watchdog $Slots/model/TestMode 多真相源，曾險發生取消輪被看門狗補跑。只報不改 |
-| A5 | Phase 4b：watchdog「START 無 DONE」中途死亡偵測 | 全流§4.7 | 5 | ⬜ | 第一版只推播不代打（自動代打見 D5）。不可只看 0-byte log、鎖被占時絕不重跑 |
+| A5 | Phase 4b：watchdog「START 無 DONE」中途死亡偵測 | 全流§4.7 | 5 | ⬜ | 第一版只推播不代打（自動代打見 D5）。不可只看 0-byte log、鎖被占時絕不重跑。**真實樣本＋1：0814-1000 輪收工前被 API Connection lost 打死（terminal_reason=api_error）——render 已完成但 checkpoint 未推進、DONE 推播未發，無任何機制發現，靠使用者「這輪異常久」人工起疑才查到；main 手修 checkpoint=0814-1000。D5 樣本數 2/3** |
 
 **A1 子項**（各自可勾）：
 - [x] 站別/階段分類（`phases` 欄位，093c713）
