@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""歐印萬 `.wav.txt` → S2b 側錄候選 TXT（純機械擷取，不改任何一個字）。
+"""歐印萬 `.wav.txt` / `_TC中文大段翻譯.txt` → S2b 側錄候選 TXT（純機械擷取，不改任何一個字）。
 
-用途：把「掃帶歐印萬」資料夾裡公司自動化系統產出的 `{基名}.wav.txt`
-擷取出**中文段**，寫成 `add-side --normalize` 吃得下的候選檔。
+用途：把「掃帶歐印萬」資料夾裡的中文逐字稿擷取出**中文段**，寫成
+`add-side --normalize` 吃得下的候選檔。**兩種來源格式並存、都要收**（2026-08-16 加）：
+
+  1. `{基名}.wav.txt`——公司自動化系統直接產出（舊管道，仍在用）。
+  2. `{基名}_TC中文大段翻譯.txt`——內部轉譯流程產出（見
+     `common/15-歐印萬掃帶.md` 「2. TC中文大段翻譯」節），TC 獨立一行、
+     角色＋內文在下一行、檔尾有「時間軸」索引。**不要因為新格式出現就刪掉
+     舊格式的處理邏輯**——兩種來源會同時存在，由副檔名/檔名判斷走哪條路。
 
 ⚠️ **這支只做擷取，不做篩選、不做摘要、不改字**——側錄的逐字鐵律
 （見 `common/14-S2b-側錄轉譯摘要.md`）在這一層一樣成立。歸位（大分類／
@@ -152,7 +158,14 @@ def extract_zh(raw):
 
 
 def segments(body):
-    """把中文段切成 [(tc6, role, text)]；認不得的行黏回上一段（原樣保留）。"""
+    """把中文段切成 [(tc6, role, text)]；認不得的行黏回上一段（原樣保留）。
+
+    ⚠️ **兩種來源格式的角色位置不同**（2026-08-16 加）：
+      - 舊格式（`.wav.txt`）：TC 與「（角色）內文」同一行，`rest` 非空。
+      - 新格式（`_TC中文大段翻譯.txt`）：TC **獨立一行**（`rest` 為空），
+        角色與內文在**下一行**開頭。判斷依據＝剛建立的段落 role／text
+        都還是空的，代表 TC 行本身沒帶任何東西，下一行才要拆角色。
+    """
     out = []
     for l in body:
         t = l.strip()
@@ -173,6 +186,11 @@ def segments(body):
             tc6 = tc.replace(":", "").zfill(6)[-6:]
             role, text = _split_role(rest.strip())
             out.append([tc6, role, text.strip()])
+        elif out and not out[-1][1] and not out[-1][2]:
+            # TC 獨立一行、角色與內文在下一行（新格式）——這一行才是角色＋內文的起點
+            role, text = _split_role(t)
+            out[-1][1] = role
+            out[-1][2] = text.strip()
         elif out:
             out[-1][2] = (out[-1][2] + "\n" + t).strip()
         # 沒有任何 TC 就出現的散行（重點摘要殘留等）直接丟掉——不是逐字內容
@@ -195,7 +213,8 @@ def source_of(path, fallback="CNN"):
 def hints(raw, path):
     """給 agent 判歸位／小分題用的線索。⚠️ 不寫進候選檔。"""
     base = os.path.basename(path)
-    kw = re.sub(r"^.*?\d{6}\s*", "", base).replace(".wav.txt", "").strip()
+    kw = re.sub(r"^.*?\d{6}\s*", "", base)
+    kw = kw.replace(".wav.txt", "").replace("_TC中文大段翻譯.txt", "").strip()
     bullets = []
     for l in raw.splitlines():
         if _BEGIN.match(l.strip()) or _END.match(l.strip()):
@@ -294,7 +313,8 @@ def role_runs(segs):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="歐印萬 .wav.txt → S2b 側錄候選 TXT")
+    ap = argparse.ArgumentParser(
+        description="歐印萬 .wav.txt / _TC中文大段翻譯.txt → S2b 側錄候選 TXT")
     ap.add_argument("--dir", default=DEFAULT_DIR, help="來源資料夾")
     ap.add_argument("--files", nargs="*", help="指定檔案（省略＝掃整個資料夾）")
     ap.add_argument("--source", default=None,
@@ -304,9 +324,12 @@ def main():
     ap.add_argument("--report", action="store_true", help="印出歸位線索")
     args = ap.parse_args()
 
+    # 兩種來源格式並存（2026-08-16 加）：公司系統的 `.wav.txt` 與內部轉譯流程的
+    # `_TC中文大段翻譯.txt`。⚠️ 資料夾裡同一基名還會有 `_原始逐字稿.txt`（逐句版，
+    # 用不到）——不要把它也收進來，只認這兩種副檔名。
     paths = args.files or sorted(
         os.path.join(args.dir, f) for f in os.listdir(args.dir)
-        if f.endswith(".wav.txt")
+        if f.endswith(".wav.txt") or f.endswith("_TC中文大段翻譯.txt")
     )
     if args.since:
         now = datetime.now()
