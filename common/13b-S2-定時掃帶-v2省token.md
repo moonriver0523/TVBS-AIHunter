@@ -134,10 +134,12 @@ const clean = (h) => decodeEnt(
 
 ### 0) 開工前：Playwright 環境衛生（**每次都要做，不是可選**）
 
+⚠️ **2026-08-16 profile 改名**：掃帶／保活／警報三支共用的 chromium profile 從 `.playwright-mcp-profile` 改名為 `.playwright-s2-profile`（seed 自當時的互動用 `.playwright-daily-profile` cookie／localStorage），**不再與互動用的 DAILY profile 共用**。下方指令與範例已同步改名；若看到舊文件或別處還寫 `playwright-mcp-profile`，以本檔與 `scripts/s2_mcp.json` 目前寫的名字為準。
+
 - **一律用 Playwright 工具組**（`mcp__browser__*`），**不是 claude-in-chrome**——NS 的 localStorage 在 claude-in-chrome 會被 extension 隱私防護擋死（回 `[BLOCKED: Cookie/query string data]`），AP／RT 的跨網域 fetch 也會被頁面 AdBlock 纏住。
 - **檢查並清掉殘留 Chrome**：
   ```powershell
-  Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ? { $_.CommandLine -like "*playwright-mcp-profile*" } |
+  Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ? { $_.CommandLine -like "*playwright-s2-profile*" } |
     Select ProcessId, CreationDate, @{n='Age';e={[int]((Get-Date)-$_.CreationDate).TotalMinutes}}
   ```
   用 `Get-Process` 的 `MainWindowTitle`／CPU／存活時間判斷是否閒置；閒置就 `Stop-Process -Force` 再開工。
@@ -146,9 +148,9 @@ const clean = (h) => decodeEnt(
 - ⚠️ **`navigate` 第一次失敗訊息是「Target page, context or browser has been closed」時，通常是它自己剛啟動了一個孤兒 process**（底層瀏覽器已起、連線沒接上），第二次才會看到真正的 `Browser is already in use`。**先精準確認再清**，不要用 `taskkill /IM chrome.exe` 之類的廣域指令（機器上通常同時有幾十個不相干的 chrome.exe）：
   ```powershell
   Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" |
-    Where-Object { $_.CommandLine -match 'playwright-mcp-profile' } | Select-Object ProcessId,CommandLine
+    Where-Object { $_.CommandLine -match 'playwright-s2-profile' } | Select-Object ProcessId,CommandLine
   ```
-  只對比對出來的主 process（`--user-data-dir=…playwright-mcp-profile --remote-debugging-pipe`，通常還停在 `about:blank`）下 `taskkill /PID {id} /T /F`（`/T` 連子 process 一起收）。**清別人（其他 agent）留下的鎖之前，先確認對方工作已結束**（問使用者，或看有沒有 session 還活著）——本節開頭「不要擅自 Kill」的原則不變，這裡只是把「怎麼精準找到該清哪個 process」寫清楚。
+  只對比對出來的主 process（`--user-data-dir=…playwright-s2-profile --remote-debugging-pipe`，通常還停在 `about:blank`）下 `taskkill /PID {id} /T /F`（`/T` 連子 process 一起收）。**清別人（其他 agent）留下的鎖之前，先確認對方工作已結束**（問使用者，或看有沒有 session 還活著）——本節開頭「不要擅自 Kill」的原則不變，這裡只是把「怎麼精準找到該清哪個 process」寫清楚。
 
 ### 1) RT
 
@@ -975,7 +977,7 @@ youtube.com/watch?v=AA6tRh8n-_w
    0806 13:00 輪 AP 進不去，agent 為了自救去 `taskkill` 掉佔用 profile 的進程——
    **連整個 browser MCP server 一起殺掉了**，之後所有瀏覽器工具都叫不動，
    要使用者手動 `/mcp` 重連才救回來。⚠️ **排程情境下沒人能重連，那就是後面每一輪都跑不動。**
-   - profile 被佔（`Browser is already in use for …playwright-mcp-profile`）
+   - profile 被佔（`Browser is already in use for …playwright-s2-profile`）
      → **記 `needs-review` 說明被佔、跳過該站**，照 §5 第 5 條「半夜禁問」往下跑，**不要動進程**。
    - 同理不准 `Remove-Item` 該 profile 底下的 `Singleton*` 鎖檔——那是別人正在用的憑據。
    - 📌 真正的解法在**呼叫端**（排程用鎖檔互斥，見 `scripts/s2_scan.ps1`），不是在 agent 端硬搶。

@@ -1,12 +1,17 @@
 /**
- * 三站保活：各載入一次首頁，把登入態續期。
+ * 保活：載入首頁，把登入態續期。
  *
- * 為什麼要有這支（2026-08-07 立，0808 擴充成三站）：
+ * 為什麼要有這支（2026-08-07 立，0808 擴充成三站，2026-08-16 收斂回只保活 NS）：
  * 三站的憑證機制完全不同，但**都是滑動效期**——載入頁面就重新計時：
  *
- *   NS  localStorage 的 JWT     1 小時   ← 最短，沒有任何 cookie 後備
- *   RT  mexlogin cookie        23 小時   ← 等於每天要重登一次
- *   AP  session_user cookie     7 天
+ *   NS  localStorage 的 JWT     1 小時   ← 最短，沒有任何 cookie 後備，唯一還在保活的站
+ *   RT  mexlogin cookie        23 小時   ← 2026-08-16 使用者指示移出保活（原因見下方 RT 區塊註解）
+ *   AP  session_user cookie     7 天    ← 已於 2026-08-09 移出保活（見下方保留的實錯記錄）
+ *
+ * ⚠️ 2026-08-16 起，本支與 `s2_alerts.js`／`s2_mcp.json` 改用專屬的
+ *    `.playwright-s2-profile`（從當時的 `.playwright-daily-profile` 複製 cookie／localStorage
+ *    種子出來），不再與互動用的 DAILY profile 共用，也不再沿用舊的 `.playwright-mcp-profile`
+ *    這個名字——三者職責分開：DAILY 給人互動用、S2 profile 給保活/掃帶/警報用。
  *
  * 原本規則是「掃帶 agent 在兩輪之間自己顧」，但**改用工作排程器之後 agent 跑完
  * 就退出，根本沒有在等待的 agent**——這支就是補這個破口。
@@ -24,7 +29,7 @@
  */
 'use strict';
 
-const PROFILE = 'C:/Users/User/.playwright-mcp-profile';
+const PROFILE = 'C:/Users/User/.playwright-s2-profile';
 
 const SITES = [
   // wait：SPA 要時間 boot 完才會換發憑證，讀太早會誤判成登出
@@ -61,8 +66,9 @@ const SITES = [
   //     // 只看有沒有 Sign in 會誤判——SPA 載入中也長那樣，所以同時要求 Latest 出現
   //     return { ok: /Latest/i.test(t) && !/sign\s*in/i.test(t) };
   //   } },
-  { name: 'RT', url: 'https://www.reutersconnect.com/all?media-types=vid', wait: 8000,
-    check: () => ({ ok: !/\/login/i.test(location.href) }) },
+  // ⛔ RT 已於 2026-08-16 移出保活（使用者指示：只保活 NS）。
+  // { name: 'RT', url: 'https://www.reutersconnect.com/all?media-types=vid', wait: 8000,
+  //   check: () => ({ ok: !/\/login/i.test(location.href) }) },
 ];
 
 // @playwright/mcp 是用 npx 跑的，套件躺在 npm 的 _npx 快取裡（路徑含雜湊）。

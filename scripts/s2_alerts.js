@@ -19,7 +19,7 @@ const os = require('os');
 const { spawnSync } = require('child_process');
 const lib = require('./s2_alerts_lib');
 
-const PROFILE = 'C:/Users/User/.playwright-mcp-profile';
+const PROFILE = 'C:/Users/User/.playwright-s2-profile';
 const FLAG = path.join(os.homedir(), '.s2-alerts-enabled');
 const SEEN_FILE = path.join(os.homedir(), '.s2-alerts-seen.json');
 const LOCK = path.join(os.homedir(), '.s2-scan.lock');
@@ -96,7 +96,7 @@ function profileBusy() {
   try {
     const r = spawnSync('powershell.exe', [
       '-NoProfile', '-Command',
-      "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('.playwright-mcp-profile') } | Measure-Object | Select-Object -ExpandProperty Count",
+      "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains('.playwright-s2-profile') } | Measure-Object | Select-Object -ExpandProperty Count",
     ], { encoding: 'utf8', timeout: 15000 });
     const n = parseInt(String(r.stdout || '').trim(), 10);
     return Number.isFinite(n) && n > 0;

@@ -7,7 +7,7 @@
         "-y",
         "@playwright/mcp",
         "--user-data-dir",
-        "C:\\Users\\User\\.playwright-mcp-profile",
+        "C:\\Users\\User\\.playwright-s2-profile",
         "--output-dir",
         "D:\\Downloads\\PlaywrightMCP"
       ],
