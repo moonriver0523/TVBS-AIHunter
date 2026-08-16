@@ -19,7 +19,13 @@ const os = require('os');
 const { spawnSync } = require('child_process');
 const lib = require('./s2_alerts_lib');
 
-const PROFILE = 'C:/Users/User/.playwright-s2-profile-v2';
+// ⚠️ 2026-08-16 使用者指示：本支**刻意留在舊的 `.playwright-s2-profile`（v1）**，
+//    不要跟掃帶／保活一起換到 `-v2`。理由：這支是每 90 秒一次的 headless 輪詢，
+//    正是 Reuters Connect 的 datadome 最敏感的行為模式——v1 已經被 datadome 標記成
+//    受限環境（清 cookie／localStorage 都救不回來），再拿 v2 去輪詢等於把剛重建好的
+//    乾淨 profile 也燒掉。v1 反正已經廢了，讓它承擔這個風險。
+//    （本支目前依使用者指示停用中：沒有 `~/.s2-alerts-enabled` 旗標就會立刻離開。）
+const PROFILE = 'C:/Users/User/.playwright-s2-profile';
 const FLAG = path.join(os.homedir(), '.s2-alerts-enabled');
 const SEEN_FILE = path.join(os.homedir(), '.s2-alerts-seen.json');
 const LOCK = path.join(os.homedir(), '.s2-scan.lock');
@@ -92,6 +98,9 @@ function lockHeld() {
   }
 }
 
+// 📌 下面比對的字串 `.playwright-s2-profile` **同時命中 v1 與 v2**（v2 的路徑含這段），
+//    這是刻意保留的：本支雖然只開 v1，但掃帶／保活跑 v2 時照樣該讓路，不要去搶機器。
+//    不要「順手」把它改成精準比對 v1。
 function profileBusy() {
   try {
     const r = spawnSync('powershell.exe', [
