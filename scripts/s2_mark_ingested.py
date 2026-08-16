@@ -28,6 +28,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -132,10 +133,18 @@ def main():
         src = os.path.join(args.pending, fn)
         dst = os.path.join(args.pending, DONE + fn)
         if os.path.exists(dst):
-            print(f"   略過（同名已存在）：{fn}")
-            continue
+            # 同一天常分好幾批交件，同名已被前一批佔用——加時間戳尾碼避免撞名，
+            # ⛔ 不能就這樣略過不改名：略過會讓這個交件檔留在「看起來還沒入庫」
+            # 的原檔名下，下一批 agent 依「檔案已存在就 append」規則會誤把新內容
+            # 併進這個其實已經入庫的檔案（2026-08-16 實例：手動改名才發現這個坑）。
+            base, ext = os.path.splitext(fn)
+            dst = os.path.join(args.pending, f"{DONE}{base}_{datetime.now():%H%M}{ext}")
+            if os.path.exists(dst):
+                print(f"   略過（連加時間戳都撞名，人工處理）：{fn}")
+                continue
         os.rename(src, dst)
         renamed += 1
+        print(f"   {fn} → {os.path.basename(dst)}")
     print(f"\nOK 已標記 {renamed} 個檔為「{DONE}」")
     return 0
 
