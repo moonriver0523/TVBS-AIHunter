@@ -13,6 +13,12 @@
  *    種子出來），不再與互動用的 DAILY profile 共用，也不再沿用舊的 `.playwright-mcp-profile`
  *    這個名字——三者職責分開：DAILY 給人互動用、S2 profile 給保活/掃帶/警報用。
  *
+ * ⚠️ 2026-08-16 當天二度更名為 `.playwright-s2-profile-v2`（全新空白 profile，三站人工重登）：
+ *    上面那個 `.playwright-s2-profile` 被 Reuters Connect 的 datadome 標記成受限環境，
+ *    清 cookie／localStorage／IndexedDB 都救不回來（只回硬封鎖頁、連機器人驗證都不給），
+ *    而全新 profile 用一般 Chrome 開就能拿到可手動通過的驗證、登入後三站都正常。
+ *    舊 profile 保留未刪，需要退路時可改回來。
+ *
  * 原本規則是「掃帶 agent 在兩輪之間自己顧」，但**改用工作排程器之後 agent 跑完
  * 就退出，根本沒有在等待的 agent**——這支就是補這個破口。
  *
@@ -29,7 +35,7 @@
  */
 'use strict';
 
-const PROFILE = 'C:/Users/User/.playwright-s2-profile';
+const PROFILE = 'C:/Users/User/.playwright-s2-profile-v2';
 
 const SITES = [
   // wait：SPA 要時間 boot 完才會換發憑證，讀太早會誤判成登出
@@ -88,7 +94,14 @@ function resolvePlaywright() {
 (async () => {
   const { chromium } = resolvePlaywright();
   const t0 = Date.now();
-  const ctx = await chromium.launchPersistentContext(PROFILE, { headless: true });
+  // ⚠️ 2026-08-16 修：**一定要 channel:'chrome'**，跟 @playwright/mcp 用同一個瀏覽器。
+  //    @playwright/mcp 開的是真正的 Google Chrome（當時 151.0.7922.76），而 playwright
+  //    內建 chromium 是 152.0.7977.8。兩者輪流開同一個 user-data-dir 時，**Chrome 讀到
+  //    `Last Version` 比自己新就判定為降級，直接重置整個 profile**（cookie／localStorage
+  //    全清）——症狀就是「才剛人工登入三站，下一輪掃帶又全部 LOGGED_OUT」。
+  //    ⛔ 不要把這行拿掉改回內建 chromium：0807 那次的教訓是「兩邊要一致」，不是
+  //       「不能用 channel:'chrome'」——現在 MCP 端就是 chrome，這裡必須跟上。
+  const ctx = await chromium.launchPersistentContext(PROFILE, { headless: true, channel: 'chrome' });
   const out = [];
   let loggedOut = false;
 

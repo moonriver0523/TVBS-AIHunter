@@ -19,7 +19,7 @@ const os = require('os');
 const { spawnSync } = require('child_process');
 const lib = require('./s2_alerts_lib');
 
-const PROFILE = 'C:/Users/User/.playwright-s2-profile';
+const PROFILE = 'C:/Users/User/.playwright-s2-profile-v2';
 const FLAG = path.join(os.homedir(), '.s2-alerts-enabled');
 const SEEN_FILE = path.join(os.homedir(), '.s2-alerts-seen.json');
 const LOCK = path.join(os.homedir(), '.s2-scan.lock');
