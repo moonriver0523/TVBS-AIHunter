@@ -15,9 +15,12 @@ function New-RunsLog {
 function T([int]$MinutesAgo) { (Get-Date).AddMinutes(-$MinutesAgo).ToString('yyyy-MM-dd HH:mm:ss') }
 
 function Run-Case {
-    param([string]$Title, [string]$LogPath, [string]$ExpectPattern, [string]$MetricsPath = 'Z:\no-such-metrics.jsonl')
+    param([string]$Title, [string]$LogPath, [string]$ExpectPattern,
+          [string]$MetricsPath = 'Z:\no-such-metrics.jsonl',
+          [string]$LockPath = 'Z:\no-such.lock')
     $out = & pwsh -NoProfile -File $WD -DeadCheckDryRun `
-        -RunsLog $LogPath -MetricsFile $MetricsPath `
+        -RunsLog $LogPath -MetricsFile $MetricsPath -LockFile $LockPath `
+        -LogDir (Join-Path $tmp 'logdir') `
         -WatchdogLog (Join-Path $tmp 'wd.txt') 2>&1 | Out-String
     $out = $out.Trim()
     $ok = $out -match $ExpectPattern
@@ -106,6 +109,30 @@ Run-Case 'K2 重跑兩次都收工要靜默' (New-RunsLog 'k2' @(
 # ── L. 紀錄檔不存在→安靜，不炸 ──
 Run-Case 'L 紀錄檔不存在不炸' 'Z:\no-such-runs.txt' '沒有可疑輪次'
 
+# ══ 判活三訊號 ════════════════════════════════════════════════════
+$runsDead = New-RunsLog 'live' @("$(T 100)`t0898-2200`tSTART`tmodel=sonnet")
+
+# ── Q. 鎖檔存在＝有輪次握著 → 不可警報 ──
+$fakeLock = Join-Path $tmp 'fake.lock'
+Set-Content -LiteralPath $fakeLock -Value 'pid=1' -Encoding UTF8
+Run-Case 'Q 鎖檔存在要判成還在跑' $runsDead '掃帶行程在跑=True' 'Z:\no-such-metrics.jsonl' $fakeLock
+
+# ── R. 那一輪的 掃帶log 剛剛還在長 → 不可警報 ──
+$logDir = Join-Path $tmp 'logdir'
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+Set-Content -LiteralPath (Join-Path $logDir '掃帶log-0898-2200.txt') -Value 'x' -Encoding UTF8
+Run-Case 'R 該輪 log 還在長要判成還在跑' $runsDead '掃帶行程在跑=True'
+Remove-Item (Join-Path $logDir '掃帶log-0898-2200.txt') -Force
+
+# ── S. 只是「命令列裡提到 s2_scan.ps1」的 -Command 行程，不算在跑 ──
+# 2026-08-17 實測踩到：一個命令列含該檔名的互動 shell 讓整個警報靜音。
+$decoy = Start-Process pwsh -PassThru -WindowStyle Hidden -ArgumentList @(
+    '-NoProfile', '-Command',
+    "'E:\GitHub\TVBS-AIHunter\scripts\s2_scan.ps1 這只是字串'; Start-Sleep -Seconds 25")
+Start-Sleep -Seconds 2
+Run-Case 'S -Command 行程只是提到檔名，不算在跑' $runsDead '掃帶行程在跑=False'
+Stop-Process -Id $decoy.Id -Force -ErrorAction SilentlyContinue
+
 # ══ 真實路徑（非 DryRun）：留痕與冪等 ══════════════════════════════
 # 把子行程的 USERPROFILE 指到空的暫存家目錄：`.s2-ntfy-topic` 不存在時
 # Send-Ntfy 直接回 $null（不送、不報錯），所以能走完整條路徑而**不會真的推播**。
@@ -118,7 +145,7 @@ Remove-Item $wd2 -ErrorAction SilentlyContinue
 $runs2 = New-RunsLog 'real' @("$(T 100)`t0899-2200`tSTART`tmodel=sonnet")
 
 function Invoke-Real {
-    & pwsh -NoProfile -Command "`$env:USERPROFILE='$home2'; & '$WD' -FlagFile '$flag' -RunsLog '$runs2' -MetricsFile 'Z:\nope.jsonl' -WatchdogLog '$wd2' -Slots '00:01'" 2>&1 | Out-Null
+    & pwsh -NoProfile -Command "`$env:USERPROFILE='$home2'; & '$WD' -FlagFile '$flag' -RunsLog '$runs2' -MetricsFile 'Z:\nope.jsonl' -WatchdogLog '$wd2' -Slots '00:01' -LockFile 'Z:\no-such.lock' -LogDir '$tmp'" 2>&1 | Out-Null
 }
 Invoke-Real
 $after1 = @(Get-Content -LiteralPath $wd2 -ErrorAction SilentlyContinue)
@@ -135,7 +162,7 @@ $m2 = @($after2 | Where-Object { $_ -match '中途死亡警報 \[0899-2200\]' })
 Remove-Item $flag -Force
 $wd3 = Join-Path $tmp 'wd_off.txt'
 Remove-Item $wd3 -ErrorAction SilentlyContinue
-& pwsh -NoProfile -Command "`$env:USERPROFILE='$home2'; & '$WD' -FlagFile '$flag' -RunsLog '$runs2' -MetricsFile 'Z:\nope.jsonl' -WatchdogLog '$wd3' -Slots '00:01'" 2>&1 | Out-Null
+& pwsh -NoProfile -Command "`$env:USERPROFILE='$home2'; & '$WD' -FlagFile '$flag' -RunsLog '$runs2' -MetricsFile 'Z:\nope.jsonl' -WatchdogLog '$wd3' -Slots '00:01' -LockFile 'Z:\no-such.lock' -LogDir '$tmp'" 2>&1 | Out-Null
 $o = Test-Path $wd3
 "{0}  O 旗標關閉時完全靜默" -f $(if (-not $o) { 'PASS' } else { 'FAIL' })
 
@@ -143,6 +170,6 @@ $o = Test-Path $wd3
 Set-Content -LiteralPath $flag -Value '' -Encoding UTF8
 $wd4 = Join-Path $tmp 'wd_nodc.txt'
 Remove-Item $wd4 -ErrorAction SilentlyContinue
-& pwsh -NoProfile -Command "`$env:USERPROFILE='$home2'; & '$WD' -FlagFile '$flag' -RunsLog '$runs2' -MetricsFile 'Z:\nope.jsonl' -WatchdogLog '$wd4' -Slots '00:01' -NoDeadCheck" 2>&1 | Out-Null
+& pwsh -NoProfile -Command "`$env:USERPROFILE='$home2'; & '$WD' -FlagFile '$flag' -RunsLog '$runs2' -MetricsFile 'Z:\nope.jsonl' -WatchdogLog '$wd4' -Slots '00:01' -LockFile 'Z:\no-such.lock' -LogDir '$tmp' -NoDeadCheck" 2>&1 | Out-Null
 $pOk = -not (Test-Path $wd4) -or -not (Select-String -Path $wd4 -Pattern '中途死亡' -Quiet)
 "{0}  P -NoDeadCheck 可關掉 A5" -f $(if ($pOk) { 'PASS' } else { 'FAIL' })

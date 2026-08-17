@@ -56,6 +56,12 @@ param(
     [switch]$TestMode,
     [int]$TestLimit = 5,
 
+    # A5 判活用：跟 s2_scan.ps1 的 -LockFile 一致。只用 Test-Path 看它在不在，
+    # **絕不開檔**（開檔會搶到獨佔握把，害正要啟動的一輪 SKIP）。
+    [string]$LockFile = "$env:USERPROFILE\.s2-scan.lock",
+    # A5 判活用：那一輪的 掃帶log 幾分鐘沒長就不算「還在寫」
+    [int]$LogIdleMinutes = 10,
+
     # A5：START 後超過這麼久還沒有 DONE／CRASH 才懷疑中途死亡。
     # ⚠️ 不要調低：歷史最久的一輪是 0811-0430 的 56.7 分，正常慢輪不能被當成死掉。
     [int]$DeadRoundMinutes = 75,
@@ -107,14 +113,15 @@ $now = Get-Date
 # 誤報比漏報更傷（會把警告訓練成雜訊），所以四個條件全中才吵人：
 #   1. `_輪次紀錄.txt` 有該 checkpoint 的 START、卻沒有 DONE／CRASH；
 #   2. 距 START 已超過 $DeadRoundMinutes；
-#   3. 現在沒有 s2_scan.ps1 行程在跑；
+#   3. 判活的三個訊號都說「沒在跑」（鎖檔不在、那一輪的 log 沒在長、
+#      沒有 -File 形式的 s2_scan.ps1 行程）——細節見 Test-ScanRunning；
 #   4. `_token_metrics.jsonl` 也沒有那一輪的紀錄。量測寫在 DONE **之後**，
 #      所以量測有紀錄＝外殼確實跑到最後，只是 DONE 那行沒落地
 #      （Write-Run 遇 Google Drive 鎖檔重試三次會放棄，成功的一輪也可能沒 DONE）。
 #
 # ⛔ 判活**絕對不准去開鎖檔**：s2_scan.ps1 用 FileShare::None 獨佔，就算只開唯讀
 #    握把，在那個瞬間正要啟動的一輪也會拿不到鎖而 SKIP——為了偵測異常反而製造異常。
-#    改看行程命令列，純唯讀，碰不到鎖。
+#    只准 Test-Path 看它在不在（純 metadata，不開檔）。
 
 function Get-UnfinishedRound {
     param([string]$Path, [datetime]$Now, [int]$MinMinutes)
@@ -170,14 +177,42 @@ function Get-UnfinishedRound {
 }
 
 function Test-ScanRunning {
-    # 查不到（CIM 壞掉／權限不足）一律當作「有在跑」——寧可漏報，
-    # 也不要因為自己查不到就發假警報。
+    <#
+      三個獨立訊號，**任何一個說「還活著」就當作還活著**（寧可漏報，
+      也不要對正在跑的輪次發假警報）。全部都是唯讀，都不碰鎖檔握把。
+    #>
+    param([string]$Checkpoint)
+
+    # 1) 鎖檔存在。Test-Path 只看檔案系統 metadata，**不會開檔**，
+    #    所以不會搶到 s2_scan.ps1 的 FileShare::None 獨佔握把。
+    #    收工時 s2_scan.ps1 會刪掉它（硬砍才會留下殘檔，那種情況本來就該人工看）。
+    if (Test-Path $LockFile) { return $true }
+
+    # 2) 那一輪自己的 log 還在長。最精準的訊號：認的是**這個 checkpoint**，
+    #    不是「有沒有人在跑什麼」。
+    if ($Checkpoint) {
+        $lg = Join-Path $LogDir "掃帶log-$Checkpoint.txt"
+        if (Test-Path $lg) {
+            $idle = ((Get-Date) - (Get-Item $lg).LastWriteTime).TotalMinutes
+            if ($idle -lt $LogIdleMinutes) { return $true }
+        }
+    }
+
+    # 3) 行程命令列。查不到（CIM 壞掉／權限不足）一律當作「有在跑」。
+    # ⚠️ 只認 `-File …s2_scan.ps1` 這種**直接啟動**的形式，並排除帶 `-Command`
+    #    的處理程序：排程與代打都是用 -File 叫起來的（見 S2掃帶 工作定義與
+    #    下方 $scanArgs），而 `-Command` 那種多半是別人（人、agent、CI）在指令
+    #    字串裡「提到」這個檔名而已。2026-08-17 實測踩到：一個命令列裡含
+    #    s2_scan.ps1 字樣的互動 shell，讓整個中途死亡警報靜音。
     try {
         $procs = Get-CimInstance Win32_Process `
             -Filter "Name='pwsh.exe' OR Name='powershell.exe'" -ErrorAction Stop
     } catch { return $true }
     foreach ($p in $procs) {
-        if ($p.CommandLine -and $p.CommandLine -like '*s2_scan.ps1*') { return $true }
+        $cl = $p.CommandLine
+        if (-not $cl) { continue }
+        if ($cl -match '(?i)-Command') { continue }
+        if ($cl -match '(?i)-File\s+"?[^"]*s2_scan\.ps1') { return $true }
     }
     return $false
 }
@@ -213,14 +248,14 @@ if (-not $NoDeadCheck) {
             Write-Host ("DeadCheck：checkpoint=$($dead.Checkpoint) " +
                         "start=$($dead.Start.ToString('yyyy-MM-dd HH:mm:ss')) " +
                         "age=$($dead.AgeMinutes)分 " +
-                        "掃帶行程在跑=$(Test-ScanRunning) " +
+                        "掃帶行程在跑=$(Test-ScanRunning -Checkpoint $dead.Checkpoint) " +
                         "有量測紀錄=$(Test-MetricsRecorded -Path $MetricsFile -Checkpoint $dead.Checkpoint) " +
                         "已警報過=$(Test-AlreadyAlerted -Path $WatchdogLog -Checkpoint $dead.Checkpoint)")
         }
         exit 0
     }
     if ($dead -and
-        -not (Test-ScanRunning) -and
+        -not (Test-ScanRunning -Checkpoint $dead.Checkpoint) -and
         -not (Test-MetricsRecorded -Path $MetricsFile -Checkpoint $dead.Checkpoint) -and
         -not (Test-AlreadyAlerted -Path $WatchdogLog -Checkpoint $dead.Checkpoint)) {
 
