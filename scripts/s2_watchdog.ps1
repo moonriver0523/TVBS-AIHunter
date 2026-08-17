@@ -173,7 +173,9 @@ function Get-UnfinishedRound {
             AgeMinutes = [Math]::Round($age, 1)
         }
     }
-    $cands | Sort-Object Start -Descending | Select-Object -First 1
+    # 回傳**全部**候選（新到舊）。只回最新一筆的話，同一天死兩輪時，
+    # 舊的那一輪會永遠被新的擋在前面、而新的已經警報過＝舊的永不出聲。
+    $cands | Sort-Object Start -Descending
 }
 
 function Test-ScanRunning {
@@ -181,12 +183,28 @@ function Test-ScanRunning {
       三個獨立訊號，**任何一個說「還活著」就當作還活著**（寧可漏報，
       也不要對正在跑的輪次發假警報）。全部都是唯讀，都不碰鎖檔握把。
     #>
-    param([string]$Checkpoint)
+    param([string]$Checkpoint, [datetime]$Start)
 
-    # 1) 鎖檔存在。Test-Path 只看檔案系統 metadata，**不會開檔**，
+    # 1) 鎖檔。Test-Path／Get-Item 只看檔案系統 metadata，**不會開檔**，
     #    所以不會搶到 s2_scan.ps1 的 FileShare::None 獨佔握把。
-    #    收工時 s2_scan.ps1 會刪掉它（硬砍才會留下殘檔，那種情況本來就該人工看）。
-    if (Test-Path $LockFile) { return $true }
+    #
+    # 🔴 **不可以「鎖檔在＝還活著」就了事**——那會讓 A5 在最該作用的情境下失效：
+    #    s2_scan.ps1 是在 finally 裡刪鎖檔的，**被硬砍就不會走到 finally**
+    #    （排程的 ExecutionTimeLimit 是 PT1H，0811-0430 跑了 56.7 分已經很接近；
+    #    0811-2200 的 LastResult=0x8007042B 正是逾時終止碼）。於是死掉的那一輪
+    #    留下自己的鎖檔，反而把針對它的警報壓掉，要等下一輪跑起來才會被清掉。
+    #
+    #    判別方式不必開檔：鎖檔內容只在取得時寫一次，所以 LastWriteTime ≈ 那一輪的
+    #    START。**比 START 新**＝是後來的輪次握著（真的有人在跑）；
+    #    **不比 START 新**＝這就是死掉那一輪自己的殘檔，不算活著。
+    if (Test-Path $LockFile) {
+        try {
+            $lockTime = (Get-Item -LiteralPath $LockFile -ErrorAction Stop).LastWriteTime
+        } catch {
+            return $true      # 看不出來就當作有人在跑（寧可漏報）
+        }
+        if (-not $Start -or $lockTime -gt $Start) { return $true }
+    }
 
     # 2) 那一輪自己的 log 還在長。最精準的訊號：認的是**這個 checkpoint**，
     #    不是「有沒有人在跑什麼」。
@@ -240,24 +258,31 @@ function Test-AlreadyAlerted {
 }
 
 if (-not $NoDeadCheck) {
-    $dead = Get-UnfinishedRound -Path $RunsLog -Now $now -MinMinutes $DeadRoundMinutes
+    $cands = @(Get-UnfinishedRound -Path $RunsLog -Now $now -MinMinutes $DeadRoundMinutes)
+    # 已經吵過的先濾掉，再取最新一筆——不然同一天死兩輪時，舊的會永遠被
+    # 已警報過的新的擋住而不出聲
+    $dead = $cands | Where-Object {
+        -not (Test-AlreadyAlerted -Path $WatchdogLog -Checkpoint $_.Checkpoint)
+    } | Select-Object -First 1
+
     if ($DeadCheckDryRun) {
-        if (-not $dead) {
+        $show = if ($dead) { $dead } else { $cands | Select-Object -First 1 }
+        if (-not $show) {
             Write-Host "DeadCheck：沒有可疑輪次（門檻 $DeadRoundMinutes 分）"
         } else {
-            Write-Host ("DeadCheck：checkpoint=$($dead.Checkpoint) " +
-                        "start=$($dead.Start.ToString('yyyy-MM-dd HH:mm:ss')) " +
-                        "age=$($dead.AgeMinutes)分 " +
-                        "掃帶行程在跑=$(Test-ScanRunning -Checkpoint $dead.Checkpoint) " +
-                        "有量測紀錄=$(Test-MetricsRecorded -Path $MetricsFile -Checkpoint $dead.Checkpoint) " +
-                        "已警報過=$(Test-AlreadyAlerted -Path $WatchdogLog -Checkpoint $dead.Checkpoint)")
+            Write-Host ("DeadCheck：checkpoint=$($show.Checkpoint) " +
+                        "start=$($show.Start.ToString('yyyy-MM-dd HH:mm:ss')) " +
+                        "age=$($show.AgeMinutes)分 " +
+                        "候選數=$($cands.Count) " +
+                        "掃帶行程在跑=$(Test-ScanRunning -Checkpoint $show.Checkpoint -Start $show.Start) " +
+                        "有量測紀錄=$(Test-MetricsRecorded -Path $MetricsFile -Checkpoint $show.Checkpoint) " +
+                        "已警報過=$(Test-AlreadyAlerted -Path $WatchdogLog -Checkpoint $show.Checkpoint)")
         }
         exit 0
     }
     if ($dead -and
-        -not (Test-ScanRunning -Checkpoint $dead.Checkpoint) -and
-        -not (Test-MetricsRecorded -Path $MetricsFile -Checkpoint $dead.Checkpoint) -and
-        -not (Test-AlreadyAlerted -Path $WatchdogLog -Checkpoint $dead.Checkpoint)) {
+        -not (Test-ScanRunning -Checkpoint $dead.Checkpoint -Start $dead.Start) -and
+        -not (Test-MetricsRecorded -Path $MetricsFile -Checkpoint $dead.Checkpoint)) {
 
         $body = "[$($dead.Checkpoint)] 在 $($dead.Start.ToString('HH:mm')) START，" +
                 "已 $($dead.AgeMinutes) 分鐘沒有 DONE／CRASH，且目前沒有掃帶行程在跑、" +

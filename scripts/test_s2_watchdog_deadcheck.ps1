@@ -112,10 +112,19 @@ Run-Case 'L 紀錄檔不存在不炸' 'Z:\no-such-runs.txt' '沒有可疑輪次'
 # ══ 判活三訊號 ════════════════════════════════════════════════════
 $runsDead = New-RunsLog 'live' @("$(T 100)`t0898-2200`tSTART`tmodel=sonnet")
 
-# ── Q. 鎖檔存在＝有輪次握著 → 不可警報 ──
+# ── Q1. 鎖檔比 START 新＝後來的輪次握著 → 判成還在跑 ──
 $fakeLock = Join-Path $tmp 'fake.lock'
 Set-Content -LiteralPath $fakeLock -Value 'pid=1' -Encoding UTF8
-Run-Case 'Q 鎖檔存在要判成還在跑' $runsDead '掃帶行程在跑=True' 'Z:\no-such-metrics.jsonl' $fakeLock
+(Get-Item $fakeLock).LastWriteTime = (Get-Date).AddMinutes(-30)   # START 是 100 分鐘前
+Run-Case 'Q1 鎖檔比START新（後續輪次握著）要判成還在跑' $runsDead '掃帶行程在跑=True' 'Z:\no-such-metrics.jsonl' $fakeLock
+
+# ── Q2. 鎖檔跟 START 同期＝死掉那一輪自己的殘檔 → **不可**壓住警報 ──
+# s2_scan.ps1 在 finally 刪鎖檔，被硬砍（ExecutionTimeLimit PT1H 逾時終止，
+# 0811-2200 的 0x8007042B 就是）不會走到 finally，殘檔會留下來。
+# 「鎖檔在就算活著」會讓 A5 在最該作用的情境下失效。
+(Get-Item $fakeLock).LastWriteTime = (Get-Date).AddMinutes(-101)
+Run-Case 'Q2 鎖檔是死掉那輪自己的殘檔，不可壓住警報' $runsDead '掃帶行程在跑=False' 'Z:\no-such-metrics.jsonl' $fakeLock
+Remove-Item $fakeLock -Force
 
 # ── R. 那一輪的 掃帶log 剛剛還在長 → 不可警報 ──
 $logDir = Join-Path $tmp 'logdir'
@@ -157,6 +166,22 @@ Invoke-Real
 $after2 = @(Get-Content -LiteralPath $wd2 -ErrorAction SilentlyContinue)
 $m2 = @($after2 | Where-Object { $_ -match '中途死亡警報 \[0899-2200\]' }).Count
 "{0}  N 冪等：第二次不重複警報（仍為 $m2 行）" -f $(if ($m2 -eq 1) { 'PASS' } else { 'FAIL' })
+
+# ── N2. 同一天死兩輪：舊的那輪不可被「已警報過的新輪」永久擋住 ──
+$runs3 = New-RunsLog 'two_dead' @(
+    "$(T 200)`t0899-1800`tSTART`tmodel=sonnet"
+    "$(T 100)`t0899-2200`tSTART`tmodel=sonnet"
+)
+$wd5 = Join-Path $tmp 'wd_two.txt'
+Remove-Item $wd5 -ErrorAction SilentlyContinue
+foreach ($i in 1..2) {
+    & pwsh -NoProfile -Command "`$env:USERPROFILE='$home2'; & '$WD' -FlagFile '$flag' -RunsLog '$runs3' -MetricsFile 'Z:\nope.jsonl' -WatchdogLog '$wd5' -Slots '00:01' -LockFile 'Z:\no-such.lock' -LogDir '$tmp'" 2>&1 | Out-Null
+}
+$two = @(Get-Content -LiteralPath $wd5 -ErrorAction SilentlyContinue)
+$hit2200 = @($two | Where-Object { $_ -match '\[0899-2200\]' }).Count
+$hit1800 = @($two | Where-Object { $_ -match '\[0899-1800\]' }).Count
+"{0}  N2 同日死兩輪各警報一次（2200=$hit2200 1800=$hit1800）" -f `
+    $(if ($hit2200 -eq 1 -and $hit1800 -eq 1) { 'PASS' } else { 'FAIL' })
 
 # ── O. 旗標關閉時連 A5 都不動作 ──
 Remove-Item $flag -Force
