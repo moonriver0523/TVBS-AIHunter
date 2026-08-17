@@ -55,7 +55,8 @@ RAW_HINT = (
     '  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py compare --raw <raw檔> --batch <batch檔>\n'
     '  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py dedup-check {first} --ids A,B\n'
     '  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py snapshot {first} --site <站> --checkpoint <輪次>\n'
-    '（AP 清單檔會自動看穿 _source；字數檢查用 inspect --lengths）'
+    '（AP 清單檔會自動看穿 _source；字數檢查用 inspect --lengths；'
+    '要**產出／寫入** json 檔改用 Write 工具直接寫，不要換 heredoc 或先落 .py 檔繞）'
 )
 
 
