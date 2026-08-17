@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python E:/GitHub/TVBS-AIHunter/scripts/s2_bash_guard.py",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

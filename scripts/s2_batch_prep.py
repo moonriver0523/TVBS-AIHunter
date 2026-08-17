@@ -423,22 +423,29 @@ def cmd_inspect(args):
         sys.exit(1)
     print(f'# {args.raw}：{shell_desc}', file=sys.stderr)
 
-    indexed = list(enumerate(items))
+    site = getattr(args, 'site', None)
+    # id 與欄位一律走 `_dedup_view` 合併視圖：AP 清單檔是 ES 形狀（欄位包在
+    # `_source` 底下、頂層 `_id` 是雜湊），不看穿的話 `--ids AP5467681` 找不到、
+    # `--fields` 全回「無此欄位」，agent 只會彈回 python -c（0817-2200 實測，
+    # D9 步驟②的前置條件）。
+    indexed = [(i, _dedup_view(it) if isinstance(it, dict) else {'value': it})
+               for i, it in enumerate(items)]
 
     if args.index is not None:
         if not (0 <= args.index < len(items)):
             print(f'✗ --index {args.index} 超出範圍（共 {len(items)} 筆，0-based）', file=sys.stderr)
             sys.exit(1)
-        indexed = [(args.index, items[args.index])]
+        indexed = [indexed[args.index]]
     elif args.ids:
         want = set(x.strip() for x in args.ids.split(','))
-        indexed = [(i, it) for i, it in indexed if _id_of_any(it, i) in want]
-        found = set(_id_of_any(it, i) for i, it in indexed)
+        indexed = [(i, it) for i, it in indexed if _dedup_id(site, it, i) in want]
+        found = set(_dedup_id(site, it, i) for i, it in indexed)
         missing = want - found
         if missing:
             print(f'⚠️ 找不到這些 id：{", ".join(sorted(missing))}', file=sys.stderr)
 
     fields = [f.strip() for f in args.fields.split(',')] if args.fields else None
+    lengths = getattr(args, 'lengths', False)
     full_detail = fields is not None and len(indexed) <= 3  # 少量精準查詢時不截斷
 
     limit = args.limit or 100
@@ -446,8 +453,19 @@ def cmd_inspect(args):
 
     lines = []
     for i, it in shown:
-        item_id = _id_of_any(it, i)
-        if fields:
+        item_id = _dedup_id(site, it, i)
+        if lengths:
+            # 字數模式：只印長度不印內容（例：檢查摘要有沒有超過 150 字）。
+            # 這是 D9 查出的工具缺口——以前 agent 只能自己寫 python 數。
+            flds = fields or sorted(k for k, v in it.items()
+                                    if isinstance(v, str) and v and not k.startswith('_'))
+            if not flds:
+                lines.append(f'{item_id}\t（無可量長度的文字欄位）')
+            else:
+                lines.append(f'{item_id}\t' + ' '.join(
+                    f'{k}=len:{len(it[k])}' if isinstance(it.get(k), str)
+                    else f'{k}=<無此欄位或非文字>' for k in flds))
+        elif fields:
             picked = {}
             for k in fields:
                 v = it.get(k, '<無此欄位>')
@@ -483,11 +501,19 @@ def cmd_search(args):
         }.get(args.field, [args.field])
 
     needle = args.contains.lower()
+    site = getattr(args, 'site', None)
     hits = []
-    for i, it in enumerate(items):
-        item_id = _id_of_any(it, i)
+    for i, raw_it in enumerate(items):
+        # 同 inspect：走 `_dedup_view` 看穿 AP 的 `_source` 殼，否則 AP 清單檔
+        # 頂層沒有任何字串欄位，search 永遠空手（D9 步驟②前置）。
+        it = _dedup_view(raw_it) if isinstance(raw_it, dict) else {}
+        item_id = _dedup_id(site, it, i)
+        str_fields = [(k, v) for k, v in it.items() if isinstance(v, str)]
+        # AP 的標題在 `caption.nitf` 這種一層 dict 底下，一併攤出來搜
+        str_fields += [(f'{k}.nitf', v['nitf']) for k, v in it.items()
+                       if isinstance(v, dict) and isinstance(v.get('nitf'), str)]
         fields_to_check = (
-            [(k, v) for k, v in it.items() if isinstance(v, str)]
+            str_fields
             if field_candidates is None
             else [(k, it.get(k)) for k in field_candidates if isinstance(it.get(k), str)]
         )
@@ -555,15 +581,19 @@ def cmd_snapshot(args):
         f'# 筆數：{len(items)}',
         '',
     ]
-    for i, it in enumerate(items):
-        item_id = _site_id_of(args.site, it, i)
+    for i, raw_it in enumerate(items):
+        # 同 inspect／search：AP 清單檔（ES 形狀）要看穿 `_source`，否則快照
+        # 印出的是 `_id` 雜湊，agent 對不回 state 只能自己重造（0817-2200 實錯）。
+        it = _dedup_view(raw_it) if isinstance(raw_it, dict) else {}
+        item_id = _dedup_id(args.site, it, i)
         desc = _title_of_any(it)
         if not desc:
             # 清單檔常常只有 `code` ＋ `at`（沒有標題欄）。這種時候印剩下的短欄位，
             # 比留一整排空白有用——快照的用途是「當時清單長什麼樣」。
             desc = ' '.join(
                 f'{k}={v}' for k, v in it.items()
-                if k != 'id' and isinstance(v, (str, int, float, bool))
+                if k != 'id' and not k.startswith('_')
+                and isinstance(v, (str, int, float, bool))
                 and len(str(v)) <= 40 and str(v) != item_id)
         lines.append(f'{item_id}\t{desc}')
 
@@ -657,9 +687,11 @@ def _dedup_view(item):
 
 def _dedup_id(site, item, index):
     """去重比對用的 id。AP 站的人看的是 `AP<editorialid>`（state 裡也是這個），
-    不是 ES 的 `_id` 雜湊——比對時要用人看得懂、跟 state 對得起來的那個。"""
+    不是 ES 的 `_id` 雜湊——比對時要用人看得懂、跟 state 對得起來的那個。
+    沒給 --site 但看得到 `editorialid` 時也走 AP 規則：那個欄位只有 AP 的
+    ES 清單檔才有，靠它自動判站比回傳雜湊有用（D9 步驟②前置）。"""
     view = _dedup_view(item)
-    if site == 'ap' and view.get('editorialid'):
+    if site in (None, 'ap') and view.get('editorialid'):
         return 'AP' + str(view['editorialid'])
     return _site_id_of(site, view, index)
 
@@ -840,6 +872,10 @@ def main():
     p_inspect.add_argument('--fields', help='逗號分隔的欄位名清單')
     p_inspect.add_argument('--limit', type=int, help='最多顯示幾筆，預設 100')
     p_inspect.add_argument('--index', type=int, help='只看第 i 筆（0-based）')
+    p_inspect.add_argument('--site', choices=['ns', 'ap', 'rt'],
+                           help='per-site id 規則（RT 是 code；AP 清單檔自動看穿 _source）')
+    p_inspect.add_argument('--lengths', action='store_true',
+                           help='只印各欄位字數不印內容（檢查摘要 150 字上限這類需求）')
     p_inspect.set_defaults(func=cmd_inspect)
 
     p_search = sub.add_parser('search', help='在 raw 檔的指定欄位裡找關鍵字')
@@ -847,6 +883,8 @@ def main():
     p_search.add_argument('--contains', required=True)
     p_search.add_argument('--field', default='all', choices=['script', 'story', 'head', 'all'])
     p_search.add_argument('--limit', type=int, help='最多顯示幾筆命中，預設 100')
+    p_search.add_argument('--site', choices=['ns', 'ap', 'rt'],
+                          help='per-site id 規則（RT 是 code；AP 清單檔自動看穿 _source）')
 
     p_snap = sub.add_parser('snapshot', help='把 raw 檔壓成純文字稽核快照（不覆寫舊檔）')
     p_snap.add_argument('raw')

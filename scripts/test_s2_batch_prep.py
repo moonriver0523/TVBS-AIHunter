@@ -225,6 +225,56 @@ DC_RT = write_json('rt_dc.json', [
 o, c = run(bp.cmd_dedup_check, Args(raw=DC_RT, ids='RT1001,RT1002', site='rt', fields=None))
 check('dedup-check RT 走 code 當 id', c == 0 and '逐字相同' in o)
 
+# ── inspect／search／snapshot 看穿 AP 的 ES `_source` 殼（D9 步驟②前置）──
+# 0817-2200 實測：inspect 在 AP 清單檔上把 id 解成 `_id` 雜湊、--fields 回
+# 「無此欄位」，agent 直接彈回 python -c——hook 指路的工具必須先能用。
+AP_ES = write_json('ap_es.json', {
+    'Items': [
+        {'_id': 'dcf0346fabc', '_score': 1.0,
+         '_source': {'editorialid': 5467681, 'headline': 'Quake rescue latest',
+                     'script': 'Rescue teams continued digging on Monday.'}},
+        {'_id': 'ee1122ffdd', '_score': 0.9,
+         '_source': {'editorialid': 5467682, 'headline': 'Quake rescue vertical',
+                     'script': 'Rescue teams continued digging on Monday.'}},
+    ]})
+
+o, c = run(bp.cmd_inspect, Args(raw=AP_ES, ids='AP5467681', fields='headline',
+                                limit=None, index=None, site='ap', lengths=False))
+check('inspect --ids 用 AP<editorialid> 找得到（不再是 _id 雜湊）',
+      c == 0 and 'AP5467681' in o and '找不到' not in o)
+check('inspect --fields 看穿 _source（headline 有值）',
+      'Quake rescue latest' in o and '無此欄位' not in o)
+
+o, c = run(bp.cmd_inspect, Args(raw=AP_ES, ids=None, fields=None,
+                                limit=None, index=None, site=None, lengths=False))
+check('inspect 摘要模式沒給 --site 也自動走 AP id（editorialid 自動判站）',
+      c == 0 and 'AP5467681' in o and 'dcf0346f' not in o)
+
+o, c = run(bp.cmd_inspect, Args(raw=AP_ES, ids='AP5467681', fields=None,
+                                limit=None, index=None, site='ap', lengths=True))
+check('inspect --lengths 印字數不印內容（字數檢查缺口）',
+      c == 0 and 'len:' in o and 'Rescue teams' not in o)
+
+o, c = run(bp.cmd_inspect, Args(raw=AP_ES, ids='AP5467681', fields='script',
+                                limit=None, index=None, site='ap', lengths=True))
+check('inspect --lengths 可指定欄位', c == 0 and 'script=len:41' in o)
+
+o, c = run(bp.cmd_search, Args(raw=AP_ES, contains='digging', field='all',
+                               limit=None, site='ap'))
+check('search 看穿 _source（AP 清單檔不再永遠空手）',
+      c == 0 and 'AP5467681' in o and 'AP5467682' in o)
+
+snap_ap = os.path.join(TMP, 'snap_ap.txt')
+o, c = run(bp.cmd_snapshot, Args(raw=AP_ES, site='ap', checkpoint='0818-1600', out=snap_ap))
+body_ap = open(snap_ap, encoding='utf-8').read()
+check('snapshot AP 清單檔印 AP<editorialid>＋標題（不是 _id 雜湊）',
+      c == 0 and 'AP5467681' in body_ap and 'dcf0346f' not in body_ap)
+
+o, c = run(bp.cmd_dedup_check, Args(raw=AP_ES, ids='AP5467681,AP5467682',
+                                    site=None, fields='script'))
+check('dedup-check 沒給 --site 也認得 AP id（editorialid 自動判站）',
+      c == 0 and '逐字相同' in o)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)
