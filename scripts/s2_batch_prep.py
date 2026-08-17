@@ -765,7 +765,11 @@ def cmd_dedup_check(args):
                 verdicts[(f, a, b)] = 'n/a'
                 print(f'  ? {a} vs {b}：有一邊沒有這個欄位，無法比對')
                 continue
-            if va == vb:
+            if not va and not vb:
+                # 兩邊都空「逐字相同」在機械上成立，但拿來當去重依據是假訊號。
+                verdicts[(f, a, b)] = 'both_empty'
+                print(f'  ? {a} vs {b}：兩邊這個欄位都是空的，不足以判斷重複')
+            elif va == vb:
                 verdicts[(f, a, b)] = 'same'
                 print(f'  ✓ {a} vs {b}：逐字相同')
             elif _norm(va) == _norm(vb):
@@ -787,17 +791,23 @@ def cmd_dedup_check(args):
         print()
 
     print('── 結論（機械判斷，收不收由編輯決定）──')
+    # 四種判定在結論行也要分開講——折成「相同」會讓「逐字相同」跟
+    # 「剝掉標記才相同」看起來一樣，而這支工具存在的理由就是把它們分開。
+    labels = [('same', '相同'), ('same_normalized', '去空白後相同'),
+              ('same_markup', '剝標記後相同'), ('diff', '不同'),
+              ('both_empty', '兩邊皆空'), ('n/a', '無法比')]
     for a, b in pairs:
-        same = [f for f in fields if verdicts.get((f, a, b)) in ('same', 'same_normalized')]
-        diff = [f for f in fields if verdicts.get((f, a, b)) == 'diff']
-        na = [f for f in fields if verdicts.get((f, a, b)) == 'n/a']
         bits = []
-        if same:
-            bits.append(f'{"/".join(same)} 相同')
-        if diff:
-            bits.append(f'{"/".join(diff)} 不同')
-        if na:
-            bits.append(f'{"/".join(na)} 無法比')
+        for key, word in labels:
+            hit = [f for f in fields if verdicts.get((f, a, b)) == key]
+            if hit:
+                bits.append(f'{"/".join(hit)} {word}')
+        unresolved = [f for f in fields if (f, a, b) not in verdicts]
+        if unresolved:
+            # 結論行是掃帶 agent 唯一會讀的一行，寧可炸掉也不能印半行空白。
+            print(f'✗ 內部錯誤：{a} vs {b} 的 {"/".join(unresolved)} 沒有判定結果',
+                  file=sys.stderr)
+            sys.exit(1)
         print(f'  {a} vs {b}：{"、".join(bits)}')
 
 

@@ -132,6 +132,8 @@ DC = write_json('ns_full.json', [
     {'id': 'MK-01MO', 'desc': 'x', 'script': '<p>同一段內容<b>加粗</b>而已</p>'},
     {'id': 'MK-02MO', 'desc': 'x', 'script': '<p>同一段內容加粗而已</p>'},
     {'id': 'MK-03MO', 'desc': 'x', 'script': '<p>同一段內容<b>加粗</b>而已但這裡多一句</p>'},
+    {'id': 'EMP-01MO', 'desc': 'x', 'script': ''},
+    {'id': 'EMP-02MO', 'desc': 'x', 'script': ''},
     {'id': 'NOF-01MO', 'dur_ms': 1000},
 ])
 
@@ -164,6 +166,24 @@ o, c = dc(ids='MK-01MO,MK-03MO', fields='script')
 check('dedup-check 內容真的不同時仍判 diff', c == 0 and '✗ MK-01MO vs MK-03MO' in o)
 check('dedup-check 差異位置算在剝掉標記後、不指到 <b>',
       '剝掉標記後第 ' in o and '<b>' not in o.split('MK-01MO vs MK-03MO')[-1])
+
+# 結論行是掃帶 agent 唯一會讀的一行，四種判定都要在那裡講清楚、不可印空白
+o, c = dc(ids='MK-01MO,MK-02MO', fields='script')
+concl = o.split('結論')[-1]
+check('dedup-check 只差標記時結論行不可空白',
+      'MK-01MO vs MK-02MO：' in concl
+      and concl.split('MK-01MO vs MK-02MO：')[1].strip() != '')
+check('dedup-check 結論行把「剝標記後相同」跟「逐字相同」分開講',
+      '剝標記後相同' in concl and 'script 相同' not in concl)
+
+o, c = dc(ids='WS-01MO,WS-02MO', fields='script')
+check('dedup-check 結論行把「去空白後相同」單獨講',
+      '去空白後相同' in o.split('結論')[-1])
+
+o, c = dc(ids='EMP-01MO,EMP-02MO', fields='script')
+check('dedup-check 兩邊皆空不可判成逐字相同',
+      c == 0 and '兩邊這個欄位都是空的' in o and '✓ EMP-01MO vs EMP-02MO' not in o)
+check('dedup-check 兩邊皆空在結論行也講明', '兩邊皆空' in o.split('結論')[-1])
 
 o, c = dc(ids='WS-01MO,WS-02MO', fields='script')
 check('dedup-check 只差空白要明確標示、不可當成完全相同',
