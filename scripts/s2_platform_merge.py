@@ -38,6 +38,15 @@ import sys
 from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+# 🔴 同 `s2_platform_lint.py`：本機 python stdout 預設 cp950，印 ⛔ 會
+# UnicodeEncodeError。工具在裸 PowerShell 就要能跑，不能要求先設環境變數。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 LOCK = os.path.join(os.environ.get("USERPROFILE") or os.path.expanduser("~"),
                     ".s2-scan.lock")
 # entries 每筆帶進 add-batch 的欄位。⚠️ 候選檔的鍵名與 add-batch 的參數名不同
@@ -146,8 +155,11 @@ def run_state(state_file, args, dry):
               f"   狀態檔沒有檔案鎖，同時寫會靜靜蓋掉對方（18 檔 §0，0810 實例 44 處）。\n"
               f"   等該輪跑完（約 19 分）再重跑本指令。")
         return 1, ""
+    # 子行程也要吃 UTF-8：`s2_state.py` 的訊息含 ⛔／⚠️，在 cp950 的預設下
+    # 它自己 print 就會炸（我們是用 utf-8 解它的輸出，不設等於兩邊講不同語言）。
+    env = dict(os.environ, PYTHONIOENCODING="utf-8")
     p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                       errors="replace")
+                       errors="replace", env=env)
     print(p.stdout or "", end="")
     if p.stderr:
         print(p.stderr, end="")

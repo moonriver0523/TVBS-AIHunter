@@ -24,6 +24,13 @@ from contextlib import redirect_stdout
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# 測試自己也印 ⚠️／❌，裸 console（cp950）要能跑，理由同兩支受測腳本。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 
 def load(name):
     spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, name + ".py"))

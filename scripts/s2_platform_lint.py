@@ -37,6 +37,16 @@ from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# 🔴 這台機器的 python stdout 預設是 **cp950**（實測 `print('⛔')` 直接
+# UnicodeEncodeError）。本檔的訊息全是中文＋⛔⚠️❌，不重設編碼的話，
+# agent 在裸 PowerShell 一跑就炸——工具會直接被放棄（D9 那個「摩擦一大就彈回
+# ad-hoc python」的形狀）。⛔ 不要改成叫使用者自己設 PYTHONIOENCODING。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass          # 被重導向到不支援 reconfigure 的物件時照舊，不擋執行
+
 # 時段標記：18 檔 §2 只列了 △▲■◆ 四個，但 `s2_state.py set-mark` 的 choices 有五個
 # （多一個舊符號 ●），候選檔若寫了 ● 一樣會在 render 時變成兩個標記，一併擋。
 MARKS = "△▲■◆●"
