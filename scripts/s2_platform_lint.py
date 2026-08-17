@@ -16,10 +16,10 @@ render 用的同一套）。本檔只加**候選檔階段特有**、`check_entry
   - 候選 JSON 的結構與交叉一致性（id ↔ 站別欄位 ↔ raw_entry 行首）
   - 兩站的時長規則相反（ABC 必帶 `▎MM:SS`／ENEX 一律留白）
 
-**分級**：❌＝交件前必修（§4 格式表＋結構錯）；⚠️＝提醒（缺 `src_text`、counts 對不上）。
-缺 `src_text` 刻意只給 ⚠️——A9 子項⑧ 尚未落地，現存所有候選檔都沒有這個欄位，
-若一律紅燈會讓每份檔都是紅的，工具本身就會被跳過（0817 那支 `snapshot` 的教訓：
-工具存在不代表會被選用）。等 ⑧ 進 18 檔之後再用 `--strict-src-text` 升級。
+**分級**：❌＝交件前必修（§4 格式表＋結構錯、缺 `src_text`）；⚠️＝提醒（counts 對不上、
+成對 txt 不在等）。`src_text` 自 2026-08-18 起是 18 檔 §2 的必帶欄位（A9 子項⑧ 落地），
+所以由 ⚠️ 升為 ❌；**規則生效前交的舊候選檔**要跑本工具時帶 `--allow-missing-src-text`
+降回 ⚠️。
 
 離開碼：0＝通過（可能有 ⚠️）｜1＝有 ❌｜**2＝讀不到／檔壞（不是「沒問題」）**。
 
@@ -84,7 +84,7 @@ def _mark_issue(entry):
     return None
 
 
-def lint(path, strict_src_text=False):
+def lint(path, allow_missing_src=False):
     """回傳 (errors, warns)。讀不到／JSON 壞直接丟 SystemExit(2)。"""
     try:
         with open(path, encoding="utf-8-sig") as f:
@@ -155,13 +155,41 @@ def lint(path, strict_src_text=False):
             err.append(f"{ident}: raw_entry 須為字串，實得 {type(entry).__name__}")
         if "sb_count" in it and not isinstance(it["sb_count"], int):
             err.append(f"{ident}: sb_count 須為整數，實得 {it['sb_count']!r}")
-        if not it.get("src_text"):
-            (err if strict_src_text else warn).append(
-                f"{ident}: 缺 `src_text`（站方原文＝事後離線查證的唯一依據，A9 子項⑧）")
+        err += _check_src_text(ident, it, allow_missing_src, warn)
 
     warn += _check_counts(data, items)
     warn += _check_txt_pair(path, seen)
     return err, warn
+
+
+def _check_src_text(ident, it, allow_missing, warn):
+    """`src_text` ＝**站方原文**，18 檔 §2 自 2026-08-18 起列為必帶欄位（A9 子項⑧）。
+
+    三站已經用實錯換過這個教訓：0804 回頭查 BITE 誤判時，RT 有 4 則、AP 有 9 則
+    已經捲出 API 翻頁範圍，**永遠查不回來**——素材被推出清單就無法回溯。
+    ⛔ 內容只准站方原文：RT4131 就是 agent 在原文尾巴接了一段中文說明，裡面的
+    `SHOTLIST`／`SOUNDBITE` 字樣害同一則誤報連續四輪（13b §543）。
+    """
+    out = []
+    src = it.get("src_text")
+    if not src:
+        msg = (f"{ident}: 缺 `src_text`（站方原文＝事後離線查證的唯一依據，18 檔 §2）")
+        if allow_missing:
+            warn.append(msg + "——已用 --allow-missing-src-text 降級")
+        else:
+            out.append(msg)
+        return out
+    if not isinstance(src, str):
+        return [f"{ident}: src_text 須為字串，實得 {type(src).__name__}"]
+    entry = str(it.get("raw_entry") or "").strip()
+    if entry and src.strip() == entry:
+        # 拿成品素材行充數＝完全失去查證價值（要比對的正是「原文 vs 我寫的摘要」）
+        out.append(f"{ident}: src_text 與 raw_entry 一字不差——那是自己寫的摘要，"
+                   f"不是站方原文")
+    elif len(src.strip()) < 50:
+        warn.append(f"{ident}: src_text 只有 {len(src.strip())} 字，"
+                    f"確認不是只貼了標題（瘦身後單則通常 1KB 起跳）")
+    return out
 
 
 def _check_ids(site, ident, i, it):
@@ -281,11 +309,11 @@ def main():
     ap = argparse.ArgumentParser(
         description="ENEX／ABC 候選檔交件前 lint（獨立流程，不碰正式狀態檔）")
     ap.add_argument("candidate", help="候選檔 {MMDD}-{站}-state.json")
-    ap.add_argument("--strict-src-text", action="store_true",
-                    help="把「缺 src_text」從 ⚠️ 升為 ❌（A9 子項⑧ 落地後再開）")
+    ap.add_argument("--allow-missing-src-text", action="store_true",
+                    help="把「缺 src_text」降回 ⚠️（只給 2026-08-18 規則生效前交的舊候選檔）")
     args = ap.parse_args()
 
-    err, warn = lint(args.candidate, args.strict_src_text)
+    err, warn = lint(args.candidate, args.allow_missing_src_text)
     print(f"候選檔：{args.candidate}")
     if err:
         print(f"\n❌ 交件前必修 {len(err)} 項：")

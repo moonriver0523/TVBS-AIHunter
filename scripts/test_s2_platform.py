@@ -70,7 +70,8 @@ def abc_doc(**over):
                    "first_seen_checkpoint": "0817-1650",
                    "script_status": "has_script", "raw_entry": ABC_LINE,
                    "category": {"大分類": "財經", "中主題": "聯準會利率"},
-                   "sb_count": 0, "abc": {"storyNumber": "081726007"}}],
+                   "sb_count": 0, "src_text": SRC,
+                   "abc": {"storyNumber": "081726007"}}],
     }
     d.update(over)
     return d
@@ -88,7 +89,8 @@ def enex_doc(**over):
                    "script_status": "has_script", "raw_entry": ENEX_LINE,
                    "category": {"大分類": "大陸", "中主題": "解放軍演訓",
                                 "小分題": "黃海實彈射擊"},
-                   "sb_count": 0, "enex": {"itemId": "927228"}}],
+                   "sb_count": 0, "src_text": SRC,
+                   "enex": {"itemId": "927228"}}],
     }
     d.update(over)
     return d
@@ -101,8 +103,20 @@ def write(name, obj):
     return p
 
 
-def run_lint(doc, name="0817-ABC-state.json", strict=False):
-    return lint_mod.lint(write(name, doc), strict)
+SRC = ("(ABC) LOCATION: NEW YORK. FED OFFICIALS SIGNALED A POSSIBLE RATE CUT "
+       "IN SEPTEMBER AS INFLATION COOLED. TRADERS NOW PRICE IN A QUARTER POINT "
+       "MOVE. SUPERS: NONE. FORMAT: VO.")
+
+
+def no_src(doc):
+    """把 src_text 拿掉——2026-08-18 起那是必帶欄位，要測「缺欄位」得自己拔。"""
+    for it in doc["items"]:
+        it.pop("src_text", None)
+    return doc
+
+
+def run_lint(doc, name="0817-ABC-state.json", allow_missing_src=False):
+    return lint_mod.lint(write(name, doc), allow_missing_src)
 
 
 def has(msgs, frag):
@@ -191,11 +205,32 @@ del d["items"][0]["script_status"]
 err, _ = run_lint(d)
 check("item 缺必要欄位明確報出", has(err, "缺 `script_status`"))
 
-# ── lint：分級（缺 src_text 只給 ⚠️，否則工具會被跳過）────────────────────
-err, warn = run_lint(abc_doc())
-check("缺 src_text 預設是 ⚠️ 不是 ❌", not err and has(warn, "src_text"))
-err, _ = run_lint(abc_doc(), strict=True)
-check("--strict-src-text 才升為 ❌", has(err, "src_text"))
+# ── lint：src_text（A9 子項⑧，2026-08-18 起必帶）──────────────────────────
+err, _ = lint_mod.lint(write("0818-S1-state.json", no_src(abc_doc())))
+check("缺 src_text 預設是 ❌（18 檔 §2 起必帶）", has(err, "缺 `src_text`"))
+err, warn = lint_mod.lint(write("0818-S2-state.json", no_src(abc_doc())), True)
+check("--allow-missing-src-text 降回 ⚠️（給規則生效前的舊檔）",
+      not err and has(warn, "降級"))
+
+err, warn = lint_mod.lint(write("0818-S3-state.json", abc_doc()))
+check("帶了合格 src_text：不再有相關 ❌／⚠️",
+      not err and not has(warn, "src_text"))
+
+d = abc_doc()
+d["items"][0]["src_text"] = ABC_LINE
+err, _ = lint_mod.lint(write("0818-S4-state.json", d))
+check("src_text 拿成品素材行充數 → ❌（查證價值歸零）",
+      has(err, "一字不差"))
+
+d = abc_doc()
+d["items"][0]["src_text"] = "FED CUTS RATES"
+_, warn = lint_mod.lint(write("0818-S5-state.json", d))
+check("src_text 過短 → ⚠️（可能只貼了標題）", has(warn, "只有"))
+
+d = abc_doc()
+d["items"][0]["src_text"] = 123
+err, _ = lint_mod.lint(write("0818-S6-state.json", d))
+check("src_text 型別錯 → ❌ 且帶實際型別", has(err, "實得 int"))
 
 _, warn = run_lint(abc_doc(counts={"掃描": 9, "收錄": 1, "排除": 2}))
 check("counts 掃描≠收錄+排除 給 ⚠️", has(warn, "≠"))
@@ -231,11 +266,13 @@ check("entries 欄位對照（first_seen_checkpoint→checkpoint 等）",
       entries[0]["checkpoint"] == "0817-1650" and entries[0]["status"] == "has_script"
       and entries[0]["entry"] == ABC_LINE and entries[0]["source"] == "ABC")
 check("sb_count 帶過去（狀態檔要存，稽核③ 靠它）", entries[0]["sb_count"] == 0)
+check("src_text 帶過去（18 檔 §2 起必帶，離線查證唯一依據）",
+      entries[0]["src_text"] == SRC)
 check("pairs 兩層分類", pairs == "ABC081726007=財經/聯準會利率", pairs)
 
 e2, p2, _ = merge.build(enex_doc())
 check("pairs 三層分類", p2 == "ENEX927228=大陸/解放軍演訓/黃海實彈射擊", p2)
-check("缺 src_text 逐則點名", merge.build(abc_doc())[2]["no_src"] == ["ABC081726007"])
+check("缺 src_text 逐則點名", merge.build(no_src(abc_doc()))[2]["no_src"] == ["ABC081726007"])
 
 d = abc_doc()
 d["items"][0]["category"] = None

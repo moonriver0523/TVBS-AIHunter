@@ -197,8 +197,8 @@ def report(data, misc, entries_path, pairs_path, pairs):
         print(f"\n⚠️ 無分類 {len(misc['uncat'])} 則（照樣入庫，事後補 set-category）："
               f"{'、'.join(misc['uncat'])}")
     if misc["no_src"]:
-        print(f"\n⚠️ 缺 src_text {len(misc['no_src'])} 則（A9 子項⑧ 未落地，"
-              f"入庫後 add-batch 會再喊一次；離線查證會沒有原文可比對）")
+        print(f"\n⚠️ 缺 src_text {len(misc['no_src'])} 則（18 檔 §2 起為必帶；"
+              f"入庫後 add-batch 會再喊一次，離線查證會沒有原文可比對）")
     # 候選檔的三處人工註記：不轉成 needs-review 就會在整併時整批蒸發。
     notes = []
     for k in ("needs_review", "known_gaps"):
@@ -225,11 +225,13 @@ def main():
     ap.add_argument("--force", action="store_true",
                     help="lint 有必修項／候選檔已整併過時仍繼續（要有明確理由）")
     ap.add_argument("--skip-lint", action="store_true", help="不跑 lint（不建議）")
+    ap.add_argument("--allow-missing-src-text", action="store_true",
+                    help="轉給 lint：缺 src_text 降回 ⚠️（只給 0818 規則生效前的舊檔）")
     args = ap.parse_args()
 
     data = read_candidate(args.candidate)
     if not args.skip_lint:
-        err, warn = load_lint().lint(args.candidate)
+        err, warn = load_lint().lint(args.candidate, args.allow_missing_src_text)
         if err:
             print(f"❌ lint 有 {len(err)} 項必修（先修再整併，或 --force 硬上）：")
             print("\n".join("  " + x for x in err))
@@ -277,9 +279,8 @@ def main():
                   f'--pairs "{{貼上 {os.path.basename(pairs_path)} 的內容}}"')
             print(f"    PowerShell 可直接展開："
                   f'--pairs "$(Get-Content -Raw "{pairs_path}")"')
-        print("\n▶ 整併完建議跑一次 `python scripts/s2_topic_dedupe.py`——"
-              "ENEX／ABC 的分類目前只做到「開新中主題前先看現有的」，"
-              "同義不同名那一層沒人擋（A9 子項⑦）")
+        print("\n▶ 整併完**要跑** `python scripts/s2_topic_dedupe.py --file {狀態檔}`"
+              "——18 檔 §7 的收尾步驟，不是選配")
         return 0
 
     if not state_file:
@@ -297,8 +298,9 @@ def main():
             return 1
     mark_merged(args.candidate, data, data.get("checkpoint"))
     print(f"\n✅ 整併完成：{len(entries)} 則入庫，候選檔 merged_into_handover 已翻 true")
-    print("▶ 建議接著跑 `python scripts/s2_topic_dedupe.py` 檢查分類是否與既有主題重複"
-          "（A9 子項⑦），並視需要重 render")
+    print(f"▶ 收尾（18 檔 §7，不是選配）：\n"
+          f'  python scripts/s2_topic_dedupe.py --file "{state_file}"\n'
+          f"  命中逐條覆核；決定不動就用 needs-review add 留痕，並視需要重 render")
     return 0
 
 
