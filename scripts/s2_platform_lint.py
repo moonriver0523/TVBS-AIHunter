@@ -25,7 +25,7 @@ render 用的同一套）。本檔只加**候選檔階段特有**、`check_entry
 
 用法：
     python scripts/s2_platform_lint.py "…\\_待整併\\0818-ABC-state.json"
-    python scripts/s2_platform_lint.py 候選.json --strict-src-text
+    python scripts/s2_platform_lint.py 舊候選.json --allow-missing-src-text
 """
 import argparse
 import importlib.util
