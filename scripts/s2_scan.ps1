@@ -102,6 +102,10 @@ param(
     # 預設開啟；要回退對照時傳 -NoBashGuard 關掉。⚠️ 獨立於 -NoToolBan，單變因可歸因。
     [switch]$NoBashGuard,
 
+    # T1（Task 2 最小啟動設定，2026-08-18 A0→A3 測試全過後依使用者指示熱修上線）：
+    # 前綴 62.0k→43.5k（−30%）。要回退對照時傳 -NoMinBoot 關掉（獨立開關，單變因）。
+    [switch]$NoMinBoot,
+
     # 常駐中主題的**每日預設**（2026-08-17 使用者訂案）。格式 `{大分類: [中主題,…]}`，
     # 建檔輪由 New-ShiftState 直接寫進新狀態檔的 `resident_topics`——render 會讓這些
     # 中主題**不論當天有沒有素材都印出空標題**（見 s2_render.group_items）。
@@ -386,12 +390,25 @@ try {
         $claudeArgs += @('--settings', $guardSettings)
     }
 
+    # T1（最小啟動設定，2026-08-18 上線）。test_s2_launcher.ps1 A0→A3 逐旗標實測：
+    #   --strict-mcp-config        只載 --mcp-config 指定的 server（前綴 62.0→51.9k）
+    #   --disable-slash-commands   不載 skill／slash 描述（→47.3k）
+    #   --setting-sources project  不載 user/local settings.json（→43.5k）
+    # ⚠️ 安全閘門（都已親驗，非推論）：OAuth 在 ~/.claude.json global config，
+    #   官方文件明講 always read 不受 --setting-sources 控制，A3 實跑登入正常；
+    #   D9 guard hook 走 --settings 旗標檔，A3 組 probe 實測「有擋」沒被吃掉；
+    #   browser MCP 在 --strict-mcp-config 下實測可用（s2_mcp.json 本來就明講）。
+    # ⚠️ 照 T1 但書：不動 --tools 白名單（Write 要留著落 batch.json）。
+    if (-not $NoMinBoot) {
+        $claudeArgs += @('--strict-mcp-config', '--disable-slash-commands', '--setting-sources', 'project')
+    }
+
     # 🔴 DryRun 的出口要在 Write-Run 之前（2026-08-12 修）。
     # 原本順序相反，每跑一次 DryRun 就在 _輪次紀錄.txt 留一行假的 START
     # （後面永遠不會有對應的 DONE），還順手生一個 0 bytes 的 掃帶log-*.txt。
     # 手動清過兩次。驗測試設定時 DryRun 要跑很多次，這條不修就等於紀錄檔報廢。
     if ($DryRun) {
-        Write-Host "--- DryRun [$Checkpoint] model=$Model effort=$Effort NoToolBan=$NoToolBan NoBashGuard=$NoBashGuard cwd=$scratchCwd（不寫 _輪次紀錄）---"
+        Write-Host "--- DryRun [$Checkpoint] model=$Model effort=$Effort NoToolBan=$NoToolBan NoBashGuard=$NoBashGuard NoMinBoot=$NoMinBoot cwd=$scratchCwd（不寫 _輪次紀錄）---"
         Write-Host "組出來的 claude 參數："
         Write-Host ($claudeArgs -join ' ')
         Write-Host "以下是會送出的 prompt 前 400 字："
@@ -473,7 +490,7 @@ try {
         # A1（2026-08-17）：把 launcher 旗標一起記進遙測。規則／旗標改了卻沒留痕，
         # 下一輪數字變好會被誤算成腳本的功勞（0817 的 13c §1a 澄清就差點如此）。
         $metricsArgs = @('--checkpoint', $Checkpoint,
-                         '--flags', "model=$Model;effort=$Effort;TestMode=$([bool]$TestMode);NoToolBan=$([bool]$NoToolBan);NoBashGuard=$([bool]$NoBashGuard)")
+                         '--flags', "model=$Model;effort=$Effort;TestMode=$([bool]$TestMode);NoToolBan=$([bool]$NoToolBan);NoBashGuard=$([bool]$NoBashGuard);NoMinBoot=$([bool]$NoMinBoot)")
         if ($scratchCwd) {
             $sanitized = $scratchCwd -replace '[^a-zA-Z0-9]', '-'
             $metricsArgs += @('--transcript-dir', "$env:USERPROFILE\.claude\projects\$sanitized")

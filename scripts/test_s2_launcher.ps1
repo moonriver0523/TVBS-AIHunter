@@ -1,5 +1,10 @@
 ﻿<#
-Task 2（最小 Claude Code 啟動設定）前置測試骨架。2026-08-12 準備，**尚未執行**。
+Task 2（最小 Claude Code 啟動設定）前置測試骨架。2026-08-12 準備，
+**2026-08-18 A0→A3 四組實跑全過**（結果見 MASTER T1；三旗標已上線 s2_scan.ps1，
+回退開關 -NoMinBoot）：
+    prefix：A0=62.0k → A1=51.9k → A2=47.3k → A3=43.5k（−30%）
+    四組皆：browser MCP 可用、D9 hook 探測「有擋」（A3 沒吃掉 --settings 的 hook）、
+    離開碼 0、OAuth 正常。
 
 依計畫書 `common/20260812-S2省Token優化計畫-修訂版.md` 的 Task 2、原版 GPT 計畫書
 第五節 Step 1~7 的 A0→A3 對照方法：每次只加一個變因，不能一次全開，
@@ -53,16 +58,34 @@ $ErrorActionPreference = 'Stop'
 $outDir = Join-Path $Repo 'scripts\_task2_test_out'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
+# ── 2026-08-18 補強（T1 實跑前）──
+# 1. claude 的 cwd 設成 $outDir：transcript 落在專屬的
+#    ~\.claude\projects\{sanitized-outDir}，不跟互動 session 混在同一個目錄——
+#    否則量測器「抓最新 .jsonl」會搶到正在跑的互動 session（advisor 抓到的洞）。
+# 2. 量測帶 --transcript-dir 明講＋--dry-run 只印不寫：TASK2-* 不是生產輪，
+#    不要寫進 _token_metrics.jsonl 汙染帳（比較用的數字從印出結果抄）。
+# 3. 四組都掛 D9 的 guard settings（現行生產 s2_scan.ps1 就是這樣跑），並在
+#    verify prompt 加 hook 探測步驟——A3 的 --setting-sources 是否吃掉 --settings
+#    的 hook，文件推不出結論，要親眼看 deny 有沒有出現（D9×T1 交會點）。
+Set-Location -LiteralPath $outDir
+$guardSettings = (Join-Path $Repo 'scripts\s2_guard_settings.json') -replace '\\', '/'
+$sanitizedOut = $outDir -replace '[^a-zA-Z0-9]', '-'
+$transcriptDir = "$env:USERPROFILE\.claude\projects\$sanitizedOut"
+
 # ── 輕量驗證 prompt：不掃帶，只驗證「工具還在、能跑」 ──────────────────
 # 目的：A0→A3 每組都便宜到可以隨便重跑；真正的「掃帶還能不能用」驗收
 # 要等這組低風險驗證都過了，再挑一個真實時段用 -TestMode 跑一次完整三站。
 $verifyPrompt = @'
 這是 Task 2 啟動設定驗證，不是正式掃帶，不要收任何素材、不要動狀態檔。
-只做以下三件事，做完就結束：
+只做以下四件事，做完就結束：
 1. 呼叫 mcp__browser__browser_navigate 打開 https://example.com
 2. 呼叫 mcp__browser__browser_evaluate 執行 `() => document.title`，把結果印出來
 3. 列出你目前能用的工具名稱清單（如果 skill／slash command 相關工具還在，一併列出）
-只做這三步，不要多做，不要嘗試連線 NS／AP／RT 三站。
+4. 用 Bash 工具執行這條指令，並把工具回覆一字不漏轉述（這是 hook 防護探測，
+   預期會被擋下——被擋下就是正確結果，不要重試、不要換寫法）：
+   python -c "import json; json.load(open('probe-s2-state.json'))"
+   轉述完請明講：「hook探測=有擋」或「hook探測=沒擋」。
+只做這四步，不要多做，不要嘗試連線 NS／AP／RT 三站。
 '@
 
 # ── 四組旗標定義 ─────────────────────────────────────────────────────
@@ -84,6 +107,7 @@ foreach ($step in $OnlySteps) {
         '--model', $Model,
         '--mcp-config', $McpConfig,
         '--add-dir', $Repo,
+        '--settings', $guardSettings,   # 現行生產就掛著（D9），四組一致才是真 A0 基準
         '--output-format', 'stream-json', '--verbose'
     ) + $flags
 
@@ -106,9 +130,13 @@ foreach ($step in $OnlySteps) {
     $mins = [Math]::Round(((Get-Date) - $t0).TotalSeconds, 1)
     Write-Host "$step 完成：離開碼=$code 耗時=${mins}秒 log=$logPath"
 
-    # 量測：跟 s2_scan.ps1 收工掛勾用同一支工具，不帶 -session 抓最新 transcript
+    # 量測：跟 s2_scan.ps1 收工掛勾用同一支工具。
+    # --transcript-dir 明講（cwd=$outDir 的專屬目錄，不搶互動 session 的檔）；
+    # --dry-run 只印不寫（TASK2-* 不是生產輪，不進 _token_metrics.jsonl）。
     try {
-        python "$PSScriptRoot\s2_token_metrics.py" --checkpoint $checkpoint
+        python "$PSScriptRoot\s2_token_metrics.py" --checkpoint $checkpoint `
+            --transcript-dir $transcriptDir --dry-run `
+            --flags "task2=$step" 2>&1 | Tee-Object -FilePath (Join-Path $outDir "$checkpoint.metrics.txt")
     } catch {
         Write-Warning "量測失敗：$($_.Exception.Message)"
     }

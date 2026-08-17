@@ -28,3 +28,4 @@ __pycache__/
 
 # 語料清除用的機密字串清單：內含真實帳密，絕對不可進版控
 style-corpus/.secret-tokens.txt
+scripts/_task2_test_out/
