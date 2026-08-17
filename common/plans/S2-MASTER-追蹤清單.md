@@ -70,7 +70,7 @@
 
 | ID | 項目 | 來源 | 優先 | 狀態 | 說明／驗收 |
 |----|------|------|-----:|------|------------|
-| A1 | Phase 0 剩餘：metrics 細分＋報表 | 全流§4.5 | 1 | 🔶部分 | 驗收：報表能解釋任一輪多出的呼叫去了哪裡。子項見下 |
+| A1 | Phase 0 剩餘：metrics 細分＋報表 | 全流§4.5 | 1 | ✅2026-08-17（子項全數完成） | 驗收：報表能解釋任一輪多出的呼叫去了哪裡 → `s2_metrics_report.py --diff` 達成。子項見下 |
 | A2 | Phase 1：`s2_batch_prep.py` 擴充成 raw 工具層 | 全流§4.1-4.2 | 2 | 🔶核心已上線 | 最高投報（保守省 10~22% 呼叫）。只讀或寫 scratch 不動 state；先拿 1600/1800 已保存 raw replay。驗收：tool-result 一次 unwrap、`python -c` 30/54→≤10/≤15。子項見下。**0813 三輪鐵證：同一個「檢查 scratch raw」需求，0430 用 Read×16、0730 用 PowerShell×29、1000 用 python -c×45——每輪換工具即興發揮，正是缺 `inspect` 標準工具的症狀**。inspect 上線後續觀：0813-2000 輪仍有 `python -c`×14（13d §4 未被完全遵守），1800/2200 輪已收斂——再觀察。**0817 續驗：0430/0730 兩輪 `python -c:json` 又回到 26/33 次（1000 輪只 2 次、有叫 s2_batch_prep×4）——查證內容確認是「檢查 raw json 印筆數/欄位/比對」，屬 13d §4 應用 inspect/search 的場景，判定真違規非誤判。根因查到：13c §1a「`s2_batch_prep.py` 保留為選用工具」沒點名是哪個子指令，agent 讀到容易連 inspect/unwrap 一起跳過。已在 13c §1a 補澄清「選用只涵蓋 dump/build，inspect/unwrap/search 一律必用」（commit `b9e0fb6`）。**0817-1200 首輪驗證：`python -c:json` 0 次（前一輪 1000 是 2 次）、`s2_batch_prep.py` 叫了 7 次，14.2分/29則/99req，離開碼 0、無異常——澄清後最乾淨的一輪，但只有一輪樣本，繼續觀察後續輪次是否維持** |
 | A3 | Phase 2：state 查詢擴充＋輪次閘門 | 全流§4.3/4.6 | 3 | ⬜ | 唯讀優先、不做第二套 parser、初版只報告不阻斷。驗收：postflight 對 0811-1800/2200 類異常能命中。子項見下 |
 | A4 | Phase 4a：`s2_schedule_check.py` 排程一致性唯讀比對 | 全流§4.8 | 4 | ✅2026-08-17 | XML 與 watchdog $Slots/model/TestMode 多真相源，曾險發生取消輪被看門狗補跑。只報不改。**基準改為「工作排程器裡的實際定義」**（repo 的 `S2掃帶.xml` 只是匯出備份，不是真相源——首跑就抓到它停在 0807 的 12 輪／opus／TestMode 版本，已同步刷新）。🔴＝看門狗 `$Slots`／代打 model／TestMode 與實際排程不符；🟡＝備份 XML 過期；ℹ️＝看門狗排程停用或旗標檔不在（代打與 A5 都不會動作）。離開碼 0／1／2，**2＝讀不到，不是一致**。11 項測試全過（`scripts/test_s2_schedule_check.py`，六項負向全都驗「解析不出來要明確失敗、不可回空清單」）|
@@ -83,9 +83,9 @@
 - [x] （281d380）階段分類器修誤標：TaskCreate/TaskUpdate 的待辦文字含「set-category」等關鍵詞會被誤判成分類階段＋黏性繼承放大（0813-0430 實例：分類顯示 7.2 分，攤開 NS 寫摘要的長思考被誤記，真值約 2.5 分）。修法：Task 類工具一律不參與階段判定、直接走繼承
 - [x] （2026-08-13）`s2_state:?` 子指令認齊——對照 s2_state.py subparser 抓齊 20 個（含漏網的 `add`；`update-batch` 不存在未加；`done` 是 needs-review 次動詞不另開桶），token 邊界比對防 `add` 誤配 `add-batch`。三輪 replay：?=9/4/5 → 2/0/0（殘留 2 筆經查為 --help 與 find 檔名，正確落 ?）
 - [x] （2026-08-13）`python -c` 依用途分桶（read-state/json/length-check/time-convert/other）——2000 輪 14 筆全數歸桶（json:11、read-state:3），other 佔比後續觀察 <10%
-- [ ] 每輪記 `prompt_sha`／`13_sha`／`13c_sha`／launcher flags（規則改了不誤判為腳本效益）
-- [ ] `s2_metrics_report.py` 趨勢報表（每輪/每站/每類工具）
-- [ ] 用 0030~1800 歷史 transcript replay 驗證：分類總數＝原工具呼叫數
+- [x] （2026-08-17）每輪記版本指紋＋launcher flags：`rule_shas`（prompt/13/13b/13c/**13d**，缺檔記 null 不省略）、`repo`（head＋dirty）、`launcher_flags`（`s2_scan.ps1` 傳 `--flags model=…;effort=…;TestMode=…;NoToolBan=…`）。⚠️ 0817-2000 起才有，之前的紀錄沒有——`--diff` 會明講「無法判斷規則是否同時變動」而不是假裝沒變
+- [x] （2026-08-17）`s2_metrics_report.py`：`--last` 總表／`--diff A B` 兩輪逐桶相減（主力，對應驗收「多出的呼叫去了哪裡」）／`--tool` 單桶跨輪趨勢／`--rules` 規則版本變動。驗收實測：`--diff 0817-0730 0817-1200` 無需人工提示即指出 `python -c:json 33→0`、`s2_batch_prep.py 0→7`。離開碼 2＝讀不到（不是「沒差異」）
+- [x] （2026-08-17）分桶不變量 `classified_total == tool_calls` 寫進 measure() 並在對不上時警告；`test_s2_token_metrics.py` 用 12 份真實 transcript replay（4~687 次呼叫）＋子指令 token 邊界＋版本指紋，39 項全過
 
 **A2 子項**（各自可勾；動工前先過 D2 裁決）：
 - [x] （281d380）`unwrap` — 自動偵測 AP Items 殼/RT items 殼/裸陣列/NS 純文字清單，卸成裸陣列；失敗回報實際頂層格式不靜默

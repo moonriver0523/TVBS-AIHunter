@@ -456,7 +456,10 @@ try {
         # 原本以為中文會保留，猜出來的目錄不存在，量測器退回舊目錄、把 1200 輪的數字
         # 記成 1600 輪（退回保護讓它沒炸，但記了錯的帳，更難發現）。實測目錄名：
         # `G:\我的雲端硬碟\Claude共用\自動掃帶系統\20260813` → `G---------Claude----------20260813`
-        $metricsArgs = @('--checkpoint', $Checkpoint)
+        # A1（2026-08-17）：把 launcher 旗標一起記進遙測。規則／旗標改了卻沒留痕，
+        # 下一輪數字變好會被誤算成腳本的功勞（0817 的 13c §1a 澄清就差點如此）。
+        $metricsArgs = @('--checkpoint', $Checkpoint,
+                         '--flags', "model=$Model;effort=$Effort;TestMode=$([bool]$TestMode);NoToolBan=$([bool]$NoToolBan)")
         if ($scratchCwd) {
             $sanitized = $scratchCwd -replace '[^a-zA-Z0-9]', '-'
             $metricsArgs += @('--transcript-dir', "$env:USERPROFILE\.claude\projects\$sanitized")

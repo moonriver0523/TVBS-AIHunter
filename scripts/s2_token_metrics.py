@@ -18,9 +18,11 @@
 """
 import argparse
 import glob
+import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 
 TRANSCRIPT_DIR = os.path.expanduser(
@@ -30,6 +32,71 @@ METRICS_FILE = (
     r'G:\我的雲端硬碟\Claude共用\自動掃帶系統\S2掃帶log\_token_metrics.jsonl'
 )
 METRICS_FILE_FALLBACK = r'D:\Downloads\S2掃帶log\_token_metrics.jsonl'
+
+
+# ── 版本指紋（MASTER A1，2026-08-17）────────────────────────────
+# 每輪把「這一輪照的是哪一版規則」記下來。沒有它，規則一改就會把規則的效果
+# 誤算到腳本頭上——0817 就發生過：13c §1a 補了一句澄清，下一輪 `python -c:json`
+# 從 26~33 次掉到 0 次，當下只能靠人工翻 commit 才確定歸因。
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RULE_FILES = {
+    'prompt': os.path.join('scripts', 's2_scan_prompt.md'),
+    '13': os.path.join('common', '13-S2-定時掃帶.md'),
+    '13b': os.path.join('common', '13b-S2-定時掃帶-v2省token.md'),
+    '13c': os.path.join('common', '13c-S2-定時掃帶-v3省token.md'),
+    '13d': os.path.join('common', '13d-S2-定時掃帶-v4.md'),
+}
+
+
+def rule_shas(repo=REPO):
+    """規則檔內容指紋。讀不到的記 null——檔案被改名／搬走要看得出來，
+    不是靜默省略（省略會讓後人以為那一版沒有這個檔案）。"""
+    out = {}
+    for key, rel in RULE_FILES.items():
+        try:
+            with open(os.path.join(repo, rel), 'rb') as f:
+                out[key] = hashlib.sha256(f.read()).hexdigest()[:12]
+        except OSError:
+            out[key] = None
+    return out
+
+
+def repo_head(repo=REPO):
+    """repo 的 commit 與髒不髒。規則檔 sha 已經很精準，這個是給人回頭查用的。"""
+    def git(*a):
+        try:
+            p = subprocess.run(['git', '-C', repo, *a],
+                               capture_output=True, timeout=15)
+            if p.returncode != 0:
+                return None
+            return p.stdout.decode('utf-8', errors='replace').strip()
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+
+    head = git('rev-parse', '--short', 'HEAD')
+    status = git('status', '--porcelain')
+    return {'head': head, 'dirty': bool(status) if status is not None else None}
+
+
+def parse_flags(s):
+    """把 launcher 傳來的 `model=sonnet;effort=medium;NoToolBan=False` 拆成 dict。
+    格式不對不吞——直接把原字串留在 `_raw`，事後看得出來是誰寫壞的。"""
+    if not s:
+        return None
+    out = {}
+    bad = []
+    for part in s.split(';'):
+        part = part.strip()
+        if not part:
+            continue
+        if '=' in part:
+            k, v = part.split('=', 1)
+            out[k.strip()] = v.strip()
+        else:
+            bad.append(part)
+    if bad:
+        out['_raw'] = s
+    return out
 
 
 def find_latest_session(tdir):
@@ -227,6 +294,11 @@ def measure(session_path):
         'output_tokens': output,
         'input_tokens': input_tok,
         'cache_read_per_tool_call': round(cache_read / tool_calls, 3) if tool_calls else None,
+        # A1 驗收不變量：分類總數必須等於原始工具呼叫數。分桶規則改壞（少一條
+        # elif、關鍵字打錯）不會報錯，只會讓某一桶悄悄變 0——這兩個數字對不上
+        # 就是唯一會叫出來的訊號。
+        'classified_total': sum(tool_by_name.values()),
+        'phase_calls_total': sum(v['calls'] for v in phase_stat.values()),
         'phases': phase_stat,
         'tool_calls_by_name': dict(sorted(tool_by_name.items(), key=lambda kv: -kv[1])),
     }
@@ -238,13 +310,26 @@ def main():
     ap.add_argument('--session', help='session id（不帶副檔名）。不帶則自動抓最新修改的 transcript')
     ap.add_argument('--transcript-dir', help='transcript 目錄（D7 之後 launcher 每輪帶入；不帶用舊預設）')
     ap.add_argument('--dry-run', action='store_true', help='只印結果，不寫入 _token_metrics.jsonl')
+    ap.add_argument('--flags', help='launcher 旗標，格式 `model=sonnet;effort=medium;NoToolBan=False`')
     args = ap.parse_args()
 
     session_path = resolve_session_path(args.session, args.transcript_dir)
     result = measure(session_path)
-    result = {'checkpoint': args.checkpoint, **result}
+    result = {
+        'checkpoint': args.checkpoint,
+        **result,
+        # A1：這一輪照的是哪一版規則、launcher 帶了什麼旗標。
+        # 沒有這兩欄，規則改動的效果會被誤算到腳本頭上。
+        'rule_shas': rule_shas(),
+        'repo': repo_head(),
+        'launcher_flags': parse_flags(args.flags),
+    }
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    if result['classified_total'] != result['tool_calls']:
+        print(f'⚠️ 分類總數 {result["classified_total"]} ≠ 工具呼叫數 '
+              f'{result["tool_calls"]}——分桶規則可能改壞了', file=sys.stderr)
 
     if args.dry_run:
         return
