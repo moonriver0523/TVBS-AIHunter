@@ -71,6 +71,8 @@
 - **X [@NOELreports](https://x.com/NOELreports)**：烏俄戰事媒體帳號，貼文常附前線／打擊目標影片。
 - **X [@wartranslated](https://x.com/wartranslated)**（WarTranslated，愛沙尼亞籍部落客）：烏俄戰事翻譯／彙整帳號，同樣常附影片，但部分內容曾在留言區被質疑真偽（例如「這明顯不是軍事車隊」），引用前留意留言區有沒有反駁。
 - **YouTube [@UNITED24media](https://www.youtube.com/@UNITED24media/videos)**：烏克蘭政府支持的官方宣傳頻道 UNITED24，立場偏烏克蘭官方，引用時留意這點。
+- **YouTube [@UATVEnglish](https://www.youtube.com/@UATVEnglish)**（2026-08-17 補充）：烏克蘭官方英語新聞頻道，立場偏烏克蘭官方，引用時留意這點。
+- **YouTube [AZOV media](https://www.youtube.com/c/AZOVmedia)**（2026-08-17 補充）：烏克蘭亞速旅（Azov）官方媒體頻道，屬單一軍事單位視角，引用時留意其立場與宣傳性質。
 
 **美伊戰爭／中東專用：**
 - **X [@OSINTWarfare](https://x.com/OSINTWarfare)**
