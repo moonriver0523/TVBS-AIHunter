@@ -63,6 +63,23 @@ batch 檔），實測發現三站清單原始檔各包一層不同的站方外�
     python s2_batch_prep.py inspect _rt_batch_1000.json --limit 5
     python s2_batch_prep.py inspect ap_detail_0430.json --ids AP4678110 --fields head,script
     python s2_batch_prep.py search rt_raw_1600.json --contains "Milei" --field all
+
+── 稽核快照與比對（A2，2026-08-17）─────────────────────────
+
+    snapshot <檔> [--site ns|ap|rt] [--checkpoint 0817-1600] [--out 檔]
+        把 raw 壓成純文字快照（標頭記殼型／筆數，之後每行 `id\t標題`），
+        供事後對帳比對，不必重開瀏覽器重抓。不給 --out 就用 --checkpoint
+        組 `_audit_{site}_{HHMM}.txt`。**已存在的快照一律不覆寫**——
+        覆寫等於靜默銷毀稽核依據。
+
+    compare --raw <raw檔> --batch <batch檔> [--site ns|ap|rt] [--require 欄位,…]
+        只印差異：raw 有 batch 沒有的 id、batch 有 raw 沒有的 id、
+        batch 內重複 id、batch 缺欄位（預設查
+        id/source/checkpoint/status/entry/src_text）。乾淨就一行「無差異」。
+        在 `add-batch` 之前跑，一次擋掉漏收與整批漏帶 src_text 兩種坑。
+
+    python s2_batch_prep.py snapshot _rt_list_1600.json --site rt --checkpoint 0817-1600
+    python s2_batch_prep.py compare --raw _rt_list_1600.json --batch rt_batch_1600.json --site rt
 """
 import argparse
 import io
@@ -294,8 +311,14 @@ def _load_raw_any(path):
     shell_desc：人看得懂的殼型描述，供 unwrap/inspect 回報用；
     偵測不出已知殼型時丟 ValueError，附上實際看到的型別／鍵，不猜、不吞錯。
     """
-    with open(path, encoding='utf-8') as f:
-        text = f.read()
+    # 檔案打不開也要走 ValueError 這條路：呼叫端全都只接 ValueError，
+    # 讓 OSError 逃出去只會噴一整段 traceback，agent 還得自己解讀
+    # （2026-08-17 A2 測試抓到；unwrap／inspect／search 原本都有這個洞）。
+    try:
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+    except OSError as e:
+        raise ValueError(f'讀不到 {path}：{e}')
 
     try:
         data = json.loads(text)
@@ -467,6 +490,138 @@ def cmd_search(args):
     print(f'共 {len(items)} 筆項目，命中 {len(hits)} 處', file=sys.stderr)
 
 
+# ── 稽核快照與比對（A2，2026-08-17）──────────────────────────
+
+def _site_id_of(site, item, index):
+    """有 --site 就走 per-site adapter（RT 用 `code` 不是 `id`），
+    沒有就走通用猜測。猜測只在沒指定站別時用，指定了就以規則為準。"""
+    if site:
+        return SITE_SPEC[site]['id_of'](item) or _id_of_any(item, index)
+    return _id_of_any(item, index)
+
+
+def cmd_snapshot(args):
+    """把一份 raw 檔壓成穩定、可事後比對的純文字快照。
+
+    用途是稽核留痕：這一輪站方清單「當時長什麼樣」。之後對帳有爭議時
+    可以直接比兩份快照，不必重開瀏覽器重抓。"""
+    try:
+        items, shell_desc = _load_raw_any(args.raw)
+    except ValueError as e:
+        print(f'✗ 讀取失敗：{e}', file=sys.stderr)
+        sys.exit(1)
+
+    out = args.out
+    if not out:
+        if not args.checkpoint:
+            print('✗ 要嘛給 --out，要嘛給 --checkpoint（用來組 _audit_{site}_{HHMM}.txt）',
+                  file=sys.stderr)
+            sys.exit(1)
+        hhmm = args.checkpoint.split('-')[-1]
+        site = args.site or 'raw'
+        out = os.path.join(os.path.dirname(os.path.abspath(args.raw)),
+                           f'_audit_{site}_{hhmm}.txt')
+
+    # 護欄：**不覆寫舊快照**。快照的價值就在於它是當時的樣子，
+    # 覆寫掉等於把稽核依據銷毀，而且是靜默銷毀。
+    if os.path.exists(out):
+        print(f'✗ {out} 已存在，快照不覆寫舊檔（那會靜默銷毀稽核依據）。'
+              f'要另存請給不同的 --out', file=sys.stderr)
+        sys.exit(1)
+
+    lines = [
+        f'# 來源：{os.path.basename(args.raw)}',
+        f'# 殼型：{shell_desc}',
+        f'# 站別：{args.site or "（未指定，id 用通用猜測）"}',
+        f'# 輪次：{args.checkpoint or "（未指定）"}',
+        f'# 筆數：{len(items)}',
+        '',
+    ]
+    for i, it in enumerate(items):
+        item_id = _site_id_of(args.site, it, i)
+        desc = _title_of_any(it)
+        if not desc:
+            # 清單檔常常只有 `code` ＋ `at`（沒有標題欄）。這種時候印剩下的短欄位，
+            # 比留一整排空白有用——快照的用途是「當時清單長什麼樣」。
+            desc = ' '.join(
+                f'{k}={v}' for k, v in it.items()
+                if k != 'id' and isinstance(v, (str, int, float, bool))
+                and len(str(v)) <= 40 and str(v) != item_id)
+        lines.append(f'{item_id}\t{desc}')
+
+    with open(out, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines) + '\n')
+    print(f'快照已寫入 {out}（{len(items)} 筆）')
+
+
+# batch 每筆該有的欄位。src_text 是 13d §5 的鐵律（事後查證的唯一依據），
+# 漏帶過兩次整批（0812-2200 的 65 則、0813-1200 的 80 則），所以預設就要查。
+DEFAULT_REQUIRED = ('id', 'source', 'checkpoint', 'status', 'entry', 'src_text')
+
+
+def cmd_compare(args):
+    """raw 與 batch 對照，**只印差異**：raw 有 batch 沒有的 id、batch 有 raw
+    沒有的 id、batch 缺欄位的則。乾淨就一行「無差異」，不印整批。"""
+    try:
+        raw_items, raw_shell = _load_raw_any(args.raw)
+    except ValueError as e:
+        print(f'✗ raw 讀取失敗：{e}', file=sys.stderr)
+        sys.exit(1)
+    try:
+        batch_items, batch_shell = _load_raw_any(args.batch)
+    except ValueError as e:
+        print(f'✗ batch 讀取失敗：{e}', file=sys.stderr)
+        sys.exit(1)
+
+    print(f'# raw  ：{os.path.basename(args.raw)}（{raw_shell}）', file=sys.stderr)
+    print(f'# batch：{os.path.basename(args.batch)}（{batch_shell}）', file=sys.stderr)
+
+    raw_ids = [_site_id_of(args.site, it, i) for i, it in enumerate(raw_items)]
+    batch_ids = [(it.get('id') or _id_of_any(it, i)) for i, it in enumerate(batch_items)]
+    raw_set, batch_set = set(raw_ids), set(batch_ids)
+
+    required = ([f.strip() for f in args.require.split(',') if f.strip()]
+                if args.require else list(DEFAULT_REQUIRED))
+
+    missing = [i for i in raw_ids if i not in batch_set]
+    extra = [i for i in batch_ids if i not in raw_set]
+
+    gaps = []
+    for i, it in enumerate(batch_items):
+        item_id = it.get('id') or _id_of_any(it, i)
+        lack = [f for f in required
+                if it.get(f) in (None, '', [], {})]
+        if lack:
+            gaps.append((item_id, lack))
+
+    dup_batch = sorted({i for i in batch_ids if batch_ids.count(i) > 1})
+
+    found = False
+    if missing:
+        found = True
+        print(f'raw 有、batch 沒有（{len(missing)} 則——可能是刻意排除，'
+              f'但要說得出理由）：')
+        for i in missing:
+            print(f'  - {i}')
+    if extra:
+        found = True
+        print(f'batch 有、raw 沒有（{len(extra)} 則——來源不明，要查）：')
+        for i in extra:
+            print(f'  - {i}')
+    if dup_batch:
+        found = True
+        print(f'batch 內重複 id（{len(dup_batch)} 個）：{", ".join(dup_batch)}')
+    if gaps:
+        found = True
+        print(f'batch 缺欄位（{len(gaps)} 則，查的是 {"/".join(required)}）：')
+        for item_id, lack in gaps:
+            print(f'  - {item_id}：缺 {", ".join(lack)}')
+
+    if not found:
+        print(f'無差異（raw {len(raw_items)} 筆、batch {len(batch_items)} 筆，'
+              f'id 全對得上，{"/".join(required)} 都有）')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -503,6 +658,20 @@ def main():
     p_search.add_argument('--contains', required=True)
     p_search.add_argument('--field', default='all', choices=['script', 'story', 'head', 'all'])
     p_search.add_argument('--limit', type=int, help='最多顯示幾筆命中，預設 100')
+
+    p_snap = sub.add_parser('snapshot', help='把 raw 檔壓成純文字稽核快照（不覆寫舊檔）')
+    p_snap.add_argument('raw')
+    p_snap.add_argument('--site', choices=['ns', 'ap', 'rt'], help='指定站別才用得到 per-site id 規則（RT 是 code）')
+    p_snap.add_argument('--checkpoint', help='用來組預設檔名 _audit_{site}_{HHMM}.txt')
+    p_snap.add_argument('--out', help='輸出路徑；不給就用 --checkpoint 組')
+    p_snap.set_defaults(func=cmd_snapshot)
+
+    p_cmp = sub.add_parser('compare', help='raw 與 batch 對照，只印缺 id／缺欄位')
+    p_cmp.add_argument('--raw', required=True)
+    p_cmp.add_argument('--batch', required=True)
+    p_cmp.add_argument('--site', choices=['ns', 'ap', 'rt'])
+    p_cmp.add_argument('--require', help=f'要檢查的欄位，逗號分隔。預設 {",".join(DEFAULT_REQUIRED)}')
+    p_cmp.set_defaults(func=cmd_compare)
     p_search.set_defaults(func=cmd_search)
 
     args = ap.parse_args()
