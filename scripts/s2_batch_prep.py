@@ -80,6 +80,24 @@ batch 檔），實測發現三站清單原始檔各包一層不同的站方外�
 
     python s2_batch_prep.py snapshot _rt_list_1600.json --site rt --checkpoint 0817-1600
     python s2_batch_prep.py compare --raw _rt_list_1600.json --batch rt_batch_1600.json --site rt
+
+── 去重比對（D9 第一步，2026-08-17）────────────────────────
+
+    dedup-check <檔> --ids A,B[,C…] [--site ns|ap|rt] [--fields script,desc,…]
+        兩則以上的指定欄位逐字比對，回答「是不是同一則的不同版本」。
+        四種判定分開講，不混為一談：
+            ✓ 逐字相同
+            ≈ 只差空白／換行
+            ≈ 只差 HTML 標記／空白（NS 的 script 夾 <p>／<b>）
+            ✗ 不同——並指出剝掉標記後第幾字起不同、印出兩邊該處前後文
+        **只回答機械問題。要不要當重複、留哪一則，是編輯判斷，這裡不做。**
+        id 打錯／找不到／欄位不存在一律明確失敗中止，不會只比得出來的那幾則
+        ——否則「打錯 id」跟「兩則不同」看起來會一樣。
+        AP 清單檔是 ES 形狀，會自動看穿 `_source` 並用 `AP<editorialid>`
+        當 id（跟 state 對得起來），不是頂層的 `_id` 雜湊。
+
+    python s2_batch_prep.py dedup-check ns_full_2200.json --site ns --ids EN-32MO,EN-31MO
+    python s2_batch_prep.py dedup-check ap_list_2200.json --site ap --ids AP5467677,AP5467678 --fields title,headline
 """
 import argparse
 import io
@@ -622,6 +640,167 @@ def cmd_compare(args):
               f'id 全對得上，{"/".join(required)} 都有）')
 
 
+DEDUP_FIELDS = ('script', 'desc', 'head', 'headline', 'story', 'cap', 'title')
+
+
+def _dedup_view(item):
+    """AP 清單檔是 Elasticsearch 形狀，真正的欄位包在 `_source` 底下，
+    頂層只有 `_id` 這種雜湊。不看穿這層的話，AP 清單上的去重完全比不動——
+    而 0817-2200 的 AP 去重正是在清單檔上做的。"""
+    src = item.get('_source')
+    if isinstance(src, dict):
+        merged = dict(item)
+        merged.update(src)
+        return merged
+    return item
+
+
+def _dedup_id(site, item, index):
+    """去重比對用的 id。AP 站的人看的是 `AP<editorialid>`（state 裡也是這個），
+    不是 ES 的 `_id` 雜湊——比對時要用人看得懂、跟 state 對得起來的那個。"""
+    view = _dedup_view(item)
+    if site == 'ap' and view.get('editorialid'):
+        return 'AP' + str(view['editorialid'])
+    return _site_id_of(site, view, index)
+
+
+def _norm(s):
+    """去重比對用的正規化：吃掉全形/半形空白與換行差異，其餘不動。
+    只用來回答「排版不同但內容相同嗎」，不改變逐字比對的結論。"""
+    return ''.join(str(s).split())
+
+
+TAG_RE = re.compile(r'<[^>]+>')
+
+
+def _norm_markup(s):
+    """再多剝一層 HTML 標記。NS 的 script 夾著 <p>／<b>，同一則的不同剪輯版
+    常常只差在標記上——不剝掉的話，「第一個差異」會指到 `<b>` 這種雜訊，
+    而不是真正的內容差異（0817-2200 EN-32MO vs EN-31MO 就是這樣）。"""
+    return _norm(TAG_RE.sub('', str(s)))
+
+
+def _first_diff(a, b):
+    """回傳第一個相異字元的 0-based 位置；完全相同回 None。
+    其中一邊是另一邊的前綴時，位置就是較短那邊的長度。"""
+    for i, (ca, cb) in enumerate(zip(a, b)):
+        if ca != cb:
+            return i
+    return None if len(a) == len(b) else min(len(a), len(b))
+
+
+def cmd_dedup_check(args):
+    """兩則以上的指定欄位逐字比對，回答「是不是同一則的不同版本」。
+
+    0817-2200 那輪 NS 去重花了 5 次臨時 python 做這件事（撈出兩則 script
+    再自己算 a==b）——`inspect` 能把兩段印出來，但沒有「相同與否」的答案，
+    agent 只能自己算。這個子指令補的就是那個洞。
+
+    **只回答機械問題（逐字是否相同、差在哪）；要不要當成重複、留哪一則，
+    是編輯判斷，這裡不做也不建議。**"""
+    try:
+        items, shell_desc = _load_raw_any(args.raw)
+    except ValueError as e:
+        print(f'✗ 讀取失敗：{e}', file=sys.stderr)
+        sys.exit(1)
+    print(f'# {os.path.basename(args.raw)}：{shell_desc}', file=sys.stderr)
+
+    ids = [i.strip() for i in args.ids.split(',') if i.strip()]
+    if len(ids) < 2:
+        print(f'✗ --ids 至少要兩個才比得出來（收到 {len(ids)} 個）', file=sys.stderr)
+        sys.exit(1)
+    dup_in_arg = sorted({i for i in ids if ids.count(i) > 1})
+    if dup_in_arg:
+        print(f'✗ --ids 裡有重複：{", ".join(dup_in_arg)}', file=sys.stderr)
+        sys.exit(1)
+
+    table = {}
+    for idx, it in enumerate(items):
+        if not isinstance(it, dict):
+            continue
+        table.setdefault(_dedup_id(args.site, it, idx), _dedup_view(it))
+
+    absent = [i for i in ids if i not in table]
+    if absent:
+        # 找不到就明講並中止，不能只比得出來的那幾則——那會讓
+        # 「打錯 id」跟「兩則不同」看起來一樣。
+        print(f'✗ 這些 id 不在 {os.path.basename(args.raw)} 裡：{", ".join(absent)}',
+              file=sys.stderr)
+        print(f'  （檔內共 {len(table)} 個 id，可用 inspect 確認拼法）', file=sys.stderr)
+        sys.exit(1)
+
+    picked = [(i, table[i]) for i in ids]
+
+    if args.fields:
+        fields = [f.strip() for f in args.fields.split(',') if f.strip()]
+        lacking = [f for f in fields
+                   if not any(isinstance(it.get(f), str) for _, it in picked)]
+        if lacking:
+            print(f'✗ 指定的欄位在這幾則裡都不是文字或不存在：{", ".join(lacking)}',
+                  file=sys.stderr)
+            sys.exit(1)
+    else:
+        fields = [f for f in DEDUP_FIELDS
+                  if any(isinstance(it.get(f), str) and it.get(f) for _, it in picked)]
+        if not fields:
+            print(f'✗ 這幾則裡找不到任何可比對的文字欄位'
+                  f'（找過 {"/".join(DEDUP_FIELDS)}），請用 --fields 指定',
+                  file=sys.stderr)
+            sys.exit(1)
+
+    pairs = [(a, b) for x, a in enumerate(ids) for b in ids[x + 1:]]
+    verdicts = {}
+
+    for f in fields:
+        print(f'── {f} ──')
+        for i, it in picked:
+            v = it.get(f)
+            if isinstance(v, str):
+                print(f'  {i}  len={len(v)}')
+            else:
+                print(f'  {i}  （無此欄位或不是文字：{type(v).__name__}）')
+        for a, b in pairs:
+            va, vb = table[a].get(f), table[b].get(f)
+            if not isinstance(va, str) or not isinstance(vb, str):
+                verdicts[(f, a, b)] = 'n/a'
+                print(f'  ? {a} vs {b}：有一邊沒有這個欄位，無法比對')
+                continue
+            if va == vb:
+                verdicts[(f, a, b)] = 'same'
+                print(f'  ✓ {a} vs {b}：逐字相同')
+            elif _norm(va) == _norm(vb):
+                verdicts[(f, a, b)] = 'same_normalized'
+                print(f'  ≈ {a} vs {b}：**只差空白／換行**，去掉空白後逐字相同')
+            elif _norm_markup(va) == _norm_markup(vb):
+                verdicts[(f, a, b)] = 'same_markup'
+                print(f'  ≈ {a} vs {b}：**只差 HTML 標記／空白**，剝掉標記後逐字相同')
+            else:
+                verdicts[(f, a, b)] = 'diff'
+                # 差異位置一律算在「剝掉標記與空白」之後的文字上，否則
+                # 指標會停在 <b> 這種排版雜訊，看不到真正差在哪。
+                ca, cb = _norm_markup(va), _norm_markup(vb)
+                pos = _first_diff(ca, cb)
+                print(f'  ✗ {a} vs {b}：不同（剝掉標記後第 {pos} 字起不同）')
+                lo = max(0, pos - 30)
+                print(f'      {a}：…{ca[lo:pos + 30]}…')
+                print(f'      {b}：…{cb[lo:pos + 30]}…')
+        print()
+
+    print('── 結論（機械判斷，收不收由編輯決定）──')
+    for a, b in pairs:
+        same = [f for f in fields if verdicts.get((f, a, b)) in ('same', 'same_normalized')]
+        diff = [f for f in fields if verdicts.get((f, a, b)) == 'diff']
+        na = [f for f in fields if verdicts.get((f, a, b)) == 'n/a']
+        bits = []
+        if same:
+            bits.append(f'{"/".join(same)} 相同')
+        if diff:
+            bits.append(f'{"/".join(diff)} 不同')
+        if na:
+            bits.append(f'{"/".join(na)} 無法比')
+        print(f'  {a} vs {b}：{"、".join(bits)}')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -671,7 +850,14 @@ def main():
     p_cmp.add_argument('--batch', required=True)
     p_cmp.add_argument('--site', choices=['ns', 'ap', 'rt'])
     p_cmp.add_argument('--require', help=f'要檢查的欄位，逗號分隔。預設 {",".join(DEFAULT_REQUIRED)}')
+
+    p_dc = sub.add_parser('dedup-check', help='兩則以上的指定欄位逐字比對，判斷是不是同一則的不同版本')
+    p_dc.add_argument('raw')
+    p_dc.add_argument('--ids', required=True, help='逗號分隔，至少兩個')
+    p_dc.add_argument('--site', choices=['ns', 'ap', 'rt'], help='指定站別才用得到 per-site id 規則（RT 是 code）')
+    p_dc.add_argument('--fields', help=f'要比的欄位，逗號分隔。不給就自動挑 {"/".join(DEDUP_FIELDS)} 裡有內容的')
     p_cmp.set_defaults(func=cmd_compare)
+    p_dc.set_defaults(func=cmd_dedup_check)
     p_search.set_defaults(func=cmd_search)
 
     args = ap.parse_args()

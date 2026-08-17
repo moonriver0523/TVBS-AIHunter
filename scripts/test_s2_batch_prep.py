@@ -121,6 +121,90 @@ out8, code8 = run(bp.cmd_compare,
                        site='rt', require=None))
 check('compare raw 讀不到要明確失敗', code8 == 1 and '無差異' not in out8)
 
+# ── dedup-check（D9 第一步：0817-2200 那 5 次臨時 python 的替代品）──
+DC = write_json('ns_full.json', [
+    {'id': 'EN-32MO', 'desc': 'A 版描述', 'script': '同一段稿子逐字相同'},
+    {'id': 'EN-31MO', 'desc': 'B 版描述', 'script': '同一段稿子逐字相同'},
+    {'id': 'MI-15MO', 'desc': '相同描述', 'script': '這段稿子前半相同，後半不同了ABC'},
+    {'id': 'MI-14MO', 'desc': '相同描述', 'script': '這段稿子前半相同，後半不同了XYZ'},
+    {'id': 'WS-01MO', 'desc': 'x', 'script': '空白 不同' + chr(10) + '但內容相同'},
+    {'id': 'WS-02MO', 'desc': 'x', 'script': '空白不同但內容相同'},
+    {'id': 'MK-01MO', 'desc': 'x', 'script': '<p>同一段內容<b>加粗</b>而已</p>'},
+    {'id': 'MK-02MO', 'desc': 'x', 'script': '<p>同一段內容加粗而已</p>'},
+    {'id': 'MK-03MO', 'desc': 'x', 'script': '<p>同一段內容<b>加粗</b>而已但這裡多一句</p>'},
+    {'id': 'NOF-01MO', 'dur_ms': 1000},
+])
+
+
+def dc(**kw):
+    a = dict(raw=DC, site=None, fields=None)
+    a.update(kw)
+    return run(bp.cmd_dedup_check, Args(**a))
+
+
+o, c = dc(ids='EN-32MO,EN-31MO')
+check('dedup-check 逐字相同要判 same', c == 0 and '逐字相同' in o)
+check('dedup-check 同時報出不同的欄位（desc）', '✗ EN-32MO vs EN-31MO' in o and 'desc' in o)
+check('dedup-check 結論行分開列相同／不同欄位',
+      'script 相同' in o.split('結論')[-1] and 'desc 不同' in o.split('結論')[-1])
+
+o, c = dc(ids='MI-15MO,MI-14MO')
+check('dedup-check 只有部分相同時 script 判 diff',
+      c == 0 and '✗ MI-15MO vs MI-14MO' in o)
+check('dedup-check 指出第一個差異位置', '字起不同' in o)
+check('dedup-check 不同時印出兩邊差異附近文字', 'ABC' in o and 'XYZ' in o)
+
+o, c = dc(ids='MK-01MO,MK-02MO', fields='script')
+check('dedup-check 只差 HTML 標記要判「剝掉標記後相同」',
+      c == 0 and '只差 HTML 標記' in o)
+check('dedup-check 只差標記時不可謊稱逐字相同',
+      '✓ MK-01MO vs MK-02MO：逐字相同' not in o)
+
+o, c = dc(ids='MK-01MO,MK-03MO', fields='script')
+check('dedup-check 內容真的不同時仍判 diff', c == 0 and '✗ MK-01MO vs MK-03MO' in o)
+check('dedup-check 差異位置算在剝掉標記後、不指到 <b>',
+      '剝掉標記後第 ' in o and '<b>' not in o.split('MK-01MO vs MK-03MO')[-1])
+
+o, c = dc(ids='WS-01MO,WS-02MO', fields='script')
+check('dedup-check 只差空白要明確標示、不可當成完全相同',
+      c == 0 and '只差空白' in o and '✓ WS-01MO vs WS-02MO：逐字相同' not in o)
+
+# 三則以上要兩兩都比
+o, c = dc(ids='EN-32MO,EN-31MO,MI-15MO', fields='script')
+check('dedup-check 三則要兩兩比（3 組）',
+      o.count('EN-32MO vs EN-31MO') and o.count('EN-32MO vs MI-15MO')
+      and o.count('EN-31MO vs MI-15MO'))
+
+# ── 以下每一項都必須「明確失敗」，不可靜默略過 ──
+o, c = dc(ids='EN-32MO')
+check('dedup-check 只給一個 id 要失敗', c == 1 and '至少要兩個' in o)
+
+o, c = dc(ids='EN-32MO,EN-32MO')
+check('dedup-check --ids 重複要失敗', c == 1 and '重複' in o)
+
+o, c = dc(ids='EN-32MO,NOSUCH-99MO')
+check('dedup-check id 不存在要失敗（不可只比得出來的那幾則）',
+      c == 1 and 'NOSUCH-99MO' in o and '逐字相同' not in o)
+
+o, c = dc(ids='EN-32MO,EN-31MO', fields='nosuchfield')
+check('dedup-check 指定不存在的欄位要失敗', c == 1 and 'nosuchfield' in o)
+
+o, c = dc(ids='NOF-01MO,EN-32MO')
+check('dedup-check 一邊沒有該欄位時標無法比對、不判相同',
+      '無法比對' in o or '無此欄位' in o)
+
+o, c = run(bp.cmd_dedup_check,
+           Args(raw=os.path.join(TMP, 'nope.json'), ids='A,B', site=None, fields=None))
+check('dedup-check 讀不到檔要明確失敗', c == 1 and '逐字相同' not in o)
+
+# RT 的 id 欄位是 code，per-site adapter 要生效
+DC_RT = write_json('rt_dc.json', [
+    {'code': 'RT1001', 'story': '同一則'},
+    {'code': 'RT1002', 'story': '同一則'},
+])
+o, c = run(bp.cmd_dedup_check, Args(raw=DC_RT, ids='RT1001,RT1002', site='rt', fields=None))
+check('dedup-check RT 走 code 當 id', c == 0 and '逐字相同' in o)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)
