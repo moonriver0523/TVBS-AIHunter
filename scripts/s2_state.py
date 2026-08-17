@@ -1132,6 +1132,12 @@ def cmd_set_resident_topics(state, args):
     排版邏輯，不必另外處理。
 
     例：`set-resident-topics --cat 烏俄 --topics "俄轟烏;烏轟俄"`
+
+    ⚠️ 2026-08-17 起分兩層，別搞混：
+      · **每天都要的固定中分類**＝寫在 `scripts/s2_resident_topics.json`，建檔輪由
+        `s2_scan.ps1 New-ShiftState` 自動寫進當天的新狀態檔（見 `13b §5a`）。
+      · **這個指令**＝只改今天這一份狀態檔的當日覆寫，隔天建檔會照設定檔重來。
+        要讓某組中主題「以後每天都有」，改設定檔，不要每天下這個指令。
     """
     top = state.setdefault("_top", {})
     resident = top.setdefault("resident_topics", {})

@@ -1047,6 +1047,11 @@ pwsh -NoProfile -File "E:\GitHub\TVBS-AIHunter\scripts\s2_scan.ps1" -Model opus
 > `s2_scan.ps1` 的 `New-ShiftState` 會在 checkpoint 以 `{MMDD}-1600` 開頭的輪次：
 > ① 建好 `{MMDD}-s2-state.json`（`window_start` 直接寫好＝當天 13:00）
 > ② 把上一班的檔全部搬進 `Archive/{YYYYMMDD}/`
+> ③ **（2026-08-17 加）常駐中主題**：照 `scripts/s2_resident_topics.json` 把固定中分類寫進
+>   新狀態檔的 `resident_topics`（現行：烏俄＝俄轟烏／烏轟俄）。這些中主題**當天 0 則也會
+>   印出空標題**，讓編輯看得出「這條線每天都在追」而不是漏歸類。
+>   要增刪就改那個 JSON，⛔ 不要改腳本；只想改今天一天用 `set-resident-topics`（當日覆寫，不影響隔天）。
+>   設定檔壞掉／不見不會弄死建檔，但會在 `_輪次紀錄.txt` 留一行 `NEWDAY WARN`。
 > **冪等**，重跑不會重建、也不會重複歸檔。
 >
 > ⚠️ **為什麼要改**：0810-1600 那輪 agent 去開 `0810-s2-state.json` 拿到

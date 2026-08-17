@@ -95,7 +95,14 @@ param(
 
     # 2026-08-13 單變因實驗：硬排除 Task 系列工具（開待辦清單零產出，見下方 --disallowedTools 註解）。
     # 預設就是排除；要回退對照時傳 -NoToolBan 關掉。
-    [switch]$NoToolBan
+    [switch]$NoToolBan,
+
+    # 常駐中主題的**每日預設**（2026-08-17 使用者訂案）。格式 `{大分類: [中主題,…]}`，
+    # 建檔輪由 New-ShiftState 直接寫進新狀態檔的 `resident_topics`——render 會讓這些
+    # 中主題**不論當天有沒有素材都印出空標題**（見 s2_render.group_items）。
+    # 📌 要增刪固定中分類就改這個 JSON，不必動腳本；只想改今天一天則用
+    #    `s2_state.py set-resident-topics`（那是當日覆寫，不影響隔天預設）。
+    [string]$ResidentTopicsFile = "$PSScriptRoot\s2_resident_topics.json"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -187,6 +194,36 @@ function New-ShiftState {
         updated_at    = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
         items         = @()
     }
+
+    # ── 常駐中主題的每日預設（2026-08-17）───────────────────────────
+    # 「烏俄底下永遠要有【俄轟烏】【烏轟俄】」這種固定中分類，原本得每天手動下一次
+    # `set-resident-topics`，忘了不會報錯、只會靜靜沒有——跟 0810 建檔那件事同一個
+    # 形狀，所以一樣移到腳本層。
+    # 🔴 設定檔壞掉／不見**不准弄死建檔**（狀態檔比常駐標題重要得多），但也不准靜靜跳過：
+    #    一律 Write-Run 留一行 WARN，否則就變成「靜默失敗」。
+    try {
+        if (Test-Path $ResidentTopicsFile) {
+            $cfg = Get-Content $ResidentTopicsFile -Raw -Encoding UTF8 | ConvertFrom-Json -AsHashtable
+            $resident = [ordered]@{}
+            foreach ($k in ($cfg.Keys | Sort-Object)) {
+                # ⚠️ 空清單要丟掉：ConvertTo-Json 會把空陣列吐成 null，而上面那組
+                #    補救 regex 只認 alerts／items，漏網的 null 會讓 Python 端炸掉。
+                $mids = @($cfg[$k] | Where-Object { $_ -and "$_".Trim() })
+                if ($mids.Count) { $resident[$k] = $mids }
+                else { Write-Run "NEWDAY`tWARN 常駐中主題「$k」清單是空的，略過" }
+            }
+            if ($resident.Count) {
+                $body.resident_topics = $resident
+                $desc = ($resident.Keys | ForEach-Object { "$_=$($resident[$_] -join '／')" }) -join '；'
+                Write-Run "NEWDAY`t常駐中主題已帶入：$desc"
+            }
+        } else {
+            Write-Run "NEWDAY`tWARN 找不到常駐中主題設定檔，本日不帶入：$ResidentTopicsFile"
+        }
+    } catch {
+        Write-Run "NEWDAY`tWARN 常駐中主題設定檔讀取失敗，本日不帶入：$($_.Exception.Message)"
+    }
+
     # ⚠️ PowerShell 的 ConvertTo-Json 對空陣列會吐 null，Python 端會炸；用 -Depth 保住結構
     $json = $body | ConvertTo-Json -Depth 6
     # 空集合被轉成 null 的兩個欄位補回來（實測 items/alerts 會中招）

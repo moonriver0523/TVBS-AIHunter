@@ -76,6 +76,8 @@
 | A4 | Phase 4a：`s2_schedule_check.py` 排程一致性唯讀比對 | 全流§4.8 | 4 | ⬜ | XML 與 watchdog $Slots/model/TestMode 多真相源，曾險發生取消輪被看門狗補跑。只報不改 |
 | A5 | Phase 4b：watchdog「START 無 DONE」中途死亡偵測 | 全流§4.7 | 5 | ⬜ | 第一版只推播不代打（自動代打見 D5）。不可只看 0-byte log、鎖被占時絕不重跑。**真實樣本＋1：0814-1000 輪收工前被 API Connection lost 打死（terminal_reason=api_error）——render 已完成但 checkpoint 未推進、DONE 推播未發，無任何機制發現，靠使用者「這輪異常久」人工起疑才查到；main 手修 checkpoint=0814-1000。D5 樣本數 2/3** |
 
+| A6 | 建檔輪自動帶入**常駐中主題**（固定中分類） | 使用者 2026-08-17 | — | 🔶待實戰驗收 | 「烏俄底下永遠要有【俄轟烏】【烏轟俄】」原本得每天手動 `set-resident-topics`，忘了不報錯只靜靜沒有（同 0810 建檔那件事的形狀）。修法：`scripts/s2_resident_topics.json` 存每日預設，`s2_scan.ps1 New-ShiftState` 建檔時寫進 `resident_topics`；設定檔壞掉不弄死建檔但留 `NEWDAY WARN`。文件見 `13b §5a` ③。**已離線驗**（scratch 假狀態檔→render：`======烏俄======` 下出現裸的【俄轟烏】【烏轟俄】、品質掃 0 命中、JSON 往返中文與陣列無損）。⚠️ 0817-1600 建檔已過，**首次自動生效是 0818-1600**；今天要有得下 `set-resident-topics` 當日補設。排程 agent 會在 `_輪次紀錄.txt` 看到沒見過的 `NEWDAY 常駐中主題已帶入` 行，屬正常 |
+
 **A1 子項**（各自可勾）：
 - [x] 站別/階段分類（`phases` 欄位，093c713）
 - [x] （281d380）階段分類器修誤標：TaskCreate/TaskUpdate 的待辦文字含「set-category」等關鍵詞會被誤判成分類階段＋黏性繼承放大（0813-0430 實例：分類顯示 7.2 分，攤開 NS 寫摘要的長思考被誤記，真值約 2.5 分）。修法：Task 類工具一律不參與階段判定、直接走繼承
