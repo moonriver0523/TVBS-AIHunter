@@ -22,6 +22,7 @@
 - 省T = `common/plans/2026-08-02-S2省Token優化計畫-修訂版.md`
 - 全流 = `common/plans/2026-08-12-S2全流程與腳本自動化分析.md`
 - 診斷 = `G:\我的雲端硬碟\Claude共用\自動掃帶系統\0812-2000掃帶診斷.txt`
+- 落差報告 = `common/plans/2026-08-18-ENEX-ABC與三站排程掃帶技術落差報告.md`（ENEX/ABC vs 三站自動化落差，A9 唯一來源）
 
 ---
 
@@ -76,6 +77,7 @@
 
 | A6 | 建檔輪自動帶入**常駐中主題**（固定中分類） | 使用者 2026-08-17 | — | 🔶待實戰驗收 | 「烏俄底下永遠要有【俄轟烏】【烏轟俄】」原本得每天手動 `set-resident-topics`，忘了不報錯只靜靜沒有（同 0810 建檔那件事的形狀）。修法：`scripts/s2_resident_topics.json` 存每日預設，`s2_scan.ps1 New-ShiftState` 建檔時寫進 `resident_topics`；設定檔壞掉不弄死建檔但留 `NEWDAY WARN`。文件見 `13b §5a` ③。**已離線驗**（scratch 假狀態檔→render：`======烏俄======` 下出現裸的【俄轟烏】【烏轟俄】、品質掃 0 命中、JSON 往返中文與陣列無損）。⚠️ 0817-1600 建檔已過，**首次自動生效是 0818-1600**；今天要有得下 `set-resident-topics` 當日補設。排程 agent 會在 `_輪次紀錄.txt` 看到沒見過的 `NEWDAY 常駐中主題已帶入` 行，屬正常 |
 | A8 | ENEX 整則排除規則新增 **`TAIWAN PLUS`**（原本只排 `TVBS`） | 使用者 2026-08-17 | — | ✅2026-08-17 | 文件 `18-交換平台素材整併.md` §5 已加第二條排除（`/\bTAIWAN\s*PLUS\b/i.test(partner)`）。0817-2215 那批已入庫的 2 則 TAIWAN PLUS 素材（ENEX927257 漢光軍演假訊息攻勢／ENEX927267 臺灣所得差距）依使用者指示一併 `remove` 撤出狀態檔＋重 render（293→291 則，品質掃 0 命中）。⚠️ 這是規則文字修改，尚未有機會被下一輪掃帶 agent 讀到／實戰驗證，agent 若跳過 TAIWAN PLUS 素材屬正常，看到照收才是漏規則 |
+| A9 | **ENEX／ABC 整併入排程掃帶**（自動化補完，使三站以外的交換平台也能進固定輪） | 落差報告（2026-08-18） | — | ⬜待做 | 先行研究已完成，規格與查證依據一律看 `common/plans/2026-08-18-ENEX-ABC與三站排程掃帶技術落差報告.md`，本表不重抄。該報告核實：MASTER 原本**零筆** ENEX/ABC 自動化待做項（只有已完成的 A8），9 項落差全在列管之外。⚠️ 「是否真的進每 2 小時固定輪」本身是裁決題——`18-交換平台素材整併.md` §0 現行明文是「人工下令才跑，不進固定排程」，且外部 agent 禁止直寫狀態檔（0810 有 44 處差點被無聲覆蓋的實例）；提高頻率＝排程外殼／鎖／補漏三件要從零補。動工順序建議由落差 #3（候選檔→`add-batch`/`set-category` 轉換工具，本次整併已證實需求）起步，它不改變執行行為、風險最低。子項見下 |
 | A7 | reconcile `missing` 無法區分「刻意去重」與「真的漏收」 | 0817-2200 體檢 | — | ⬜待做 | 0817-2200 首次出現 AP `missing=4`（AP5467678/80/81/82）。查證結果**不是漏收**：agent 判定它們與 AP5467677／AP5467679 標題及 script 逐字相同（SNTV 同主題不同剪輯／Vertical 版），刻意只收 1 則，並在 state 建了 `script_status=note` 的存根項、把理由寫進 `needs_review`——處置本身正確且有留痕。但 reconcile 只比對「list 有、batch 沒有」，把刻意去重也算成 missing，使得 `missing≠0` 這個最重要的漏收警訊被稀釋。建議：reconcile 比對時把 state 內 `script_status=note` 的 id 視為已處置，另立 `deduped` 計數與 `missing` 分開報。⚠️ 動工前要先確認 note 存根不會被拿來掩蓋真漏收（存根必須有 `needs_review` 理由才算數）。
 
 **A1 子項**（各自可勾）：
@@ -94,6 +96,18 @@
 - [x] （2026-08-17）`snapshot` — 稽核快照，預設 `_audit_{site}_{HHMM}.txt`；**已存在一律不覆寫**（覆寫＝靜默銷毀稽核依據）；清單檔沒有標題欄時退而印 `at=…` 等短欄位，不留一排空白
 - [x] （2026-08-17）`compare --raw --batch` — 只印 raw 有 batch 沒有／batch 有 raw 沒有／batch 內重複 id／batch 缺欄位（預設含 `src_text`，直取 13d §5 那個踩過兩次共 145 則的坑）；乾淨只印一行。順帶修掉 `_load_raw_any` 檔案打不開會噴 traceback 的洞（`unwrap`／`inspect`／`search` 原本都中招）。15 項測試全過（`scripts/test_s2_batch_prep.py`），13d §4 已同步收錄用法
 - 護欄：per-site adapter（RT 用 `code` 不是 `id`）；冪等；不覆寫舊 snapshot；子步獨立 status
+
+**A9 子項**（＝落差報告「落差總表」9 項，各自可勾；編號對應報告章節）：
+- [ ] ①ENEX／ABC 登入態保活腳本（§2）——**先研究可行性**：ABC 已實測「比照 NS 載入頁面續期」走不通（無 `Set-Cookie`），ENEX 完全沒調查過
+- [ ] ②ENEX／ABC 版 `s2_batch_prep.py`：把兩份可行性計畫書裡的端點／查詢／抽取白名單／逐字保真驗證封裝成程式碼（§3；現況每輪由 agent 在 `browser_evaluate` 內從零手刻）
+- [ ] ③候選檔 → `add-batch --entries`／`set-category --pairs` 自動轉換工具（暫名 `s2_merge_platform.py`）（§4；**需求已由 0817 那批 42 則整併證實**，當時靠現場手寫一次性 python）
+- [ ] ④ENEX／ABC 版清單對帳：輕量健康檢查查詢比對候選 JSON 的 `counts.掃描`，取代「agent 自己宣稱」（§5；ENEX 附錄 A 已有可延伸的查詢範本）
+- [ ] ⑤`s2_mark_ingested.py` 認得候選檔「排除清單」區塊，不把 `skipped` 代碼誤判成缺件（§6；本次任務實錯，得人工改名）
+- [ ] ⑥候選檔交件前格式 lint（把 18 檔 §4 那張表機械化：缺 `▎畫面：`、行尾時間碼、150 字摘要上限）（§7；0810 那批 38 個品質掃 HIT 中 ABC 佔 12、ENEX 佔 3，全是進了正式狀態檔才被抓到）
+- [ ] ⑦18 檔流程規則加入 `s2_topic_dedupe.py` 收尾步驟（§8；純規則文字，工具已存在且無來源限制）
+- [ ] ⑧候選 schema 補 `src_text`（§9；三站已用 RT4131 連四輪 BITE 誤判換來這個教訓，ENEX/ABC 尚未吸收。`fields`／`parse_ok` 同缺但優先度低）
+- [ ] ⑨ABC 時間窗前端過濾變通法固定成腳本（§10；端點日期參數只到「日」，現靠 agent 臨場想）
+- 另記（§1 順帶查出、不屬本項但該有人管）：`13-S2-定時掃帶.md` 寫 12 個檢查點、`S2掃帶.xml` 快照顯示 9 個，何者生效未核實——與 A4 的「XML 只是匯出備份不是真相源」同一類問題
 
 **A3 子項**（各自可勾）：
 - [ ] `s2_state show` 補 `--source/--status/--id-prefix/--unclassified/--missing-field/--contains`
