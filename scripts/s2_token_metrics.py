@@ -180,12 +180,36 @@ def classify_bash_tool(cmd):
 PHASES = ('稽核', 'render', '分類', 'NS', 'AP', 'RT', '其他')
 
 
-def classify_phase(name, input_str):
+_FILENAME_TOKEN_RE = re.compile(r'[a-z0-9]+')
+
+
+def _site_from_filename(file_hint):
+    """2026-08-18（0430/0730 體檢發現）：從檔名／路徑找站別，只認**完整
+    alnum token**（ns_batch.json → token 'ns'；ap4678987 不算，因為
+    正規表示式把連續英數字一起吃掉，不會拆出單獨的 'ap'）——避免跟
+    素材 id（AP4678987）或內文字樣（apply／capital）誤撞。
+    只傳入檔名／指令這種「路徑用字」，不要傳整段組稿內容，否則摘要
+    正文提到「美聯社」英文字樣一樣會誤判。"""
+    tokens = set(_FILENAME_TOKEN_RE.findall(file_hint.lower()))
+    if 'rt' in tokens:
+        return 'RT'
+    if 'ap' in tokens:
+        return 'AP'
+    if 'ns' in tokens:
+        return 'NS'
+    return None
+
+
+def classify_phase(name, input_str, file_hint=''):
     """P2 分段遙測（2026-08-12）：依 tool input 內容把呼叫標到階段。
     這是把 0812 事後手工爬 2MB log 拆階段的方法寫死成程式——
     沒有它，每次異常都得重新手工拆，而且第一次就因此答錯方向。
     判斷順序有意義：稽核／render／分類的指令裡常夾著站名（--rt-list、
-    _rt_batch），所以**流程階段先判、站別後判**。"""
+    _rt_batch），所以**流程階段先判、站別後判**。
+
+    回傳 '其他' 以外的值＝「直接命中」（direct）；呼叫端會拿這個
+    區分「真的判到」vs「靠前一筆繼承」，供時段回看規則使用（見
+    measure() 的 phase_stat 回看重歸屬，MASTER A1 0430/0730 體檢）。"""
     s = input_str.lower()
     if 's2_audit' in s:
         return '稽核'
@@ -200,6 +224,13 @@ def classify_phase(name, input_str):
         return 'AP'
     if any(k in s for k in ('ns.cnn.com', 'newsource', '_ns_', 'cnn.com')):
         return 'NS'
+    # 檔名 token 判站：Write ns_batch_0430.json／batch_ns_0730.json 這種
+    # 站名不夾在底線兩側的變體，原本的字串比對接不到，只能靠上一筆繼承——
+    # 而繼承來源常常是稍早的 list-topics（真的是分類），造成組稿的長思考
+    # 被算進分類桶（0818-0430：15.0 分裡 12.2 分其實是三站組稿）。
+    by_file = _site_from_filename(file_hint)
+    if by_file:
+        return by_file
     return '其他'
 
 
@@ -207,7 +238,7 @@ def measure(session_path):
     last_usage = {}  # message.id -> usage dict（保留最後一筆）
     tool_calls = 0
     tool_by_name = {}
-    events = []  # (timestamp_iso, phase) 每個 tool_use 一筆，for 分段遙測
+    events = []  # (timestamp_iso, phase, is_direct) 每個 tool_use 一筆，for 分段遙測
     n = 0
     last_ts = None
     prev_phase = None  # 沿用「連續區段」假設：無標記的呼叫（click／snapshot／
@@ -235,7 +266,12 @@ def measure(session_path):
                     continue
                 tool_calls += 1
                 name = block.get('name') or '?'
-                raw_input = json.dumps(block.get('input') or {}, ensure_ascii=False)
+                inp = block.get('input') or {}
+                raw_input = json.dumps(inp, ensure_ascii=False)
+                # 只取路徑／指令這種「用字」給檔名 token 判站，不要把 Write
+                # 的 content 全文（組稿正文）也丟進去——摘要正文提到「美聯社」
+                # 這類字樣一樣會誤判站別（見 classify_phase／_site_from_filename）。
+                file_hint = inp.get('command') or inp.get('file_path') or ''
                 if name == 'Bash':
                     cmd = (block.get('input') or {}).get('command', '')
                     name = classify_bash_tool(cmd)
@@ -248,13 +284,13 @@ def measure(session_path):
                     # 長思考全記歪（顯示 7.2 分，真值約 2.5 分）。直接當「其他」
                     # 走繼承前一階段的路徑，跟 click／snapshot 等無標記呼叫同一套邏輯。
                     if name.startswith('Task'):
-                        ph = '其他'
+                        raw_ph = '其他'
                     else:
-                        ph = classify_phase(name, raw_input)
-                    if ph == '其他' and prev_phase:
-                        ph = prev_phase
+                        raw_ph = classify_phase(name, raw_input, file_hint)
+                    is_direct = raw_ph != '其他'  # 給 phase_stat 回看規則用
+                    ph = raw_ph if is_direct else (prev_phase or raw_ph)
                     prev_phase = ph
-                    events.append((ts, ph))
+                    events.append((ts, ph, is_direct))
 
     # 分段耗時：呼叫 i 的「時段」＝t[i]～t[i+1]（含工具執行＋下一步思考），
     # 歸給呼叫 i 的階段；最後一個呼叫用 transcript 末行時間戳收尾。
@@ -262,6 +298,16 @@ def measure(session_path):
     # 本版沿連續區段全額歸給所屬階段），絕對值差 1～3 分；但方法每輪一致，
     # **跨輪比較**才是這個遙測的用途（實測 0812-2000：AP 7.0/23 vs 手工 6.6/22、
     # RT 14.3/70 vs 11.4/58，異常階段一眼可辨）。
+    #
+    # 回看重歸屬（2026-08-18，0430/0730 體檢發現）：長時段預設歸給「呼叫 i」，
+    # 但 list-topics／show --mid 這類分類查詢後面接的長思考，實際上常常是
+    # 「正在組下一批 NS/AP/RT 稿子」，不是分類本身在想事情——真正洩漏底的
+    # 訊號是**下一筆呼叫（i+1）是不是直接判到別的站**（不是靠繼承）。
+    # 只在「gap 夠長（≥60 秒，跟這個 repo 其他健檢工具的停頓判準一致）
+    # 且 i+1 是直接命中、站別跟 i 不同」才回看重歸屬；短 gap／i+1 也是繼承
+    # 一律維持原歸屬——避免把正常的分類節奏也打散。
+    REATTRIBUTE_GAP_SEC = 60
+
     phase_stat = {}
     if events:
         from datetime import datetime
@@ -269,11 +315,16 @@ def measure(session_path):
         def parse(ts):
             return datetime.fromisoformat(ts.replace('Z', '+00:00'))
 
-        times = [parse(ts) for ts, _ in events]
+        times = [parse(ts) for ts, _, _ in events]
         times.append(parse(last_ts) if last_ts else times[-1])
-        for i, (_, ph) in enumerate(events):
+        for i, (_, ph, _direct) in enumerate(events):
             sec = max(0.0, (times[i + 1] - times[i]).total_seconds())
-            st = phase_stat.setdefault(ph, {'calls': 0, 'minutes': 0.0})
+            use_ph = ph
+            if i + 1 < len(events) and sec >= REATTRIBUTE_GAP_SEC:
+                nxt_ph, nxt_direct = events[i + 1][1], events[i + 1][2]
+                if nxt_direct and nxt_ph != ph:
+                    use_ph = nxt_ph
+            st = phase_stat.setdefault(use_ph, {'calls': 0, 'minutes': 0.0})
             st['calls'] += 1
             st['minutes'] += sec / 60
         for st in phase_stat.values():
