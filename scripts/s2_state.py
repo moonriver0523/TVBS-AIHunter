@@ -453,6 +453,14 @@ def cmd_add_batch(state, args):
         if missing:
             skipped.append(f"第{n}筆({e.get('id','?')}): 缺 {','.join(missing)}")
             continue
+        # 0818-2000 實錯：checkpoint 誤填成查詢視窗講法（如「18:00」）而非
+        # `{MMDD}-{HHMM}`，first_seen_checkpoint 存進去的格式錯了，外層 s2_scan.ps1
+        # 用精確比對算「本輪新增」時全部漏算，誤報成「本輪 0 則」。這裡當場擋下，
+        # 不要等稽核事後才抓——照收會讓錯誤格式先入庫，之後還得靠 fix-first-seen 補救。
+        if not CHECKPOINT_RE.match(str(e["checkpoint"])):
+            skipped.append(f"{e.get('id','?')}: checkpoint 格式錯誤（需為 {{MMDD}}-{{HHMM}}，"
+                           f"如 0818-2000，收到的是 {e['checkpoint']!r}）")
+            continue
         if e["status"] not in ("has_script", "pending"):
             skipped.append(f"{e['id']}: status 須為 has_script/pending")
             continue
@@ -1219,6 +1227,32 @@ def cmd_set_mark(state, args):
     print(f"OK {len(ids)} 則標記" + ("已清除（改回自動推算）" if args.clear else f"寫死為 {args.mark}"))
 
 
+CHECKPOINT_RE = re.compile(r"^\d{4}-\d{4}$")
+
+
+def cmd_fix_first_seen(state, args):
+    """修正既有素材的 `first_seen_checkpoint` 欄位（格式錯誤救援用）。
+
+    0818-2000 實錯：agent 組 add-batch 的來源檔時，checkpoint 誤填成查詢視窗的
+    講法（如「18:00」）而非正確格式 `{MMDD}-{HHMM}`；`update-entry`／`patch-entry`
+    的 `--checkpoint` 寫的是 `entry_updated`，都碰不到 `first_seen_checkpoint`——
+    這個欄位本來就沒有專門的修改路徑，才需要這支。一般情況不該用到（正常寫入時
+    格式已由 add-batch 的檢查擋住），只在事後補救舊資料時用。
+    """
+    if not CHECKPOINT_RE.match(args.checkpoint):
+        print(f"ERROR: --checkpoint 格式錯誤（需為 {{MMDD}}-{{HHMM}}，如 0818-2000）：{args.checkpoint}")
+        sys.exit(2)
+    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    missing = [i for i in ids if i not in state["items"]]
+    if missing:
+        print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未變更，請修正後重跑）")
+        sys.exit(2)
+    for i in ids:
+        state["items"][i]["first_seen_checkpoint"] = args.checkpoint
+    save(state, args.file)
+    print(f"OK {len(ids)} 則 first_seen_checkpoint 已改為 {args.checkpoint}")
+
+
 def cmd_set_aired(state, args):
     """標記／取消「本台已做過這則新聞」（render 會在代碼前印 🟤）。
 
@@ -1612,6 +1646,10 @@ def main():
     # 萬一要對舊檔動 set-mark 時還得指定得出來。
     sm.add_argument("--mark", choices=["△", "▲", "■", "◆", "●"])
     sm.add_argument("--clear", action="store_true", help="清除寫死值，改回自動推算")
+    ffs = sub.add_parser("fix-first-seen",
+                         help="修正 first_seen_checkpoint 格式錯誤（update-entry/patch-entry 都碰不到這個欄位）")
+    ffs.add_argument("--ids", required=True)
+    ffs.add_argument("--checkpoint", required=True, help="正確格式 {MMDD}-{HHMM}，如 0818-2000")
     sr = sub.add_parser("set-aired", help="🟤 本台已做過（仍留庫存、仍可做後續）；人工判斷，agent 不自行標")
     sr.add_argument("--ids", required=True)
     sr.add_argument("--clear", action="store_true", help="取消已播標記")
@@ -1669,6 +1707,7 @@ def main():
         "set-topic-order": cmd_set_topic_order,
         "set-resident-topics": cmd_set_resident_topics,
         "set-mark": cmd_set_mark, "set-aired": cmd_set_aired,
+        "fix-first-seen": cmd_fix_first_seen,
         "set-category": cmd_set_category, "get": cmd_get, "show": cmd_show,
         "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,
