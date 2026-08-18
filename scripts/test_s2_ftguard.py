@@ -53,7 +53,7 @@ def run_batch(entries):
 def e(i, ft=None, sb=None, nobite=True):
     tail = "▎無BITE。▎01:30" if nobite else "▎BITE：受訪者「內容」。▎01:30"
     tag = "" if nobite else " (BITE)"
-    d = {"id": i, "source": "NS", "checkpoint": "t", "status": "has_script",
+    d = {"id": i, "source": "NS", "checkpoint": "0818-2000", "status": "has_script",
          "entry": f"{i} (測試){tag} ▎摘要。▎畫面：畫面。{tail}"}
     if ft:
         d["footage_type"] = ft
@@ -109,7 +109,7 @@ report("沒帶 sb_count 時不誤判（NS 走 footageType，不帶 sb_count）",
 report("標無BITE 的不會被反向規則誤觸",
        S.bite_doubt("AA-51ZZ (x) ▎a。▎畫面：b。▎無BITE。▎01:00", 0, None) is None)
 
-out, items = run_batch([{"id": "AA-52ZZ", "source": "AP", "checkpoint": "t",
+out, items = run_batch([{"id": "AA-52ZZ", "source": "AP", "checkpoint": "0818-2000",
                          "status": "has_script", "sb_count": 0,
                          "entry": FAKE.replace("AA-50ZZ", "AA-52ZZ")}])
 report("假 BITE 照樣入庫（不擋）＋寫進 needs_review",
@@ -129,7 +129,7 @@ sp_ = os.path.join(d, "s.json")
 with open(sp_, "w", encoding="utf-8") as f:
     json.dump({"date": "0101", "items": []}, f)
 subprocess.run([sys.executable, SCRIPT, "--file", sp_, "add", "--id", "AA-40ZZ",
-                "--source", "NS", "--checkpoint", "t", "--status", "has_script",
+                "--source", "NS", "--checkpoint", "0818-2000", "--status", "has_script",
                 "--footage-type", "RAW",
                 "--entry", "AA-40ZZ (測試) ▎摘要。▎畫面：畫面。▎無BITE。▎01:00"],
                capture_output=True, text=True, encoding="utf-8")
@@ -138,7 +138,7 @@ with open(sp_, encoding="utf-8-sig") as f:
 report("add 單筆也會標疑慮（不再是後門）", bool(it.get("needs_review")), str(it.get("needs_review"))[:40])
 
 subprocess.run([sys.executable, SCRIPT, "--file", sp_, "update-entry", "--id", "AA-40ZZ",
-                "--sb-count", "1", "--checkpoint", "t",
+                "--sb-count", "1", "--checkpoint", "0818-2000",
                 "--entry", "AA-40ZZ (測試) (BITE) ▎摘要。▎畫面：畫面。▎BITE：某人「話」。▎01:00"],
                capture_output=True, text=True, encoding="utf-8")
 with open(sp_, encoding="utf-8-sig") as f:
