@@ -149,6 +149,21 @@
 | ~~R7~~ src_text 混入中文說明 9 筆清洗（RT1395/3501/3613/3657/4161/4631/4641/4820＋截斷標記） | **使用者 2026-08-18 裁定直接刪除**，原列已從 R 表移除。理由：要回站方重抓原文成本高、素材已老化，只影響事後離線查證依據。防呆已上線（6ecfc17），不會再新增同類。後人不要再立案 |
 | ~~R11~~ 0812-2200 的 65 則＋0813-1200 的 80 則缺 src_text | **使用者 2026-08-18 裁定直接刪除**，原列已從 R 表移除。根因早已破案（agent 組批漏欄位，非工具 bug）、防呆已上線（6ecfc17），回補部分先前已由 D8 裁定不補；本列已無殘留待辦。後人不要再立案 |
 
+## ⛔ 不可 merge 的殘留分支（2026-08-18 全分支盤點，使用者要求）
+
+**內容都已經用別的路徑進了 main，分支本身是殘骸；merge 回去不是補齊而是倒退。**
+後人看到「有分支沒 merge」不要好心合併，先讀這張表。
+
+| 分支 | 為什麼不可 merge |
+|---|---|
+| `agent/nhk-side-recording-6digit-tc`（2026-08-02） | P-045 早已在 main，**且已被 P-047 修正／部分作廢**（`00-寫稿通則.md:105,107`、`06-auto-script-sot.md:95` 都明寫「修正 P-045」）。merge 會把作廢的舊規則帶回來 |
+| `agent/verified-update-without-footage`（2026-08-02） | P-044 的規則文字早已在 main（`06-auto-script-sot.md:44`）。但這支還帶著 **262 行版的 `scripts/s2_state.py`，main 現在是 1680 行**——merge＝砍掉 1400 行、把狀態檔工具打回 8/02。⚠️ 另有 1 個**從未推上遠端的本機 commit**（`51c8782`），只存在當時那台機器 |
+| `agent/rules-v2-sandbox`（2026-07-21，7 commits） | 廢棄的規則去重實驗。main **沒有** `sandbox/`，merge 會憑空加回 20 個檔的舊沙盒（內容是 7/21 版規則，早被推翻） |
+
+📌 同次盤點的其餘結論：**main 本身乾淨**（與 origin/main 零落差；追蹤內容只有 4 個根檔＋目錄，repo 根那堆 `川想擴戰2200 #NN`／`_ns_list_*.txt`／`NE-022SA *` 散落檔**全被 gitignore 擋住**，沒有一個進版控）。`docs/tai-character-convention` 是唯一真的有東西沒進 main 的——臺／台完整規範（對照表＋專有名詞例外＋不溯及既往）當時只活在該分支，main 上僅 `17-網址素材整併.md` 一行摘要，而 17 是講網址素材整併的檔、agent 讀 `00-寫稿通則.md` 根本看不到，**規則與實作脫節了 9 天**；已於本次 cherry-pick 進 main（`fcae283`）並把 17 那行改為指回 00＝唯一來源。另 `docs/learning-0731-俄炸朝彈2200`／`docs/x-material-detection-fix` 遠端已刪、內容全數已合併（0 個未合併 commit），本次一併刪除本機空殼。
+
+⚠️ **流程風險（同日觀察，寫給所有 agent）**：2026-08-18 有多個 session 同時在這個 repo 工作並**反覆切換 HEAD 分支**，一天內至少被切走 3 次。已造成一次實害——main 的 S2 改進 commit 被誤推到 `feat/human-dub-digest` 上（`git push origin main` 推的是沒動過的本機 main＝空推，看起來成功其實什麼都沒推），事後才靠 `git status --short --branch` 發現並 cherry-pick 回 main。**鐵律：每次要寫 repo 前先 `git status --short --branch` 確認 HEAD，不要相信上一次的分支狀態**（全域 CLAUDE.md 早有這條，該次就是沒照做）。
+
 ## 實作共同護欄（摘自全流§九，全項目適用）
 
 一次只上一項；歷史 replay→shadow→TestMode→1 正式輪→3 連續正式輪；比 normalized
