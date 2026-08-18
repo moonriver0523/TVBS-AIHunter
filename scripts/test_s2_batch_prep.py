@@ -275,6 +275,56 @@ o, c = run(bp.cmd_dedup_check, Args(raw=AP_ES, ids='AP5467681,AP5467682',
 check('dedup-check 沒給 --site 也認得 AP id（editorialid 自動判站）',
       c == 0 and '逐字相同' in o)
 
+# ── A13：AP 詳情 API 的 nitf 殼，三條查詢路徑都要看得穿（2026-08-18）────────
+#
+# 0818-2200 實錯：AP 詳情 API 回的 `script`／`caption` 是
+# `{'words': N, 'nitf': '<p>SHOTLIST:</p>…'}` 一層 dict，不是字串。
+# `inspect --lengths` 只挑 str 欄位 → 沒列出 script；`search --field script`
+# 同樣只認 str → 0 命中。掃帶 agent 兩個訊號都看到「沒有」，判定「AP API 缺欄位」，
+# 照 13c §1a 退 §1b 逐則開了 14 個詳情頁——資料其實一直都在（15/15 筆都有）。
+# 這組測試把「工具答錯比沒工具更糟」釘住：**檔案裡有的東西，工具不准說沒有。**
+AP_NITF = write_json('ap_nitf.json', [
+    {'_id': 'aaa111', '_source': {
+        'editorialid': 4679131,
+        'caption': {'words': 8, 'nitf': '<p>RUSSIA: PUTIN MEETING +PLAYBACK+</p>'},
+        'script': {'words': 89, 'nitf': '<p>SHOTLIST:</p><p>1. SOUNDBITE (English) Someone</p>'},
+        'shots': [{'start': '00:00:00.000'}],          # 存在但既非 str 也非 nitf 殼
+        'headline': 'Putin meeting playback',           # 一般字串欄位，行為不可變
+    }},
+])
+
+o, c = run(bp.cmd_inspect, Args(raw=AP_NITF, ids=None, fields=None,
+                                limit=None, index=None, site='ap', lengths=True))
+check('A13 --lengths 自動列欄位時要含 nitf 殼（原本整個漏掉）',
+      c == 0 and 'script.nitf=len:' in o and 'caption.nitf=len:' in o)
+check('A13 --lengths 仍照列一般字串欄位（沒有回歸）', 'headline=len:' in o)
+
+o, c = run(bp.cmd_inspect, Args(raw=AP_NITF, ids=None, fields='script,caption',
+                                limit=None, index=None, site='ap', lengths=True))
+check('A13 --lengths 指名 nitf 欄位不再回「無此欄位」',
+      c == 0 and 'script.nitf=len:' in o and '無此欄位' not in o)
+
+o, c = run(bp.cmd_inspect, Args(raw=AP_NITF, ids=None, fields='shots,nosuchfield',
+                                limit=None, index=None, site='ap', lengths=True))
+check('A13 「欄位存在但非文字」與「真的沒這欄位」要講不同的話',
+      c == 0 and 'shots=<欄位存在但非文字>' in o and 'nosuchfield=<無此欄位>' in o)
+
+o, c = run(bp.cmd_search, Args(raw=AP_NITF, contains='SOUNDBITE', field='script',
+                               limit=None, site='ap'))
+check('A13 search --field script 在 nitf 殼上要命中（原本 0 命中）',
+      c == 0 and 'script.nitf' in o and 'AP4679131' in o)
+
+o, c = run(bp.cmd_search, Args(raw=AP_NITF, contains='SOUNDBITE', field='all',
+                               limit=None, site='ap'))
+check('A13 --field all 與 --field script 結論一致（同檔不同參數不可相反）',
+      c == 0 and 'script.nitf' in o)
+
+# 純字串站別（NS／RT）不可因為這次改動而改變行為
+o, c = run(bp.cmd_search, Args(raw=AP_ES, contains='digging', field='script',
+                               limit=None, site='ap'))
+check('A13 一般 str 欄位的 --field 查詢照舊命中（NS/RT 形狀無回歸）',
+      c == 0 and 'AP5467681' in o)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)

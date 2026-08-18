@@ -415,6 +415,63 @@ def _title_of_any(item):
     return ''
 
 
+# ── AP 的一層 nitf 殼：三條查詢路徑共用同一份攤平邏輯（A13，2026-08-18）──
+#
+# 🔴 **為什麼要抽出來**：AP 詳情 API 的 `script`／`caption` 不是字串，是
+# `{'words': 89, 'nitf': '<p>SHOTLIST:</p>…'}` 這種一層 dict。本檔原本有三條路徑
+# 各自處理（或不處理）這件事，結果彼此不一致：
+#   ✅ `_title_of_any`／`cmd_search --field all`  → 會看穿 `.nitf`
+#   ❌ `cmd_inspect --lengths`                    → 只挑 `isinstance(v, str)`，dict 直接漏掉
+#   ❌ `cmd_search --field <指名欄位>`             → 同樣只認 str，指名 script 永遠 0 命中
+#
+# 0818-2200 實錯就是踩這個：AP API **明明成功**、15/15 筆的 `_source.script.nitf`
+# 都有完整 SHOTLIST／SOUNDBITE，但 `inspect --lengths` 沒列出 script／caption、
+# `search --field script` 回 0 命中，掃帶 agent 兩個訊號都看到「沒有」，於是判定
+# 「AP API 缺欄位」，照 13c §1a 退 §1b **逐則開了 14 個詳情頁**——整段白做，
+# AP 那站 12 則燒掉 89 次呼叫／10.5 分（前一輪 14 則只要 31 次／5.7 分）。
+# ⛔ **工具答錯比沒有工具更糟**：agent 沒有違規，它是照著工具給的答案做判斷的。
+# 所以修法是把攤平邏輯收成這兩支共用 helper，不要再讓任何一條路徑自己寫一份。
+
+def _nitf_text(value):
+    """AP 一層 dict 殼 → 內文字串；不是這個形狀就回 None。"""
+    if isinstance(value, dict) and isinstance(value.get('nitf'), str):
+        return value['nitf']
+    return None
+
+
+def flatten_text_fields(item):
+    """一筆 item 的所有文字欄位 → `[(欄位名, 文字)]`，含攤平後的 `{k}.nitf`。
+
+    順序：先原生字串欄位，再 `.nitf`——跟 `cmd_search --field all` 原本的行為一致，
+    改用本函式後輸出不變（既有測試據此把關）。
+    """
+    out = [(k, v) for k, v in item.items() if isinstance(v, str)]
+    out += [(f'{k}.nitf', t) for k, v in item.items()
+            if (t := _nitf_text(v)) is not None]
+    return out
+
+
+def text_field(item, key):
+    """查某個具名欄位的文字內容，回傳 `(顯示名, 文字, 狀態)`。
+
+    狀態三分，**呼叫端要能講出不同的話**——0818-2200 的誤導有一半來自
+    「欄位不存在」與「欄位在、只是不是字串」共用同一句 `<無此欄位或非文字>`：
+      `'str'`     欄位本身就是字串
+      `'nitf'`    欄位是 AP 的 dict 殼，已取出 `.nitf`（顯示名會變成 `key.nitf`）
+      `'absent'`  真的沒有這個欄位
+      `'nontext'` 欄位存在但既非字串也不是 nitf 殼（例如 `shots` 是 list）
+    """
+    if key not in item:
+        return (key, None, 'absent')
+    v = item[key]
+    if isinstance(v, str):
+        return (key, v, 'str')
+    t = _nitf_text(v)
+    if t is not None:
+        return (f'{key}.nitf', t, 'nitf')
+    return (key, None, 'nontext')
+
+
 def cmd_inspect(args):
     try:
         items, shell_desc = _load_raw_any(args.raw)
@@ -457,14 +514,31 @@ def cmd_inspect(args):
         if lengths:
             # 字數模式：只印長度不印內容（例：檢查摘要有沒有超過 150 字）。
             # 這是 D9 查出的工具缺口——以前 agent 只能自己寫 python 數。
-            flds = fields or sorted(k for k, v in it.items()
-                                    if isinstance(v, str) and v and not k.startswith('_'))
-            if not flds:
-                lines.append(f'{item_id}\t（無可量長度的文字欄位）')
+            # ⚠️ A13（2026-08-18）：這裡原本只挑 `isinstance(v, str)`，AP 的
+            # `script`／`caption` 是 `{'words':N,'nitf':…}` dict，**整個沒被列出**，
+            # 讓 agent 以為站方沒給稿。改走 `flatten_text_fields`／`text_field`
+            # 共用 helper（見其上方大段說明），三條查詢路徑對齊。
+            if fields:
+                parts = []
+                for k in fields:
+                    name, text, state = text_field(it, k)
+                    if text is not None:
+                        parts.append(f'{name}=len:{len(text)}')
+                    elif state == 'nontext':
+                        # 跟「沒有這個欄位」講不同的話：欄位在，只是不是文字，
+                        # 合起來講會被讀成「站方沒給」——那正是 0818-2200 的誤導源頭。
+                        parts.append(f'{k}=<欄位存在但非文字>')
+                    else:
+                        parts.append(f'{k}=<無此欄位>')
+                lines.append(f'{item_id}\t' + ' '.join(parts))
             else:
-                lines.append(f'{item_id}\t' + ' '.join(
-                    f'{k}=len:{len(it[k])}' if isinstance(it.get(k), str)
-                    else f'{k}=<無此欄位或非文字>' for k in flds))
+                flds = [(n, t) for n, t in flatten_text_fields(it)
+                        if t and not n.startswith('_')]
+                if not flds:
+                    lines.append(f'{item_id}\t（無可量長度的文字欄位）')
+                else:
+                    lines.append(f'{item_id}\t' + ' '.join(
+                        f'{n}=len:{len(t)}' for n, t in sorted(flds)))
         elif fields:
             picked = {}
             for k in fields:
@@ -508,15 +582,20 @@ def cmd_search(args):
         # 頂層沒有任何字串欄位，search 永遠空手（D9 步驟②前置）。
         it = _dedup_view(raw_it) if isinstance(raw_it, dict) else {}
         item_id = _dedup_id(site, it, i)
-        str_fields = [(k, v) for k, v in it.items() if isinstance(v, str)]
-        # AP 的標題在 `caption.nitf` 這種一層 dict 底下，一併攤出來搜
-        str_fields += [(f'{k}.nitf', v['nitf']) for k, v in it.items()
-                       if isinstance(v, dict) and isinstance(v.get('nitf'), str)]
-        fields_to_check = (
-            str_fields
-            if field_candidates is None
-            else [(k, it.get(k)) for k in field_candidates if isinstance(it.get(k), str)]
-        )
+        # AP 的標題／內文在 `caption.nitf`／`script.nitf` 這種一層 dict 底下，
+        # 一併攤出來搜（A13 起改走共用 helper，見其上方說明）。
+        if field_candidates is None:
+            fields_to_check = flatten_text_fields(it)
+        else:
+            # ⚠️ A13：這條**指名欄位**的路徑原本只認 `isinstance(str)`，於是
+            # `search --contains SOUNDBITE --field script` 在 AP 檔上永遠 0 命中
+            # （script 是 dict）——跟 `--field all` 行為不一致，同一份檔案換個參數
+            # 就得到相反的答案。改用 `text_field` 後兩條路徑一致。
+            fields_to_check = []
+            for k in field_candidates:
+                name, text, _ = text_field(it, k)
+                if text is not None:
+                    fields_to_check.append((name, text))
         for field_name, text in fields_to_check:
             pos = text.lower().find(needle)
             if pos == -1:
