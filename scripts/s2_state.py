@@ -727,9 +727,14 @@ def bite_tag_patchable(line):
         return False, "寫著「無BITE」，補 (BITE) 會自相矛盾（要改請用 update-entry）"
     if "▎BITE：" not in line and "▎BITE:" not in line:
         return False, "沒有 ▎BITE： 段，補了會變成「有 (BITE) 但缺 ▎BITE： 段」"
-    if not re.match(r"^[^▎]*?\([^)]*\)", line):
-        # `CODE (備註) (BITE) ▎…`：第一個備註括號是 (BITE) 的錨點。沒有它就不猜，
-        # 硬塞會變成第一括號＝BITE，撞上 s2_validate 的「第一備註寫了 BITE」。
+    # `CODE (備註) (BITE) ▎…`：第一個備註括號是 (BITE) 的錨點。沒有它就不猜，
+    # 硬塞會變成第一括號＝BITE，撞上 s2_validate 的「第一備註寫了 BITE」。
+    # ⚠️ 判準必須跟 `insert_bite_tag()` **看同一段字**（第一個 `▎` 之前的 head）：
+    # 只要條件掃整行、插入卻只切 head，遇到括號裡夾了 `▎` 的畸形行就會
+    # 放行卻找不到 `)`，`rfind` 回 -1 → 產出開頭多一個空格的壞行，而
+    # `check_entry()` 對 LINE_RE 不 match 的行回空清單＝**壞掉還不報**，
+    # 整行接著從品質掃與檔頭統計裡靜默消失（本 repo 記過三次的同一種坑）。
+    if ")" not in line.split("▎", 1)[0]:
         return False, "摘要前沒有備註括號可接，不猜插入位置（請用 update-entry）"
     return True, ""
 
@@ -766,8 +771,24 @@ def cmd_patch_entry(state, args):
             unchanged.append(f"{i}: {why}")
             continue
         # 走 apply_update 而不是直接寫 raw_entry：entry_updated／sp.derive／
-        # bite_doubt／needs_review 結案這一整串記帳邏輯只該有一份。
+        # bite_doubt 這一整串記帳邏輯只該有一份。
+        #
+        # 🔴 **但 needs_review 要原樣保住**（2026-08-18 上線當天實測抓到）：
+        # `apply_update` 的收尾是「重算 doubt，算不出來就 `pop("needs_review")`」，
+        # 那條的前提是呼叫端**帶著新的 sb_count 進來**（`update-entry` 補完整稿的
+        # 情境＝真的有新資訊，才有資格宣告結案）。`patch-entry` 只動標記，
+        # 手上沒有 sb_count 也沒有 footage_type，重算出來的 doubt 幾乎必為 None，
+        # 於是**光是標一個 🟡 就會把留痕清掉**。實測：RT6164（稿未到、needs-review
+        # 記著跨輪交辦）跑一次 `--alert yellow`，留痕就沒了。
+        # ⛔ 這是靜默資料遺失，而且踩的正好是 R6 的教訓——**跨輪交辦要走狀態檔的
+        # needs-review，不是帳本**——留痕被無聲吃掉等於那條路也斷了。
+        # 所以本指令對 needs_review **一律中性**：改完原樣放回（本來沒有就維持沒有）。
+        had_review = state["items"][i].get("needs_review")
         _, issues = apply_update(state, i, new, checkpoint=args.checkpoint)
+        if had_review is not None:
+            state["items"][i]["needs_review"] = had_review
+        else:
+            state["items"][i].pop("needs_review", None)
         fmt += issues
         done.append(f"{i}: {why}")
     if done:

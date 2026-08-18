@@ -113,9 +113,12 @@
      （檔頭最多 3 則）＋該則加 `🔴`
    - **其餘重大** → 該則加 `🟡`（不動 `set-alert`）
    - ⛔ **加標記不要重打整條 entry**（2026-08-18）——用
-     `python scripts/s2_state.py patch-entry --ids A,B,C --alert red|yellow`
-     （撤掉用 `--alert none`）。它只動標記，`🟤`／`🔖`／內文一個字都不碰，
-     已經是該標記就跳過不寫。**⛔ 不要用 `update-entry` 重打、更不要自己寫
+     `python scripts/s2_state.py patch-entry --ids A,B,C --alert red|yellow`。
+     它只動標記，`🟤`／`🔖`／內文／`needs_review` 一個字都不碰，
+     已經是該標記就跳過不寫。
+   - ⛔ **排程輪只加不撤**：`--alert none`（撤除）與降級 `🔴`→`🟡` **只有使用者
+     口令才做**（13c §2a），你自己不准動。既有不變式是「標過永久保留」——
+     以前撤標記要重打全文、有摩擦擋著，現在一個指令就撤，所以規則要寫明。**⛔ 不要用 `update-entry` 重打、更不要自己寫
      臨時 .py**：0818-1600 那輪光是為了插 9 個 emoji 就重打了 9 條完整
      entry（`_fix_markers.py`），同一條 `WE-021MO` 整天被打了三遍。
    - 🇹🇼 **只要跟臺灣有關就一律至少 `🟡`**（漢光演習、國軍、臺海、兩岸、

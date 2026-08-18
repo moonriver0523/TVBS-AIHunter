@@ -104,6 +104,13 @@ NOPAREN = "RT2612 ▎摘要。▎畫面：畫面。▎BITE：某人(某某)「�
 new, why = patch("△ " + NOPAREN, bite=True)
 report("--bite：沒有備註括號可接 → 拒絕不猜位置", new is None and "不猜" in why, why)
 
+# 畸形行：括號裡夾了 ▎。判準若掃整行、插入卻只切 head，就會放行卻找不到 `)`，
+# 產出開頭多一個空格的壞行——而 check_entry 對 LINE_RE 不 match 的行回空清單，
+# 等於壞掉還不報、整行從品質掃靜默消失（本 repo 記過三次的坑）。
+WEIRD = "RT2612 (備註▎怪) ▎摘要。▎畫面：畫面。▎BITE：某人(某某)「話。」▎1:00"
+new, why = patch("△ " + WEIRD, bite=True)
+report("--bite：括號裡夾 ▎ 的畸形行 → 拒絕（不產出壞行）", new is None, f"得到 {new!r} / {why}")
+
 # 併用：換標記＋補 (BITE) 一次做完
 new, why = patch("△ 🟡 " + NOBITE_TAG, alert="red", bite=True)
 report("--alert 與 --bite 併用", new == "△ 🔴 " + NOBITE_TAG.replace(
@@ -155,6 +162,48 @@ src = REAL_BITE[1][0]
 new, _ = patch(src, alert="yellow", bite=True)
 report("replay：一次做完 _fix_ap＋_fix_markers 兩步",
        new == "△ 🟡 " + REAL_BITE[1][1][2:], f"得到 {new!r}")
+
+# ── ⑤ needs_review 必須原樣保住（2026-08-18 上線當天實測抓到的靜默資料遺失）──
+# apply_update 的「重算 doubt → 算不出來就 pop needs_review」前提是呼叫端帶了新的
+# sb_count；patch-entry 沒有那個資訊，光標一個 🟡 就把跨輪交辦的留痕清掉。
+# 踩的正好是 R6 的教訓（跨輪交辦要走狀態檔的 needs-review，不是帳本）。
+import json                                                        # noqa: E402
+import tempfile                                                    # noqa: E402
+
+
+class _Args:
+    def __init__(self, **kw):
+        self.ids = kw.get("ids", "")
+        self.alert = kw.get("alert")
+        self.bite = kw.get("bite", False)
+        self.checkpoint = kw.get("checkpoint")
+        self.file = kw.get("file")
+
+
+def _fresh_state(path, needs_review=None):
+    it = {"id": "RT2612", "source": "RT", "script_status": "has_script",
+          "sb_count": 5, "raw_entry": "△ " + BODY}
+    if needs_review:
+        it["needs_review"] = needs_review
+    json.dump({"items": [it]}, open(path, "w", encoding="utf-8"), ensure_ascii=False)
+    return st.load(path)
+
+
+with tempfile.TemporaryDirectory() as td:
+    p = os.path.join(td, "s.json")
+
+    s = _fresh_state(p, "稿未到，跨輪交辦")
+    st.cmd_patch_entry(s, _Args(ids="RT2612", alert="yellow", file=p))
+    after = {x["id"]: x for x in json.load(open(p, encoding="utf-8"))["items"]}
+    report("needs_review：標 🟡 之後留痕還在",
+           after["RT2612"].get("needs_review") == "稿未到，跨輪交辦",
+           f"得到 {after['RT2612'].get('needs_review')!r}")
+
+    s = _fresh_state(p)          # 本來就沒有留痕 → 不可憑空生出來
+    st.cmd_patch_entry(s, _Args(ids="RT2612", alert="red", file=p))
+    after = {x["id"]: x for x in json.load(open(p, encoding="utf-8"))["items"]}
+    report("needs_review：本來沒有就維持沒有",
+           "needs_review" not in after["RT2612"], f"得到 {after['RT2612'].get('needs_review')!r}")
 
 print("\n全部通過" if ok else "\n有失敗項")
 sys.exit(0 if ok else 1)
