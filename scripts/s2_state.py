@@ -630,6 +630,157 @@ def cmd_update_batch(state, args):
         print("\n".join("  " + s for s in skipped))
 
 
+# ── patch-entry：機械標記修補（A12 桶①，2026-08-18）────────────────────
+#
+# 🔴 **為什麼要有這支**：`update-entry` 只有「全文替換」一條路。於是每輪為了在
+# 已經寫好的素材行前面插一個 🔴／🟡、或補一個第二括號 `(BITE)`，agent 只能把
+# **整條 entry 一字不差重打一遍**。0818-1600 那輪四支臨時腳本
+# （`_fix_ns_bite` / `_fix_ap` / `_fix_markers` / `_fix_combined2`）的全部內容
+# 就是這件事，約 12KB 中文重打；`WE-021MO` 同一條 entry 被輸出**三遍**。
+# 而 🔴／🟡 是 `s2_scan_prompt.md:113–122` 的**每輪必做步驟**（「拿不準就標 🟡」），
+# 所以這不是偶發，是每輪固定的損失。形狀同 `cmd_update_batch` 上方那段註解記的
+# 「缺工具就會長出即興腳本」，只是這次缺的是**部分修補**而不是批次。
+#
+# ⛔ **不做第二套 parser**：標記位置、互斥關係、素材行判準全部走 `s2_validate`
+# 既有的 `strip_mark()`／`RED_RE`／`SUBALERT_RE`／`AIRED_RE`／`HILITE_RE`／
+# `LINE_RE`／`SIDE_RE`（不變式清單第 2 條的同一個原則）。本函式只負責「拆開→
+# 換標記→照原順序組回去」，一個判準都不自己重寫。
+#
+# ⚠️ **只做機械可導的，不替 agent 做判斷**：
+#   - `--alert red|yellow|none` 是**明令**才動（重大與否是編輯判斷，機械推不出來）。
+#   - `--bite` 只補 `s2_validate` 已經在報的那一種（有 `▎BITE：` 段但缺 `(BITE)`
+#     第二括號）。缺 BITE 段、已寫「無BITE」、或本來就有 `(BITE)` 一律拒絕不動，
+#     免得把「有 (BITE) 但缺 ▎BITE： 段」這種相反的錯誤製造出來。
+#   - ⛔ 刻意**不**做成寫入時自動補：13c §497 訂的是品質掃「只警告不修」，
+#     靜默改稿會牴觸那條原則。要不要改成自動導出屬裁決題（MASTER A12）。
+
+ALERT_MARKS = {"red": "🔴", "yellow": "🟡", "none": ""}
+
+
+def patch_marks(sv, entry, alert=None, add_bite=False):
+    """回傳 (新 entry, 說明)。不需要改動時 `新 entry` 為 None（呼叫端據此跳過）。
+
+    `alert`：`'red'`／`'yellow'`／`'none'`／`None`（不動）。🔴 與 🟡 互斥，
+    換標記＝先剝掉舊的再插新的，不會兩個並存（同 `s2_render.strip_marks` 的約定）。
+    """
+    first = (entry or "").strip().split("\n")[0]
+    rest_lines = (entry or "").strip().split("\n")[1:]
+    if not first:
+        return None, "空內容"
+    # 側錄（多行 TC 兩行式）與非素材行不套這套格式，同 `check_entry()` 的守門。
+    _, bare = sv.strip_mark(first)
+    if sv.SIDE_RE.match(bare) or not sv.LINE_RE.match(bare):
+        return None, "非素材行（側錄／兩行式），不套標記格式"
+
+    # 拆：時段標記 → 🔴/🟡 → 🟤 → 🔖 → 本體。順序是 s2_validate 訂的，照它拆照它組。
+    m = sv.MARK_RE.match(first)
+    period, tail = (m.group(1), first[m.end():]) if m else ("", first)
+    had_red = bool(sv.RED_RE.match(tail))
+    if had_red:
+        tail = sv.RED_RE.sub("", tail, count=1)
+    had_yellow = bool(sv.SUBALERT_RE.match(tail))
+    if had_yellow:
+        tail = sv.SUBALERT_RE.sub("", tail, count=1)
+    had_aired = bool(sv.AIRED_RE.match(tail))
+    if had_aired:
+        tail = sv.AIRED_RE.sub("", tail, count=1)
+    had_hilite = bool(sv.HILITE_RE.match(tail))
+    if had_hilite:
+        tail = sv.HILITE_RE.sub("", tail, count=1)
+
+    notes = []
+    new_alert = "🔴" if had_red else ("🟡" if had_yellow else "")
+    if alert is not None:
+        want = ALERT_MARKS[alert]
+        if want == new_alert:
+            notes.append("標記已是" + (want or "無"))
+        else:
+            notes.append(f"{new_alert or '無'} → {want or '無'}")
+            new_alert = want
+
+    if add_bite:
+        ok, why = bite_tag_patchable(tail)
+        if not ok:
+            return None, why
+        tail = insert_bite_tag(tail)
+        notes.append("補上 (BITE)")
+
+    prefix = "".join(x + " " for x in (period, new_alert,
+                                       "🟤" if had_aired else "",
+                                       "🔖" if had_hilite else "") if x)
+    new_first = prefix + tail
+    if new_first == first:
+        return None, "；".join(notes) or "無變更"
+    return "\n".join([new_first] + rest_lines), "；".join(notes)
+
+
+def bite_tag_patchable(line):
+    """`(BITE)` 第二括號能不能機械補上？回傳 (可以嗎, 原因)。
+
+    判準對齊 `s2_validate._run_line_checks()` 報的那三條，**只補其中一種**：
+    有 `▎BITE：` 段、沒有 `(BITE)`、沒寫「無BITE」——其餘一律拒絕，
+    因為那些要嘛是編輯判斷（該不該有 BITE），要嘛補了反而製造相反的錯誤。
+    """
+    if "(BITE)" in line:
+        return False, "已有 (BITE)，不需補"
+    if "無BITE" in line:
+        return False, "寫著「無BITE」，補 (BITE) 會自相矛盾（要改請用 update-entry）"
+    if "▎BITE：" not in line and "▎BITE:" not in line:
+        return False, "沒有 ▎BITE： 段，補了會變成「有 (BITE) 但缺 ▎BITE： 段」"
+    if not re.match(r"^[^▎]*?\([^)]*\)", line):
+        # `CODE (備註) (BITE) ▎…`：第一個備註括號是 (BITE) 的錨點。沒有它就不猜，
+        # 硬塞會變成第一括號＝BITE，撞上 s2_validate 的「第一備註寫了 BITE」。
+        return False, "摘要前沒有備註括號可接，不猜插入位置（請用 update-entry）"
+    return True, ""
+
+
+def insert_bite_tag(line):
+    """在摘要（第一個 `▎`）之前的**最後一個**括號後面插 `(BITE)`。"""
+    head = line.split("▎", 1)[0]
+    tail = line[len(head):]
+    idx = head.rfind(")")
+    return head[:idx + 1] + " (BITE)" + head[idx + 1:].rstrip() + " " + tail.lstrip()
+
+
+def cmd_patch_entry(state, args):
+    """機械修補既有素材行的標記，不必重打整條 entry（見上方大段說明）。"""
+    if args.alert is None and not args.bite:
+        print("ERROR: 至少要帶 --alert 或 --bite（兩者可同時）")
+        sys.exit(2)
+    sv = load_validate()
+    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    if not ids:
+        print("ERROR: --ids 是空的")
+        sys.exit(2)
+    missing = [i for i in ids if i not in state["items"]]
+    if missing:
+        # 同 set-aired：先全部驗完才動手，不做「改一半再報錯」。
+        print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未變更，請修正後重跑）")
+        sys.exit(2)
+
+    done, unchanged, fmt = [], [], []
+    for i in ids:
+        old = state["items"][i].get("raw_entry", "") or ""
+        new, why = patch_marks(sv, old, args.alert, args.bite)
+        if new is None:
+            unchanged.append(f"{i}: {why}")
+            continue
+        # 走 apply_update 而不是直接寫 raw_entry：entry_updated／sp.derive／
+        # bite_doubt／needs_review 結案這一整串記帳邏輯只該有一份。
+        _, issues = apply_update(state, i, new, checkpoint=args.checkpoint)
+        fmt += issues
+        done.append(f"{i}: {why}")
+    if done:
+        save(state, args.file)           # 全部改完只寫一次檔（同 update-batch）
+    print(f"OK 已修補 {len(done)} 則")
+    if done:
+        print("\n".join("  " + x for x in done))
+    report_fmt(fmt)
+    if unchanged:
+        print(f"未變更 {len(unchanged)} 則：")
+        print("\n".join("  " + x for x in unchanged))
+
+
 # 地區詞 → 樣板上該去的大分類（2026-08-06 訂）。用來抓「中主題放錯大分類」。
 # 為什麼有效：agent 命名時會自己把地區寫進中主題名（【美國治安】【美國地方】），
 # 它知道這是哪裡的事，只是**沒去想樣板上有沒有專屬的那一格**。名稱就是現成線索。
@@ -1405,6 +1556,17 @@ def main():
     u.add_argument("--sb-count", type=int, default=None,
                    help="抽取白名單數出的 SOUNDBITE 段數；>0 且 entry 寫「無BITE」會擋下。"
                         "站方補完整稿後回寫用（不帶＝不動舊值）")
+    pe = sub.add_parser("patch-entry",
+                        help="機械修補既有素材行的標記（🔴／🟡／補 (BITE)），"
+                             "不必重打整條 entry")
+    pe.add_argument("--ids", required=True, help="逗號分隔；不存在的 id 一律先擋下不改")
+    pe.add_argument("--alert", choices=["red", "yellow", "none"],
+                    help="🔴 重大（進檔頭）／🟡 重大未進檔頭／none 撤掉；兩者互斥，"
+                         "換標記自動剝舊插新。⛔ 重大與否是編輯判斷，只有明令才動")
+    pe.add_argument("--bite", action="store_true",
+                    help="補第二括號 (BITE)。只補「有 ▎BITE： 段但缺 (BITE)」這一種；"
+                         "已有／寫著無BITE／沒有 BITE 段一律拒絕不動")
+    pe.add_argument("--checkpoint")
     sub.add_parser("pending")
     # ⚠️ WP1（2026-08-03）廢除 to-compile／mark-compiled／compiled 欄位：
     # 它們存在的唯一理由是「讓 agent 不用每輪重寫整份 txt」，改用 s2_render.py
@@ -1480,7 +1642,8 @@ def main():
     {
         "resume": cmd_resume, "diff": cmd_diff, "add": cmd_add,
         "add-batch": cmd_add_batch,
-        "update-entry": cmd_update_entry, "pending": cmd_pending,
+        "update-entry": cmd_update_entry, "patch-entry": cmd_patch_entry,
+        "pending": cmd_pending,
         "add-side": cmd_add_side, "set-alert": cmd_set_alert,
         "set-topic-order": cmd_set_topic_order,
         "set-resident-topics": cmd_set_resident_topics,

@@ -495,6 +495,16 @@ python scripts/s2_state.py needs-review done --ids RT2333   # 處理完就結案
 - ⚠️ **pending 每輪都要主動清查**（不只 23:00）：§1a API 批次重查，稿到就 `update-entry` 覆寫並順手帶 `--sb-count`（同一份回應數一次 SOUNDBITE，零額外成本）。照規則直接處理，不問使用者。pending 為 0 就跳過。
 - ⚠️ **狀態檔＝唯一真相源，render 是單向投影**：任何要進 txt 的內容（含側錄、檔頭重大行）必先進狀態檔；⛔ 不手改 txt——下一輪就被覆蓋。品質掃命中修的是 `raw_entry`。
 - 🔴 **品質檢查在「寫入當下」就會跑**：`add`／`add-batch`／`update-entry` 寫完立刻印「⚠️ 格式待修 N 項（已入庫，請直接 `update-entry` 改掉）」——**看到當場修，不要留到收工**（那時已忘脈絡）。只警告不擋、不會替你修。（為什麼：品質掃原本只綁 render，輪次外寫入等於側門繞過關卡——0811 實錯 35 則帶著 52 項格式問題上了交接單。側錄／YouTube 兩行式不套此判準。）
+  - ⚠️ **「有 ▎BITE： 但缺 (BITE) 第二括號」這一項不要重打整條**（2026-08-18）：
+    跑 `python scripts/s2_state.py patch-entry --ids A,B,C --bite` 就好，
+    它只插第二括號、其餘一字不動。**只補這一種**——已經有 `(BITE)`、寫著
+    「無BITE」、或根本沒有 `▎BITE：` 段，一律拒絕不動（那些是編輯判斷，
+    要改請用 `update-entry`）。其餘格式問題仍照舊自己改。
+    ⛔ 這條**刻意不做成寫入時自動補**：本節訂的就是「只警告不修」，
+    靜默改稿會牴觸它——要改成自動導出屬裁決題（MASTER A12）。
+    背景：0818-1600 那輪為了補 `(BITE)`，`_fix_ns_bite.py`＋`_fix_ap.py`
+    把 18 條完整 entry 重打了一遍；實測同樣 28 則用 `--bite` 一次還原、
+    與原文一字不差。
 - **腳本連續失敗 2 次**：錯誤原文記進回報，當輪改 V1 直讀 JSON 繼續（degraded mode），不卡住。
 
 ## 2a. 使用者臨時口令：改庫存
@@ -509,8 +519,9 @@ python scripts/s2_state.py needs-review done --ids RT2333   # 處理完就結案
 | 使用者這樣說 | 你要跑的 |
 |---|---|
 | 「把 XX 標**已播**／灰圈／🟤」 | `set-aired --ids …`（`--clear` 取消） |
-| 「XX 標**重大**／紅圈」 | `set-alert --add "…"` ＋該則加 `🔴` |
-| 「XX 標**次重大**／橘圈」 | 該則加 `🟡`（不動 set-alert） |
+| 「XX 標**重大**／紅圈」 | `set-alert --add "…"` ＋ `patch-entry --ids XX --alert red` |
+| 「XX 標**次重大**／橘圈」 | `patch-entry --ids XX --alert yellow`（不動 set-alert） |
+| 「XX **撤掉**紅圈／橘圈」 | `patch-entry --ids XX --alert none` |
 | 「XX **分類錯了**」 | `set-category --pairs`（分號分隔） |
 | 「XX **不要了**／誤收」 | `remove --ids XX`（「待人工」用 `needs-review add`） |
 | 「XX 的**時段標記**錯了」 | `set-mark --ids XX --mark ▲` |
