@@ -26,6 +26,10 @@ import s2_validate as sv  # noqa: E402  共用 CODE／標記剝離，不另寫�
 # 時長：`01:34`（MM:SS）為標準；`01:01:01`（HH:MM:SS）舊資料有，一併收
 _DUR = re.compile(r"^\d{1,3}:\d{2}(?::\d{2})?$")
 _LABEL = re.compile(r"^(畫面|BITE)[：:]\s*")
+# 網址素材（common/17）行尾另起一行 `▎URL：…`——不算三段式的一段，解析前先剝掉，
+# 否則會被 segs 迴圈當成無法歸類的段落（無 BITE 時直接解析失敗）或誤黏進
+# bite 陣列（有 BITE 時，2026-08-19 韓聯社/CNA 批次實錯：URL 混進 fields.bite）。
+_URL_SUFFIX = re.compile(r"\n▎URL：(\S+)\s*$")
 
 
 def parse_entry(entry):
@@ -38,6 +42,11 @@ def parse_entry(entry):
     line = line.strip()
     if not line:
         return None, "空白內容"
+    url = None
+    um = _URL_SUFFIX.search(line)
+    if um:
+        url = um.group(1)
+        line = line[:um.start()].rstrip()
     m = re.match(rf"^({sv.CODE}(?:\s*/\s*{sv.CODE})*)\s*", line)
     if not m:
         return None, "抓不到素材代碼（YouTube 兩行式等非標準格式）"
@@ -57,7 +66,7 @@ def parse_entry(entry):
         return None, "沒有摘要／畫面等內容段"
 
     out = {"codes": codes, "notes": notes, "summary": None,
-           "footage": None, "bite": [], "no_bite": False, "duration": None}
+           "footage": None, "bite": [], "no_bite": False, "duration": None, "url": url}
     for s in segs:
         lab = _LABEL.match(s)
         if lab and lab.group(1) == "畫面":
