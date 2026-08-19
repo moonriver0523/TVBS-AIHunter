@@ -104,6 +104,7 @@
 | A13 | 🔴 `inspect --lengths` 靜默漏掉巢狀欄位→AP 誤判缺 script | 0818-2200 體檢 | — | ✅2026-08-18（`3e18165`）待實戰驗收 | 已修共用 helper，54 項測試全過 |
 | A14 | 0818-2000「本輪 0 則」誤報（實收 45 則） | 0818-2200 體檢連帶查出 | — | 🔶另一 session 已修但未 commit＋弄壞測試 | ⛔ main 未擅自 commit 他人在途改動，待 fixture 修正 |
 | A15 | 🔴 batch json 由 agent 經 Write 重打整包內容當 output token | 0818-1800／0819-0100 兩輪抽查 | 2 | ⬜待做／需先確認可行性 | 估佔全輪 output token 20~25%，改進方向未驗證可行性 |
+| A16 | 晚班交接每則外電加可點連結（RT permalink／AP 搜尋頁） | 使用者 2026-08-19 | — | ⬜待做 | RT 用 itemid 組 `all?id={guid}&media-types=vid`，零額外呼叫、是真 permalink；AP 用 Edit No 組 `home/search?query={id}&mediaType=video`，零額外呼叫但只到搜尋結果頁（detail 頁網址含 hash，見 `ap/01-search-workflow.md:55`，無法自己組出來） |
 
 ### D — 待使用者裁決（未裁定前不得動工） → 詳情：[master-detail/D.md](master-detail/D.md)
 
