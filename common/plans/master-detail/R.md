@@ -1,0 +1,22 @@
+# S2 MASTER 詳情檔 — R類（修復）
+
+> 本檔為 [S2-MASTER-追蹤清單.md](../S2-MASTER-追蹤清單.md) 的詳情內容，內容自原表逐字搬遷，未經摘要或精簡。
+> 進度紀錄規則同 MASTER：**只加不改**——更正請追加新行，不要覆寫舊敘事。
+
+## R — 修復（品質與可靠性）
+
+| ID | 項目 | 來源 | 優先 | 狀態 | 說明／驗收 |
+|----|------|------|-----:|------|------------|
+| R1 | RT Load More 迴圈修法：0811「一次抓完」evaluate 配方寫死進 13c §1b＋⛔禁迴圈 | 交接§6-1 | 1 | ⏸等E1 | 每輪省 ~38 次呼叫/6 分。⚠️ 禁令下不准附範本（交接§11-3 教訓） |
+| R2 | RT 對帳只用 Edit No 判歷史已收，跨日撞號→靜默漏收（P0-1） | 複核 | 2 | ✅281d380（0813-1600 首次真實命中 RT4607） | 唯一真資料風險（RT3609 實例）。改 Edit No＋日期複合判斷。0812 未踩中但每天在骰 |
+| R3 | audit finding fingerprint 去重／紅燈冪等（P0-4） | 複核＋交接§6-4 | 3 | ✅281d380 | PO-11~14WE 已登記 needs-review 仍每輪紅燈重查，1600 輪燒 7.7分/51次。修好順帶消掉目前唯一殘留紅燈 |
+| R4 | truncate() 加標記後總長 4014 > 4000（P0-2） | 複核 | 4 | ✅281d380 | 17:05 只改了標記字元，長度溢出沒修→已修：標記算進 limit |
+| R5 | audit △ 判準尊重合法 set-mark override（P0-3） | 複核 | 5 | ✅2026-08-13 | 17:05 只修了假警報那一半。修法：`mark` 欄位存在＝set-mark 留痕（s2_state 唯一寫入點已核），有 override 者不再報「判日失敗」；副本合成雙情境測試 PASS（無 override 照抓、有 override 不誤報） |
+| R6 | AP 對帳清單抓到 page 2（≥32 則） | 接手查證 | 6 | ✅2026-08-13（13d §7）；**2026-08-14 訂正** | 現況 list=16 恰為 page 1 容量，被擠出 page 1 的素材對帳網接不到（AP5467302 實例）。掃描本身有翻頁（三輪 log 均有 PageNumber=2），弱的是對帳快照。修法走規則層：13d §7 原要求對帳快照 page1+page2 合併（≥32 則，當窗不足 17 則才允許單頁）。屬規則文字，待下輪實戰驗收快照筆數。**0814-1200 體檢訂正：PageNumber=2 回 100+（與 0100 的 117 同形），合併 page2 會把 116 寫進對帳分母。13d §7 已改為「只信 Page1＝16；禁止打 Page2；被擠出的用 term／DOM 定向補，不准 116 假綠燈」**。**0814-0100 實戰：agent 改走 API 一次撈 117 則（超額達標），但落地格式變 tab＋ISO UTC，audit parser 只認 `\|` 分隔→整行當 code、時間空白→117 則全進「窗外」假綠燈（已收 0 竟無紅燈）。main 當場修 parse_list_file（tab 分隔／total 表頭跳過／ISO UTC→本地時區），重跑：AP 已收 58＋前幾天 33＋**窗內未收 23**——全窗對帳首戰就抓到被 page1 快照時代遮住的累積漏收。**後續（0814 上午）：23 之中 1 則是稽核不看日期的誤報（已修 73e172e，窗判斷帶日期）；真漏收 22 則，使用者裁定回補 9 則硬新聞（含哥倫比亞強震搜救）、13 則運動/軟性放掉。sonnet 子代理已回補完成並經 main 獨立驗收：9 則全入庫帶 src_text、分類歸位（哥倫比亞強震那則進機動格）、render 444 則（+9）品質掃 0 命中。⚠️ 流程教訓：main 把「待 0430 回補」寫 MASTER 但排程 agent 不讀 MASTER→訊息斷鏈兩輪，跨輪交辦要走狀態檔（needs-review/alert），不是帳本** |
+| R8 | audit 其餘輸出補完：各清單 shown/total/more（P0-5）＋ --json-report（P0-6) | 複核 | 8 | ✅P0-5（2026-08-13） | §4 已做一處（384d9de）。P0-5 已補齊：more_note() helper 套到 Ⓐ/②/③/④/⑥/⑦ 全部截斷點（生產稽核實測「還有 14 則未列出」8+14=22 對得上）。--json-report（P0-6）仍 ⬜ 留案不動 |
+| R9 | update-entry 同步 src_text／footage_type（P1） | 複核 | 9 | ✅6ecfc17；**0818-1000 第三次真實復發** | src_text 已補（--src-text/--src-text-file/批次每筆可帶；{id,src_text} 純回補不動稿）；footage_type 原本就會傳入 apply_update。**0818-1000（使用者要求查浪費，main 查證）**：NS 整批 39 則再度整批漏帶 src_text（`add-batch` 印警告，確認防呆機制正常運作），跟 0812-2200／65 則、0813-1200／80 則同一種失誤第三次出現；AP／RT 兩站這輪正常，僅 NS 中招。防呆只做到「警告＋可回補」，沒有做到「組 batch 當下就擋下漏欄位」，所以每次復發都要付一次現場回補的時間成本——這輪回補（Write ns_fix_1000.json 重寫 27 則措辭＋Write ns_srctext_1000.json 補齊全 39 則 src_text＋兩次 update-entry）從 10:08:37 燒到 10:13:53，約 5.3 分鐘。⚠️ 續觀：若之後幾輪還在復發，代表「事後警告」不夠，該考慮把 src_text 缺欄位做成組 batch 前的硬性檢查（例如 `s2_batch_prep.py` 的 build/compare 流程擋下不完整的 batch，不是等 add-batch 才報）|
+| R10 | BITE 三態 CONFIRMED／NO_BITE／REVIEW_REQUIRED（P1） | 複核 | 10 | ⬜ | |
+| R12 | truncate 3000 字截斷 SOUNDBITE 段→BITE 無法驗證 | RT9878 實例 | 4.5 | ✅281d380 | RT9878 sb_count 機械數到 9，但 truncate 只取前 3000 字未含逐字引言，agent 只能標無BITE 待人工。修法與 R4 同區：truncate 應保證 SOUNDBITE/SUPERS 段落優先保留，不是傻取前 N 字 |
+| R14 | browser_evaluate 大回應落檔＝資料遺失：MCP 回 `[Evaluation result](./檔)` 連結但檔案從未寫出，agent 全機找檔 | 0813-2200健檢 | 2.5 | ✅2026-08-13（13d §6）；**0814-1000 首戰驗收過**：agent 遇到同款連結自述「per V4 §6 資料沒落地」直接分段重抓，前天 13 分鐘的坑這次 ~20 秒繞過 | 0813-2200 NS 站兩踩（ns_probe/ns_full_2200.json）：一次抓 60 則回應過大→MCP 聲稱落檔→實際連自家 output-dir（D:\Downloads\PlaywrightMCP）都沒有→agent 燒約 9＋4 分鐘搜檔（含 `find /` 全磁碟 120s timeout）。該輪 NS 15.8分/46次（正常約3分），整輪 33.7 分。agent 最後自己用分段回傳解掉＝正解。修法：13d 新章節硬規則（見連結視同資料遺失、禁找檔、禁 `find /`、立即分段重抓） |
+| R13 | batch 檔寫錯位置→雙重搬運（浪費 ~3 分/輪） | 2200健檢 | 6.5 | ✅281d380 | 2200 輪把 rt/ap batch 先寫 repo 根目錄，再 Read 回來重 Write 到 scratch 目錄（卡點 91s+102s 就在這）。repo 根目錄已累積 9 個各輪殘留 json（0700/0100/1500/2000…）。修法：規則明示 batch 一律直接寫 `scratch-dir` 路徑＋清一次現存殘留。**0813-0100 再犯：ns/ap/rt_new_0813.json 又先落 repo 根（該輪三個 >60s 停頓 345s/136s/148s 全在這組檔的 Read 之後），事後有自清但雙重搬運照舊——已連兩輪，建議優先度上調**。1000 輪第三種變體：ns/ap/rt_list_1000.json 先落 repo 根、就地 python -c 檢查、再 `mv` 進 scratch（比 Read+Write 便宜但同病）。**0813-1200（13d §1 硬規則生效首輪）仍再犯**（detail 檔先落 repo 根再 mv）——規則文字管不住，剩下的硬解是 launcher 把工作目錄設成 scratch-dir（候補案，需裁決，見 D7） |
+
