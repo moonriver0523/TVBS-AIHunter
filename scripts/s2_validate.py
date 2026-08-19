@@ -354,8 +354,11 @@ def _run_line_checks(l, hit, has_bite_tag, has_bite_seg, has_nobite):
         hit(n, "缺 ▎畫面： 段")
     if not has_bite_seg and not has_nobite:
         hit(n, "結尾既非 無BITE 也無 BITE： 段")
-    if not re.search(r"(無BITE。|」|▎\d{1,3}:\d{2})\s*$", l):
-        hit(n, "行尾有多餘內容（應以 無BITE。／」／▎MM:SS 結尾）")
+    # common/17 網址素材（韓聯社／CNA）行尾另有 ▎URL：{網址}——正確格式是另起一行，
+    # 但既有資料曾把它接在同一行尾端（2026-08-19 YNA22-33 實錯），兩種都容許，
+    # 不再誤判成「行尾有多餘內容」。
+    if not re.search(r"(無BITE。|」|▎\d{1,3}:\d{2}|▎URL：\S+)\s*$", l):
+        hit(n, "行尾有多餘內容（應以 無BITE。／」／▎MM:SS／▎URL：{網址} 結尾）")
     if has_bite_seg:
         bite_seg = l.split("▎BITE：", 1)[-1] if "▎BITE：" in l else l.split("▎BITE:", 1)[-1]
         for q in re.findall(r"「([^」]*)」", bite_seg):
