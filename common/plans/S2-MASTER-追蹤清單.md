@@ -52,6 +52,7 @@
 | E2 | effort=medium 實效驗證 | 093c713 | ✅ | medium vs high 同時段對照數據幾乎相同，已交 D1 裁決 |
 | E3 | 鎖檔收工自動清理實戰驗證 | c9614ac | ✅ | 已移歸檔，收工推播首次實戰成功 |
 | E4 | ①b 稽核前置驗收：update-entry 次數 7→1~3 | TODO | 🔶 | 規則與「邊掃邊分類」流程打架，驗收口徑已由 T7 調整，持續觀察 |
+| E5 | AP detail 擷取偶發 selector 失效，靠 agent 事後自癒重跑 | 0819-2000 體檢 | ⬜列入觀察 | 首次樣本：16筆抓成全空/APundefined，agent自行重跑修正，最終資料乾淨但多花約2萬token、4分鐘；累積更多樣本再議是否加自動重試檢查 |
 
 ### R — 修復（品質與可靠性） → 詳情：[master-detail/R.md](master-detail/R.md)
 
