@@ -93,6 +93,13 @@ AIRED_RE = re.compile(r"^(🟤)\s*")
 #   🔴＝曾進過檔頭（最高層級，永久保留）／🟡＝重大但未進檔頭（同樣永久保留）
 # ⚠️ 兩者互斥：升進檔頭就改標 🔴，不會同時出現。
 SUBALERT_RE = re.compile(r"^(🟡)\s*")
+# 推薦標記 ⭐（2026-08-19 使用者訂案）：**編輯覺得適合做成新聞才標**，機械／agent
+# 不可自行判斷標上——跟 🔴／🟡（agent 可自行判斷「重大與否」）是不同性質的標記，
+# 這條只能透過使用者明確指示才能下（呼叫路徑仍是 `patch-entry --alert star`，
+# 該路徑本來就要求明令才動，這裡多一條「明令」還必須是使用者親自下的）。
+# ⚠️ 與 🔴／🟡 三者互斥：使用者一定是先看過紅黃標、覺得有必要才會另外標 ⭐，
+# 不會同一則同時掛兩種——位置與 🔴／🟡 相同（時段標記之後、代碼之前）。
+STAR_RE = re.compile(r"^(⭐)\s*")
 # 畫面亮點標記 🔖（2026-08-11 使用者訂案，位置第三次也是最終定版）：
 # 演進：0810 放第一個備註括號尾端 → 0811 凌晨改小分題尾端 → 0811 定案回到素材行。
 # **為什麼回到素材行**：小分題會被多則素材共用，但畫面品質是「每一則」的屬性。
@@ -107,9 +114,10 @@ HILITE_RE = re.compile(r"^(🔖)\s*")
 
 
 def strip_mark(l):
-    """回傳 (時段標記或空字串, 去掉時段標記／🔴／🟡／🟤／🔖 之後的行)。
+    """回傳 (時段標記或空字串, 去掉時段標記／🔴／🟡／⭐／🟤／🔖 之後的行)。
 
-    ⚠️ 這幾個標記可並存且**順序固定**：`{時段} {🔴|🟡} {🟤} {🔖} {代碼}`。
+    ⚠️ 這幾個標記可並存且**順序固定**：`{時段} {🔴|🟡|⭐} {🟤} {🔖} {代碼}`
+    （🔴／🟡／⭐ 三者互斥，只會出現其中一個）。
     迴圈跑兩輪是因為 🔖 排在 🟤 後面，單輪由前往後比對時若 🔴 與 🔖 之間夾了 🟤，
     第一輪只會剝掉前兩個——與其相信順序，不如剝到不能再剝為止。
     """
@@ -118,7 +126,7 @@ def strip_mark(l):
     changed = True
     while changed:
         changed = False
-        for rx in (RED_RE, SUBALERT_RE, AIRED_RE, HILITE_RE):
+        for rx in (RED_RE, SUBALERT_RE, STAR_RE, AIRED_RE, HILITE_RE):
             r = rx.match(rest)
             if r:
                 rest = rest[r.end():]
@@ -141,10 +149,15 @@ def is_subalert(l):
     return bool(SUBALERT_RE.match(_after_mark(l)))
 
 
+def is_star(l):
+    """素材行是否帶推薦標記 ⭐（時段標記之後、代碼之前；與 🔴／🟡 互斥）。"""
+    return bool(STAR_RE.match(_after_mark(l)))
+
+
 def is_aired(l):
-    """素材行是否帶已播標記 🟤（時段標記與 🔴／🟡 之後、代碼之前）。"""
+    """素材行是否帶已播標記 🟤（時段標記與 🔴／🟡／⭐ 之後、代碼之前）。"""
     rest = _after_mark(l)
-    for rx in (RED_RE, SUBALERT_RE):
+    for rx in (RED_RE, SUBALERT_RE, STAR_RE):
         r = rx.match(rest)
         if r:
             rest = rest[r.end():]
@@ -642,6 +655,9 @@ def header_from_lines(lines, window="", date="", mmdd="", alerts=()):
         # 用字與網頁版篩選 chip 一致（2026-08-09 使用者要求）——同一件事兩種說法，
         # 編輯在 txt 與網頁之間切換時會以為是兩種標記。
         legend.append("🔴=重大　🟡=次重大")
+    # ⭐ 有用到才印圖例（2026-08-19），同一件事同一套說法，與網頁版篩選 chip 一致。
+    if any(is_star(raw) for raw in lines):
+        legend.append("⭐=推薦")
     if any(is_aired(raw) for raw in lines):
         legend.append("🟤=已做過")
     if legend:

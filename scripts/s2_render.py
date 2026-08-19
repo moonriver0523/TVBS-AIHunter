@@ -52,6 +52,7 @@ MARK_RE = re.compile(r"^\s*([△▲■◆●])\s*")   # `●` 為舊符號，剝
 RED_RE = re.compile(r"^\s*(🔴)\s*")
 AIRED_RE = re.compile(r"^\s*(🟤)\s*")
 SUBALERT_RE = re.compile(r"^\s*(🟡)\s*")   # 次級重大：重大但未進檔頭
+STAR_RE = re.compile(r"^\s*(⭐)\s*")        # 推薦（2026-08-19，與 🔴／🟡 三者互斥，見 s2_validate）
 
 
 def load_state(path):
@@ -64,7 +65,8 @@ def load_state(path):
 
 
 def strip_marks(entry):
-    """剝掉 raw_entry 開頭既有的時段標記／🔴／🟡／🟤，回傳 (有無🔴, 有無🟡, 有無🟤, 淨內容)。
+    """剝掉 raw_entry 開頭既有的時段標記／🔴／🟡／⭐／🟤，
+    回傳 (有無🔴, 有無🟡, 有無⭐, 有無🟤, 淨內容)。
 
     標記一律由 render 重算後補回：舊資料有的有、有的沒有，照抄會出現雙標記或漏標記。
     🟤 的正規來源是 item 的 `aired` 欄位（`set-aired` 寫入），但 raw_entry 裡若被手打
@@ -80,12 +82,16 @@ def strip_marks(entry):
     orange = bool(SUBALERT_RE.match(e))
     if orange:
         e = SUBALERT_RE.sub("", e, count=1)
+    star = bool(STAR_RE.match(e))
+    if star:
+        e = STAR_RE.sub("", e, count=1)
     aired = bool(AIRED_RE.match(e))
     if aired:
         e = AIRED_RE.sub("", e, count=1)
-    # 🔴 與 🟡 互斥：升進檔頭就是 🔴，不會同時掛兩個。萬一內容裡兩個都寫了，
-    # 取較高層級的 🔴——降級會讓「曾進過檔頭」這個永久註記憑空消失。
-    return red, (orange and not red), aired, e
+    # 🔴／🟡／⭐ 三者互斥：升進檔頭就是 🔴，不會同時掛兩個。萬一內容裡不只一個都寫了，
+    # 取較高層級的 🔴 或 🟡——降級會讓「曾進過檔頭」這個永久註記憑空消失；
+    # ⭐ 是使用者事後另外標的推薦，優先度排在 🔴／🟡 之後（見 s2_validate STAR_RE 說明）。
+    return red, (orange and not red), (star and not red and not orange), aired, e
 
 
 def mmdd_shift(mmdd, days):
@@ -198,14 +204,14 @@ def cat_of(it):
 
 
 def render_item(it, base_mmdd):
-    """素材行／側錄段落：`{時段標記} {🔴若有} {raw_entry 原文}`。
+    """素材行／側錄段落：`{時段標記} {🔴|🟡|⭐ 若有} {raw_entry 原文}`。
 
     raw_entry **零加工**輸出（側錄逐字不壓縮、不加 `▎`、TC 冒號格式照留，見 14-S2b）；
     側錄是多行的，標記只加在第一行（TC 行）行首。
     YouTube 兩行式（13b §4c）的網址行**照樣帶時段標記**，但標記與網址之間
     一定要有半形空格——`△https://…` 會黏成一串、網址點不開（2026-08-03 使用者訂正）。
     """
-    red, orange, aired_txt, body = strip_marks(it.get("raw_entry", "") or "")
+    red, orange, star, aired_txt, body = strip_marks(it.get("raw_entry", "") or "")
     # 該則若有寫死的 `mark`（補掃輪等 checkpoint 判不準的情形，見 set-mark）優先用它
     mk = it.get("mark") if it.get("mark") in ("△", "▲", "■", "◆", "●") else         mark_for(it.get("first_seen_checkpoint"), base_mmdd)
     prefix = mk + " "
@@ -213,6 +219,8 @@ def render_item(it, base_mmdd):
         prefix += "🔴 "
     elif orange:
         prefix += "🟡 "          # 重大但未進檔頭（2026-08-05），與 🔴 互斥
+    elif star:
+        prefix += "⭐ "          # 推薦（2026-08-19），與 🔴／🟡 互斥
     # 🟤 已播：正規來源是 `aired` 欄位（set-aired 寫入），raw_entry 手打的也認
     if it.get("aired") or aired_txt:
         prefix += "🟤 "

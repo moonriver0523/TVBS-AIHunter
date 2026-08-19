@@ -8,9 +8,10 @@
 一字不差的同一條 entry——若對不上，這支工具就沒有取代臨時腳本的資格。
 
 其餘負向測試守兩件事：
-  ① 標記順序／互斥（`{時段} {🔴|🟡} {🟤} {🔖} {代碼}`）不可被打亂——
+  ① 標記順序／互斥（`{時段} {🔴|🟡|⭐} {🟤} {🔖} {代碼}`）不可被打亂——
      順序錯或沒剝乾淨會讓整行 LINE_RE 不 match，從品質掃與檔頭統計裡
-     **靜默消失**（△／🔴／🟡／🔖 上線時各踩過一次，見 s2_validate 註解）。
+     **靜默消失**（△／🔴／🟡／🔖 上線時各踩過一次，見 s2_validate 註解；
+     ⭐ 是 2026-08-19 加入的第三個互斥值，同一套剝除機制）。
   ② `--bite` 只補 s2_validate 已經在報的那一種，其餘一律拒絕——
      補錯方向會製造出「有 (BITE) 但缺 ▎BITE： 段」這個相反的錯誤。
 
@@ -70,6 +71,28 @@ report("標記：本來就沒有再撤 → 不變更", new is None, f"why={why}"
 
 # 🔴 一定要剝乾淨——沒剝乾淨整行會從品質掃靜默消失
 for pre, alert in (("△ 🔴 ", "yellow"), ("△ 🟡 🟤 🔖 ", "red"), ("△ 🔴 🟤 ", "none")):
+    new, _ = patch(pre + BODY, alert=alert)
+    _, bare = sv.strip_mark(new)
+    report(f"剝乾淨：{pre.strip()} 換標記後 LINE_RE 仍認得",
+           bool(sv.LINE_RE.match(bare)), f"剩 {bare[:24]!r}")
+
+# ── ①b ⭐ 推薦：與 🔴／🟡 三者互斥（2026-08-19）──────────────────────
+for pre, alert, want, label in (
+    ("△ ",            "star",   "△ ⭐ ", "無 → ⭐"),
+    ("△ 🔴 ",         "star",   "△ ⭐ ", "🔴 → ⭐（不並存）"),
+    ("△ 🟡 ",         "star",   "△ ⭐ ", "🟡 → ⭐（不並存）"),
+    ("△ ⭐ ",         "red",    "△ 🔴 ", "⭐ → 🔴（不並存）"),
+    ("△ ⭐ ",         "none",   "△ ",     "⭐ → 撤除"),
+    ("△ ⭐ 🟤 ",      "none",   "△ 🟤 ",  "撤除保住 🟤"),
+):
+    new, why = patch(pre + BODY, alert=alert)
+    report(f"標記：{label}", new == want + BODY,
+           f"得到 {new!r}" if new != want + BODY else "")
+
+new, why = patch("△ ⭐ " + BODY, alert="star")
+report("標記：已是 ⭐ 再標 ⭐ → 不變更", new is None, f"why={why}")
+
+for pre, alert in (("△ ⭐ ", "red"), ("△ 🔴 ", "star"), ("△ ⭐ 🟤 🔖 ", "none")):
     new, _ = patch(pre + BODY, alert=alert)
     _, bare = sv.strip_mark(new)
     report(f"剝乾淨：{pre.strip()} 換標記後 LINE_RE 仍認得",

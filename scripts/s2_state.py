@@ -662,14 +662,19 @@ def cmd_update_batch(state, args):
 #   - ⛔ 刻意**不**做成寫入時自動補：13c §497 訂的是品質掃「只警告不修」，
 #     靜默改稿會牴觸那條原則。要不要改成自動導出屬裁決題（MASTER A12）。
 
-ALERT_MARKS = {"red": "🔴", "yellow": "🟡", "none": ""}
+ALERT_MARKS = {"red": "🔴", "yellow": "🟡", "star": "⭐", "none": ""}
+# ⭐ 推薦（2026-08-19）：跟 🔴／🟡 走同一個 `--alert` 欄位、同一條「明令才動」路徑，
+# 但語意更嚴格——🔴／🟡 是「重大與否，agent 可自行判斷」，⭐ 是「編輯覺得適合做成
+# 新聞才標，agent 不可自行判斷、只能在使用者明確指示時才下這個值」。程式碼層面
+# 兩者呼叫方式相同（都是 `--alert star`），這條限制是給下指令的 agent／使用者看的
+# 政策，機械本身不擋（沒有「誰下的令」這種資訊可查）。
 
 
 def patch_marks(sv, entry, alert=None, add_bite=False):
     """回傳 (新 entry, 說明)。不需要改動時 `新 entry` 為 None（呼叫端據此跳過）。
 
-    `alert`：`'red'`／`'yellow'`／`'none'`／`None`（不動）。🔴 與 🟡 互斥，
-    換標記＝先剝掉舊的再插新的，不會兩個並存（同 `s2_render.strip_marks` 的約定）。
+    `alert`：`'red'`／`'yellow'`／`'star'`／`'none'`／`None`（不動）。🔴／🟡／⭐ 三者
+    互斥，換標記＝先剝掉舊的再插新的，不會同時並存（同 `s2_render.strip_marks` 的約定）。
     """
     first = (entry or "").strip().split("\n")[0]
     rest_lines = (entry or "").strip().split("\n")[1:]
@@ -689,6 +694,9 @@ def patch_marks(sv, entry, alert=None, add_bite=False):
     had_yellow = bool(sv.SUBALERT_RE.match(tail))
     if had_yellow:
         tail = sv.SUBALERT_RE.sub("", tail, count=1)
+    had_star = bool(sv.STAR_RE.match(tail))
+    if had_star:
+        tail = sv.STAR_RE.sub("", tail, count=1)
     had_aired = bool(sv.AIRED_RE.match(tail))
     if had_aired:
         tail = sv.AIRED_RE.sub("", tail, count=1)
@@ -697,7 +705,7 @@ def patch_marks(sv, entry, alert=None, add_bite=False):
         tail = sv.HILITE_RE.sub("", tail, count=1)
 
     notes = []
-    new_alert = "🔴" if had_red else ("🟡" if had_yellow else "")
+    new_alert = "🔴" if had_red else ("🟡" if had_yellow else ("⭐" if had_star else ""))
     if alert is not None:
         want = ALERT_MARKS[alert]
         if want == new_alert:
@@ -1612,12 +1620,13 @@ def main():
                    help="抽取白名單數出的 SOUNDBITE 段數；>0 且 entry 寫「無BITE」會擋下。"
                         "站方補完整稿後回寫用（不帶＝不動舊值）")
     pe = sub.add_parser("patch-entry",
-                        help="機械修補既有素材行的標記（🔴／🟡／補 (BITE)），"
+                        help="機械修補既有素材行的標記（🔴／🟡／⭐／補 (BITE)），"
                              "不必重打整條 entry")
     pe.add_argument("--ids", required=True, help="逗號分隔；不存在的 id 一律先擋下不改")
-    pe.add_argument("--alert", choices=["red", "yellow", "none"],
-                    help="🔴 重大（進檔頭）／🟡 重大未進檔頭／none 撤掉；兩者互斥，"
-                         "換標記自動剝舊插新。⛔ 重大與否是編輯判斷，只有明令才動")
+    pe.add_argument("--alert", choices=["red", "yellow", "star", "none"],
+                    help="🔴 重大（進檔頭）／🟡 重大未進檔頭／⭐ 推薦／none 撤掉；三者互斥，"
+                         "換標記自動剝舊插新。⛔ 重大與否是編輯判斷，只有明令才動；"
+                         "⭐ 更嚴格——只能是使用者親自明示才可以標，agent 不可自行判斷該標")
     pe.add_argument("--bite", action="store_true",
                     help="補第二括號 (BITE)。只補「有 ▎BITE： 段但缺 (BITE)」這一種；"
                          "已有／寫著無BITE／沒有 BITE 段一律拒絕不動")

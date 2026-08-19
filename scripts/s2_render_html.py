@@ -46,7 +46,7 @@ def hilite_of(text):
     ⛔ 不要再依括號裡的標籤拆成多個鈕——拆開的版本做過，兩個鈕反而讓人要點兩次
     才看得到全部，而且側錄兩行式沒有備註括號，會整批漏在篩選外。
 
-    ⚠️ 只看**第一行**：🔖 標在素材代碼前面（🔴／🟡 之後），一定在第一行；
+    ⚠️ 只看**第一行**：🔖 標在素材代碼前面（🔴／🟡／⭐ 之後），一定在第一行；
     往下多看會把側錄內容行裡偶然出現的符號也算進來。
     """
     return "🔖" if "🔖" in (text or "").split("\n")[0] else ""
@@ -137,11 +137,13 @@ def collect(state, base_mmdd):
                         "id": it.get("id") or "",
                         "src": src, "kind": kind,
                         "mark": R.mark_for(it.get("first_seen_checkpoint") or "", base_mmdd) or "",
-                        # 重大層級（2026-08-09 使用者要求可篩）：🔴＝檔頭重大、🟡＝重大未進檔頭。
-                        # 從**渲染後的成品**認，不從 raw_entry——render 會依 alerts 補標記，
-                        # 只看 raw_entry 會漏掉那些「檔頭有、正文還沒補」的則。
+                        # 重大層級（2026-08-09 使用者要求可篩）：🔴＝檔頭重大、🟡＝重大未進檔頭、
+                        # ⭐＝推薦（2026-08-19，三者互斥）。從**渲染後的成品**認，不從
+                        # raw_entry——render 會依 alerts 補標記，只看 raw_entry 會漏掉
+                        # 那些「檔頭有、正文還沒補」的則。
                         "alert": ("🔴" if "🔴" in text[:8] else
-                                  ("🟡" if "🟡" in text[:8] else "")),
+                                  ("🟡" if "🟡" in text[:8] else
+                                   ("⭐" if "⭐" in text[:8] else ""))),
                         # 畫面亮點（2026-08-11 使用者要求可篩）：見 hilite_of。
                         "hilite": hilite_of(text),
                         "cp": it.get("first_seen_checkpoint") or "",
@@ -176,33 +178,39 @@ TEMPLATE = """<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>__TITLE__</title>
 <style>
-:root{--bg:#fff;--fg:#1a1a1a;--mut:#666;--line:#e3e3e3;--card:#fafafa;
-      --accent:#0b62d0;--chip:#eef2f7;--chipon:#0b62d0;--warn:#c00;
-      --big:#d94a1f;--subbg:#e8eaed;--subfg:#2b2f36;
-      --midbg:#0b62d0;--midfg:#fff}
+:root{--bg:#fbfbfc;--panelbg:#f4f5f7;--fg:#1c1e22;--mut:#6b7078;--line:#e2e4e8;--card:#f1f2f5;
+      --accent:#1558c4;--accent-fg:#fff;--chip:#eef0f4;--chipfg:#3a3e46;--chipon:#1558c4;--warn:#c02f2f;
+      --warntint:#fdecec;--big:#c8481c;--subbg:#e6e8ec;--subfg:#2b2f36;
+      --midbg:#1558c4;--midfg:#fff;--sidetint:#eef0f3;--urltint:#eaf1fd;--kindfg:#5b6068;
+      --shadow:0 1px 2px rgba(20,22,26,.06)}
 @media (prefers-color-scheme:dark){
-:root{--bg:#16181c;--fg:#e8e8e8;--mut:#9aa0a6;--line:#2c3038;--card:#1d2026;
-      --accent:#6aa9ff;--chip:#252a32;--chipon:#2b6cb0;--warn:#ff6b6b;
-      --big:#ff7a4d;--subbg:#333941;--subfg:#e8e8e8;
-      --midbg:#2b6cb0;--midfg:#fff}}
+:root{--bg:#15171b;--panelbg:#1a1c21;--fg:#e7e8ea;--mut:#9198a3;--line:#2b2e35;--card:#1d2026;
+      --accent:#5d9bff;--accent-fg:#0b1220;--chip:#22252c;--chipfg:#c7cad0;--chipon:#3d6fc4;--warn:#ff6b6b;
+      --warntint:#3a1f22;--big:#ff8a5c;--subbg:#2b2f37;--subfg:#e7e8ea;
+      --midbg:#2c5fa8;--midfg:#fff;--sidetint:#20232a;--urltint:#1b2532;--kindfg:#9198a3;
+      --shadow:0 1px 3px rgba(0,0,0,.35)}}
 *{box-sizing:border-box}
+::selection{background:var(--accent);color:var(--accent-fg)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
 body{margin:0;background:var(--bg);color:var(--fg);
-     font:15px/1.7 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+     font:15px/1.65 "Inter","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+     -webkit-font-smoothing:antialiased}
 /* 檔頭分兩塊：標題與檔頭資訊**隨頁面捲走**，只有搜尋列釘在頂端。
    原本整組（標題＋檔頭＋三排篩選＋兩個鈕）都 sticky，手機上吃掉半個螢幕，
    素材瀏覽空間所剩無幾（2026-08-09 使用者實測回報）。 */
-.top{padding:10px 14px 4px}
+.top{padding:14px 16px 6px}
 .sticky{position:sticky;top:var(--histh);z-index:9;background:var(--bg);
-        border-bottom:1px solid var(--line);padding:6px 14px 8px}
-h1{font-size:17px;margin:0}
-.tgl{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+        border-bottom:1px solid var(--line);padding:8px 16px 10px}
+h1{font-size:19px;font-weight:800;letter-spacing:-.01em;margin:0}
+.tgl{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
 .caret{color:var(--mut);font-size:12px;transition:transform .15s}
 .caret.open{transform:rotate(180deg)}
-.meta{color:var(--mut);font-size:13px;white-space:pre-wrap;margin-top:3px}
+.meta{color:var(--mut);font-size:13px;line-height:1.8;white-space:pre-wrap;margin-top:5px}
 /* 產出時間要**永遠看得到**：它藏在收合的檔頭裡就失去警示作用了。
    資料若停在幾小時前，編輯一眼就該察覺，而不是照著舊清單發稿。 */
-.stamp{margin-left:auto;color:var(--mut);font-size:12px;white-space:nowrap}
-.stamp.stale{color:var(--warn);font-weight:600}
+.stamp{margin-left:auto;color:var(--mut);font-size:12px;white-space:nowrap;
+  padding:2px 9px;border-radius:10px;background:var(--chip)}
+.stamp.stale{color:var(--warn);font-weight:700;background:var(--warntint)}
 .off{display:none!important}
 
 /* 歷史列（2026-08-11 上線）：跟會收合的檔頭（.top）是兩件事——檔頭捲走就捲走，
@@ -210,14 +218,17 @@ h1{font-size:17px;margin:0}
    蓋住），下面的搜尋列要讓出「歷史列的高度」——用行內 script 量測實際高度寫進
    --histh，不是猜一個 px 值，字級／螢幕寬度變動時才不會兩者間出現縫隙或重疊。 */
 :root{--histh:0px}
-.histbar{display:flex;gap:6px;overflow-x:auto;padding:6px 14px 10px;
+.histbar{display:flex;gap:6px;overflow-x:auto;padding:8px 16px 11px;
          border-bottom:1px solid var(--line);-webkit-overflow-scrolling:touch;
          position:sticky;top:0;z-index:11;background:var(--bg)}
 .histbar::-webkit-scrollbar{height:4px}
 .hlabel{flex:none;font-size:12px;color:var(--mut);align-self:center;margin-right:2px}
-.dpill{flex:none;padding:4px 11px;font-size:12px;border:1px solid var(--line);
-       border-radius:12px;color:var(--mut);text-decoration:none;white-space:nowrap}
-.dpill.on{background:var(--chipon);color:#fff;border-color:var(--chipon);font-weight:600}
+.dpill{flex:none;padding:4px 12px;font-size:12px;border:1px solid var(--line);
+       border-radius:999px;color:var(--mut);text-decoration:none;white-space:nowrap;
+       transition:border-color .15s,color .15s}
+.dpill:hover{border-color:var(--accent);color:var(--accent)}
+.dpill.on{background:var(--chipon);color:#fff;border-color:var(--chipon);font-weight:700}
+.dpill.on:hover{color:#fff}
 
 /* ══ 篩選面板 ══════════════════════════════════════════════════
    桌機：常駐左側欄（橫向空間本來就有，不必開關）
@@ -227,8 +238,8 @@ h1{font-size:17px;margin:0}
 #panel{}
 .grip{display:none}
 .phead{display:none}
-.fgroup{margin-bottom:10px}
-.flabel{font-size:12px;color:var(--mut);margin-bottom:2px}
+.fgroup{margin-bottom:14px}
+.flabel{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--mut);margin-bottom:5px}
 #scrim{display:none}
 #fab{display:none}
 /* LOGO：**預設不顯示**。手機版是下方彈出的操作面板，高度本來就吃緊
@@ -238,14 +249,15 @@ h1{font-size:17px;margin:0}
 
 /* ── 桌機：常駐左側欄 ── */
 @media (min-width:820px) and (hover:hover){
-  body{display:grid;grid-template-columns:200px 1fr;
+  body{display:grid;grid-template-columns:216px 1fr;
        grid-template-areas:"panel top" "panel hist" "panel sticky" "panel main"}
   .top{grid-area:top}
   .histbar{grid-area:hist}
   .sticky{grid-area:sticky}
   main{grid-area:main}
   #panel{grid-area:panel;position:sticky;top:0;align-self:start;max-height:100vh;
-         overflow:auto;padding:12px;border-right:1px solid var(--line)}
+         overflow:auto;padding:16px 14px;background:var(--panelbg);
+         border-right:1px solid var(--line)}
   #panel .bar{margin-top:2px}
   .chip{font-size:12px;padding:3px 8px}
   /* LOGO 收在左欄最下方。`margin-top:auto` 需要 #panel 是 flex 縱向排列，
@@ -253,9 +265,9 @@ h1{font-size:17px;margin:0}
      圖是圓形構圖、四角是黑底，`border-radius:50%` 把黑角切掉，
      淺色主題下才不會變成一塊突兀的黑方塊。 */
   #panel{display:flex;flex-direction:column}
-  .brand{display:block;margin:18px auto 4px;text-align:center;
-         opacity:.85;transition:opacity .2s}
-  .brand:hover{opacity:1}
+  .brand{display:block;margin:18px auto 4px;text-align:center;text-decoration:none;
+         opacity:.85;transition:opacity .2s,transform .2s}
+  .brand:hover{opacity:1;transform:translateY(-1px)}
   .brand img{width:80px;height:80px;border-radius:50%;display:block;margin:0 auto}
 }
 
@@ -276,42 +288,51 @@ h1{font-size:17px;margin:0}
   #scrim.open{opacity:1;pointer-events:auto}
   /* 浮動鈕放右下角＝拇指自然落點 */
   #fab{display:block;position:fixed;right:14px;bottom:16px;z-index:58;
-       padding:11px 18px;font-size:14px;font-weight:700;border:none;border-radius:22px;
-       background:var(--accent);color:#fff;box-shadow:0 3px 12px rgba(0,0,0,.3)}
-  #fab.on{background:var(--warn)}
+       padding:11px 18px;font-size:14px;font-weight:700;border:none;border-radius:999px;
+       background:var(--accent);color:var(--accent-fg);box-shadow:0 3px 14px rgba(0,0,0,.3);
+       transition:background .15s}
+  #fab.on{background:var(--warn);color:#fff}
   main{padding-bottom:76px}   /* 別讓最後一則被浮動鈕蓋住 */
 }
-.alert{color:var(--warn);font-weight:600}
-.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
-input[type=search]{flex:1;min-width:180px;padding:7px 10px;font-size:14px;
-  border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
-.chip{padding:4px 10px;font-size:13px;border:1px solid var(--line);border-radius:14px;
-      background:var(--chip);color:var(--fg);cursor:pointer;user-select:none}
+.alert{color:var(--warn);font-weight:700}
+.bar{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:8px}
+input[type=search]{flex:1;min-width:180px;padding:8px 12px;font-size:14px;
+  border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);
+  transition:border-color .15s,box-shadow .15s}
+input[type=search]:focus-visible{border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in oklab,var(--accent) 22%,transparent);outline:none}
+.chip{padding:4px 11px;font-size:12.5px;border:1px solid var(--line);border-radius:999px;
+      background:var(--chip);color:var(--chipfg);cursor:pointer;user-select:none;
+      transition:border-color .15s,background .15s,color .15s}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
 .chip.on{background:var(--chipon);color:#fff;border-color:var(--chipon)}
-.count{color:var(--mut);font-size:13px;margin-left:auto}
-button.act{padding:4px 10px;font-size:12px;border:1px solid var(--line);
-  border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
-button.act:hover{border-color:var(--accent);color:var(--accent)}
-main{padding:6px 14px 60px}
+.chip.on:hover{color:#fff}
+.count{color:var(--mut);font-size:12.5px;font-variant-numeric:tabular-nums;margin-left:auto}
+button.act{padding:5px 11px;font-size:12px;font-weight:600;border:1px solid var(--line);
+  border-radius:7px;background:var(--card);color:var(--fg);cursor:pointer;
+  transition:border-color .15s,color .15s,background .15s}
+button.act:hover{border-color:var(--accent);color:var(--accent);background:var(--urltint)}
+main{padding:10px 16px 60px}
 /* 三層各給一種辨識方式（2026-08-09 使用者訂）：
    大分類＝橘紅色字＋同色底線／中主題＝維持原本的 accent 色／小分題＝深底反白框。
    ⚠️ 顏色要用 token 定義，深色模式才不會變成黑底上的深橘。 */
-.big{margin:22px 0 8px;padding:5px 0;
+.big{margin:26px 0 10px;padding:6px 0;
      border-top:2px solid var(--big);border-bottom:2px solid var(--big);
-     font-size:16px;font-weight:700;letter-spacing:2px;color:var(--big)}
-.mid{margin:12px 0 4px;font-weight:700}
+     font-size:15px;font-weight:800;letter-spacing:.06em;color:var(--big)}
+.big:first-child{margin-top:4px}
+.mid{margin:16px 0 6px;font-weight:700}
 /* 中主題＝藍底白字色塊，去掉【】（2026-08-09 使用者訂）。
    前後各留一個半形空格才不會貼著色塊邊緣；空格寫在文字裡而不是靠 padding，
    使用者要的就是「 新加坡國慶 」這個形狀。⚠️ 只有網頁版這樣，TXT 版仍是【】。 */
-.mid .midtxt{display:inline-block;padding:2px 6px;border-radius:4px;
+.mid .midtxt{display:inline-block;padding:3px 8px;border-radius:5px;font-size:13.5px;
      background:var(--midbg);color:var(--midfg)}
-.sub{margin:8px 0 2px;font-size:13px;color:var(--mut)}  /* 空清單提示沿用這個灰 */
+.sub{margin:10px 0 3px;font-size:13px;color:var(--mut)}  /* 空清單提示沿用這個灰 */
 /* 小分題反白：底色掛在文字本身（inline-block），不是整條橫幅——
    橫幅會跟上面的大分類底線打架，而且小分題常常很短，整條反白看起來像錯誤訊息。
    ⚠️ 底色**淺灰配深字**（2026-08-09 使用者訂正，原本是深灰配白字太重）：
    小分題只是第三層標題，配色比大分類還搶眼會把視覺層級整個弄反。
    深色模式反過來（深底淺字），但同樣是「比背景稍亮一階」而非高對比。 */
-.sub .subtxt{display:inline-block;padding:2px 8px;border-radius:4px;
+.sub .subtxt{display:inline-block;padding:3px 9px;border-radius:5px;
      background:var(--subbg);color:var(--subfg);font-weight:600}
 .hd{display:flex;align-items:center;gap:8px}
 .hd button{visibility:hidden}
@@ -323,14 +344,20 @@ main{padding:6px 14px 60px}
   body{font-size:16px}          /* 手機閱讀尺寸 */
   .item{padding:8px 6px}        /* 觸控目標放大 */
 }
-.item{display:flex;gap:8px;padding:6px 8px;border:1px solid transparent;
-      border-radius:6px;align-items:flex-start}
+.item{display:flex;gap:9px;padding:7px 9px;margin:1px 0;border:1px solid transparent;
+      border-radius:8px;align-items:flex-start;transition:background .12s,border-color .12s}
 .item:hover{background:var(--card);border-color:var(--line)}
 .item .txt{flex:1;white-space:pre-wrap;word-break:break-word}
 /* 側錄／網址素材與三段式素材行視覺區隔——側錄是逐字稿、篇幅大得多，
-   不分開的話會在清單裡壓過真正的外電素材（0802 實測占 30%）。 */
-.item.side{border-left:3px solid var(--mut);padding-left:8px}
-.item.url{border-left:3px solid var(--accent);padding-left:8px}
+   不分開的話會在清單裡壓過真正的外電素材（0802 實測占 30%）。
+   ⚠️ 不用 border-left 色條（那是裝飾性側邊線，統一改用底色調 + 小標籤，
+   辨識力不輸色條、也不會在清單裡長出一整排彩色豎線）。 */
+.item.side{background:var(--sidetint)}
+.item.side:hover{background:var(--sidetint);filter:brightness(.97)}
+.item.url{background:var(--urltint)}
+.item.url:hover{background:var(--urltint);filter:brightness(.97)}
+.kindtag{flex:none;align-self:flex-start;margin-top:1px;padding:1px 6px;font-size:11px;
+  font-weight:700;border-radius:4px;color:var(--kindfg);background:var(--chip)}
 /* 側錄摺疊：預設只露第一行＋一小段內容，點開才看全文 */
 .sumline{cursor:pointer;user-select:none;color:var(--mut)}
 .sumline .caret{display:inline-block;margin-right:4px;transition:transform .15s}
@@ -339,18 +366,20 @@ main{padding:6px 14px 60px}
 .item button{visibility:hidden;flex:none}
 .item:hover button{visibility:visible}
 .hide{display:none}
-.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
-  background:var(--accent);color:#fff;padding:7px 16px;border-radius:16px;
-  font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:99}
-.toast.on{opacity:1}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+  background:var(--accent);color:var(--accent-fg);padding:8px 18px;border-radius:999px;
+  font-size:13px;font-weight:600;box-shadow:var(--shadow);
+  opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:99}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(-2px)}
 /* 剪貼簿被擋時的最後退路：把文字攤開、全選好，讓人長按「複製」 */
-#modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;
+#modal{position:fixed;inset:0;background:rgba(10,12,16,.55);display:none;
   z-index:100;padding:16px;align-items:center;justify-content:center}
 #modal.on{display:flex}
-#modal .box{background:var(--bg);border-radius:8px;padding:12px;width:100%;
-  max-width:680px;max-height:80vh;display:flex;flex-direction:column;gap:8px}
-#modal textarea{width:100%;height:52vh;font:13px/1.6 monospace;padding:8px;
-  border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
+#modal .box{background:var(--bg);border-radius:12px;padding:14px;width:100%;
+  max-width:680px;max-height:80vh;display:flex;flex-direction:column;gap:9px;
+  box-shadow:0 12px 40px rgba(0,0,0,.35)}
+#modal textarea{width:100%;height:52vh;font:13px/1.6 monospace;padding:10px;
+  border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--fg)}
 #modal .hint{color:var(--mut);font-size:13px}
 </style></head><body>
 <div class="top">
@@ -543,6 +572,11 @@ function draw(){
           const d=document.createElement('div');
           d.className='item'+(u.kind==='side'?' side':'')+(u.kind==='url'?' url':'');
           const mk=document.createElement('span'); mk.className='mark'; mk.textContent=first.mark;
+          // 底色調取代了原本的 border-left 色條，額外補一顆小標籤讓「這是側錄／網址
+          // 素材」不必靠底色深淺猜——尤其淺色主題下兩種底色調本來就很接近。
+          const kt = u.kind==='side' ? '側' : (u.kind==='url' ? '網址' : '');
+          const ktEl = kt ? (()=>{const s=document.createElement('span');
+            s.className='kindtag'; s.textContent=kt; return s;})() : null;
           const tx=document.createElement('div'); tx.className='txt';
           const bare=full.replace(/^\\s*[△▲■◆●]\\s*/,'');
 
@@ -568,7 +602,8 @@ function draw(){
             tx.textContent=bare;
           }
           // ⛔ 複製一律給**全文**，不是預覽——摺疊是顯示層的事，貼出去必須完整
-          d.append(mk,tx,btn('複製',()=>copy(full,`已複製 ${first.id}`)));
+          if(ktEl) d.append(mk,ktEl,tx,btn('複製',()=>copy(full,`已複製 ${first.id}`)));
+          else d.append(mk,tx,btn('複製',()=>copy(full,`已複製 ${first.id}`)));
           list.append(d);
         });
       });
@@ -613,9 +648,10 @@ chips('fsrc','src',uniq('src').sort((a,b)=>{
   return w(a)-w(b) || a.localeCompare(b);
 }),SRC_LABEL);
 chips('fmark','mark',uniq('mark'),MARK_LABEL);
-// 重大：🔴 在前、🟡 在後（輕重順序，不用字母序）
-chips('falert','alert',uniq('alert').sort((a,b)=>(a==='🔴'?0:1)-(b==='🔴'?0:1)),
-      {"🔴":"🔴 重大","🟡":"🟡 次重大"});
+// 重大／推薦：⭐ 在最前（編輯先看推薦、才看紅黃標）、🔴 次之、🟡 在後（2026-08-19 使用者訂案）
+const ALERT_ORDER={"⭐":0,"🔴":1,"🟡":2};
+chips('falert','alert',uniq('alert').sort((a,b)=>ALERT_ORDER[a]-ALERT_ORDER[b]),
+      {"⭐":"⭐ 推薦","🔴":"🔴 重大","🟡":"🟡 次重大"});
 // 畫面亮點：**只有一個鈕**，涵蓋所有標了 🔖 的（畫面好／搖晃瞬間／日後新增的標籤）。
 // 那天沒有任何 🔖 就不會長出鈕。
 chips('fhilite','hilite',uniq('hilite'),{"🔖":"🔖 畫面好"});
@@ -734,10 +770,15 @@ def build_html(state, base_mmdd, window, datebar_html=""):
     for a in alerts:                       # 重大提醒要跳出來，不要跟一般檔頭同色
         meta_html = meta_html.replace(html.escape(a),
                                       f'<span class="alert">{html.escape(a)}</span>')
-    # LOGO 抓不到就整塊不輸出（而不是留一個 src="" 的破圖）
+    # LOGO 抓不到就整塊不輸出（而不是留一個 src="" 的破圖）。
+    # 2026-08-19 使用者要求：按下 LOGO 回到「今天」的晚班交接主頁——跟歷史列
+    # 「今天」那顆鈕共用同一個 %%EXEC_URL%% 佔位字串（doGet() 換成部署固定網址），
+    # target="_top" 理由見 build_datebar() 的說明：Apps Script 的 /exec 頁面
+    # 最上層在一個 Google 沙盒網域，相對連結解析基準是那層，必須用絕對網址換掉。
     uri = logo_data_uri()
-    logo_html = (f'<div class="brand"><img src="{uri}" alt="Miniverse" '
-                 f'width="80" height="80" loading="lazy"></div>') if uri else ""
+    logo_html = (f'<a class="brand" href="%%EXEC_URL%%" target="_top" '
+                 f'title="回到今天的晚班交接"><img src="{uri}" alt="Miniverse" '
+                 f'width="80" height="80" loading="lazy"></a>') if uri else ""
     return (TEMPLATE
             .replace("__TITLE__", html.escape(title))
             .replace("__H1__", html.escape(title))
