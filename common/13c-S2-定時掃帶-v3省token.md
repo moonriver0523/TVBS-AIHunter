@@ -15,7 +15,7 @@
 | 順序 | 站 | 入口網址 | 備註 |
 |---|---|---|---|
 | **1** | CNN Newsource（NS） | `https://newsource.ns.cnn.com` | **中間有 `.ns.`**，少了會導向錯誤頁；不支援網址搜尋 |
-| **2** | AP Newsroom | `https://newsroom.ap.org/home` | Latest 分頁；空白關鍵字查詢回空白頁 |
+| **2** | AP Newsroom | `https://newsroom.ap.org/topic?id=116e9ab7aa044476925398d731289267&mediaType=video&navsource=latest&parentlnk=false` | 0820 訂正：這才是完整清單頁（All Latest topic），舊版 `/home` 首頁只是小工具、清單不完整，別再用 |
 | **3** | Reuters Connect（RT） | `https://www.reutersconnect.com/all?media-types=vid` | 大列表，My Subscription／Newest First |
 
 ⛔ **固定輪就是這三站，不多不少。** ENEX／ABC NewsOne 已打通但**人工下令才跑、不進固定排程**
@@ -176,25 +176,28 @@ const clean = (h) => decodeEnt(
 
 ### 2) AP
 
-- **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`——**照抄頁面實際發出的 request body**，自己拼的排序會偏 relevance 抓舊素材。
-- ⚠️ **`PageNumber` 不可靠**（實測回錯頁還自稱正確）。
-- 🔴🔴 **`PageSize` 只能照抄 `16`，一個字不准改**：調大調小都會**靜默換排序**、回一批舊素材且無錯誤訊息（0803/0804 實測，先前「50/100 驗過」是誤判已推翻）。要多筆就 `PageSize=16` 分批，或走 §1b DOM 直撈。
-  - 🔴 **2026-08-12 複驗（0430／0730 兩輪）發現這條規則存在但沒被守住**：0430 清單查詢打了
-    `16、16、50` 三次，0730 打了 `16、100、16、20` 四次——**同一輪內 `PageSize` 自己換來換去**，
-    伴隨每次都重新 `browser_navigate` 回首頁。**這不只是白燒 token（單輪多花 5~7 次呼叫、
-    約單輪 5~10%），是正確性風險：換 `PageSize` 拿到的是靜默錯位的舊資料，不會報錯，
-    agent 也未必發現自己拿錯了。** 下面補一份「照抄即用」的完整範本，目的就是讓 agent
-    沒有自己重打／改參數的空間——直接複製整段，`TopicId` 換成本輪從頁面照抄的值即可，
-    其餘一個字不改。
-  - ⭐ **AP 清單查詢：照抄即用範本**（`browser_evaluate` 一次呼叫，含 navigate 後的完整流程；
-    **不要分好幾次呼叫、不要自己另拼 `PageSize`**）：
+- 🔴🔴 **2026-08-20 重大訂正：舊 recipe 掃錯頁面，以下整段作廢，改用新範本**——`browser_navigate` 目標
+  一律要開 **`https://newsroom.ap.org/topic?id=116e9ab7aa044476925398d731289267&mediaType=video&navsource=latest&parentlnk=false`**
+  （AP 官方「All Latest」topic 頁），**不是 `/home` 首頁**！舊版一路沿用 `/home` 首頁的 Latest 小工具，
+  它的清單範圍/排序邏輯跟真正的完整清單不一樣，過去「每輪只收 16-17 則」、「`PageNumber≥2` 回垃圾
+  資料」的判斷，很可能都是測試對象搞錯所致——用真正的 topic 頁重測 `PageNumber 1→2→3` 三頁連續呼叫，
+  `TotalRows` 穩定、逐頁銜接自然、無跳號、無跳回舊 archive 垃圾，過去漏抓的實例（如 `AP4679409`）
+  在這個新 recipe 下位置正確、完整出現（見 MASTER R6/E1 0820 訂正）。
+- **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`——**照抄 topic 頁實際發出的
+  request body**（比舊 recipe 多了 `Date`／`digitizationType`／`MyPlanSearch`／`IsSavedSearch` 等欄位，
+  少了任何一個都可能退化回舊的不完整行為），自己拼的排序會偏 relevance 抓舊素材。
+- ⭐ **AP 清單查詢：照抄即用範本（0820 新版，取代舊版）**（`browser_evaluate` 一次呼叫；
+  **不要分好幾次呼叫、不要自己刪減欄位**）：
     ```js
     async () => {
       const body = {
-        SearchType: 'keyword', PageNumber: 1, PageSize: 16, MediaTypes: ['video'],
-        TopicId: '{本輪從頁面照抄}', isTopicSearch: true, ProductGroup: '',
-        language: '', digitizationType: null, isSemanticItemIdSearch: false,
-        Semantic: null, MyPlanSearch: false,
+        SearchType: null, Date: 'Anytime', IsSavedSearch: false, IsSharedSearch: false,
+        PageNumber: 1, PageSize: 50, persons: [], Sort: ['arrivaldatetime:desc'],
+        ShareToken: '', digitizationType: 'Digitized_NonDigitized', language: '',
+        isSemanticItemIdSearch: false, Semantic: null, MyPlanSearch: true,
+        TopicId: '116e9ab7aa044476925398d731289267', MediaTypes: ['video'],
+        isTopicSearch: true, Query: null, SavedSearchId: null, SavedSearchName: '',
+        photoOrientTypes: [], ProductGroup: '', GraphicsType: [],
       };
       const r = await fetch('https://api.newsroom.ap.org/v1/nrsearch/search/topic', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -203,9 +206,12 @@ const clean = (h) => decodeEnt(
       return await r.json();
     }
     ```
-    - 需要超過 16 則：**翻頁用 `PageNumber` 遞增（1→2→3…），`PageSize` 永遠是 `16`**，
-      不准用調大 `PageSize` 的方式一次拿更多——那正是靜默換排序的觸發點。
-    - `browser_navigate` 回 `/home` 只需要開工時做**一次**，同一輪內清單查詢不必每次重新導覽。
+    - `PageSize` 用 `50`（不是舊版的 `16`）——0820 實測 topic 頁的完整 body 配 `PageSize:50`
+      正確、無靜默換排序。
+    - 需要超過 50 則：**翻頁用 `PageNumber` 遞增（1→2→3…）**，0820 實測連續三頁銜接正常、
+      `TotalRows` 穩定，過去「Page2 回垃圾」的判斷已推翻（見上）。仍建議每輪對帳時抽查
+      Page2 尾端跟 Page1 首端是否重疊銜接，累積更多輪驗證後再考慮拿掉這條抽查。
+    - `browser_navigate` 開 topic 頁只需要開工時做**一次**，同一輪內清單查詢不必每次重新導覽。
 - **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。逗號串多則不支援（回空），一則一次；同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則仍算 1 次呼叫。**批次一律用 `Promise.all`，不要為了「保險」逐則單獨呼叫**——單則呼叫沒有比較安全，純粹多花呼叫次數。
 - `TopicId` 跨 session 穩定，仍建議每輪從頁面請求照抄。
 - ⭐ **抽取白名單（實測定版）**：
