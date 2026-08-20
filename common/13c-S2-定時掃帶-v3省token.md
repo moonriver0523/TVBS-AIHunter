@@ -179,10 +179,12 @@ const clean = (h) => decodeEnt(
 - 🔴🔴 **2026-08-20 重大訂正：舊 recipe 掃錯頁面，以下整段作廢，改用新範本**——`browser_navigate` 目標
   一律要開 **`https://newsroom.ap.org/topic?id=116e9ab7aa044476925398d731289267&mediaType=video&navsource=latest&parentlnk=false`**
   （AP 官方「All Latest」topic 頁），**不是 `/home` 首頁**！舊版一路沿用 `/home` 首頁的 Latest 小工具，
-  它的清單範圍/排序邏輯跟真正的完整清單不一樣，過去「每輪只收 16-17 則」、「`PageNumber≥2` 回垃圾
-  資料」的判斷，很可能都是測試對象搞錯所致——用真正的 topic 頁重測 `PageNumber 1→2→3` 三頁連續呼叫，
-  `TotalRows` 穩定、逐頁銜接自然、無跳號、無跳回舊 archive 垃圾，過去漏抓的實例（如 `AP4679409`）
-  在這個新 recipe 下位置正確、完整出現（見 MASTER R6/E1 0820 訂正）。
+  它的清單範圍/排序邏輯跟真正的完整清單不一樣，過去「每輪只收 16-17 則」的根因（Page1 只給 16／50
+  則、超出的沒被真正翻頁補到）確認出在這裡，過去漏抓的實例（如 `AP4679409`）用真正的 topic 頁
+  可以正確查到、位置吻合。**但「`PageNumber≥2` 是不是真的能拿來翻頁補完整」這件事同一天再驗證，
+  發現沒有一開始想的乾淨**（不論 `PageSize` 多少，`PageNumber:2` 都固定回 100 則、對齊伺服器內部
+  固定 offset，會有空窗或重疊兩種風險，不是簡單的「站方 bug／沒 bug」二分）——**用完整 topic 頁**
+  這件事本身是確定的修正，**但 Page2+ 的翻頁可靠度仍待保守處理**，正確用法見下方與 `13d` §7。
 - **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`——**照抄 topic 頁實際發出的
   request body**（比舊 recipe 多了 `Date`／`digitizationType`／`MyPlanSearch`／`IsSavedSearch` 等欄位，
   少了任何一個都可能退化回舊的不完整行為），自己拼的排序會偏 relevance 抓舊素材。
@@ -208,9 +210,13 @@ const clean = (h) => decodeEnt(
     ```
     - `PageSize` 用 `50`（不是舊版的 `16`）——0820 實測 topic 頁的完整 body 配 `PageSize:50`
       正確、無靜默換排序。
-    - 需要超過 50 則：**翻頁用 `PageNumber` 遞增（1→2→3…）**，0820 實測連續三頁銜接正常、
-      `TotalRows` 穩定，過去「Page2 回垃圾」的判斷已推翻（見上）。仍建議每輪對帳時抽查
-      Page2 尾端跟 Page1 首端是否重疊銜接，累積更多輪驗證後再考慮拿掉這條抽查。
+    - 🔴 **Page1（50 則）當唯一可信主要來源，照舊全部收錄。需要超過 50 則時可以多打
+      `PageNumber:2`，但 0820 當天再驗證發現它不是無條件可信**：不論 Page1 用的
+      `PageSize` 是多少，`PageNumber:2` 一律固定回 100 則、對齊伺服器內部固定
+      offset（不是接續 Page1），視 `PageSize` 不同會出現「Page1/Page2 之間有
+      20~31 分鐘空窗漏抓」或「兩頁重疊 50 則被算兩次」其中一種風險，細節與正確
+      用法見 `13d` §7（**Page2 只能當候選補充池，去重＋逐一核實或 needs-review，
+      不能直接當確定則寫入**）。
     - `browser_navigate` 開 topic 頁只需要開工時做**一次**，同一輪內清單查詢不必每次重新導覽。
 - **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。逗號串多則不支援（回空），一則一次；同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則仍算 1 次呼叫。**批次一律用 `Promise.all`，不要為了「保險」逐則單獨呼叫**——單則呼叫沒有比較安全，純粹多花呼叫次數。
 - `TopicId` 跨 session 穩定，仍建議每輪從頁面請求照抄。

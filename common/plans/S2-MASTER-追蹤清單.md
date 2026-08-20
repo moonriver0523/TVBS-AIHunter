@@ -64,7 +64,7 @@
 | R3 | audit finding fingerprint 去重／紅燈冪等 | 複核＋交接§6-4 | 3 | ✅281d380 | 已修，順帶照出真待處理項 |
 | R4 | truncate() 加標記後總長溢出 | 複核 | 4 | ✅281d380 | 已修：標記算進 limit |
 | R5 | audit △ 判準尊重合法 set-mark override | 複核 | 5 | ✅2026-08-13 | 雙情境合成測試 PASS |
-| R6 | AP 對帳清單抓到 page 2（≥32 則）；0820推翻「Page2站方bug」判斷並改recipe | 接手查證；0820使用者發現掃錯網址 | 6 | ✅2026-08-13；2026-08-14 訂正；✅0820重寫13c§2/13d§7並commit | 全窗對帳抓到累積漏收 22 則，9 則已回補驗收，教訓：跨輪交辦要走 needs-review 不是帳本。**0820**：舊recipe掃`/home`首頁小工具非真正完整清單，真清單在`/topic?id=116e9...`，改用該頁body測PageNumber 1→2→3連貫正確，0814「Page2回垃圾」判斷疑似測錯頁；已改13c§2清單recipe(navigate目標＋body＋PageSize:50＋允許翻頁)、13d§7規則、13c§0網址對照表，下一輪(0820-1600)起生效，待實戰驗收 |
+| R6 | AP 對帳清單抓到 page 2（≥32 則）；0820改用完整topic頁recipe，Page2翻頁降級為補充來源 | 接手查證；0820使用者發現掃錯網址＋要求模擬複驗 | 6 | ✅2026-08-13；2026-08-14 訂正；✅0820改recipe並二次訂正(commit待補) | 全窗對帳抓到累積漏收 22 則，9 則已回補驗收，教訓：跨輪交辦要走 needs-review 不是帳本。**0820**：改用`/topic?id=116e9...`完整清單頁解決Page1只收16-17則的根因(已生效)；但使用者要求模擬複驗後發現Page2+翻頁不論PageSize都固定回100則、對齊固定offset，會有空窗(PageSize小)或重疊(PageSize=100)風險，非簡單「站方bug有無」二分。訂正為：Page1(PageSize:50)為唯一可信來源，Page2+降級為候選補充池(需去重+核實，不可直接當確定則)，已更新13c§2/13d§7 |
 | R8 | audit 其餘輸出補完：shown/total/more＋--json-report | 複核 | 8 | ✅P0-5（2026-08-13） | P0-5 已補齊；P0-6 --json-report 仍 ⬜ 留案 |
 | R9 | update-entry 同步 src_text／footage_type | 複核 | 9 | ✅6ecfc17；0818-1000 第三次真實復發 | 防呆只做到事後警告，未做組 batch 前硬性檢查，持續觀察是否再復發 |
 | R10 | BITE 三態 CONFIRMED／NO_BITE／REVIEW_REQUIRED | 複核 | 10 | ⬜ | 未動工 |
