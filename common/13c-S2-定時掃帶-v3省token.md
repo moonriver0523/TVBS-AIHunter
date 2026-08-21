@@ -15,7 +15,7 @@
 | 順序 | 站 | 入口網址 | 備註 |
 |---|---|---|---|
 | **1** | CNN Newsource（NS） | `https://newsource.ns.cnn.com` | **中間有 `.ns.`**，少了會導向錯誤頁；不支援網址搜尋 |
-| **2** | AP Newsroom | `https://newsroom.ap.org/home` | Latest 分頁；空白關鍵字查詢回空白頁 |
+| **2** | AP Newsroom | `https://newsroom.ap.org/topic?id=116e9ab7aa044476925398d731289267&mediaType=video&navsource=latest&parentlnk=false` | 0820 訂正：這才是完整清單頁（All Latest topic），舊版 `/home` 首頁只是小工具、清單不完整，別再用 |
 | **3** | Reuters Connect（RT） | `https://www.reutersconnect.com/all?media-types=vid` | 大列表，My Subscription／Newest First |
 
 ⛔ **固定輪就是這三站，不多不少。** ENEX／ABC NewsOne 已打通但**人工下令才跑、不進固定排程**
@@ -176,39 +176,112 @@ const clean = (h) => decodeEnt(
 
 ### 2) AP
 
-- **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`——**照抄頁面實際發出的 request body**，自己拼的排序會偏 relevance 抓舊素材。
-- ⚠️ **`PageNumber` 不可靠**（實測回錯頁還自稱正確）。
-- 🔴🔴 **`PageSize` 只能照抄 `16`，一個字不准改**：調大調小都會**靜默換排序**、回一批舊素材且無錯誤訊息（0803/0804 實測，先前「50/100 驗過」是誤判已推翻）。要多筆就 `PageSize=16` 分批，或走 §1b DOM 直撈。
-  - 🔴 **2026-08-12 複驗（0430／0730 兩輪）發現這條規則存在但沒被守住**：0430 清單查詢打了
-    `16、16、50` 三次，0730 打了 `16、100、16、20` 四次——**同一輪內 `PageSize` 自己換來換去**，
-    伴隨每次都重新 `browser_navigate` 回首頁。**這不只是白燒 token（單輪多花 5~7 次呼叫、
-    約單輪 5~10%），是正確性風險：換 `PageSize` 拿到的是靜默錯位的舊資料，不會報錯，
-    agent 也未必發現自己拿錯了。** 下面補一份「照抄即用」的完整範本，目的就是讓 agent
-    沒有自己重打／改參數的空間——直接複製整段，`TopicId` 換成本輪從頁面照抄的值即可，
-    其餘一個字不改。
-  - ⭐ **AP 清單查詢：照抄即用範本**（`browser_evaluate` 一次呼叫，含 navigate 後的完整流程；
-    **不要分好幾次呼叫、不要自己另拼 `PageSize`**）：
+- 🔴🔴 **2026-08-20 重大訂正：舊 recipe 掃錯頁面，以下整段作廢，改用新範本**——`browser_navigate` 目標
+  一律要開 **`https://newsroom.ap.org/topic?id=116e9ab7aa044476925398d731289267&mediaType=video&navsource=latest&parentlnk=false`**
+  （AP 官方「All Latest」topic 頁），**不是 `/home` 首頁**！舊版一路沿用 `/home` 首頁的 Latest 小工具，
+  它的清單範圍/排序邏輯跟真正的完整清單不一樣，過去「每輪只收 16-17 則」的根因（Page1 只給 16／50
+  則、超出的沒被真正翻頁補到）確認出在這裡，過去漏抓的實例（如 `AP4679409`）用真正的 topic 頁
+  可以正確查到、位置吻合。**但「`PageNumber≥2` 是不是真的能拿來翻頁補完整」這件事同一天再驗證，
+  發現沒有一開始想的乾淨**（不論 `PageSize` 多少，`PageNumber:2` 都固定回 100 則、對齊伺服器內部
+  固定 offset，會有空窗或重疊兩種風險，不是簡單的「站方 bug／沒 bug」二分）——**用完整 topic 頁**
+  這件事本身是確定的修正，**但 Page2+ 的翻頁可靠度仍待保守處理**，正確用法見下方與 `13d` §7。
+- **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`——**照抄 topic 頁實際發出的
+  request body**（比舊 recipe 多了 `Date`／`digitizationType`／`MyPlanSearch`／`IsSavedSearch` 等欄位，
+  少了任何一個都可能退化回舊的不完整行為），自己拼的排序會偏 relevance 抓舊素材。
+- 🔴 **2026-08-21 訂正：舊版範本回傳未瘦身原始 JSON，是 A18 兩次真實復發（0821-0430／
+  0821-1200，`ap_list_*.json` 850~930KB／50 則、比正常大近 40 倍）的根因**——舊範本
+  `return await r.json()` 直接回整包 ES 回應，跟 §0-1「`page.evaluate()` 裡先瘦身」的規則
+  自相矛盾，agent 照抄舊範本就等於沒做瘦身。**Playwright 實測確認 AP 官方前端自己發出的
+  request/response 每次都是同一種 ES 整包格式（`Items[]._source`），站方完全穩定、不是
+  站方問題**——問題出在範本本身沒示範「fetch 完在同一個 `evaluate` 裡瘦身再回傳」，下方
+  範本已改為 fetch＋瘦身一次做完，⛔ 不要再用未瘦身版本：
+- ⭐ **AP 清單查詢：照抄即用範本（0821 新版，fetch＋瘦身一次做完，取代舊版）**（`browser_evaluate` 一次呼叫；
+  **不要分好幾次呼叫、不要自己刪減欄位、⛔ 不要回傳 `r.json()` 原始整包**）：
     ```js
     async () => {
+      const clean = (h) => (h || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const body = {
-        SearchType: 'keyword', PageNumber: 1, PageSize: 16, MediaTypes: ['video'],
-        TopicId: '{本輪從頁面照抄}', isTopicSearch: true, ProductGroup: '',
-        language: '', digitizationType: null, isSemanticItemIdSearch: false,
-        Semantic: null, MyPlanSearch: false,
+        SearchType: null, Date: 'Anytime', IsSavedSearch: false, IsSharedSearch: false,
+        PageNumber: 1, PageSize: 50, persons: [], Sort: ['arrivaldatetime:desc'],
+        ShareToken: '', digitizationType: 'Digitized_NonDigitized', language: '',
+        isSemanticItemIdSearch: false, Semantic: null, MyPlanSearch: true,
+        TopicId: '116e9ab7aa044476925398d731289267', MediaTypes: ['video'],
+        isTopicSearch: true, Query: null, SavedSearchId: null, SavedSearchName: '',
+        photoOrientTypes: [], ProductGroup: '', GraphicsType: [],
       };
       const r = await fetch('https://api.newsroom.ap.org/v1/nrsearch/search/topic', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify(body),
       });
-      return await r.json();
+      const j = await r.json();
+      // ⭐ 瘦身：只回傳白名單欄位（slimList，見下方§「抽取白名單」定版）
+      return (j.Items || []).map((it) => {
+        const s = it._source || {};
+        return {
+          id: 'AP' + s.editorialid, itemid: s.itemid,
+          title: s.title, head: s.headline,
+          cap:  clean(s.caption && s.caption.nitf),
+          role: s.editorialrole,
+          src:  (s.sources || []).map((x) => x.name).join('/'),
+          sig:  (s.signals || []).filter((x) => /Ready|SNTV/i.test(x)).join(','),
+          line: s.dateline, ts: s.firstcreated, comp: s.compositiontype,
+        };
+      });
     }
     ```
-    - 需要超過 16 則：**翻頁用 `PageNumber` 遞增（1→2→3…），`PageSize` 永遠是 `16`**，
-      不准用調大 `PageSize` 的方式一次拿更多——那正是靜默換排序的觸發點。
-    - `browser_navigate` 回 `/home` 只需要開工時做**一次**，同一輪內清單查詢不必每次重新導覽。
+    - `PageSize` 用 `50`（不是舊版的 `16`）——0820 實測 topic 頁的完整 body 配 `PageSize:50`
+      正確、無靜默換排序。
+    - 落檔前自我檢查：瘦身後的 `ap_list_{HHMM}.json` 50 則正常應落在 20~30KB 區間
+      （約 0.5KB/則）；若單一檔案 >100KB，代表瘦身沒套到，當場改用本範本重抓，不要沿用。
+    - 🔴 **Page1（50 則）當唯一可信主要來源，照舊全部收錄。需要超過 50 則時可以多打
+      `PageNumber:2`，但 0820 當天再驗證發現它不是無條件可信**：不論 Page1 用的
+      `PageSize` 是多少，`PageNumber:2` 一律固定回 100 則、對齊伺服器內部固定
+      offset（不是接續 Page1），視 `PageSize` 不同會出現「Page1/Page2 之間有
+      20~31 分鐘空窗漏抓」或「兩頁重疊 50 則被算兩次」其中一種風險，細節與正確
+      用法見 `13d` §7（**Page2 只能當候選補充池，去重＋逐一核實或 needs-review，
+      不能直接當確定則寫入**）。
+    - `browser_navigate` 開 topic 頁只需要開工時做**一次**，同一輪內清單查詢不必每次重新導覽。
 - **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。逗號串多則不支援（回空），一則一次；同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則仍算 1 次呼叫。**批次一律用 `Promise.all`，不要為了「保險」逐則單獨呼叫**——單則呼叫沒有比較安全，純粹多花呼叫次數。
+- 🔴 **2026-08-21 訂正：回應形狀跟清單一樣是 ES 整包（`{Items:[{_source:{...}}], ...}`），
+  不是扁平的 `{cap,script,...}`**——Playwright 實測直接截 AP 官方頁面自己發出的 `item/details`
+  真實 request/response 確認，站方每次都回同一種整包格式，完全穩定。0820-2200／0821-0430／
+  0821-1200 三次「AP 詳情擷取又壞掉」（`APundefined`、欄位全空、甚至查詢殼原樣落檔）的根因
+  是**沒有現成的 fetch＋解包＋瘦身一次做完的範本**，agent 每輪臨場手寫解析邏輯，時好時壞。
+  下方補上完整範本，⛔ 不要再臨場手寫：
+- ⭐ **AP 詳情查詢：照抄即用範本（0821 新版，fetch＋解包＋瘦身一次做完）**（`browser_evaluate`
+  一次呼叫，`Promise.all` 打 N 則）：
+    ```js
+    async (itemids) => {  // itemids：清單瘦身結果裡的 s.itemid（32 碼 GUID），不是 AP 編號
+      const clean = (h) => (h || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const one = async (itemid) => {
+        const r = await fetch('https://api.newsroom.ap.org/v1/nrsearch/search/item/details', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ ItemIds: itemid, mediaType: 'video', IsNonSalable: false }),
+        });
+        const j = await r.json();
+        const s = (j.Items && j.Items[0] && j.Items[0]._source) || {};  // ⚠️ 一定要解包 Items[0]._source
+        const script = clean(s.script && s.script.nitf);
+        return {
+          id: 'AP' + s.editorialid, title: s.title, head: s.headline,
+          cap: clean(s.caption && s.caption.nitf), script,
+          role: s.editorialrole, src: (s.sources || []).map((x) => x.name).join('/'),
+          rights: s.rightsline, line: s.dateline || s.locationline,
+          dur: (s.shots && s.shots[0] && s.shots[0].end) || '',
+          comp: s.compositiontype,
+          sb_count: (script.match(/SOUNDBITE/g) || []).length,
+          has_sot: /SOT/i.test(s.editorialrole || ''),
+          prelim: /^\s*\+\+\s*PRELIMINARY SCRIPT/i.test(script),
+        };
+      };
+      return Promise.all(itemids.map(one));
+    }
+    ```
+    - 落檔前自我檢查：任何一則 `id` 含雙重前綴（如 `APAP...`）、`script` 為空字串、或整包
+      看得到 `Query`/`FirstRow`/`HasRelated` 這種殼欄位，都代表解包漏做或沒套本範本，
+      當場用本範本重抓，不要把壞資料寫進 `ap_detail_{HHMM}.json` 或事後再修。
 - `TopicId` 跨 session 穩定，仍建議每輪從頁面請求照抄。
-- ⭐ **抽取白名單（實測定版）**：
+- ⭐ **抽取白名單（實測定版，上方兩支範本已內嵌同一套邏輯，此處保留供查閱對照）**：
 
   ```js
   // 清單：diff 與初判用（不必開詳情就能判斷收不收、是不是 SNTV）
@@ -487,6 +560,18 @@ python scripts/s2_state.py needs-review done --ids RT2333   # 處理完就結案
   - 用途：離線查證誤判、兜底擋下時直接看原文改、日後規則研究。素材捲出站方清單後**只有這份能回溯**。
   - ⛔ **裡面只准站方原文，不准寫任何自己的判斷或說明**（0808 實錯 RT4131：agent 加的中文說明含 `SOUNDBITE` 字樣，害假 BITE 判準連錯四輪）。要記判斷用 `needs-review add`。
   - ⛔ 存「瘦身後」不是「原始回應」；不准存 token／cookie。
+- 🔴 **NS 站 `add-batch` 前必跑 `compare --require src_text` 硬性檢查**（2026-08-21 立規，MASTER R9）：
+  NS 整批漏帶 `src_text` 已連續復發四次（0812-2200／65 則、0813-1200／80 則、
+  0818-1000／39 則、0821-0730／35 則），每次都要整批回補（Write 一份 `_fix.json`
+  重補 src_text＋`update-entry`），單次成本約 4–5 分鐘。事後警告（`add-batch` 印
+  ⚠️）驗證過**擋不住**——四次都是警告照印、agent 照樣先送出再回頭補，因為警告
+  在送出**之後**才出現。改成送出**之前**擋：
+  ```
+  python scripts/s2_batch_prep.py compare --raw <NS原始清單/raw檔> --batch ns_batch_{HHMM}.json --site ns --require src_text
+  ```
+  看到「batch 缺欄位」就地把 `batch.json` 補齊 `src_text` 再送 `add-batch`，
+  **不准先送出再回補**。只回「無差異」才准 `add-batch`。⚠️ AP／RT 目前四次都沒
+  中招，暫不強制（但 `compare` 本身也適用三站，順手查不吃虧）。
 - **整併流程**＝pending 全量重查 → `add-batch`／`update-entry` → `set-category --pairs` → 側錄 `add-side` → `set-alert` → `s2_render.py` 全量渲染。agent 輸出趨近 0，不手寫 txt。
 - 🔴 **分類收斂：獨立 agent 出建議，掃帶輪只套用**（跨輪一致性沒有輪內 agent 能看見；23:00 已是最重的一輪不再加擔）：
   - 建議檔：`_待整併/{MMDD}-分類收斂建議.txt`，只認 `MOVE {id}={大}/{中}/{小}` 與 `ORDER {大}={中1};{中2};…` 兩種指令行。交辦範本：[`scripts/s2_reclass_prompt.md`](../scripts/s2_reclass_prompt.md)。
