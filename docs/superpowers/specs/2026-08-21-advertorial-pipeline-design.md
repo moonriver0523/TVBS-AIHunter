@@ -1,8 +1,9 @@
 # 自動寫稿(業配) — 寫稿＋配音＋剪接 變體設計
 
 - 日期：2026-08-21
-- 狀態：待使用者審 spec 後才可寫實作計畫
-- 母本：寫稿＝`common/06-auto-script-sot.md`；製片配音／上字／終檢＝`production/`＋`scripts/production/`（CTV 全鏈）；剪接＝改吃 SOT 多來源，不是 CTV 單母帶
+- 狀態：寫稿 overlay 已落地（`common/19-auto-script-advertorial.md`，2026-08-21 花蓮暑假2400 實戰回寫）；製片全鏈仍待實作
+- 母本：寫稿格式＝`common/06-auto-script-sot.md`（**只引用，禁止複製／禁止改 06**）；業配例外只寫在 `19`。製片配音／上字／終檢＝`production/`＋`scripts/production/`（CTV 全鏈）；剪接＝改吃 SOT 多來源，不是 CTV 單母帶
+- 編號：原擬 `common/18-auto-script-advertorial.md`，但 `18` 已是交換平台素材整併，改放 `19`
 
 ## 一句話
 
@@ -74,8 +75,8 @@ G:\我的雲端硬碟\Claude共用\業配自動寫稿測試\{SLUG}\
 
 ## 寫稿
 
-- 規則檔：`common/18-auto-script-advertorial.md`，從 `common/06-auto-script-sot.md` **整份複製**。
-- 開頭改寫（僅此處與 06 不同）：
+- 規則檔：`common/19-auto-script-advertorial.md`（overlay，**不整份複製 06**，避免兩份 SOT 規則分叉）。實戰例外（檔名寬認、Drive 先對本機、「第二個訪問」＝同帶第二段、OS 必提活動名與閉幕、只寫有的畫面、BITE 不改官方數字）寫在 `19`，不要回寫進 `06`。
+- 開頭與 06 的差異：
   - 名稱／觸發／落檔路徑
   - 輸入改為需求單＋官方新聞稿＋盤點後的 `#XX` 清單（不再假設批次下載的 `{SLUG} #{編號} {來源}`）
   - **開始前必讀需求單全文**；與 06／風格指南衝突時：**需求單的呈現要求優先**，SOT 格式鐵則（【】結構、SB 五行、標題字數、TC 寫法）仍優先於需求單（需求單不得改輸出格式）
@@ -152,9 +153,9 @@ SOT 口白可能超過 CTV 14 字／行：配音以稿面行為準（可長行�
 
 ## 索引（實作時改）
 
-- `README.md`：跨來源流程加「自動寫稿(業配)」；製片產出加 `production_advertorial/`
-- `AGENTS.md`：業配與 SOT／CTV／準連並列；業配必讀 `18`＋需求單＋官方新聞稿
-- `common/12-子系統地圖.md`：S8 加 `18`；S9 加 `production_advertorial/`（多來源 adapter，不是新子系統）
+- `README.md`：跨來源流程加「自動寫稿(業配)」→ `common/19`（寫稿 overlay 已加；製片 `production_advertorial/` 仍待實作）
+- `AGENTS.md`：業配與 SOT／CTV／準連並列；業配必讀 `19`＋需求單＋官方新聞稿（**不要改 06**）
+- `common/12-子系統地圖.md`：S8 加 `19`；S9 加 `production_advertorial/`（多來源 adapter，不是新子系統；製片列仍待實作）
 
 ## 測試
 

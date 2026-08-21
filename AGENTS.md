@@ -1,6 +1,6 @@
 # AI 代理入口
 
-本專案的流程總索引在 [`README.md`](README.md)，子系統全貌見 [`common/12-子系統地圖.md`](common/12-子系統地圖.md)（一條規則不等於一個子系統；同一個動作常橫跨 `reuters/`／`ap/`／`cnn/` 多份文件）。處理任何「自動寫稿(SOT)」「自動寫稿(CTV)」或「自動寫稿(準連)」任務前，除讀取 [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md)／[`cnn/01-auto-script-writing.md`](cnn/01-auto-script-writing.md)／[`common/16-auto-script-junlian.md`](common/16-auto-script-junlian.md) 外，**必須先讀取** [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md)。
+本專案的流程總索引在 [`README.md`](README.md)，子系統全貌見 [`common/12-子系統地圖.md`](common/12-子系統地圖.md)（一條規則不等於一個子系統；同一個動作常橫跨 `reuters/`／`ap/`／`cnn/` 多份文件）。處理任何「自動寫稿(SOT)」「自動寫稿(CTV)」或「自動寫稿(準連)」任務前，除讀取 [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md)／[`cnn/01-auto-script-writing.md`](cnn/01-auto-script-writing.md)／[`common/16-auto-script-junlian.md`](common/16-auto-script-junlian.md) 外，**必須先讀取** [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md)。處理「自動寫稿(業配)」前改讀 [`common/19-auto-script-advertorial.md`](common/19-auto-script-advertorial.md)（格式仍跟 06，**例外只在 19，禁止改 06**），再讀 INDEX。
 
 ⚠️ **稿名結尾是「準」字（例如 `渡輪起火19準`、`挾持巴士15準`）就是準連**，走 [`common/16-auto-script-junlian.md`](common/16-auto-script-junlian.md)，**不要套 SOT 的【主標題】【次標題】結構**。準連以搶時效為核心：**不跑 `validate_sot.py`（也不要土炮替代腳本）、不補 AP 照片**，字數與秒數交由人工把關。
 

@@ -24,6 +24,7 @@
 - [`common/11-wire-rundown-organizer.md`](common/11-wire-rundown-organizer.md) — **外電稿單整理**：把雜亂的外電候選素材（或只給主題）整理成稿頭+素材代碼+一句話短摘要的稿單，存 txt 供編輯瀏覽決定（新流程，`+`分隔符與「參考」行語意待使用中驗證）
 - [`common/05-material-numbering.md`](common/05-material-numbering.md) — **素材編號**：在素材清單裡找出 AP/RT/APcctv/ENEX/ABC/CNN Newsource 組合碼/YouTube/X 等素材代碼並依序編號（`RTV` 正規化為 `RT`）（完整輸出一次；下游禁止重貼）
 - [`common/06-auto-script-sot.md`](common/06-auto-script-sot.md) — **自動寫稿(SOT)**：接續外電批次下載結果，寫成台灣電視新聞稿（省 Token：瘦盤點、每片一次 ASR、完成稿落檔、照片列表直下）
+- [`common/19-auto-script-advertorial.md`](common/19-auto-script-advertorial.md) — **自動寫稿(業配)**：需求單＋官方新聞稿＋散裝帶；**格式跟 06，例外只寫在 19**（禁止改 06）。先分析能不能開寫，批准才寫稿
 - [`common/16-auto-script-junlian.md`](common/16-auto-script-junlian.md) — **自動寫稿(準連)**：`{SLUG}XX準` 短版口播帶（預設 OS+BITE+OS、40~60 秒）；稿頭收交場句、網路標上限 24 字、SB 只有 2 行帶「」不列英文、段落用 `====` 分隔、OS 不逐段標 TC。結構與 SOT／CTV 皆不同，**不可互套**。**搶時效：不跑驗證腳本、不補 AP 照片，字數秒數人工把關**
 - [`common/07-bite-assistant.md`](common/07-bite-assistant.md) — **掐BITE助手**：從編號素材、CNN側錄6碼素材，或本機/雲端既有素材找 Bite TC，直接輸出SB五行雙語逐字，不剪片不上傳
 - [`common/auto-script-learning/INDEX.md`](common/auto-script-learning/INDEX.md) — **自動寫稿持續校稿索引**：保存使用者修改稿帶來的規則、成熟度、案例與 Prompt 變更；所有代理執行自動寫稿前必讀
