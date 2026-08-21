@@ -499,6 +499,18 @@ python scripts/s2_state.py needs-review done --ids RT2333   # 處理完就結案
   - 用途：離線查證誤判、兜底擋下時直接看原文改、日後規則研究。素材捲出站方清單後**只有這份能回溯**。
   - ⛔ **裡面只准站方原文，不准寫任何自己的判斷或說明**（0808 實錯 RT4131：agent 加的中文說明含 `SOUNDBITE` 字樣，害假 BITE 判準連錯四輪）。要記判斷用 `needs-review add`。
   - ⛔ 存「瘦身後」不是「原始回應」；不准存 token／cookie。
+- 🔴 **NS 站 `add-batch` 前必跑 `compare --require src_text` 硬性檢查**（2026-08-21 立規，MASTER R9）：
+  NS 整批漏帶 `src_text` 已連續復發四次（0812-2200／65 則、0813-1200／80 則、
+  0818-1000／39 則、0821-0730／35 則），每次都要整批回補（Write 一份 `_fix.json`
+  重補 src_text＋`update-entry`），單次成本約 4–5 分鐘。事後警告（`add-batch` 印
+  ⚠️）驗證過**擋不住**——四次都是警告照印、agent 照樣先送出再回頭補，因為警告
+  在送出**之後**才出現。改成送出**之前**擋：
+  ```
+  python scripts/s2_batch_prep.py compare --raw <NS原始清單/raw檔> --batch ns_batch_{HHMM}.json --site ns --require src_text
+  ```
+  看到「batch 缺欄位」就地把 `batch.json` 補齊 `src_text` 再送 `add-batch`，
+  **不准先送出再回補**。只回「無差異」才准 `add-batch`。⚠️ AP／RT 目前四次都沒
+  中招，暫不強制（但 `compare` 本身也適用三站，順手查不吃虧）。
 - **整併流程**＝pending 全量重查 → `add-batch`／`update-entry` → `set-category --pairs` → 側錄 `add-side` → `set-alert` → `s2_render.py` 全量渲染。agent 輸出趨近 0，不手寫 txt。
 - 🔴 **分類收斂：獨立 agent 出建議，掃帶輪只套用**（跨輪一致性沒有輪內 agent 能看見；23:00 已是最重的一輪不再加擔）：
   - 建議檔：`_待整併/{MMDD}-分類收斂建議.txt`，只認 `MOVE {id}={大}/{中}/{小}` 與 `ORDER {大}={中1};{中2};…` 兩種指令行。交辦範本：[`scripts/s2_reclass_prompt.md`](../scripts/s2_reclass_prompt.md)。
