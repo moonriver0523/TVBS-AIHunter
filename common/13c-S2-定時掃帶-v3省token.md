@@ -188,10 +188,18 @@ const clean = (h) => decodeEnt(
 - **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`——**照抄 topic 頁實際發出的
   request body**（比舊 recipe 多了 `Date`／`digitizationType`／`MyPlanSearch`／`IsSavedSearch` 等欄位，
   少了任何一個都可能退化回舊的不完整行為），自己拼的排序會偏 relevance 抓舊素材。
-- ⭐ **AP 清單查詢：照抄即用範本（0820 新版，取代舊版）**（`browser_evaluate` 一次呼叫；
-  **不要分好幾次呼叫、不要自己刪減欄位**）：
+- 🔴 **2026-08-21 訂正：舊版範本回傳未瘦身原始 JSON，是 A18 兩次真實復發（0821-0430／
+  0821-1200，`ap_list_*.json` 850~930KB／50 則、比正常大近 40 倍）的根因**——舊範本
+  `return await r.json()` 直接回整包 ES 回應，跟 §0-1「`page.evaluate()` 裡先瘦身」的規則
+  自相矛盾，agent 照抄舊範本就等於沒做瘦身。**Playwright 實測確認 AP 官方前端自己發出的
+  request/response 每次都是同一種 ES 整包格式（`Items[]._source`），站方完全穩定、不是
+  站方問題**——問題出在範本本身沒示範「fetch 完在同一個 `evaluate` 裡瘦身再回傳」，下方
+  範本已改為 fetch＋瘦身一次做完，⛔ 不要再用未瘦身版本：
+- ⭐ **AP 清單查詢：照抄即用範本（0821 新版，fetch＋瘦身一次做完，取代舊版）**（`browser_evaluate` 一次呼叫；
+  **不要分好幾次呼叫、不要自己刪減欄位、⛔ 不要回傳 `r.json()` 原始整包**）：
     ```js
     async () => {
+      const clean = (h) => (h || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const body = {
         SearchType: null, Date: 'Anytime', IsSavedSearch: false, IsSharedSearch: false,
         PageNumber: 1, PageSize: 50, persons: [], Sort: ['arrivaldatetime:desc'],
@@ -205,11 +213,26 @@ const clean = (h) => decodeEnt(
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify(body),
       });
-      return await r.json();
+      const j = await r.json();
+      // ⭐ 瘦身：只回傳白名單欄位（slimList，見下方§「抽取白名單」定版）
+      return (j.Items || []).map((it) => {
+        const s = it._source || {};
+        return {
+          id: 'AP' + s.editorialid, itemid: s.itemid,
+          title: s.title, head: s.headline,
+          cap:  clean(s.caption && s.caption.nitf),
+          role: s.editorialrole,
+          src:  (s.sources || []).map((x) => x.name).join('/'),
+          sig:  (s.signals || []).filter((x) => /Ready|SNTV/i.test(x)).join(','),
+          line: s.dateline, ts: s.firstcreated, comp: s.compositiontype,
+        };
+      });
     }
     ```
     - `PageSize` 用 `50`（不是舊版的 `16`）——0820 實測 topic 頁的完整 body 配 `PageSize:50`
       正確、無靜默換排序。
+    - 落檔前自我檢查：瘦身後的 `ap_list_{HHMM}.json` 50 則正常應落在 20~30KB 區間
+      （約 0.5KB/則）；若單一檔案 >100KB，代表瘦身沒套到，當場改用本範本重抓，不要沿用。
     - 🔴 **Page1（50 則）當唯一可信主要來源，照舊全部收錄。需要超過 50 則時可以多打
       `PageNumber:2`，但 0820 當天再驗證發現它不是無條件可信**：不論 Page1 用的
       `PageSize` 是多少，`PageNumber:2` 一律固定回 100 則、對齊伺服器內部固定
@@ -219,8 +242,46 @@ const clean = (h) => decodeEnt(
       不能直接當確定則寫入**）。
     - `browser_navigate` 開 topic 頁只需要開工時做**一次**，同一輪內清單查詢不必每次重新導覽。
 - **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。逗號串多則不支援（回空），一則一次；同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則仍算 1 次呼叫。**批次一律用 `Promise.all`，不要為了「保險」逐則單獨呼叫**——單則呼叫沒有比較安全，純粹多花呼叫次數。
+- 🔴 **2026-08-21 訂正：回應形狀跟清單一樣是 ES 整包（`{Items:[{_source:{...}}], ...}`），
+  不是扁平的 `{cap,script,...}`**——Playwright 實測直接截 AP 官方頁面自己發出的 `item/details`
+  真實 request/response 確認，站方每次都回同一種整包格式，完全穩定。0820-2200／0821-0430／
+  0821-1200 三次「AP 詳情擷取又壞掉」（`APundefined`、欄位全空、甚至查詢殼原樣落檔）的根因
+  是**沒有現成的 fetch＋解包＋瘦身一次做完的範本**，agent 每輪臨場手寫解析邏輯，時好時壞。
+  下方補上完整範本，⛔ 不要再臨場手寫：
+- ⭐ **AP 詳情查詢：照抄即用範本（0821 新版，fetch＋解包＋瘦身一次做完）**（`browser_evaluate`
+  一次呼叫，`Promise.all` 打 N 則）：
+    ```js
+    async (itemids) => {  // itemids：清單瘦身結果裡的 s.itemid（32 碼 GUID），不是 AP 編號
+      const clean = (h) => (h || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const one = async (itemid) => {
+        const r = await fetch('https://api.newsroom.ap.org/v1/nrsearch/search/item/details', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ ItemIds: itemid, mediaType: 'video', IsNonSalable: false }),
+        });
+        const j = await r.json();
+        const s = (j.Items && j.Items[0] && j.Items[0]._source) || {};  // ⚠️ 一定要解包 Items[0]._source
+        const script = clean(s.script && s.script.nitf);
+        return {
+          id: 'AP' + s.editorialid, title: s.title, head: s.headline,
+          cap: clean(s.caption && s.caption.nitf), script,
+          role: s.editorialrole, src: (s.sources || []).map((x) => x.name).join('/'),
+          rights: s.rightsline, line: s.dateline || s.locationline,
+          dur: (s.shots && s.shots[0] && s.shots[0].end) || '',
+          comp: s.compositiontype,
+          sb_count: (script.match(/SOUNDBITE/g) || []).length,
+          has_sot: /SOT/i.test(s.editorialrole || ''),
+          prelim: /^\s*\+\+\s*PRELIMINARY SCRIPT/i.test(script),
+        };
+      };
+      return Promise.all(itemids.map(one));
+    }
+    ```
+    - 落檔前自我檢查：任何一則 `id` 含雙重前綴（如 `APAP...`）、`script` 為空字串、或整包
+      看得到 `Query`/`FirstRow`/`HasRelated` 這種殼欄位，都代表解包漏做或沒套本範本，
+      當場用本範本重抓，不要把壞資料寫進 `ap_detail_{HHMM}.json` 或事後再修。
 - `TopicId` 跨 session 穩定，仍建議每輪從頁面請求照抄。
-- ⭐ **抽取白名單（實測定版）**：
+- ⭐ **抽取白名單（實測定版，上方兩支範本已內嵌同一套邏輯，此處保留供查閱對照）**：
 
   ```js
   // 清單：diff 與初判用（不必開詳情就能判斷收不收、是不是 SNTV）

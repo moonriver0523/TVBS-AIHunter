@@ -107,7 +107,7 @@
 | A15 | 🔴 batch json 由 agent 經 Write 重打整包內容當 output token | 0818-1800／0819-0100 兩輪抽查 | 2 | ⬜待做／需先確認可行性 | 估佔全輪 output token 20~25%，改進方向未驗證可行性 |
 | A16 | 晚班交接每則外電加可點連結（RT permalink／AP 搜尋頁） | 使用者 2026-08-19 | — | ⬜待做 | RT 用 itemid 組 `all?id={guid}&media-types=vid`，零額外呼叫、是真 permalink；AP 用 Edit No 組 `home/search?query={id}&mediaType=video`，零額外呼叫但只到搜尋結果頁（detail 頁網址含 hash，見 `ap/01-search-workflow.md:55`，無法自己組出來） |
 | A17 | batch 無謂拆成多段小量 Write，多付切段開銷 | 0820-1800 體檢(使用者要求深查RT流程) | — | ⬜列入觀察 | 首次樣本：本輪RT新增35則、呼叫64次為近期最高；查scratch發現35則batch被拆成6個小檔分次寫再合併，非13d§6允許的正當切段(35KB遠不到截斷風險門檻)，多付5-6次額外呼叫+事後8則fix；與A15同屬batch寫入浪費家族但機制不同(A15=整包重打當output token，A17=無謂切段)，累積樣本再議 |
-| A18 | AP清單漏套抽取白名單(原始ES回應整包落檔)＋AP詳情擷取重試 | 0821-0430體檢；0821-1200體檢(使用者授權Playwright查根因) | — | 🔶查根因中(0821) | 問題一：`ap_list_0430.json` 927KB/50則、`ap_list_1200.json` 871KB/50則，同一天內2次真實復發，確認未套13c§0-1白名單瘦身規則。問題二：AP詳情擷取0430壞1次重試成功；1200更嚴重——連壞2次(第1次是原始查詢殼未解析、第2次`APundefined`全空)第3次才成功，與0820-2200`ap_list_2200.json`全`APundefined`同一故障簽章第三次出現。使用者授權開Playwright查驗是否為AP站常態問題並找解法，比照R9模式研議是否加硬性關卡 |
+| A18 | AP清單漏套抽取白名單(原始ES回應整包落檔)＋AP詳情擷取重試 | 0821-0430/0821-1200體檢(使用者授權Playwright查根因)；main查證與熱修 | — | ✅2026-08-21(main查證+熱修，13c§1a) | Playwright實測AP官方前端自己的list/detail真實request/response，確認站方API每次都回同一種ES整包格式(`Items[]._source`)，完全穩定，不是站方bug。真因是13c舊範本本身沒示範「fetch後在同一個evaluate裡瘦身/解包再回傳」，agent每輪臨場手寫解析邏輯品質不穩，才會時好時壞。修法：13c§1a補上清單＋詳情各一支fetch+解包+瘦身一次做完的完整可照抄範本(取代舊版`return await r.json()`)，並加落檔大小自我檢查(>100KB代表沒套到)；13d§5補充說明本項不比照R9走送出前硬性關卡(關卡擋不住解析邏輯本身寫壞，需從源頭給範本)。待下一輪實戰驗收 |
 
 ### D — 待使用者裁決（未裁定前不得動工） → 詳情：[master-detail/D.md](master-detail/D.md)
 
