@@ -333,7 +333,7 @@ $scanArgs = @(
 )
 if ($TestMode) { $scanArgs += @('-TestMode', '-TestLimit', $TestLimit) }
 
-& pwsh @scanArgs
+& pwsh -WindowStyle Hidden @scanArgs
 $code = $LASTEXITCODE
 Write-Log "接手結束 [$checkpoint] 離開碼=$code"
 exit $code
