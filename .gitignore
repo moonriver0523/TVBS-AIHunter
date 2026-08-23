@@ -29,3 +29,8 @@ __pycache__/
 # 語料清除用的機密字串清單：內含真實帳密，絕對不可進版控
 style-corpus/.secret-tokens.txt
 scripts/_task2_test_out/
+
+# 試作產出的成品網頁：內含晚班交接正文（路透／AP 限制條款素材），不進版控。
+# 只留腳本與模板；成品一律寫 D:\Downloads（見 scripts/prototype/*.py 檔頭）。
+scripts/prototype/*-tc-matrix-*.html
+scripts/prototype/0*.html
