@@ -440,6 +440,7 @@ try {
     # 兩者的差別本身就是有用的訊號——見下方 $topStale。
     $statePath = $null
     $topStale = $false
+    $topStaleAutoFixed = $false
     foreach ($f in Get-ChildItem $StateDir -Filter '*-s2-state.json' -File |
                    Sort-Object LastWriteTime -Descending) {
         try {
@@ -447,8 +448,19 @@ try {
             $hasItems = @($j.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint }).Count -gt 0
             if ($j.checkpoint -eq $Checkpoint) { $statePath = $f.FullName; $st = $j; break }
             if ($hasItems) {
-                # 有本輪的素材、但頂層沒推進＝忘了 set-top
-                $statePath = $f.FullName; $st = $j; $topStale = $true; break
+                # 有本輪的素材、但頂層沒推進＝忘了 set-top。
+                # 2026-08-23：連續兩輪（含 2200 那輪）都靠人工發現才補跑，
+                # 純警告顯然不夠——這裡的值本來就是唯一正確答案（$Checkpoint 本身），
+                # 沒有歧義可判斷，直接在殼層自動補跑，不再等 agent 或人工回頭處理。
+                $statePath = $f.FullName; $st = $j; $topStale = $true
+                try {
+                    python "$PSScriptRoot\s2_state.py" --file $statePath set-top checkpoint $Checkpoint
+                    $st.checkpoint = $Checkpoint
+                    $topStaleAutoFixed = $true
+                } catch {
+                    Write-Run "自動補 set-top 失敗（$($_.Exception.Message)）——仍需人工補跑 ``s2_state.py set-top checkpoint $Checkpoint``"
+                }
+                break
             }
         } catch { }
     }
@@ -470,9 +482,14 @@ try {
     # 素材有進來、頂層卻沒推進：東西沒丟，但 render 的對帳查核會去查上一輪的紀錄
     # 而誤放行（0809-0800 實錯）。單獨列一條，不要跟「整輪沒跑」混在一起。
     if ($topStale) {
-        $bad += "本輪素材有寫入但**頂層 checkpoint 沒推進**（忘了 set-top）——" +
-                "會讓 render 的對帳查核查到上一輪紀錄而誤放行；補跑 " +
-                "``s2_state.py set-top checkpoint $Checkpoint``"
+        if ($topStaleAutoFixed) {
+            $bad += "本輪素材有寫入但**頂層 checkpoint 沒推進**（agent 忘了 set-top）——" +
+                    "已由殼層自動補跑 ``set-top checkpoint $Checkpoint`` 修正，僅記錄提醒 agent 這步別再漏"
+        } else {
+            $bad += "本輪素材有寫入但**頂層 checkpoint 沒推進**（忘了 set-top），且自動補跑失敗——" +
+                    "會讓 render 的對帳查核查到上一輪紀錄而誤放行；補跑 " +
+                    "``s2_state.py set-top checkpoint $Checkpoint``"
+        }
     }
     Write-Run ("DONE`t離開碼=$code`t耗時=${mins}分`t本輪新增=$added 則`ttxt=$txtOk" +
                $(if ($bad) { "`t⚠️ $($bad -join '；')" } else { '' }))
