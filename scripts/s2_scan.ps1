@@ -473,6 +473,23 @@ try {
         $added = @($st.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint }).Count
     }
 
+    # 對帳留痕檢查（2026-08-24 補）：s2_audit.py 有沒有跑過、寫進 reconcile_log。
+    # ⚠️ **不自動補跑**——跟 set-top 不同，這裡沒有「唯一正確答案」可以無腦補：
+    # 稽核結果（🔴／🟡、疑似放錯分類…）本來就要 agent 當場看過、判斷、可能改分類，
+    # 殼層自動跑只會補出數字、補不出那個判斷，等於製造一份沒人看過的假紀錄。
+    # 只負責偵測＋喊出來，讓當天／隔輪的人知道要回頭補（0824-0100 實錯：
+    # 三站快照都存了，`s2_audit.py` 卻整段沒跑，直到使用者自己發現才補）。
+    $reconcileMissing = $false
+    if ($statePath -and $st -and $st.reconcile_log) {
+        $entry = $st.reconcile_log.$Checkpoint
+        if (-not $entry) {
+            $reconcileMissing = $true
+        } else {
+            $stations = @($entry.PSObject.Properties.Name)
+            if (@('RT', 'AP', 'NS') | Where-Object { $stations -notcontains $_ }) { $reconcileMissing = $true }
+        }
+    }
+
     Write-Host "DONE [$Checkpoint] 離開碼=$code 耗時=${mins}分 本輪新增=$added 則 txt=$txtOk"
     $bad = @()
     if ($code -ne 0) { $bad += "離開碼=$code" }
@@ -490,6 +507,10 @@ try {
                     "會讓 render 的對帳查核查到上一輪紀錄而誤放行；補跑 " +
                     "``s2_state.py set-top checkpoint $Checkpoint``"
         }
+    }
+    if ($reconcileMissing) {
+        $bad += "本輪沒留下清單對帳紀錄（``s2_audit.py`` 沒跑或沒跑完）——" +
+                "三站快照若還在，回頭補跑 ``s2_audit.py --mmdd $mmdd --rt-list <快照> --ap-list <快照> --ns-list <快照>``"
     }
     Write-Run ("DONE`t離開碼=$code`t耗時=${mins}分`t本輪新增=$added 則`ttxt=$txtOk" +
                $(if ($bad) { "`t⚠️ $($bad -join '；')" } else { '' }))
