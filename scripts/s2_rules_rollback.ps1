@@ -16,6 +16,8 @@
 #   common/13d-S2-定時掃帶-v4.md
 #   scripts/s2_scan_prompt.md
 #   common/13e-S2-素材行與分類規則.md  ← 刪除（分檔產物）
+#   common/13f-S2-大分類與各站規則.md  ← 刪除（分檔產物）
+#   common/13c2-S2-定時掃帶-v3省token-下.md ← 刪除（分檔產物）
 #   common/13-rationale.md            ← 刪除（分檔產物）
 #
 # ⚠️ 生效時機：規則是**每輪開跑時**從 repo 現讀的，所以還原後**下一輪自動生效**，
@@ -74,7 +76,8 @@ foreach ($name in $restore.Keys) {
 }
 
 # ── 刪掉分檔產物 ────────────────────────────────────────────────────
-foreach ($gone in @('13e-S2-素材行與分類規則.md', '13-rationale.md')) {
+foreach ($gone in @('13e-S2-素材行與分類規則.md', '13f-S2-大分類與各站規則.md',
+                     '13c2-S2-定時掃帶-v3省token-下.md', '13-rationale.md')) {
     $p = Join-Path $Repo 'common' $gone
     if (Test-Path $p) {
         if ($PSCmdlet.ShouldProcess($p, '刪除（分檔產物）')) {

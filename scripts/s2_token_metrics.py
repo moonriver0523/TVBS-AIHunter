@@ -42,9 +42,12 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RULE_FILES = {
     'prompt': os.path.join('scripts', 's2_scan_prompt.md'),
     '13': os.path.join('common', '13-S2-定時掃帶.md'),
-    # 2026-08-24（R15）：13 過長被 Read 靜默截斷（實測每輪只載入約一半），
-    # 已切成兩部；13e 是第二部（素材行／分類／時區／RT），同樣必讀，指紋要記。
+    # 2026-08-24（R15）：Read 結果約 30,000 字元會靜默截斷，13（53,676 字元）與
+    # 13c（42,998 字元）實測每輪都只載入約一半。已切成 13＋13e＋13f 與 13c＋13c2，
+    # 逐字保留（附 SHA-256 守恆證明）。五份都是必讀，指紋都要記。
     '13e': os.path.join('common', '13e-S2-素材行與分類規則.md'),
+    '13f': os.path.join('common', '13f-S2-大分類與各站規則.md'),
+    '13c2': os.path.join('common', '13c2-S2-定時掃帶-v3省token-下.md'),
     '13b': os.path.join('common', '13b-S2-定時掃帶-v2省token.md'),
     '13c': os.path.join('common', '13c-S2-定時掃帶-v3省token.md'),
     '13d': os.path.join('common', '13d-S2-定時掃帶-v4.md'),
