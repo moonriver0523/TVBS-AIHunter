@@ -32,7 +32,7 @@ param(
     # chromium 的 cookie 資料庫。**保活前後各量一次**（2026-08-09 蒐證用）：
     # 使用者與我都懷疑「AP 掉線＝關閉時 cookie 沒寫回磁碟」，而這件事**可以直接量**，
     # 不必猜——關乾淨的話這個檔的修改時間會往前走，沒動就是沒寫回去。
-    [string]$CookieDb = "$env:USERPROFILE\.playwright-s2-profile-v2\Default\Network\Cookies"
+    [string]$CookieDb = "$env:USERPROFILE\.playwright-s2-profile-v4\Default\Network\Cookies"
 )
 
 $ErrorActionPreference = 'Stop'

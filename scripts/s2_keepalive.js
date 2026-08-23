@@ -35,7 +35,7 @@
  */
 'use strict';
 
-const PROFILE = 'C:/Users/User/.playwright-s2-profile-v2';
+const PROFILE = 'C:/Users/User/.playwright-s2-profile-v4';
 
 const SITES = [
   // wait：SPA 要時間 boot 完才會換發憑證，讀太早會誤判成登出
