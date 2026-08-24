@@ -68,6 +68,43 @@ def _make_tagger():
 tag_tc = _make_tagger()
 
 
+def stored_tc(st):
+    """從狀態檔撈已存的 T/C（A10 v2，2026-08-24）。
+
+    為什麼要自己撈：`s2_render_html.collect()` 是**用固定欄位清單**組 row 的，
+    `items` 上新增的 `tc` 欄位不會流到 renderer，而 `s2_render_html.py` 暫定不動。
+    """
+    # ⚠️ 磁碟上的 `items` 是**陣列**（每筆自帶 id）；只有 s2_state.load() 會把它
+    #    轉成 dict。這裡讀的是原始 JSON，兩種都要吃。
+    items = st.get("items") or []
+    pairs = items.items() if isinstance(items, dict) else (
+        (it.get("id"), it) for it in items)
+    out = {}
+    for i, it in pairs:
+        tc = (it or {}).get("tc") or {}
+        if i and (tc.get("T") or tc.get("C")):
+            out[i] = {"T": list(tc.get("T") or []), "C": list(tc.get("C") or [])}
+    return out
+
+
+def join_tc(r, stored):
+    """有存的用存的 → 沒有的跑 tag_tc() → 再沒有就「未分類」。
+
+    回傳 (T, C, flags, src)，src 為 'stored'／'heur'／'mixed'。
+    這條 fallback 正是「一條產線一條產線接、不會壞頁面」的技術基礎：
+    還沒接的產線沒有 tc 欄位，自動退回啟發式，頁面照常。
+    """
+    T, C, flags = tag_tc(r)
+    s = stored.get(r.get("id") or "")
+    if not s:
+        return T, C, flags, "heur"
+    got_t, got_c = bool(s["T"]), bool(s["C"])
+    return (s["T"] if got_t else T,
+            s["C"] if got_c else C,
+            flags,
+            "stored" if (got_t and got_c) else "mixed")
+
+
 def fold_side(rows):
     """把側錄列依 (src,大,中,小) 摺成單元；其餘列原樣保留，順序不變。
 
@@ -154,10 +191,17 @@ def main():
     raw = [r for r in H.collect(st, base) if r.get("kind") != "empty"]
     rows = fold_side(raw)
 
+    stored = stored_tc(st)
     out = []
+    n_stored = n_mixed = 0
     for r in rows:
-        T, C, flags = tag_tc(r)
+        T, C, flags, tcsrc = join_tc(r, stored)
+        if tcsrc == "stored":
+            n_stored += 1
+        elif tcsrc == "mixed":
+            n_mixed += 1
         out.append({
+            "tcsrc": tcsrc,
             "id": r.get("id") or "", "big": r.get("big") or "",
             "mid": r.get("mid") or "", "sub": r.get("sub") or "",
             "src": r.get("src") or "", "kind": r.get("kind") or "",
@@ -211,6 +255,20 @@ def main():
     ue = sum(1 for r in out if UNKNOWN in r["T"] or UNKNOWN in r["C"])
     n = len(out) or 1
     print(f"   未分類：T {ut}／C {uc}／至少一軸 {ue}（共 {n} 則，{ue*100//n}%）")
+    # A10 v2 驗收指標。⚠️ 上面那組數的是**啟發式**的未分類——set-tc 從沒跑過
+    # 也會回報正常，所以一定要分開數「已存」與「兜底」。
+    print(f"   T/C 來源：已存 {n_stored}／半存 {n_mixed}／啟發式兜底 "
+          f"{n - n_stored - n_mixed}（已存率 {(n_stored + n_mixed) * 100 // n}%）")
+    # 主指標：agent 判的跟關鍵詞判的**不一樣**的那些——那才是 v2 宣稱的價值。
+    diff = []
+    for r, row in zip(rows, out):
+        if row["tcsrc"] == "heur":
+            continue
+        hT, hC, _ = tag_tc(r)
+        if sorted(row["T"]) != sorted(hT) or sorted(row["C"]) != sorted(hC):
+            diff.append(row["id"])
+    print(f"   與啟發式判定相異：{len(diff)} 則"
+          + (f"（前 15：{'、'.join(diff[:15])}）" if diff else ""))
 
 
 if __name__ == "__main__":
