@@ -46,7 +46,13 @@ for cmd, want in (
     ('python scripts/s2_state.py needs-review add --id X', 's2_state:needs-review'),
     ('python -c "import json; json.load(open(1))"', 'python -c:json'),
     ('python -c "print(len(x))"', 'python -c:length-check'),
-    ('python scripts/s2_batch_prep.py inspect raw.json', 's2_batch_prep.py'),
+    # T9（2026-08-25）：batch_prep 改分到子指令。舊斷言是 's2_batch_prep.py'
+    # 一桶到底，正是「看得到 60 次、看不出 56 次是 inspect」的原因。
+    ('python scripts/s2_batch_prep.py inspect raw.json', 's2_batch_prep:inspect'),
+    ('python scripts/s2_batch_prep.py dedup-check a.json --ids A,B',
+     's2_batch_prep:dedup-check'),          # 帶連字號的子指令要整段吃進來
+    ('python "E:/x/s2_batch_prep.py" build --site ap', 's2_batch_prep:build'),
+    ('python scripts/s2_batch_prep.py --help', 's2_batch_prep.py'),  # 認不出就回舊桶名
     ('python scripts/s2_render.py --file x.json', 's2_render.py'),
     ('ls -la', 'Bash（其他）'),
 ):

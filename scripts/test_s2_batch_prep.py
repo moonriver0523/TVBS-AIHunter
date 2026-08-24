@@ -325,6 +325,54 @@ o, c = run(bp.cmd_search, Args(raw=AP_ES, contains='digging', field='script',
 check('A13 一般 str 欄位的 --field 查詢照舊命中（NS/RT 形狀無回歸）',
       c == 0 and 'AP5467681' in o)
 
+# ── T9（2026-08-25）：inspect 全文改由字元預算決定，不再由筆數決定 ──────
+# 舊判準是 `len(indexed) <= 3` 才印全文，於是「要看完整 script」＝「一次只能查
+# 3 筆」，0825-0100 實測 56 次 inspect 裡 31 次是一次只看一則。
+_S = 'x' * 5000
+BUDGET_OK = write_json('budget_ok.json', [
+    {'id': f'N{i}', 'script': _S} for i in range(5)])          # 25,000 < 28,000
+BUDGET_OVER = write_json('budget_over.json', [
+    {'id': f'N{i}', 'script': _S} for i in range(8)])          # 40,000 > 28,000
+BUDGET_HUGE = write_json('budget_huge.json', [
+    {'id': 'N0', 'script': 'y' * 40000}])                      # 單則就爆預算
+
+o, c = run(bp.cmd_inspect, Args(raw=BUDGET_OK, ids=None, fields='script',
+                                limit=None, index=None, site=None, lengths=False))
+check('T9 5 筆共 25,000 字元吃得下預算 → 整批全文（舊制只有 ≤3 筆才全文）',
+      c == 0 and '...[略]' not in o)
+
+o, c = run(bp.cmd_inspect, Args(raw=BUDGET_OVER, ids=None, fields='script',
+                                limit=None, index=None, site=None, lengths=False))
+check('T9 8 筆共 40,000 字元超預算 → 退回預覽', c == 0 and '...[略]' in o)
+check('T9 超預算要**明講**，不是靜默截斷', '超過 28,000 字元預算' in o)
+check('T9 超預算要附可直接貼的分批指令', '--ids N0,N1,N2,N3,N4' in o)
+
+o, c = run(bp.cmd_inspect, Args(raw=BUDGET_HUGE, ids=None, fields='script',
+                                limit=None, index=None, site=None, lengths=False))
+# ⛔ 這裡掉到 200 字元預覽會是功能退步：舊制單則查是印全文的。
+check('T9 單則自己爆預算 → 截到預算為止（不是掉回 200 字元）',
+      c == 0 and o.count('y') > 20000)
+check('T9 單則爆預算也要明講截在哪', '自己就超過' in o)
+
+o, c = run(bp.cmd_inspect, Args(raw=BUDGET_OK, ids='N1', fields='script',
+                                limit=None, index=None, site=None, lengths=False))
+check('T9 一次只查一則 → 印批次引導（比照 A10 v2「要有觸發點」）',
+      c == 0 and '同檔還有 4 筆' in o)
+
+o, c = run(bp.cmd_inspect, Args(raw=BUDGET_OK, ids='N1,N2', fields='script',
+                                limit=None, index=None, site=None, lengths=False))
+check('T9 已經批次了就不要再囉嗦引導', c == 0 and '同檔還有' not in o)
+
+# RT detail 的素材編號在 `edit`（清單檔才是 `code`），原本掉到 `#index`，
+# `--ids` 對 RT detail 形同不存在——那 15 次 `--index N` 的根因。
+RT_DETAIL = write_json('rt_detail.json', [
+    {'edit': 'RT7542', 'head': 'Sheinbaum presser', 'story': 'short'},
+    {'edit': 'RT7500', 'head': 'Amatrice quake', 'story': 'short'}])
+o, c = run(bp.cmd_inspect, Args(raw=RT_DETAIL, ids=None, fields=None,
+                                limit=None, index=None, site='rt', lengths=False))
+check('T9 RT detail 認得 edit 當 id（不再是 #0／#1，--ids 才可用）',
+      c == 0 and 'RT7542' in o and '#0' not in o)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)

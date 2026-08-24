@@ -55,6 +55,10 @@ batch 檔），實測發現三站清單原始檔各包一層不同的站方外�
     inspect <檔> [--ids A,B] [--fields f1,f2] [--limit N] [--index i]
         讀取（會自動卸殼，不必先跑 unwrap）並精準印出指定項目／欄位。
         不給 --ids/--index/--fields 時預設印摘要：筆數＋每筆 id＋標題行。
+        🔴 **`--ids` 請一次帶多則**（`--ids A,B,C,…`）。全文總長吃得下
+        28,000 字元就**整批印全文**；塞不下才退回 200 字元預覽，並明講、
+        附上前 N 筆的分批指令。一次只查一則跟一次查 20 則**成本一樣**
+        （每次呼叫都要重付整個 context ≈ $0.089），所以逐則翻是純浪費。
 
     search  <檔> --contains 關鍵字 [--field script|story|head|all]
         列出命中項的 id＋命中欄位裡關鍵字前後片段。
@@ -126,6 +130,14 @@ SOUNDBITE_RE = re.compile(r"\(\s*SOUNDBITE|SOUNDBITE\s*:|SUPERS\s*:", re.IGNOREC
 # 硬保留的頭段長度：SOUNDBITE 區段太靠前面時直接原樣收（走 plain cut 那條路即可），
 # 只有「頭段還沒截到就會先把 SOUNDBITE 砍掉」時才切換成保留策略。
 HEAD_KEEP = 500
+
+# `inspect --fields` 一次能印多少字元的全文預算（T9，2026-08-25）。
+# 沿用 R15 的 `SAFE_BUDGET`＝28,000 同一個數字：Read 結果約 30,000 字元會**靜默**
+# 截斷，超過就等於白花一次呼叫。
+INSPECT_TEXT_BUDGET = 28000
+
+# 塞不下預算時每個欄位的預覽長度（原本的固定行為，現在只在超預算時才走）。
+INSPECT_PREVIEW_CHARS = 200
 
 
 def truncate(s, limit=SRC_TEXT_LIMIT):
@@ -393,7 +405,12 @@ def cmd_unwrap(args):
 
 
 def _id_of_any(item, index):
-    for key in ('id', 'code', '_id', 'itemid', 'guid'):
+    # `edit`（T9，2026-08-25）：RT **detail** 檔的素材編號存在 `edit`，清單檔才是
+    # `code`，於是 `SITE_SPEC['rt']['id_of']` 在 detail 上永遠回空字串、掉到這裡
+    # 又撿不到，最後變成 `#index`——`--ids` 因此對 RT detail 形同不存在，agent
+    # 只剩 `--index` 一則一則翻。0825-0100 那 15 次 `--index N --fields story`
+    # 的根因就是這個（既有缺陷，非本次改動造成）。
+    for key in ('id', 'code', 'edit', '_id', 'itemid', 'guid'):
         if item.get(key):
             return str(item[key])
     return f'#{index}'
@@ -472,6 +489,55 @@ def text_field(item, key):
     return (key, None, 'nontext')
 
 
+def _plan_full_detail(shown, fields, site):
+    """決定這批 `--fields` 查詢能不能**整批印全文**；塞不下就備妥可直接貼的分批指令。
+
+    回傳 `(cap, note)`：`cap` 是每個欄位的截斷長度，`None`＝不截斷（整批全文）。
+    `note` 不是 None 時，呼叫端要原樣印到 stderr。
+
+    為什麼要有這個（T9，2026-08-25）：原本的判準是
+    `fields is not None and len(indexed) <= 3`——**只有查 ≤3 筆才印全文**，於是
+    「我要看完整 script」在操作上就等於「一次只能查 3 筆」。0825-0100 實測 56 次
+    `inspect` 裡 **31 次是一次只看一則**（`ap_detail` 連續 11 次同 `--fields script`、
+    `rt_detail` 連續 15 次 `--index N --fields story`，其中兩次參數完全重複），
+    每次呼叫 ≈ 296k cache_read ≈ **$0.089**，光這一輪就 ≈ $2.5。
+
+    ⛔ 塞不下時**不靜默截斷**——會明講並印出下一步指令。R15 的教訓是靜默截斷
+    會讓 agent 合理地退回逐則查詢，那正是這一刀要消滅的形狀。
+    """
+    total_len, fit_ids = 0, []
+    for i, it in shown:
+        one = sum(len(v) for v in (it.get(k) for k in fields) if isinstance(v, str))
+        if total_len + one > INSPECT_TEXT_BUDGET:
+            break
+        fit_ids.append(_dedup_id(site, it, i))
+        total_len += one
+    if len(fit_ids) == len(shown):
+        return None, None
+    if not fit_ids:
+        # 第一則自己就超過預算（RT 的 TIMELINE 長稿實測有 30,270 字元）。
+        # ⛔ 這裡**不能**掉到 200 字元預覽——舊制單則查是印全文的，掉下去等於
+        #    agent 再也拿不到這則的內容，是功能退步。改成截到預算為止，
+        #    拿到的量跟舊制被工具攔下時差不多，但這次有明講截在哪。
+        return INSPECT_TEXT_BUDGET, (
+            f'ℹ️ 第一則的 {",".join(fields)} 自己就超過 {INSPECT_TEXT_BUDGET:,} 字元預算，'
+            f'已截到預算為止（**不是**全文）。這種長稿逐則查是對的。')
+    head = (f'ℹ️ 這 {len(shown)} 筆的 {",".join(fields)} 全文超過 {INSPECT_TEXT_BUDGET:,} '
+            f'字元預算，已改印 {INSPECT_PREVIEW_CHARS} 字元預覽（**不是**全文）。')
+    # ⚠️ 沒帶 `--site` 時 `_dedup_id` 回退成 `#index`，那不是能貼回 `--ids` 的東西
+    #    ——印出來會變成一條**跑不動的**建議指令，比不給建議更糟。
+    if any(x.startswith('#') for x in fit_ids):
+        return INSPECT_PREVIEW_CHARS, (
+            f'{head}\n'
+            f'   要全文請分批（前 {len(fit_ids)} 筆吃得下）。'
+            f'⚠️ 這個檔沒帶 `--site` 認不出 id，'
+            f'請補 `--site ns|ap|rt` 才能用 `--ids` 分批。')
+    return INSPECT_PREVIEW_CHARS, (
+        f'{head}\n'
+        f'   要全文請分批，前 {len(fit_ids)} 筆可一次取：\n'
+        f'   --ids {",".join(fit_ids)}')
+
+
 def cmd_inspect(args):
     try:
         items, shell_desc = _load_raw_any(args.raw)
@@ -503,10 +569,15 @@ def cmd_inspect(args):
 
     fields = [f.strip() for f in args.fields.split(',')] if args.fields else None
     lengths = getattr(args, 'lengths', False)
-    full_detail = fields is not None and len(indexed) <= 3  # 少量精準查詢時不截斷
 
     limit = args.limit or 100
     shown, total = indexed[:limit], len(indexed)
+
+    # 全文 vs 預覽改由**字元預算**決定，不再由筆數決定（T9，見 _plan_full_detail）。
+    # `cap` 是每欄位截斷長度，None＝整批全文。
+    cap, budget_note = (
+        _plan_full_detail(shown, fields, site) if (fields and not lengths)
+        else (INSPECT_PREVIEW_CHARS, None))
 
     lines = []
     for i, it in shown:
@@ -543,8 +614,8 @@ def cmd_inspect(args):
             picked = {}
             for k in fields:
                 v = it.get(k, '<無此欄位>')
-                if isinstance(v, str) and not full_detail and len(v) > 200:
-                    v = v[:200] + '...[略]'
+                if isinstance(v, str) and cap and len(v) > cap:
+                    v = v[:cap] + '...[略]'
                 picked[k] = v
             lines.append(f'{item_id}\t{json.dumps(picked, ensure_ascii=False)}')
         else:
@@ -554,6 +625,14 @@ def cmd_inspect(args):
     if total > limit:
         print(f'…另 {total - limit} 筆略，用 --limit 調整', file=sys.stderr)
     print(f'共 {len(items)} 筆，本次顯示 {min(total, limit)} 筆', file=sys.stderr)
+    if budget_note:
+        print(budget_note, file=sys.stderr)
+    # 逐則翻閱的觸發點（T9）。比照 A10 v2 的 T/C 覆蓋率閘門：光把「請批次」寫進
+    # 規則檔沒有用（0824-2000 實證「載入 ≠ 遵守」），要在**用到的當下**給提示。
+    elif fields and total == 1 and len(items) > 1:
+        print(f'💡 這次只看了 1 則，同檔還有 {len(items) - 1} 筆。'
+              f'`--ids a,b,c` 可一次取多則，總長吃得下 {INSPECT_TEXT_BUDGET:,} 字元'
+              f'就整批印全文——分開叫每次都要重付一次 context。', file=sys.stderr)
 
 
 def cmd_search(args):

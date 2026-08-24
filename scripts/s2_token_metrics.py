@@ -182,7 +182,11 @@ def classify_bash_tool(cmd):
     if 'python -c' in cmd or 'python3 -c' in cmd:
         return classify_python_c(cmd)
     if 's2_batch_prep' in cmd:
-        return 's2_batch_prep.py'
+        # 分到子指令（T9，2026-08-25）。原本一桶到底，於是遙測只看得到
+        # 「batch_prep 60 次」、看不出 56 次都是 `inspect`——0825-0100 的診斷
+        # 因此只能回頭爬 transcript。沒有這一刀，任何修法都無法用 --diff 驗收。
+        m = re.search(r's2_batch_prep\.py["\']?\s+([a-z][a-z-]*)', cmd)
+        return f's2_batch_prep:{m.group(1)}' if m else 's2_batch_prep.py'
     if 's2_render' in cmd:
         return 's2_render.py'
     return 'Bash（其他）'
