@@ -352,7 +352,7 @@ function buildMatrixEl(){
   const wrap=document.createElement("details"); wrap.className="matrix-wrap";
   wrap.open=matrixOpen;
   wrap.ontoggle=()=>{ matrixOpen=wrap.open; };
-  const sum=document.createElement("summary"); sum.textContent="T×C 矩陣";
+  const sum=document.createElement("summary"); sum.textContent="主題矩陣（可收合）";
   const scroll=document.createElement("div"); scroll.className="matrix-scroll";
   const tb=document.createElement("table"); tb.className="mx";
   const head=document.createElement("tr");
