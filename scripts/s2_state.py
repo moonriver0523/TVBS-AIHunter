@@ -927,6 +927,139 @@ def cmd_pending(state, args):
     print("\n".join(pend) if pend else "(無 pending)")
 
 
+# ── T/C 議題／地緣標籤（A10 v2，2026-08-24 上線） ─────────────────────────────
+# 🔴 T/C 一律存 item 的**頂層 `tc` 鍵**，⛔ 絕對不放進 `category`。
+#    `_set_one_category()` 是 `items[i]["category"] = c` **整包覆寫**、只重建三鍵；
+#    T/C 若寄生在 category 裡，之後任何一次 set-category／s2_apply_reclass MOVE
+#    都會無聲抹掉它，而 render 的兜底（沒有就跑 tag_tc()）會把損失蓋住——
+#    畫面完全正常，永遠發現不了。頂層鍵安全：apply_update 原地改鍵、
+#    add-batch 撞 id 跳過，補稿與批次路徑都不波及。
+#
+# 名單**只認 `common/plans/a10-p0-data/TC-字典.md`**，不在這裡寫死第三份拷貝
+# （`build_tc_matrix_0821.py` 已經是第二份；17 檔把「雙真相源」列為具名失效模式）。
+TC_DICT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "common", "plans", "a10-p0-data", "TC-字典.md")
+# 每個 checkpoint 的 set-tc 呼叫上限（A23 式硬上限）。
+# 訂 6 而不是 4：checkpoint 就是輪次，set-category 實測已穩定 4 次／輪，
+# T/C 綁同批再加上各產線整併端補標，4 會讓**合法呼叫**撞牆。
+TC_CALLS_PER_CHECKPOINT = 6
+
+
+def _load_tc_dict():
+    """從 TC-字典.md 解析出 (T 名單, C 名單)。單一真相源，解析不到就硬失敗。"""
+    try:
+        txt = open(TC_DICT_PATH, encoding="utf-8-sig").read()
+    except OSError as e:
+        sys.exit(f"⛔ 讀不到 TC 字典 {TC_DICT_PATH}：{e}")
+    T, C, cur = [], [], None
+    for line in txt.splitlines():
+        s = line.strip()
+        if s.startswith("## 議題 T"):
+            cur = T
+            continue
+        if s.startswith("## 地緣 C"):
+            cur = C
+            continue
+        if cur is None or not s.startswith("|"):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        name = cells[0] if cells else ""
+        if not name or name.startswith("-") or name in ("名稱",):
+            continue
+        cur.append(name)
+    if not T or not C:
+        sys.exit(f"⛔ TC 字典解析失敗（T {len(T)} 個／C {len(C)} 個），"
+                 f"格式可能已變動：{TC_DICT_PATH}")
+    return T, C
+
+
+def _set_one_tc(state, raw_id, spec, ok_t, ok_c):
+    """設定單筆 T/C。回傳錯誤訊息字串，成功回 None。
+
+    spec 格式：`T1,T2/C1,C2`（T 與 C 以 `/` 分隔，各自以 `,` 分隔多個）。
+    T 或 C 任一側可留空（例：`/臺灣` 只設 C），但不能兩側都空。
+    """
+    i = norm_id(raw_id)
+    if i not in state["items"]:
+        return f"{i}: 不存在"
+    if "/" not in spec:
+        return f"{i}: tc 需為「T1,T2/C1,C2」（例：政治,社會/臺灣）"
+    tside, cside = spec.split("/", 1)
+    T = [x.strip() for x in tside.split(",") if x.strip()]
+    C = [x.strip() for x in cside.split(",") if x.strip()]
+    if not T and not C:
+        return f"{i}: T 與 C 不能都是空的"
+    bad = [x for x in T if x not in ok_t] + [x for x in C if x not in ok_c]
+    if bad:
+        return f"{i}: 不在 TC-字典 裡的名稱 {'／'.join(bad)}"
+    tc = dict(state["items"][i].get("tc") or {})
+    if T:
+        tc["T"] = T
+    if C:
+        tc["C"] = C
+    state["items"][i]["tc"] = tc
+    return None
+
+
+def cmd_set_tc(state, args):
+    """寫 T/C 標籤。牙齒放寫入端，但**整批回報一次、不逐則退回**——
+    每次拒絕都是一次重試呼叫（≈$0.07），逐則退回會把品質訊號變成成本乘數。
+    """
+    ok_t, ok_c = _load_tc_dict()
+    if args.pairs and (args.id or args.tc):
+        print("ERROR: --pairs 與 --id/--tc 擇一，不可混用")
+        sys.exit(2)
+
+    # A23 式硬上限：同一個 checkpoint 的呼叫次數。
+    # 🔴 頂層鍵一律走 `state["_top"]`——`save()` 寫的是 `dict(state["_top"])`，
+    #    直接掛在 `state` 上的鍵**會被靜默丟棄**（2026-08-24 離線試跑實測到）。
+    top = state.setdefault("_top", {})
+    cp = top.get("checkpoint") or ""
+    calls = dict(top.get("tc_calls") or {})
+    used = int(calls.get(cp) or 0)
+    if used >= TC_CALLS_PER_CHECKPOINT:
+        print(f"⛔ set-tc 在 checkpoint {cp} 已呼叫 {used} 次，達上限 "
+              f"{TC_CALLS_PER_CHECKPOINT}。請整批一次下，不要逐則呼叫。")
+        sys.exit(3)
+
+    if not args.pairs:
+        if not (args.id and args.tc):
+            print('ERROR: 單筆需 --id 與 --tc；批次用 --pairs "id=T/C;..."')
+            sys.exit(2)
+        pairs = f"{args.id}={args.tc}"
+    else:
+        pairs = args.pairs
+
+    sep = ";" if ";" in pairs else "\n"
+    done, skipped = [], []
+    for tok in (t.strip() for t in pairs.split(sep)):
+        if not tok:
+            continue
+        if "=" not in tok:
+            skipped.append(f"「{tok}」: 缺 =（格式 id=T1,T2/C1,C2）")
+            continue
+        i, spec = tok.split("=", 1)
+        err = _set_one_tc(state, i, spec, ok_t, ok_c)
+        (skipped if err else done).append(err or norm_id(i))
+
+    # 拒絕要留得下痕跡：遙測只記呼叫次數、不記離開碼，整份 jsonl 沒有欄位
+    # 承載「這次失敗了」。落在狀態檔 needs_review（既有人工複核通道）。
+    if skipped:
+        rej = dict(top.get("tc_rejected") or {})
+        rej[cp] = (rej.get(cp) or []) + skipped
+        top["tc_rejected"] = rej
+
+    calls[cp] = used + 1
+    top["tc_calls"] = calls
+    save(state, args.file)
+    print(f"OK 設定 {len(done)} 則 T/C"
+          f"（checkpoint {cp} 第 {used + 1}/{TC_CALLS_PER_CHECKPOINT} 次呼叫）")
+    if skipped:
+        print(f"⚠️ 退回 {len(skipped)} 則（已記進 tc_rejected，不必逐則重試，"
+              f"整批改好再下一次）：")
+        print("\n".join("  " + s for s in skipped))
+
+
 def cmd_set_category(state, args):
     if args.pairs and (args.id or args.cat):
         print("ERROR: --pairs 與 --id/--cat 擇一，不可混用")
@@ -1431,6 +1564,11 @@ SHOW_FIELDS = {
     "summary": lambda i, it: (it.get("fields") or {}).get("summary") or "",
     "bite":   lambda i, it: "；".join((it.get("fields") or {}).get("bite") or []),
     "dur":    lambda i, it: (it.get("fields") or {}).get("duration") or "",
+    # A10 v2（2026-08-24）：沒有這兩個鍵，agent 沒有任何合規途徑查證自己這輪標了幾則
+    # ——show --fields 對不認得的欄位是 sys.exit(2) 硬錯，而 s2_bash_guard 又擋掉
+    # python -c 讀狀態檔，只剩 get --id 一則一則倒。
+    "T":      lambda i, it: ",".join((it.get("tc") or {}).get("T") or []),
+    "C":      lambda i, it: ",".join((it.get("tc") or {}).get("C") or []),
 }
 DEFAULT_SHOW = ("id", "cat", "source", "cp", "status")
 
@@ -1680,6 +1818,11 @@ def main():
     c.add_argument("--id")
     c.add_argument("--cat", help="大分類/中主題[/小分題]")
     c.add_argument("--pairs", help='批次："id=大分類/中主題[/小分題];id2=..."（分隔符優先認分號）')
+    tc = sub.add_parser("set-tc", help="寫 T（議題）／C（地緣）標籤；名單只認 TC-字典.md")
+    tc.add_argument("--id")
+    tc.add_argument("--tc", help="T1,T2/C1,C2（單側可留空，例：/臺灣）")
+    tc.add_argument("--pairs", help='批次："id=T1,T2/C1,C2;id2=..."（分隔符優先認分號）。'
+                                    f'⚠️ 每 checkpoint 上限 {TC_CALLS_PER_CHECKPOINT} 次，請整批一次下')
     st = sub.add_parser("set-top")
     st.add_argument("field")
     st.add_argument("value")
@@ -1717,7 +1860,8 @@ def main():
         "set-resident-topics": cmd_set_resident_topics,
         "set-mark": cmd_set_mark, "set-aired": cmd_set_aired,
         "fix-first-seen": cmd_fix_first_seen,
-        "set-category": cmd_set_category, "get": cmd_get, "show": cmd_show,
+        "set-category": cmd_set_category, "set-tc": cmd_set_tc,
+        "get": cmd_get, "show": cmd_show,
         "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,
         "scratch-dir": cmd_scratch_dir, "list-topics": cmd_list_topics,

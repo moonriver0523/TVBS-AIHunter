@@ -136,10 +136,15 @@ def resolve_session_path(session_arg, transcript_dir=None):
 # 而非憑印象列——之前漏掉的子指令全部落到 's2_state:?'，看不出實際熱點）。
 # 'needs-review' 要放在 'add' 前面：`needs-review add` 這種帶次動詞（add/list/
 # done）的呼叫要記成 's2_state:needs-review'，不能被次動詞 'add' 搶先比對到。
+# 2026-08-24（A10 v2）：補 'set-tc'，並補回**本來就漏掉**的 'patch-entry' 與
+# 'fix-first-seen'——s2_state.py 有 23 個 subparser，這個 tuple 之前只列 20 個，
+# 那兩支的呼叫一直落在 's2_state:?'、--diff 看不到（既有缺陷，非 v2 造成）。
+# ⚠️ 'set-tc' 要排在 'set-top' 之前：兩者都以 'set-t' 開頭，順序反了會被搶先比對。
 S2_STATE_SUBCOMMANDS = (
     'needs-review', 'resume', 'pending', 'scratch-dir', 'diff', 'add-batch',
-    'add-side', 'update-entry', 'set-mark', 'set-aired', 'set-alert',
-    'set-topic-order', 'set-resident-topics', 'set-category', 'set-top',
+    'add-side', 'update-entry', 'patch-entry', 'fix-first-seen',
+    'set-mark', 'set-aired', 'set-alert',
+    'set-topic-order', 'set-resident-topics', 'set-category', 'set-tc', 'set-top',
     'remove', 'list-topics', 'show', 'get', 'add',
 )
 
@@ -221,7 +226,7 @@ def classify_phase(name, input_str, file_hint=''):
         return '稽核'
     if 's2_render' in s:
         return 'render'
-    if any(k in s for k in ('set-category', 's2_topic_dedupe', 'list-topics',
+    if any(k in s for k in ('set-category', 'set-tc', 's2_topic_dedupe', 'list-topics',
                             'set-topic-order', 'set-resident-topics')):
         return '分類'
     if any(k in s for k in ('reuters', '_rt_', 'rt_list')):
