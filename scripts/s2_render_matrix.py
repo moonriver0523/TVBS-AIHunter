@@ -14,9 +14,11 @@ T/C 來源優先序：**狀態檔已存的 → `tag_tc()` 關鍵詞兜底 → �
 這條 fallback 是「一條產線一條產線接、不會壞頁面」的技術基礎：還沒接上
 `set-tc` 的產線沒有 `tc` 欄位，自動退回兜底，頁面照常。
 """
+import html as _html
 import json
 import os
 import sys
+from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -154,6 +156,17 @@ def build_html(state, base_mmdd, window, datebar_html=""):
     title = head[0] if head else f"{base_mmdd} 晚班交接"
     window_line = head[1] if len(head) > 1 else window
 
+    # 檔頭其餘各行（標記說明、🔴 重大提醒）。
+    # 🔴 head[2] 是「收錄外電共 N 則」，本頁改用 stats_line() 自己算（D1：側錄計入
+    #    總則數），所以跳過它以免同一個數字出現兩次、還可能不一致。
+    # 🔴 重大提醒必須跳出來——那是編輯最需要一眼看到的東西。
+    #    比照 s2_render_html.build_html()：先整段 escape，再把 🔴 那幾行包上 .alert。
+    meta_lines = [h for i, h in enumerate(head) if i >= 2 and not h.startswith("收錄外電共")]
+    meta_html = _html.escape("\n".join(meta_lines))
+    for a in (h for h in meta_lines if h.startswith("🔴")):
+        meta_html = meta_html.replace(_html.escape(a),
+                                      f'<span class="alert">{_html.escape(a)}</span>')
+
     raw = [r for r in H.collect(state, base_mmdd) if r.get("kind") != "empty"]
     rows = fold_side(raw)
     stored = stored_tc(state)
@@ -184,6 +197,14 @@ def build_html(state, base_mmdd, window, datebar_html=""):
         c_list.append((UNKNOWN, ""))
         c_fb[UNKNOWN] = "❓"
 
+    # LOGO 抓不到就整塊不輸出（而不是留一個 src="" 的破圖）。
+    # %%EXEC_URL%% 佔位由 Apps Script doGet() 換成部署固定網址；target="_top" 是因為
+    # /exec 頁面最上層在 Google 沙盒網域，相對連結會解析到那層，必須用絕對網址跳出 iframe。
+    uri = H.logo_data_uri()
+    logo_html = (f'<a class="brand" href="%%EXEC_URL%%" target="_top" '
+                 f'title="回到今天的晚班交接"><img src="{uri}" alt="Miniverse" '
+                 f'width="80" height="80" loading="lazy"></a>') if uri else ""
+
     tpl = open(TPL, encoding="utf-8").read()
     return (tpl
             .replace("__DATA__", json.dumps(out, ensure_ascii=False))
@@ -194,6 +215,12 @@ def build_html(state, base_mmdd, window, datebar_html=""):
             .replace("__TITLE__", title)
             .replace("__WINDOW__", window_line)
             .replace("__STATS__", stats_line(rows))
+            .replace("__META__", meta_html)
+            .replace("__LOGO__", logo_html)
+            # 產出時間戳。⚠️ 用本機時間、格式固定 "%Y-%m-%d %H:%M"——前端拿它算
+            # 「幾小時前」並在超過 3.5 小時時變紅（Apps Script 會無聲退回昨天那份，
+            # 沒有這個示警編輯會照舊清單發稿）。跟 s2_render_html.py:786 同一套。
+            .replace("__BUILT__", datetime.now().strftime("%Y-%m-%d %H:%M"))
             .replace("__HISTPILLS__", datebar_html))
 
 

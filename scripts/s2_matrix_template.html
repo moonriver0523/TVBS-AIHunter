@@ -33,6 +33,25 @@ h1{font-size:18px;margin:0;font-weight:800;letter-spacing:-.01em}
 .note{font-size:12px;color:var(--mut);flex:1 0 100%}
 .note b{color:var(--warn);font-weight:700}
 .win{font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+/* 產出時間要**永遠看得到**：資料若停在幾小時前，編輯一眼就該察覺，
+   而不是照著舊清單發稿。掃帶最長間隔是 3 小時（13:00→16:00），超過就代表
+   管線停了或 html 沒更新，而 Apps Script 會**無聲**退回昨天那份。 */
+.stamp{margin-left:auto;color:var(--mut);font-size:12px;white-space:nowrap;
+  padding:2px 9px;border-radius:10px;background:var(--chip)}
+.stamp.stale{color:var(--warn);font-weight:700;background:var(--warntint)}
+/* 檔頭其餘各行（標記說明、🔴 重大提醒）。重大提醒是編輯最需要一眼看到的東西，
+   2026-08-24 矩陣版上線時整塊漏掉，使用者發現時間戳不見才連帶查出來。 */
+.meta{color:var(--mut);font-size:13px;line-height:1.8;white-space:pre-wrap;flex:1 0 100%;margin-top:5px}
+.alert{color:var(--warn);font-weight:700}
+/* LOGO 收在左欄最下方，點了回到今天的晚班交接主頁（2026-08-19 使用者要求）。
+   ⚠️ 本模板是**桌機優先**（手機是 max-width:819px 那段），跟舊模板的
+   mobile-first 相反，所以這裡預設顯示、手機那段才關掉。
+   `margin-top:auto` 需要 #panel 是 flex 縱向排列。
+   圖是圓形構圖、四角黑底，border-radius:50% 把黑角切掉，淺色主題才不會出現黑方塊。 */
+.brand{display:block;margin:18px auto 4px;text-align:center;text-decoration:none;
+  opacity:.85;transition:opacity .2s,transform .2s}
+.brand:hover{opacity:1;transform:translateY(-1px)}
+.brand img{width:80px;height:80px;border-radius:50%;display:block;margin:0 auto}
 :root{--stickyh:0px;--histh:0px}
 .histbar{display:flex;gap:6px;overflow-x:auto;padding:8px 16px;
   border-bottom:1px solid var(--line);position:sticky;top:0;z-index:11;background:var(--bg)}
@@ -61,7 +80,8 @@ button.act{padding:5px 10px;font-size:12px;font-weight:600;border:1px solid var(
   border-radius:7px;background:var(--card);color:var(--fg);cursor:pointer}
 button.act:hover{border-color:var(--accent);color:var(--accent)}
 #panel{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;
-  padding:14px 12px;background:var(--panel);border-right:1px solid var(--line)}
+  padding:14px 12px;background:var(--panel);border-right:1px solid var(--line);
+  display:flex;flex-direction:column}   /* flex 縱向：讓 .brand 的 margin-top:auto 生效 */
 .flabel{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--mut);margin:10px 0 5px}
 .fgroup:first-child .flabel{margin-top:0}
 .grip{display:none}
@@ -126,6 +146,9 @@ table.mx td.on,table.mx th.on{background:var(--cellon);color:#fff}
 .hint{font-size:12px;color:var(--mut);padding:4px 16px 0}
 @media (max-width:819px){
   body{display:block}
+  /* 篩選抽屜高度有限（max-height:62vh），多一塊裝飾會把篩選鈕擠出可視範圍
+     ——2026-08-19 使用者明確說「PC 版就好，手機版不用改」。 */
+  .brand{display:none}
   #panel{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--bg);
     border-top:1px solid var(--line);border-radius:14px 14px 0 0;max-height:none;
     padding:6px 14px 18px;max-height:62vh;overflow:auto;
@@ -150,7 +173,9 @@ table.mx td.on,table.mx th.on{background:var(--cellon);color:#fff}
 <header class="top">
   <h1>__TITLE__</h1>
   <span class="win">__WINDOW__</span>
+  <span class="stamp" id="stamp"></span>
   <span class="note">__STATS__</span>
+  <div class="meta" id="meta">__META__</div>
 </header>
 <!-- 不要再包一層 histbar：build_datebar() 回傳的已是完整元素（含標籤與捲軸容器）。
      包兩層會讓標題出現兩次，2026-08-24 上線前實際踩到。 -->
@@ -160,6 +185,7 @@ __HISTPILLS__
   <div class="grip" id="grip"></div>
   <div class="phead">篩選<button class="act" id="closeF">關閉</button></div>
   <div id="panelBody"></div>
+__LOGO__
 </aside>
 <button id="fab">篩選</button>
 <div class="sticky">
@@ -179,6 +205,19 @@ __HISTPILLS__
   <div><button class="act" onclick="document.getElementById('modal').classList.remove('on')">關閉</button></div>
 </div></div>
 <script>
+// ── 產出時間：停太久要主動變紅，不能只是印在那裡 ────────────────────
+// 掃帶最長間隔是 3 小時（13:00→16:00），超過就代表管線停了或 html 沒更新，
+// 而 Apps Script 會**無聲**退回昨天那份——不主動示警，編輯會照著舊清單發稿。
+// （2026-08-24 矩陣版上線時漏移植，使用者發現後補回。）
+const BUILT = "__BUILT__";
+(function(){
+  const el=document.getElementById('stamp');
+  if(!el) return;
+  el.textContent='更新於 '+BUILT.slice(5);          // 去掉年份，手機省空間
+  const age=(Date.now()-new Date(BUILT.replace(/-/g,'/')).getTime())/36e5;
+  if(age>3.5){ el.classList.add('stale'); el.textContent='⚠ '+el.textContent+`（${age.toFixed(0)} 小時前）`; }
+})();
+
 const ROWS = __DATA__;
 const T_DICT = __T__;
 const C_DICT = __C__;
