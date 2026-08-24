@@ -6,6 +6,17 @@
 > 狀態、優先序、裁決、驗收都以 MASTER 表為準，agent 之間以它交接；
 > 本檔以下的 S2 段落保留當歷史紀錄，不再更新。
 
+## 🟢 掐BITE 工作台（S7 前台，2026-08-24 立案並完成 Phase 1）
+
+計畫書：[`common/plans/2026-08-24-S5至S8產線UI前台可行性評估.md`](common/plans/2026-08-24-S5至S8產線UI前台可行性評估.md)
+（S5–S8 介面化評估＋Phase 0 ASR 基準實測＋Phase 1 交付紀錄）。
+
+**本項不進 S2-MASTER**——MASTER 是 S2 專用帳本，本項在 S5–S8，追蹤以該計畫書為準。
+Phase 1 已可用：`python scripts/bite_workbench.py --dir "…\SOT自動寫稿測試\{SLUG}"`。
+
+- [ ] Phase 1b（中文翻譯接 LLM）／1c（整合掐SO 剪片，會動到 S7「不剪片」規則）待裁定
+- [ ] 是否把 `whisper-cli` 寫進 `common/07` 的找 TC 優先序第 5 項——**不等前台就能收割**，待裁定
+
 ## 🔵 S2 晚班交接網頁版部署 Cloud Run（2026-08-16 立案，待裁示）
 
 評估報告：[`common/plans/2026-08-16-S2晚班交接網頁版-CloudRun部署評估.md`](common/plans/2026-08-16-S2晚班交接網頁版-CloudRun部署評估.md)。
