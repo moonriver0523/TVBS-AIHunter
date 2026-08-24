@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#eef0f4; --fg:#1c1e22; --mut:#5c616a; --line:#d9dce2;
+  --card:#fff; --accent:#1558c4; --accent-fg:#fff; --chip:#e7e9ee; --chipfg:#2d3138;
+  --chipon:#1558c4; --warn:#c02f2f; --big:#c8481c; --midbg:#1558c4; --midfg:#fff;
+  --subbg:#e6e8ec; --sidetint:#eef0f3; --urltint:#eaf1fd; --t:#0f6a4a; --c:#7a3b12;
+  --cell:#f1f3f6; --cellhot:#d9e6fb; --cellon:#1558c4; --empty:#f7f8fa;
+  --shadow:0 1px 2px rgba(20,22,26,.06); --z-bar:40; --z-modal:50;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#15171b; --panel:#1a1c21; --fg:#e7e8ea; --mut:#9198a3; --line:#2b2e35;
+    --card:#1d2026; --accent:#5d9bff; --accent-fg:#0b1220; --chip:#22252c; --chipfg:#c7cad0;
+    --chipon:#3d6fc4; --warn:#ff6b6b; --big:#ff8a5c; --midbg:#2c5fa8; --midfg:#fff;
+    --subbg:#2b2f37; --sidetint:#20232a; --urltint:#1b2532; --t:#5dcc9a; --c:#e0a06a;
+    --cell:#22252c; --cellhot:#24344c; --cellon:#3d6fc4; --empty:#191b20;
+    --shadow:0 1px 3px rgba(0,0,0,.35);
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:14.5px/1.55 "Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.off{display:none!important}
+.top{padding:12px 16px 4px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+h1{font-size:18px;margin:0;font-weight:800;letter-spacing:-.01em}
+.note{font-size:12px;color:var(--mut);flex:1 0 100%}
+.note b{color:var(--warn);font-weight:700}
+.win{font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+:root{--stickyh:0px;--histh:0px}
+.histbar{display:flex;gap:6px;overflow-x:auto;padding:8px 16px;
+  border-bottom:1px solid var(--line);position:sticky;top:0;z-index:11;background:var(--bg)}
+.histbar::-webkit-scrollbar{height:4px}
+.hlabel{flex:none;font-size:12px;color:var(--mut);align-self:center;margin-right:2px}
+.dpill{flex:none;padding:4px 12px;font-size:12px;border:1px solid var(--line);border-radius:999px;
+  color:var(--mut);text-decoration:none;white-space:nowrap;transition:border-color .15s,color .15s}
+.dpill:hover{border-color:var(--accent);color:var(--accent)}
+.dpill.on{background:var(--chipon);color:#fff;border-color:var(--chipon);font-weight:700}
+.dpill.on:hover{color:#fff}
+.sticky{position:sticky;top:var(--histh);z-index:9;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 16px}
+body #extra{position:sticky;top:var(--stickyh);z-index:8;background:var(--bg)}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+input[type=search]{flex:1;min-width:160px;padding:7px 11px;font-size:14px;border:1px solid var(--line);
+  border-radius:8px;background:var(--card);color:var(--fg)}
+.chip{padding:3px 9px;font-size:12px;border:1px solid var(--line);border-radius:999px;
+  background:var(--chip);color:var(--chipfg);cursor:pointer;user-select:none}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.chip.on{background:var(--chipon);color:#fff;border-color:var(--chipon)}
+.chip.on:hover{color:#fff}
+.chip .n{opacity:.72;font-variant-numeric:tabular-nums;margin-left:4px}
+.chip.t.on{background:var(--t);border-color:var(--t)}
+.chip.c.on{background:var(--c);border-color:var(--c)}
+.count{margin-left:auto;color:var(--mut);font-variant-numeric:tabular-nums;font-size:12.5px}
+button.act{padding:5px 10px;font-size:12px;font-weight:600;border:1px solid var(--line);
+  border-radius:7px;background:var(--card);color:var(--fg);cursor:pointer}
+button.act:hover{border-color:var(--accent);color:var(--accent)}
+#panel{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;
+  padding:14px 12px;background:var(--panel);border-right:1px solid var(--line)}
+.flabel{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--mut);margin:10px 0 5px}
+.fgroup:first-child .flabel{margin-top:0}
+.grip{display:none}
+.phead{display:none}
+#scrim{display:none}
+#fab{display:none}
+body{display:grid;grid-template-columns:232px 1fr;
+  grid-template-areas:"top top" "panel hist" "panel sticky" "panel extra" "panel main"}
+.top{grid-area:top} #panel{grid-area:panel} .histbar{grid-area:hist} .sticky{grid-area:sticky}
+#extra{grid-area:extra} main{grid-area:main;padding:10px 16px 88px}
+.big{margin:22px 0 8px;padding:6px 0;border-top:2px solid var(--big);border-bottom:2px solid var(--big);
+  font-size:15px;font-weight:800;letter-spacing:.05em;color:var(--big)}
+.mid{margin:14px 0 6px;font-weight:700}
+.midtxt{background:var(--midbg);color:var(--midfg);padding:2px 8px;border-radius:4px}
+.sub{margin:8px 0 4px}
+.subtxt{background:var(--subbg);padding:1px 8px;border-radius:4px;font-weight:600}
+.hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.item{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:start;
+  padding:7px 8px;margin:3px 0;background:var(--card);border:1px solid var(--line);border-radius:8px}
+.item.side{background:var(--sidetint)}
+.item.url{background:var(--urltint)}
+.mark{color:var(--mut);font-size:12px}
+.txt{white-space:pre-wrap;font-size:13.5px}
+/* 側錄摺疊／展開（2026-08-23 補回，沿用生產 s2_render_html.py 的樣式與行為）：
+   側錄中位數 401 字、最長 1442（0802 實測），一則三段式素材才 150–250 字，
+   不摺會把清單灌爆；但**一定要能展開看全文**，不然側錄等於只剩標題。 */
+.sumline{cursor:pointer;user-select:none;color:var(--mut)}
+.sumline .caret{display:inline-block;margin-right:4px;transition:transform .15s}
+.caret{color:var(--mut);font-size:12px}
+.caret.open{transform:rotate(180deg)}
+.sidebody{margin-top:4px;white-space:pre-wrap;color:var(--fg)}
+.off{display:none!important}
+.tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.ptag{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--chip);color:var(--chipfg);display:inline-flex;align-items:center;gap:4px}
+.em{font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif}
+.flg{width:1.25em;height:.84em;object-fit:cover;vertical-align:-.12em;border-radius:2px;
+     display:inline-block;box-shadow:0 0 0 1px rgba(0,0,0,.18);flex:none}
+.kindtag{font-size:10px;padding:1px 5px;border-radius:4px;background:var(--chip);color:var(--mut);align-self:start}
+.matrix-wrap{padding:8px 16px 4px;border-bottom:1px solid var(--line);background:var(--bg)}
+.matrix-wrap summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--fg);padding:2px 0;list-style:none}
+.matrix-wrap summary::-webkit-details-marker{display:none}
+.matrix-wrap summary::before{content:"▾ ";color:var(--mut)}
+.matrix-wrap:not([open]) summary::before{content:"▸ "}
+.matrix-scroll{overflow-x:auto;margin-top:6px}
+table.mx{border-collapse:separate;border-spacing:2px;font-size:11px;font-variant-numeric:tabular-nums}
+table.mx th,table.mx td{text-align:center;min-width:28px;height:26px;padding:0 3px;border-radius:4px}
+table.mx th{color:var(--mut);font-weight:700;cursor:pointer}
+table.mx th.rowh{text-align:left;min-width:92px;color:var(--fg)}
+table.mx td{background:var(--cell);cursor:pointer}
+table.mx td.z{background:var(--empty);color:transparent;cursor:default}
+table.mx td.hot{background:var(--cellhot);font-weight:700}
+table.mx td.on,table.mx th.on{background:var(--cellon);color:#fff}
+.toast{position:fixed;bottom:64px;left:50%;transform:translateX(-50%) translateY(12px);opacity:0;
+  background:#111;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;pointer-events:none;
+  z-index:var(--z-modal);transition:opacity .18s,transform .18s}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+#modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:var(--z-modal);place-items:center}
+#modal.on{display:grid}
+#modal .box{background:var(--card);color:var(--fg);padding:14px;border-radius:10px;width:min(640px,92vw);
+  border:1px solid var(--line)}
+#modal textarea{width:100%;min-height:180px;margin:8px 0;font:12px/1.5 ui-monospace,monospace}
+.hint{font-size:12px;color:var(--mut);padding:4px 16px 0}
+@media (max-width:819px){
+  body{display:block}
+  #panel{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--bg);
+    border-top:1px solid var(--line);border-radius:14px 14px 0 0;max-height:none;
+    padding:6px 14px 18px;max-height:62vh;overflow:auto;
+    box-shadow:0 -6px 24px rgba(0,0,0,.28);border-right:0;
+    transform:translateY(100vh);transition:transform .22s ease}
+  #panel.open{transform:translateY(0)}
+  .grip{display:block;width:38px;height:4px;border-radius:2px;background:var(--line);margin:2px auto 8px}
+  .phead{display:flex;align-items:center;justify-content:space-between;font-weight:700;margin-bottom:8px}
+  #scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.35);
+    z-index:59;opacity:0;pointer-events:none;transition:opacity .22s}
+  #scrim.open{opacity:1;pointer-events:auto}
+  #fab{display:block;position:fixed;right:14px;bottom:16px;z-index:58;
+    padding:11px 18px;font-size:14px;font-weight:700;border:none;border-radius:999px;
+    background:var(--accent);color:var(--accent-fg);box-shadow:0 3px 14px rgba(0,0,0,.3)}
+  #fab.on{background:var(--warn);color:#fff}
+  main{padding-bottom:96px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>__TITLE__</h1>
+  <span class="win">__WINDOW__</span>
+  <span class="note">__STATS__</span>
+</header>
+<!-- 不要再包一層 histbar：build_datebar() 回傳的已是完整元素（含標籤與捲軸容器）。
+     包兩層會讓標題出現兩次，2026-08-24 上線前實際踩到。 -->
+__HISTPILLS__
+<div id="scrim"></div>
+<aside id="panel">
+  <div class="grip" id="grip"></div>
+  <div class="phead">篩選<button class="act" id="closeF">關閉</button></div>
+  <div id="panelBody"></div>
+</aside>
+<button id="fab">篩選</button>
+<div class="sticky">
+  <div class="bar">
+    <input id="q" type="search" placeholder="搜尋標題／摘要／編號" autocomplete="off">
+    <span class="count" id="cnt"></span>
+    <button class="act" id="copyAll">複製目前篩選結果</button>
+    <button class="act" id="reset">清除篩選</button>
+  </div>
+</div>
+<div id="extra"></div>
+<main id="list"></main>
+<div class="toast" id="toast"></div>
+<div id="modal"><div class="box">
+  <div class="hint">此環境擋住了自動複製。文字已全選——長按選取區選「複製」即可。</div>
+  <textarea readonly></textarea>
+  <div><button class="act" onclick="document.getElementById('modal').classList.remove('on')">關閉</button></div>
+</div></div>
+<script>
+const ROWS = __DATA__;
+const T_DICT = __T__;
+const C_DICT = __C__;
+const C_FALLBACK = __C_FALLBACK__;
+const FLAGS = __FLAGS__;
+const T_EMOJI = Object.fromEntries(T_DICT);
+const SRC_LABEL = {SIDE_CNN:"CNN側錄",SIDE_NHK:"NHK側錄",YT:"網址素材",CNN_newsource:"NS",CNN:"NS",YNA:"韓聯社",CNA:"CNA",ENEX:"ENEX",ABC:"ABC"};
+const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■ 晨班","◆":"◆ 早班"};
+const SRC_ORDER = ["AP","RT","NS","SIDE_CNN","SIDE_NHK","YNA","CNA","ENEX","ABC"];
+const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(), hilite:new Set(), T:new Set(), C:new Set(), q:""};
+let matrixOpen = true;
+function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
+function hasAny(sel, arr){ if(!sel.size) return true; return (arr||[]).some(x=>sel.has(x)); }
+function passBase(r){
+  if(F.src.size && !F.src.has(r.src)) return false;
+  if(F.mark.size && !F.mark.has(r.mark)) return false;
+  if(F.big.size && !F.big.has(r.big)) return false;
+  if(F.alert.size && !F.alert.has(r.alert)) return false;
+  if(F.hilite.size && !F.hilite.has(r.hilite)) return false;
+  if(F.q && !(r.q||"").includes(F.q) && !(r.text||"").toLowerCase().includes(F.q)) return false;
+  return true;
+}
+function pass(r){ return passBase(r) && hasAny(F.T,r.T) && hasAny(F.C,r.C); }
+function passDim(r, skip){
+  if(skip!=="src" && F.src.size && !F.src.has(r.src)) return false;
+  if(skip!=="mark" && F.mark.size && !F.mark.has(r.mark)) return false;
+  if(skip!=="big" && F.big.size && !F.big.has(r.big)) return false;
+  if(skip!=="alert" && F.alert.size && !F.alert.has(r.alert)) return false;
+  if(skip!=="hilite" && F.hilite.size && !F.hilite.has(r.hilite)) return false;
+  if(skip!=="T" && !hasAny(F.T,r.T)) return false;
+  if(skip!=="C" && !hasAny(F.C,r.C)) return false;
+  if(F.q && !(r.q||"").includes(F.q) && !(r.text||"").toLowerCase().includes(F.q)) return false;
+  return true;
+}
+function countWhere(pred){ let n=0; for(const r of ROWS) if(pred(r)) n++; return n; }
+function chipEl(label, on, click, extra){
+  const b=document.createElement("span");
+  b.className="chip"+(on?" on":"")+(extra?" "+extra:"");
+  b.innerHTML=label;
+  b.onclick=click;
+  return b;
+}
+function toast(m){const t=document.getElementById("toast");
+  t.textContent=m; t.classList.add("on"); setTimeout(()=>t.classList.remove("on"),1300);}
+function copy(text, msg){
+  const manual=()=>{
+    const m=document.getElementById("modal");
+    m.querySelector("textarea").value=text;
+    m.classList.add("on");
+    const ta=m.querySelector("textarea");
+    ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+  };
+  const legacy=()=>{
+    try{
+      const ta=document.createElement("textarea");
+      ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
+      document.body.appendChild(ta); ta.select();
+      const ok=document.execCommand("copy"); ta.remove();
+      if(ok){toast(msg);return;}
+    }catch(e){}
+    manual();
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>toast(msg)).catch(legacy);
+  }else legacy();
+}
+function btn(label, fn){
+  const b=document.createElement("button"); b.className="act"; b.textContent=label;
+  b.onclick=e=>{e.stopPropagation(); fn();}; return b;
+}
+function subText(sub,its){return (sub?sub+"\n":"")+its.map(r=>r.text).join("\n");}
+function midText(mid,subs){
+  const parts=[...subs.entries()].map(([s,i])=>subText(s,i));
+  return (mid?`【${mid}】\n`:"")+parts.join("\n+\n");
+}
+function flagImg(iso){
+  const svg = FLAGS[iso];
+  if(!svg) return "";
+  return `<img class="flg" alt="${iso}" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}">`;
+}
+function cMark(name){
+  const codes = ((C_DICT.find(x=>x[0]===name)||[])[1]||"").split(",").filter(Boolean);
+  if(codes.length) return codes.map(flagImg).join("");
+  return `<span class="em">${C_FALLBACK[name]||""}</span>`;
+}
+function fmtTag(kind, name){
+  if(kind==="T") return `<span class="em">${T_EMOJI[name]||""}</span> ${name}`;
+  return `${cMark(name)} ${name}`;
+}
+function renderPanel(){
+  const p=document.getElementById("panelBody"); p.innerHTML="";
+  const addGroup=(title, key, vals, lab, cls)=>{
+    const g=document.createElement("div"); g.className="fgroup";
+    g.innerHTML=`<div class="flabel">${title}</div>`;
+    const bar=document.createElement("div"); bar.className="bar";
+    vals.forEach(v=>{
+      const showN = countWhere(r=>{
+        if(!passDim(r, key)) return false;
+        if(key==="T") return (r.T||[]).includes(v);
+        if(key==="C") return (r.C||[]).includes(v);
+        return r[key]===v;
+      });
+      if(!showN && !F[key].has(v)) return;
+      const label=(lab&&lab[v])?lab[v]:(key==="T"||key==="C"?fmtTag(key,v):v);
+      bar.append(chipEl(`${label}<span class="n">${showN}</span>`, F[key].has(v), ()=>{
+        F[key].has(v)?F[key].delete(v):F[key].add(v); draw();
+      }, cls||""));
+    });
+    g.append(bar); p.append(g);
+  };
+  const srcs=uniq("src").sort((a,b)=> (SRC_ORDER.indexOf(a)<0?99:SRC_ORDER.indexOf(a))-(SRC_ORDER.indexOf(b)<0?99:SRC_ORDER.indexOf(b)));
+  addGroup("來源","src",srcs,SRC_LABEL);
+  addGroup("重大","alert",uniq("alert").sort((a,b)=>({"⭐":0,"🔴":1,"🟡":2}[a]??9)-({"⭐":0,"🔴":1,"🟡":2}[b]??9)), {"⭐":"⭐ 推薦","🔴":"🔴 重大","🟡":"🟡 次重大"});
+  addGroup("畫面亮點","hilite",uniq("hilite"),{"🔖":"🔖 畫面好"});
+  addGroup("時段","mark",uniq("mark"),MARK_LABEL);
+  if(isMobile()){
+    p.append(buildMatrixEl());
+  }else{
+    // 2026-08-23 使用者要求：側欄的「舊大分類」換成 T（Topic）。
+    // 值走 T_DICT 的固定 12 類順序（不用 uniq("T")），今天 0 則的類別
+    // 由 addGroup 內的 showN 判斷自動不出現，順序才不會每天跳動。
+    // 跟矩陣列首的差別：這排 chip 可**複選**，矩陣列首是單選。
+    addGroup("Topic 議題","T",T_DICT.map(([t])=>t));
+  }
+}
+function matrixCellCount(t,c){
+  return countWhere(r => passBase(r) && r.T.includes(t) && r.C.includes(c));
+}
+const mqMobile = window.matchMedia("(max-width:819px)");
+function isMobile(){ return mqMobile.matches; }
+function buildMatrixEl(){
+  const wrap=document.createElement("details"); wrap.className="matrix-wrap";
+  wrap.open=matrixOpen;
+  wrap.ontoggle=()=>{ matrixOpen=wrap.open; };
+  const sum=document.createElement("summary"); sum.textContent="T×C 矩陣";
+  const scroll=document.createElement("div"); scroll.className="matrix-scroll";
+  const tb=document.createElement("table"); tb.className="mx";
+  const head=document.createElement("tr");
+  head.append(document.createElement("th"));
+  C_DICT.forEach(([c,em])=>{
+    const th=document.createElement("th");
+    th.innerHTML=cMark(c); th.title=c;
+    if(F.C.has(c)) th.classList.add("on");
+    th.onclick=()=>{
+      if(F.C.size===1 && F.C.has(c)) F.C.clear();
+      else { F.C.clear(); F.C.add(c); }
+      draw();
+    };
+    head.append(th);
+  });
+  tb.append(head);
+  T_DICT.forEach(([t,em])=>{
+    const tr=document.createElement("tr");
+    const th=document.createElement("th"); th.className="rowh";
+    th.innerHTML=`<span class="em">${em}</span> ${t}`;
+    if(F.T.has(t)) th.classList.add("on");
+    th.onclick=()=>{
+      if(F.T.size===1 && F.T.has(t)) F.T.clear();
+      else { F.T.clear(); F.T.add(t); }
+      draw();
+    };
+    tr.append(th);
+    C_DICT.forEach(([c])=>{
+      const n=matrixCellCount(t,c);
+      const td=document.createElement("td");
+      if(!n){ td.className="z"; td.textContent="·"; }
+      else{
+        td.textContent=n;
+        if(n>=5) td.classList.add("hot");
+        if(F.T.has(t) && F.C.has(c)) td.classList.add("on");
+        td.onclick=()=>{
+          if(F.T.size===1 && F.T.has(t) && F.C.size===1 && F.C.has(c)){
+            F.T.clear(); F.C.clear();
+          }else{
+            F.T.clear(); F.C.clear(); F.T.add(t); F.C.add(c);
+          }
+          draw();
+        };
+      }
+      tr.append(td);
+    });
+    tb.append(tr);
+  });
+  scroll.append(tb); wrap.append(sum, scroll);
+  return wrap;
+}
+function renderExtra(){
+  const el=document.getElementById("extra"); el.innerHTML="";
+  if(!isMobile()){
+    el.append(buildMatrixEl());
+  }
+}
+function tagPills(r){
+  const d=document.createElement("div"); d.className="tags";
+  (r.T||[]).forEach(t=>{
+    const s=document.createElement("span"); s.className="ptag";
+    s.innerHTML=fmtTag("T",t); d.append(s);
+  });
+  (r.C||[]).forEach(c=>{
+    const s=document.createElement("span"); s.className="ptag";
+    s.innerHTML=fmtTag("C",c); d.append(s);
+  });
+  if(r.flags&&r.flags.length){
+    const s=document.createElement("span"); s.className="ptag";
+    s.innerHTML=r.flags.map(flagImg).join(""); d.append(s);
+  }
+  return d;
+}
+function itemEl(r){
+  const d=document.createElement("div");
+  d.className="item"+(r.kind==="side"?" side":"")+(r.kind==="url"?" url":"");
+  const mk=document.createElement("span"); mk.className="mark"; mk.textContent=r.mark||"";
+  const tx=document.createElement("div");
+  const t=document.createElement("div"); t.className="txt";
+  const full=r.text||"";
+  const bare=full.replace(/^\s*[△▲■◆●]\s*/,"");
+  if(r.kind==="side"){
+    // 摺疊＋可展開，行為對齊生產版 s2_render_html.py。
+    // ⚠️ 2026-08-23 迴歸：先前這裡一律印 r.preview（slim_text 只取第一行、截 220 字），
+    //    側錄在 Python 端摺疊後整段逐字稿被壓成一行預覽且**沒有展開入口**，
+    //    等於看不到內文。摺疊是顯示層的事，全文一定要留得住。
+    const head=bare.split("\n")[0];
+    const body=bare.split("\n").slice(1).join("\n");
+    const peek=body.replace(/\s+/g," ").slice(0,28);
+    const sum=document.createElement("div"); sum.className="sumline";
+    sum.innerHTML='<span class="caret">▾</span>';
+    sum.append(document.createTextNode(
+      `${head}${r.segs>1?`　共 ${r.segs} 段`:""}${peek?`　${peek}…`:""}`));
+    const bodyEl=document.createElement("div");
+    bodyEl.className="sidebody off"; bodyEl.textContent=bare;
+    sum.onclick=()=>{
+      bodyEl.classList.toggle("off");
+      sum.querySelector(".caret").classList.toggle("open", !bodyEl.classList.contains("off"));
+    };
+    t.append(sum, bodyEl);
+  }else{
+    // 通訊社／網址素材本來就短，直接給全文——先前用 preview 會吃掉網址素材的 ▎URL 行。
+    t.textContent=bare;
+  }
+  tx.append(t, tagPills(r));
+  // ⛔ 複製一律給全文，不是預覽
+  d.append(mk, tx, btn("複製",()=>copy(full, `已複製 ${r.id||""}`)));
+  return d;
+}
+function groupBy(rows, keyFn){
+  const m=new Map();
+  rows.forEach(r=>{
+    const k=keyFn(r);
+    if(!m.has(k)) m.set(k,[]);
+    m.get(k).push(r);
+  });
+  return m;
+}
+function primaryT(r){
+  for(const [t] of T_DICT) if((r.T||[]).includes(t)) return t;
+  return (r.T&&r.T[0]) || "話題";
+}
+function renderList(){
+  const list=document.getElementById("list"); list.innerHTML="";
+  const rows=ROWS.filter(pass);
+  // 2026-08-23 使用者裁決：側錄計入總則數（原本拆開報有邏輯矛盾），
+  // 側錄以「摺疊後單元」為 1 則（Python 端已依 (src,大,中,小) 摺好），
+  // 所以這裡直接數列數即可，跟檔頭「側錄 N 則」同一套語意。
+  const nSide=rows.filter(r=>r.kind==="side").length;
+  const total=ROWS.length;
+  document.getElementById("cnt").textContent =
+    `${rows.length} / ${total} 則` + (nSide?`（含側錄 ${nSide} 則）`:"");
+  if(!rows.length){
+    const e=document.createElement("div"); e.className="sub"; e.textContent="沒有符合條件的素材。"; list.append(e); return;
+  }
+  const byT=groupBy(rows, primaryT);
+  T_DICT.forEach(([t,em])=>{
+    if(!byT.has(t)) return;
+    const items=byT.get(t);
+    const h=document.createElement("div"); h.className="big hd";
+    h.append(document.createTextNode(`${em} ${t}`));
+    h.append(btn(`複製整格（${items.length}）`,()=>copy(items.map(r=>r.text).join("\n"),`已複製「${t}」${items.length} 則`)));
+    list.append(h);
+    const byMid=groupBy(items, r=>r.mid||"（無中主題）");
+    byMid.forEach((arr, mid)=>{
+      const mh=document.createElement("div"); mh.className="mid hd";
+      const mt=document.createElement("span"); mt.className="midtxt"; mt.textContent=" "+mid+" ";
+      mh.append(mt);
+      const subMap=new Map();
+      arr.forEach(r=>{ const k=r.sub||""; if(!subMap.has(k)) subMap.set(k,[]); subMap.get(k).push(r); });
+      mh.append(btn(`複製（${arr.length}）`,()=>copy(midText(mid,subMap),`已複製「${mid}」${arr.length} 則`)));
+      list.append(mh);
+      const bySub=groupBy(arr, r=>r.sub||"");
+      bySub.forEach((its, sub)=>{
+        if(sub){
+          const sh=document.createElement("div"); sh.className="sub hd";
+          const st=document.createElement("span"); st.className="subtxt"; st.textContent=sub;
+          sh.append(st);
+          sh.append(btn(`複製（${its.length}）`,()=>copy(subText(sub,its),`已複製「${sub}」${its.length} 則`)));
+          list.append(sh);
+        }
+        its.forEach(r=>list.append(itemEl(r)));
+      });
+    });
+  });
+}
+function activeFilterCount(){
+  return ["src","mark","big","alert","hilite","T","C"].reduce((n,k)=>n+F[k].size,0) + (F.q?1:0);
+}
+function updateFab(){
+  const nf=activeFilterCount();
+  const fab=document.getElementById("fab");
+  fab.textContent = nf ? `篩選 (${nf})` : "篩選";
+  fab.classList.toggle("on", nf>0);
+}
+function draw(){ renderPanel(); renderExtra(); renderList(); updateFab(); }
+document.getElementById("q").oninput=e=>{ F.q=e.target.value.trim().toLowerCase(); draw(); };
+document.getElementById("copyAll").onclick=()=>{
+  const rows=ROWS.filter(pass);
+  copy(rows.map(r=>r.text).join("\n"), `已複製篩選結果 ${rows.length} 則`);
+};
+document.getElementById("reset").onclick=()=>{
+  ["src","mark","big","alert","hilite","T","C"].forEach(k=>F[k].clear());
+  F.q=""; document.getElementById("q").value=""; draw();
+};
+function openF(on){
+  document.getElementById("panel").classList.toggle("open", on);
+  document.getElementById("scrim").classList.toggle("open", on);
+}
+document.getElementById("fab").onclick=()=>openF(!document.getElementById("panel").classList.contains("open"));
+document.getElementById("closeF").onclick=()=>openF(false);
+document.getElementById("scrim").onclick=()=>openF(false);
+let ty0=null;
+document.getElementById("grip").addEventListener("touchstart",e=>{ty0=e.touches[0].clientY;},{passive:true});
+document.getElementById("grip").addEventListener("touchmove",e=>{
+  if(ty0!==null && e.touches[0].clientY-ty0>40){ openF(false); ty0=null; }
+},{passive:true});
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") openF(false); });
+function syncStickyH(){
+  const hist=document.getElementById("histbar");
+  const histH = hist ? hist.offsetHeight : 0;
+  document.documentElement.style.setProperty("--histh", histH+"px");
+  const el=document.querySelector(".sticky");
+  if(el) document.documentElement.style.setProperty("--stickyh", (histH+el.offsetHeight)+"px");
+}
+new ResizeObserver(syncStickyH).observe(document.querySelector(".sticky"));
+if(document.getElementById("histbar")) new ResizeObserver(syncStickyH).observe(document.getElementById("histbar"));
+window.addEventListener("resize", syncStickyH);
+syncStickyH();
+mqMobile.addEventListener("change", ()=>draw());
+draw();
+</script>
+</body>
+</html>

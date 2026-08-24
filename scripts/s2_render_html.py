@@ -795,6 +795,8 @@ def main():
     p.add_argument("--out", help="輸出 html 路徑（省略＝印到 stdout）")
     p.add_argument("--base-date", default="", help="晚班當天 MMDD；省略自動推得")
     p.add_argument("--window", default="", help="時間窗；省略取狀態檔算出的累計窗")
+    p.add_argument("--legacy", action="store_true",
+                   help="用舊版面（預設＝T/C 矩陣版，跟排程每輪產出的那份一致）")
     args = p.parse_args()
 
     state = R.load_state(args.file)
@@ -805,7 +807,14 @@ def main():
     win = args.window or R.window_from_state(state, base) or state.get("window_local", "")
     live_dir = os.path.dirname(os.path.abspath(args.file))
     datebar = build_datebar(base, find_archive_dates(live_dir))
-    out = build_html(state, base, win, datebar)
+    # A10 v2（2026-08-24）：預設產矩陣版，跟 `s2_render.py` 排程那條路**同一支**。
+    # ⛔ 兩條路都會產出正式檔案，新版面兩邊都要接——2026-08-11 歷史列就是只接了
+    #    這條獨立入口、排程那條沒接，功能「上線」卻從來沒生效過。
+    if args.legacy or os.environ.get("S2_HTML_LEGACY") == "1":
+        out = build_html(state, base, win, datebar)
+    else:
+        import s2_render_matrix as rm
+        out = rm.build_html(state, base, win, datebar)
 
     if not args.out:
         sys.stdout.write(out)

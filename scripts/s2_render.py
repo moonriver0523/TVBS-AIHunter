@@ -627,8 +627,19 @@ def main():
             #    都沒有歷史列。⛔ 兩條路都會產出正式檔案，**新功能兩邊都要接**。
             live_dir = os.path.dirname(os.path.abspath(args.file))
             datebar = rh.build_datebar(base, rh.find_archive_dates(live_dir))
+            # A10 v2（2026-08-24 使用者裁決）：線上版換成 T/C 矩陣版。
+            # ⛔ 這不是第三條 render 路——`s2_render_html.py --matrix` 那條獨立入口
+            #    也呼叫同一支 build_html（2026-08-11 事故就是只接一條）。
+            # 緊急開關：設環境變數 S2_HTML_LEGACY=1 就退回舊版面，不必改程式、
+            # 不必 git revert——排程輪次中途也能用。
+            if os.environ.get("S2_HTML_LEGACY") == "1":
+                html_body = rh.build_html(state, base, win, datebar)
+                print("⚠️ S2_HTML_LEGACY=1，本輪 HTML 用舊版面")
+            else:
+                import s2_render_matrix as rm
+                html_body = rm.build_html(state, base, win, datebar)
             with open(html_out, "w", encoding="utf-8") as f:
-                f.write(rh.build_html(state, base, win, datebar))
+                f.write(html_body)
             print(f"OK 已產出 HTML 檢視版 {html_out}")
             # ⚠️ 側錄「則數」現在有**兩份算法**：txt 檔頭走 sv.side_units（解析文字），
             #    網頁版走 JS（篩選會變動，必須在瀏覽器端算）。兩份遲早會漂移，

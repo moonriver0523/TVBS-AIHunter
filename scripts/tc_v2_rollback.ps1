@@ -61,7 +61,7 @@ $commits | ForEach-Object { Write-Host "  $_" }
 # ── 閘門 3：工作區必須乾淨（只看要回滾的那幾個檔） ───────────────────────
 $dirty = @(& git -C $repo status --porcelain -- `
              scripts/s2_state.py scripts/s2_token_metrics.py `
-             common/13f-S2-大分類與各站規則.md)
+             scripts/s2_render.py scripts/s2_render_html.py common/13f-S2-大分類與各站規則.md)
 if ($dirty) {
     Write-Host "❌ 這些檔案有未提交的改動，先處理掉再回滾：" -ForegroundColor Red
     $dirty | ForEach-Object { Write-Host "  $_" }
@@ -77,6 +77,8 @@ if ($DryRun) { Write-Host "`n(DryRun：以上都沒有真的執行)" -Foreground
 & git -C $repo checkout "$base" -- `
     scripts/s2_state.py `
     scripts/s2_token_metrics.py `
+    scripts/s2_render.py `
+    scripts/s2_render_html.py `
     common/13f-S2-大分類與各站規則.md
 if ($LASTEXITCODE -ne 0) { Write-Host "❌ checkout 失敗" -ForegroundColor Red; exit 1 }
 
