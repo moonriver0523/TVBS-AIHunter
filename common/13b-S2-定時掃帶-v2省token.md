@@ -1048,7 +1048,10 @@ pwsh -NoProfile -File "E:\GitHub\TVBS-AIHunter\scripts\s2_scan.ps1" -Model opus
 > ① 建好 `{MMDD}-s2-state.json`（`window_start` 直接寫好＝當天 13:00）
 > ② 把上一班的檔全部搬進 `Archive/{YYYYMMDD}/`
 > ③ **（2026-08-17 加）常駐中主題**：照 `scripts/s2_resident_topics.json` 把固定中分類寫進
->   新狀態檔的 `resident_topics`（現行：烏俄＝俄轟烏／烏轟俄）。這些中主題**當天 0 則也會
+>   新狀態檔的 `resident_topics`（現行：烏俄＝烏打俄／俄打烏，即 13f 權威命名去掉外層方括號——
+>   render 會自動幫中主題加上『【】』，寫進 JSON 的名字不能再帶括號，否則印成『【【烏打俄】】』。
+>   2026-08-24 訂正：原本寫「俄轟烏／烏轟俄」跟 13f 權威命名「【烏打俄】／【俄打烏】」對不上，
+>   導致每天多開兩個永遠空的重複格，見 `common/plans/S2-MASTER-追蹤清單.md`）。這些中主題**當天 0 則也會
 >   印出空標題**，讓編輯看得出「這條線每天都在追」而不是漏歸類。
 >   要增刪就改那個 JSON，⛔ 不要改腳本；只想改今天一天用 `set-resident-topics`（當日覆寫，不影響隔天）。
 >   設定檔壞掉／不見不會弄死建檔，但會在 `_輪次紀錄.txt` 留一行 `NEWDAY WARN`。
