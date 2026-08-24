@@ -942,7 +942,11 @@ TC_DICT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 # 每個 checkpoint 的 set-tc 呼叫上限（A23 式硬上限）。
 # 訂 6 而不是 4：checkpoint 就是輪次，set-category 實測已穩定 4 次／輪，
 # T/C 綁同批再加上各產線整併端補標，4 會讓**合法呼叫**撞牆。
-TC_CALLS_PER_CHECKPOINT = 6
+# 🔴 2026-08-25 上調 6 → 8：0825-0100 輪（79 則）實際用滿 6 次、**正好頂到上限**，
+#    再多一點素材就會拒絕到合法呼叫——那會變成成本乘數（每次拒絕＝一次重試呼叫
+#    ≈$0.07），正是這個上限想避免的東西。上限的用意是擋「逐則呼叫」的失控形狀，
+#    不是擋正常批次；8 仍遠低於逐則呼叫的量級（79 則逐則＝79 次）。
+TC_CALLS_PER_CHECKPOINT = 8
 
 
 def _load_tc_dict():
