@@ -373,6 +373,60 @@ o, c = run(bp.cmd_inspect, Args(raw=RT_DETAIL, ids=None, fields=None,
 check('T9 RT detail 認得 edit 當 id（不再是 #0／#1，--ids 才可用）',
       c == 0 and 'RT7542' in o and '#0' not in o)
 
+# ── T9 二輪（對抗性審查發現）：`edit` 上游有退化值，撞名的 id 比沒有 id 更糟 ──
+# 實測 20260824 六份 rt_detail 有五份含裸前綴 'RT'，1800 那份 39 筆裡就有 19 筆。
+RT_DIRTY = write_json('rt_dirty.json', [
+    {'edit': 'RT', 'head': 'A', 'story': _S},
+    {'edit': 'RT', 'head': 'B', 'story': _S},
+    {'edit': 'RT7440', 'head': 'C', 'story': _S},
+    {'edit': 'RT', 'head': 'D', 'story': _S},
+    {'edit': 'RT7415', 'head': 'E', 'story': _S},
+    {'edit': 'RT7427', 'head': 'F', 'story': _S},
+])
+o, c = run(bp.cmd_inspect, Args(raw=RT_DIRTY, ids=None, fields=None,
+                                limit=None, index=None, site='rt', lengths=False))
+check('T9-2 edit 的裸前綴退化值不當 id（撞名會讓 --ids 撈到一整群）',
+      c == 0 and o.count('\tA') and '#0\t' in o and '#1\t' in o and 'RT7440' in o)
+
+o, c = run(bp.cmd_dedup_check, Args(raw=RT_DIRTY, ids='RT,RT7440', site='rt', fields=None))
+check('T9-2 dedup-check 對退化值要 fail-loud（不可靜默拿第一個比）',
+      c != 0 and 'RT' in o)
+
+# 分批建議必須 round-trip：貼回去要剛好撈到承諾的筆數，否則會再度爆預算、
+# 印出同一條壞建議 → 不收斂，agent 照做只是白燒呼叫。
+o, c = run(bp.cmd_inspect, Args(raw=RT_DIRTY, ids=None, fields='story',
+                                limit=None, index=None, site='rt', lengths=False))
+sug = [l for l in o.splitlines() if '--ids' in l]
+check('T9-2 撞名檔仍給得出建議（退化值已退回 #N，#N 也可貼回）', len(sug) == 1)
+if sug:
+    _ids = sug[0].split('--ids ')[-1].strip()
+    o2, c2 = run(bp.cmd_inspect, Args(raw=RT_DIRTY, ids=_ids, fields='story',
+                                      limit=None, index=None, site='rt', lengths=False))
+    check('T9-2 建議指令 round-trip：貼回去筆數相符且不再爆預算',
+          c2 == 0 and f'本次顯示 {len(_ids.split(","))} 筆' in o2 and '超過' not in o2)
+
+o, c = run(bp.cmd_inspect, Args(raw=RT_DIRTY, ids='#0,#1', fields='head',
+                                limit=None, index=None, site='rt', lengths=False))
+check('T9-2 `--ids #N` 序號定址受理（工具自己印的 #N 要貼得回去）',
+      c == 0 and '本次顯示 2 筆' in o and '找不到' not in o)
+
+# 預算量的是序列化後的長度：raw len 加總不含 JSON escape，NS 型內容實測膨脹 4.9%，
+# 近飽和時足以把「宣告整批全文」的輸出推破 Bash 的 30k 靜默截斷線。
+ESCAPE_HEAVY = write_json('escape_heavy.json', [
+    {'id': f'E{i}', 'script': ('line\n"quoted"\t' * 250)} for i in range(9)])
+o, c = run(bp.cmd_inspect, Args(raw=ESCAPE_HEAVY, ids=None, fields='script',
+                                limit=None, index=None, site=None, lengths=False))
+check('T9-2 escape 膨脹要計入預算（宣告全文就不能破 30k）',
+      c == 0 and (len(o) <= 30000 or '超過' in o))
+
+# dict 欄位（AP nitf 殼）原本被算成 0 → 宣告「整批全文」卻整包 dumps。
+NITF = write_json('nitf.json', [
+    {'id': f'P{i}', 'script': {'words': 500, 'nitf': 'z' * 3000}} for i in range(15)])
+o, c = run(bp.cmd_inspect, Args(raw=NITF, ids=None, fields='script',
+                                limit=None, index=None, site=None, lengths=False))
+check('T9-2 dict 欄位也要計入預算（原本算 0，會靜默爆 30k）',
+      c == 0 and (len(o) <= 30000 or '超過' in o))
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)

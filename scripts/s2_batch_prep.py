@@ -411,8 +411,18 @@ def _id_of_any(item, index):
     # 只剩 `--index` 一則一則翻。0825-0100 那 15 次 `--index N --fields story`
     # 的根因就是這個（既有缺陷，非本次改動造成）。
     for key in ('id', 'code', 'edit', '_id', 'itemid', 'guid'):
-        if item.get(key):
-            return str(item[key])
+        v = item.get(key)
+        if not v:
+            continue
+        s = str(v)
+        # ⚠️ `edit` 上游有**退化值**：實測 20260824 六份 rt_detail 裡有五份含裸前綴
+        #    `'RT'`（沒有編號），1800 那份 39 筆裡就有 19 筆。撞名的 id 比沒有 id
+        #    更糟——`--ids RT` 會一次撈到 19 筆（爆預算）、`dedup-check` 會**靜默**
+        #    拿第一個比（比錯還不報錯），而改動前 `'RT'` 不是合法 id、是 fail-loud 的。
+        #    1600 那份還有 `RTRT7400` 雙前綴，可見上游值本來就髒。
+        if key == 'edit' and not re.search(r'\d', s):
+            continue
+        return s
     return f'#{index}'
 
 
@@ -505,12 +515,18 @@ def _plan_full_detail(shown, fields, site):
     ⛔ 塞不下時**不靜默截斷**——會明講並印出下一步指令。R15 的教訓是靜默截斷
     會讓 agent 合理地退回逐則查詢，那正是這一刀要消滅的形狀。
     """
+    # ⚠️ 量的是**序列化後**的長度，不是 raw `len(v)` 總和——保證要落在真正印出去的
+    #    那串位元組上。JSON escape（`\n` 變兩字元、引號）實測讓 NS 型內容膨脹 4.9%，
+    #    近飽和時足以把「宣告整批全文」的輸出推破 Bash 的 30k 靜默截斷線。
+    #    順帶解掉 dict 欄位（AP 的 nitf 殼）被算成 0 的洞：`json.dumps` 會把整包算進去。
     total_len, fit_ids = 0, []
     for i, it in shown:
-        one = sum(len(v) for v in (it.get(k) for k in fields) if isinstance(v, str))
+        item_id = _dedup_id(site, it, i)
+        one = len(json.dumps({k: it.get(k, '<無此欄位>') for k in fields},
+                             ensure_ascii=False)) + len(item_id) + 2  # id + \t + \n
         if total_len + one > INSPECT_TEXT_BUDGET:
             break
-        fit_ids.append(_dedup_id(site, it, i))
+        fit_ids.append(item_id)
         total_len += one
     if len(fit_ids) == len(shown):
         return None, None
@@ -526,12 +542,19 @@ def _plan_full_detail(shown, fields, site):
             f'字元預算，已改印 {INSPECT_PREVIEW_CHARS} 字元預覽（**不是**全文）。')
     # ⚠️ 沒帶 `--site` 時 `_dedup_id` 回退成 `#index`，那不是能貼回 `--ids` 的東西
     #    ——印出來會變成一條**跑不動的**建議指令，比不給建議更糟。
-    if any(x.startswith('#') for x in fit_ids):
+    # ⚠️ 認不出 id 的筆數會是 `#N` 序號——那**也是可以貼回 `--ids` 的**（`cmd_inspect`
+    #    一律受理 `#N`），所以不必因此拒絕給建議，照樣印出去就好。
+    # 🔴 建議指令必須 **round-trip**：貼回去要剛好撈到這幾筆，不能多。
+    #    id 撞名時貼回去會撈到一整群 → 再度爆預算 → 再印同一條壞建議，**不收斂**，
+    #    agent 照做只是白燒呼叫，正好是這一刀要救的那條路。寧可不給建議，
+    #    也不要給一條跑起來不對的指令。
+    want = set(fit_ids)
+    hit = sum(1 for i, it in shown if _dedup_id(site, it, i) in want)
+    if len(want) != len(fit_ids) or hit != len(fit_ids):
         return INSPECT_PREVIEW_CHARS, (
             f'{head}\n'
-            f'   要全文請分批（前 {len(fit_ids)} 筆吃得下）。'
-            f'⚠️ 這個檔沒帶 `--site` 認不出 id，'
-            f'請補 `--site ns|ap|rt` 才能用 `--ids` 分批。')
+            f'   ⚠️ 這個檔的 id 有重複，貼回 `--ids` 會撈到多餘的筆數，'
+            f'因此不給分批指令。請改用 `--limit`／`--index` 逐段取。')
     return INSPECT_PREVIEW_CHARS, (
         f'{head}\n'
         f'   要全文請分批，前 {len(fit_ids)} 筆可一次取：\n'
@@ -561,8 +584,12 @@ def cmd_inspect(args):
         indexed = [indexed[args.index]]
     elif args.ids:
         want = set(x.strip() for x in args.ids.split(','))
-        indexed = [(i, it) for i, it in indexed if _dedup_id(site, it, i) in want]
+        # `#N` 序號定址一律受理：id 撲空時本工具自己就是印 `#0…#N`，只認真 id
+        # 會讓自己印出來的東西貼不回去（RT detail 補了 `edit` 之後實測到的回歸）。
+        indexed = [(i, it) for i, it in indexed
+                   if _dedup_id(site, it, i) in want or f'#{i}' in want]
         found = set(_dedup_id(site, it, i) for i, it in indexed)
+        found |= set(f'#{i}' for i, _ in indexed)
         missing = want - found
         if missing:
             print(f'⚠️ 找不到這些 id：{", ".join(sorted(missing))}', file=sys.stderr)

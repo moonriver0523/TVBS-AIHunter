@@ -53,6 +53,10 @@ for cmd, want in (
      's2_batch_prep:dedup-check'),          # 帶連字號的子指令要整段吃進來
     ('python "E:/x/s2_batch_prep.py" build --site ap', 's2_batch_prep:build'),
     ('python scripts/s2_batch_prep.py --help', 's2_batch_prep.py'),  # 認不出就回舊桶名
+    # 幽靈桶：.py 後面接第二個路徑時，`scripts` 會被抓成子指令。只收已知子指令。
+    ('grep -n "cap" scripts/s2_batch_prep.py scripts/test_s2_batch_prep.py',
+     's2_batch_prep.py'),
+    ('wc -l scripts/s2_batch_prep.py scripts/s2_render.py', 's2_batch_prep.py'),
     ('python scripts/s2_render.py --file x.json', 's2_render.py'),
     ('ls -la', 'Bash（其他）'),
 ):

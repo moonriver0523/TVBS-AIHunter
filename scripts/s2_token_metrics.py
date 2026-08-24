@@ -149,6 +149,13 @@ S2_STATE_SUBCOMMANDS = (
 )
 
 
+# `s2_batch_prep.py` 的子指令（跟該檔 add_parser() 那份對齊；新增子指令要一併補）。
+BATCH_PREP_SUBCOMMANDS = (
+    'dump', 'build', 'unwrap', 'inspect', 'search', 'snapshot',
+    'compare', 'dedup-check',
+)
+
+
 def _has_subcommand_token(cmd, sub):
     """精確比對子指令 token，不吃子字串——避免 'add' 誤配到 'add-batch'／
     'set-top' 誤配到 'set-topic-order'（兩者都以該字串開頭）。"""
@@ -185,8 +192,13 @@ def classify_bash_tool(cmd):
         # 分到子指令（T9，2026-08-25）。原本一桶到底，於是遙測只看得到
         # 「batch_prep 60 次」、看不出 56 次都是 `inspect`——0825-0100 的診斷
         # 因此只能回頭爬 transcript。沒有這一刀，任何修法都無法用 --diff 驗收。
+        # ⚠️ 只收**已知**子指令：不設限的話 `grep -n "cap" scripts/s2_batch_prep.py
+        #    scripts/test_s2_batch_prep.py` 會把第二個路徑的 `scripts` 抓成子指令，
+        #    長出 `s2_batch_prep:scripts` 這種幽靈桶。認不出就退回舊桶名。
         m = re.search(r's2_batch_prep\.py["\']?\s+([a-z][a-z-]*)', cmd)
-        return f's2_batch_prep:{m.group(1)}' if m else 's2_batch_prep.py'
+        if m and m.group(1) in BATCH_PREP_SUBCOMMANDS:
+            return f's2_batch_prep:{m.group(1)}'
+        return 's2_batch_prep.py'
     if 's2_render' in cmd:
         return 's2_render.py'
     return 'Bash（其他）'
