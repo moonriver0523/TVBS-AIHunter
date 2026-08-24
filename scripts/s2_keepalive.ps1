@@ -226,5 +226,13 @@ try {
     exit $code
 }
 finally {
-    if ($lock) { $lock.Dispose() }
+    if ($lock) {
+        $lock.Dispose()
+        # R16（2026-08-24）：這裡原本只 Dispose 不刪檔，而保活每 30 分鐘跑一次，
+        # 鎖檔就永遠躺在那裡 →「檔案存在」與「有沒有輪次在跑」變成零相關，
+        # 任何拿它當閘門的程序都是永久誤報。比照 s2_scan.ps1:599 補上刪除。
+        # 互斥真正靠的是上面 FileShare::None 的獨佔握把，刪檔只是清留痕；
+        # 刪不掉＝已被下一輪拿走，正是該留下的時候。
+        Remove-Item $LockFile -Force -ErrorAction SilentlyContinue
+    }
 }
