@@ -19,6 +19,14 @@
 import os
 import sys
 
+# Windows 預設 cp950 主控台印不出 ✅／❌，會讓本檢查以 UnicodeEncodeError 假性失敗
+# （0824-1000 輪實際踩到）。強制 UTF-8 輸出，呼叫端就不必自己加 PYTHONIOENCODING。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 C = os.path.join(REPO, "common")
