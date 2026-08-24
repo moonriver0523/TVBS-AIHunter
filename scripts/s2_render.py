@@ -610,6 +610,36 @@ def main():
         else:
             print("OK 主題重複偵測 0 命中")
 
+    # ── T/C 覆蓋率閘門（A10 v2，2026-08-24 上線當晚加）─────────────────────
+    # 🔴 為什麼需要這道閘門：0824-2000 輪實證，`13f` 的 T/C 判準**完整進了 context**
+    #    （rule_shas 相符、transcript 裡讀得到判準段與指令範例），agent 也照常下了
+    #    4 次 `set-category`，但 `set-tc` **一次都沒呼叫**（以 tool_calls_by_name
+    #    與 transcript 逐行掃描兩種獨立方法交叉驗證過，比照 R17 的教訓）。
+    #    屬 T7／A23 家族：規則已改、行為沒跟上。**光把判準寫進規則不夠，要有觸發點。**
+    #
+    # 設計取自 `list-topics` 的成功模式：它執行率高，是因為有「開新中主題前」這種
+    # 明確觸發時機。這裡就是幫 `set-tc` 造一個——每輪 render 完固定報一次，
+    # 並且**把可以直接貼的指令印出來**，不要只說「請去標」。
+    #
+    # ⛔ 純提示，不影響已寫入的 txt。txt 是權威產物，不能為了附屬品讓收工失敗
+    #    （同本檔 HTML 那段的理由）。
+    try:
+        import s2_render_matrix as _rm
+        _n, _stored, _mixed, _heur, _diff = _rm.tc_stats(state, base)
+        if _heur:
+            print(f"⚠️ T/C 覆蓋率 {(_n - _heur) * 100 // max(_n, 1)}%"
+                  f"（{_n} 則裡有 {_heur} 則還沒標，網頁上那些會退回關鍵詞兜底／未分類）")
+            print(f"   ⛔ 收工前請補標。查沒標的是哪幾則：")
+            print(f'   python scripts/s2_state.py --file "{args.file}" show --fields id,cat,T,C')
+            print("   補標（⚠️ 整批一次下，每 checkpoint 有呼叫次數上限）：")
+            print(f'   python scripts/s2_state.py --file "{args.file}" '
+                  f'set-tc --pairs "id1=政治,社會/臺灣;id2=天災天氣/日本"')
+            print(f"   判準與名單見 common/13f「T／C 標籤」節。")
+        else:
+            print(f"OK T/C 覆蓋率 100%（{_n} 則全部已標）")
+    except Exception as e:                                  # noqa: BLE001
+        print(f"⚠️ T/C 覆蓋率檢查失敗（不影響 txt）：{type(e).__name__}: {e}")
+
     # HTML 檢視版：txt 旁邊順手產一份（2026-08-09）。編輯用手機開 Apps Script
     # 網址看的就是它，所以**每輪都要跟著更新**，否則手機上看到的是舊資料。
     # ⛔ **失敗絕不可以影響 txt**——txt 是權威產物、HTML 只是衍生檢視層，
