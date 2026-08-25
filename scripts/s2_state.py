@@ -949,6 +949,36 @@ TC_DICT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 TC_CALLS_PER_CHECKPOINT = 8
 
 
+# ── C 正規化：併入表與「專項帶區域」表（2026-08-25 使用者裁示） ──────────────
+# 🔴 **只在這裡定義一次。** render 端的 `stored_tc()` 直接 import 這兩張表——
+#    複製一份到 renderer 會漂，而漂掉的那天畫面與狀態檔會各說各話。
+# ⚠️ 放在**寫入端**而不是只做驗證：13f／17 的來源預設寫的是「CNA→新加坡」，
+#    若只驗不改寫，每一處預設都得改成「新加坡,東南亞」，漏一處就退回舊行為。
+C_MERGED = {"墨西哥": "中南美", "其他地區": "國際"}   # 舊桶已刪，改寫不退件
+C_IMPLIES = {"新加坡": "東南亞", "泰國": "東南亞"}    # 專項與區域並存
+
+
+def normalize_c(names):
+    """回傳 (正規化後的 C 名單, 改寫說明)。順序穩定、不重複。
+
+    ⛔ 以色列／伊朗**不在** `C_IMPLIES` 裡——那組的規則相反（掛專項就不掛中東）。
+       三種形狀寫在 TC-字典.md 的表下方，不要互相類推。
+    """
+    out, notes = [], []
+    for x in names:
+        y = C_MERGED.get(x)
+        if y:
+            notes.append(f"{x}→{y}")
+            x = y
+        if x not in out:
+            out.append(x)
+        imp = C_IMPLIES.get(x)
+        if imp and imp not in out:
+            out.append(imp)
+            notes.append(f"{x}＋{imp}")
+    return out, notes
+
+
 def _load_tc_dict():
     """從 TC-字典.md 解析出 (T 名單, C 名單)。單一真相源，解析不到就硬失敗。"""
     try:
@@ -977,7 +1007,7 @@ def _load_tc_dict():
     return T, C
 
 
-def _set_one_tc(state, raw_id, spec, ok_t, ok_c):
+def _set_one_tc(state, raw_id, spec, ok_t, ok_c, notes=None):
     """設定單筆 T/C。回傳錯誤訊息字串，成功回 None。
 
     spec 格式：`T1,T2/C1,C2`（T 與 C 以 `/` 分隔，各自以 `,` 分隔多個）。
@@ -993,6 +1023,11 @@ def _set_one_tc(state, raw_id, spec, ok_t, ok_c):
     C = [x.strip() for x in cside.split(",") if x.strip()]
     if not T and not C:
         return f"{i}: T 與 C 不能都是空的"
+    # 先正規化再驗字典：墨西哥／其他地區是**已刪的舊桶**，改寫比退件好——
+    # 退件會逼 agent 多一次呼叫（≈$0.07），而正確答案是唯一的、沒有歧義。
+    C, _notes = normalize_c(C)
+    if _notes and notes is not None:
+        notes.append(f"{i}: " + "、".join(_notes))
     bad = [x for x in T if x not in ok_t] + [x for x in C if x not in ok_c]
     if bad:
         return f"{i}: 不在 TC-字典 裡的名稱 {'／'.join(bad)}"
@@ -1044,7 +1079,7 @@ def cmd_set_tc(state, args):
         pairs = args.pairs
 
     sep = ";" if ";" in pairs else "\n"
-    done, skipped = [], []
+    done, skipped, rewrites = [], [], []
     for tok in (t.strip() for t in pairs.split(sep)):
         if not tok:
             continue
@@ -1052,7 +1087,7 @@ def cmd_set_tc(state, args):
             skipped.append(f"「{tok}」: 缺 =（格式 id=T1,T2/C1,C2）")
             continue
         i, spec = tok.split("=", 1)
-        err = _set_one_tc(state, i, spec, ok_t, ok_c)
+        err = _set_one_tc(state, i, spec, ok_t, ok_c, rewrites)
         (skipped if err else done).append(err or norm_id(i))
 
     # 拒絕要留得下痕跡：遙測只記呼叫次數、不記離開碼，整份 jsonl 沒有欄位
@@ -1067,6 +1102,11 @@ def cmd_set_tc(state, args):
     save(state, args.file)
     print(f"OK 設定 {len(done)} 則 T/C"
           f"（checkpoint {cp} 第 {used + 1}/{TC_CALLS_PER_CHECKPOINT} 次呼叫）")
+    if rewrites:
+        # 改寫要看得見，否則使用者會以為 C 是 agent 自己判的。
+        print(f"ℹ️ C 依字典改寫 {len(rewrites)} 則（併入桶／專項帶區域）：")
+        for _x in rewrites:
+            print("  " + _x)
     # 🔴 補標在 render 之後 → 頁面還是舊的（2026-08-25 實測到的「大量未分類」主因）。
     #    現行流程是 render → 覆蓋率閘門報「N 則還沒標」→ agent 補標 → **收工**，
     #    沒有人再 render 一次。0825-1200 實例：頁面上 618 列有 53 列是 heur
@@ -1412,7 +1452,9 @@ def cmd_add_side(state, args):
             bad.append(f"{i}: 沒有大分類（候選 TXT 需標擬歸位，或沿用 txt 三層排版）")
             continue
         T = [x for x in (tc or {}).get("T") or [] if x in ok_t]
-        C = [x for x in (tc or {}).get("C") or [] if x in ok_c]
+        # ⚠️ 先正規化再過濾：舊桶（墨西哥／其他地區）在這裡會被**靜默丟棄**
+        C, _ = normalize_c((tc or {}).get("C") or [])
+        C = [x for x in C if x in ok_c]
         rej = [x for x in ((tc or {}).get("T") or []) if x not in ok_t] + \
               [x for x in ((tc or {}).get("C") or []) if x not in ok_c]
         if rej:
