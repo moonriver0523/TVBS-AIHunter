@@ -635,6 +635,13 @@ def main():
             print(f'   python scripts/s2_state.py --file "{args.file}" '
                   f'set-tc --pairs "id1=政治,社會/臺灣;id2=天災天氣/日本"')
             print(f"   判準與名單見 common/13f「T／C 標籤」節。")
+            # 🔴 2026-08-25：這道閘門把 set-tc 的觸發點放在 render **之後**，
+            #    於是本輪新增的那一批一定是「render 完才標」，而沒有人再 render
+            #    一次——0825-1200 實測頁面 618 列有 53 列落回關鍵詞兜底
+            #    （22 列 C＝未分類），狀態檔卻是 100% 標好的。使用者看到的
+            #    「大量未分類」就是這個時序造成的，不是 agent 沒標。
+            print("   🔴 補標完**一定要再跑一次本指令**（render），否則網頁與 txt "
+                  "停在上面那個覆蓋率——狀態檔標好了，頁面不會自己更新。")
         else:
             print(f"OK T/C 覆蓋率 100%（{_n} 則全部已標）")
     except Exception as e:                                  # noqa: BLE001

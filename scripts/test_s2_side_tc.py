@@ -271,6 +271,60 @@ report("① arity 壞掉：一個字都沒寫進狀態檔（改好重跑即可�
        after == [], f"得到 {len(after)} 則")
 
 
+# ══ set-tc 的兩個觸發點（2026-08-25，「大量未分類」診斷後補）═══════════════
+# 🔴 使用者觀察到頁面常有大量未分類、要事後再請 agent 補。診斷結果是**時序**，
+#    不是 agent 沒標：
+#    ① render → 覆蓋率閘門報「N 則還沒標」→ agent 補標 → 收工，**沒有人再
+#       render 一次**，所以頁面永遠缺當輪那一批（0825-1200 實測 618 列有 53 列
+#       落回關鍵詞兜底，狀態檔卻 100%）。
+#    ② `set-top checkpoint` 是收工才下的，於是輪次中途的 set-tc 被記到**前一輪**
+#       的桶（0825-0430 實測用掉 0100 的第 7、8 格），撞到上限就整輪標不完。
+import contextlib                                             # noqa: E402
+import io as _io                                              # noqa: E402
+
+
+class _TcArgs:
+    def __init__(self, file, pairs):
+        self.file, self.pairs = file, pairs
+        self.id = self.tc = None
+
+
+def _run_set_tc(items, pairs, top=None):
+    doc = {"checkpoint": "0825-1600", "items": items}
+    doc.update(top or {})
+    json.dump(doc, open(sp, "w", encoding="utf-8"), ensure_ascii=False)
+    s = st.load(sp)
+    buf = _io.StringIO()
+    code = 0
+    try:
+        with contextlib.redirect_stdout(buf):
+            st.cmd_set_tc(s, _TcArgs(sp, pairs))
+    except SystemExit as e:
+        code = e.code
+    return code, buf.getvalue()
+
+
+_it = [{"id": "AP1", "source": "AP", "raw_entry": "x", "category": None,
+        "script_status": "has_script"}]
+
+_code, _out = _run_set_tc(_it, "AP1=政治/美國",
+                          {"last_render_ts": "2026-08-25T12:18:14.027672"})
+report("① render 之後才標 → 要印出「再跑一次 render」",
+       _code == 0 and "s2_render.py" in _out, f"離開碼 {_code}；輸出 {_out[-90:]!r}")
+report("① 重跑指令必須帶 --out（少了它 render 只印到 stdout、什麼都不寫）",
+       "--out" in _out and "晚班交接.txt" in _out, f"輸出 {_out[-140:]!r}")
+
+
+_code, _out = _run_set_tc(_it, "AP1=政治/美國")
+report("① 還沒 render 過就不要囉嗦（避免變成每次都印的雜訊）",
+       _code == 0 and "s2_render.py" not in _out, f"輸出 {_out[-90:]!r}")
+
+_code, _out = _run_set_tc(_it, "AP1=政治/美國",
+                          {"tc_calls": {"0825-1600": st.TC_CALLS_PER_CHECKPOINT}})
+report("② 撞上限時要指出「checkpoint 可能還停在上一輪」並給自救指令",
+       _code == 3 and "set-top checkpoint" in _out, f"離開碼 {_code}；輸出 {_out[-120:]!r}")
+
+
 # ══ render 端：fold_side 要記住「單元內第一個有 T/C 的段」 ═══════════════
 # 🔴 為什麼：`fold_side` 摺單元時取 `dict(第一列)`。舊格式先入庫、事後用
 #    `set-tc` 補標到單元中間某一段時，只認第一列會讓**整個單元看起來沒標**。

@@ -1024,6 +1024,15 @@ def cmd_set_tc(state, args):
     if used >= TC_CALLS_PER_CHECKPOINT:
         print(f"⛔ set-tc 在 checkpoint {cp} 已呼叫 {used} 次，達上限 "
               f"{TC_CALLS_PER_CHECKPOINT}。請整批一次下，不要逐則呼叫。")
+        # 🔴 2026-08-25：實測 0825-0430 那輪的 set-tc 全部被記到 **前一輪**
+        #    （`0825-0100`）的桶裡，用掉它的第 7、8 格——因為 `set-top checkpoint`
+        #    是收工才下的，寫 T/C 的當下頂層 checkpoint 還停在上一輪。
+        #    後果：本輪的額度沒用到，卻先撞上一輪的牆，131 則裡只標到 29 則，
+        #    其餘留到下一輪才補——正是「大量未分類」的來源之一。
+        #    上限的用意是擋逐則呼叫，不是擋跨輪誤記，所以這裡要把自救路徑講出來。
+        print(f"⚠️ 若 checkpoint 還停在上一輪（目前狀態檔寫的是 {cp!r}），"
+              f"**本輪的額度其實還沒用**。先下 "
+              f"`set-top checkpoint {{MMDD}}-{{HHMM}}` 更新成本輪，再重下這批。")
         sys.exit(3)
 
     if not args.pairs:
@@ -1058,6 +1067,22 @@ def cmd_set_tc(state, args):
     save(state, args.file)
     print(f"OK 設定 {len(done)} 則 T/C"
           f"（checkpoint {cp} 第 {used + 1}/{TC_CALLS_PER_CHECKPOINT} 次呼叫）")
+    # 🔴 補標在 render 之後 → 頁面還是舊的（2026-08-25 實測到的「大量未分類」主因）。
+    #    現行流程是 render → 覆蓋率閘門報「N 則還沒標」→ agent 補標 → **收工**，
+    #    沒有人再 render 一次。0825-1200 實例：頁面上 618 列有 53 列是 heur
+    #    （22 列 C＝未分類、7 列 T＝未分類），而狀態檔其實 100% 標好了。
+    #    使用者看到的頁面因此每一輪都缺當輪那一批。
+    #    比照 `list-topics` 的成功模式：**在用到的當下給觸發點**，不是寫進規則等它遵守。
+    if done and (top.get("last_render_ts") or ""):
+        # ⚠️ 一定要把 `--out` 也印出來：`s2_render.py` 少了它只會把 txt 印到
+        #    stdout、**什麼都不寫**（`s2_render.py:591` 的 `if not args.out: return`），
+        #    照著跑會以為更新了、其實頁面沒動——那比不提示更糟。
+        _m = re.search(r"(\d{4})-s2-state", os.path.basename(args.file))
+        _out = (os.path.join(os.path.dirname(args.file), f"{_m.group(1)}晚班交接.txt")
+                if _m else "…/{MMDD}晚班交接.txt")
+        print(f"🔴 這批是在 render（{top['last_render_ts'][:19]}）之後才標的，"
+              f"**網頁與 txt 還是舊的**。收工前請再跑一次：")
+        print(f'   python scripts/s2_render.py --file "{args.file}" --out "{_out}"')
     if skipped:
         print(f"⚠️ 退回 {len(skipped)} 則（已記進 tc_rejected，不必逐則重試，"
               f"整批改好再下一次）：")
