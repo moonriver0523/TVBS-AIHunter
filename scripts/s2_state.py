@@ -1427,7 +1427,11 @@ def cmd_add_side(state, args):
             for ln in entry.split("\n")[:2]:
                 print(f"     {ln[:60]}")
     else:
-        if added:
+        # ⚠️ `tc_filled` 也要觸發存檔：純補標的重跑（整份都已在庫、只是事後補了
+        #    `T:`／`C:`）`added` 是空的，只看 `added` 會**印出「補標已在庫 N」卻
+        #    什麼都沒寫進去**——宣稱成功、實際丟失，正是這條工程要消滅的形狀。
+        #    而 `14` C-3b 白紙黑字承諾「事後在候選檔上補寫 T:/C: 也會生效」。
+        if added or tc_filled:
             save(state, args.file)
         print(f"OK 收錄側錄 {len(added)} 段" + (f"：{','.join(added[:8])}…" if len(added) > 8
                                             else (f"：{','.join(added)}" if added else "")))

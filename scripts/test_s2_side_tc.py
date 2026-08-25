@@ -228,6 +228,26 @@ report("已在庫補標：tc 有補上（候選檔是 append、每輪重讀，�
        saved["CNN 08-25 160106"].get("tc") == {"T": ["社會"], "C": ["南韓"]},
        f"得到 {saved['CNN 08-25 160106'].get('tc')}")
 
+# 🔴 純補標的重跑（整份都已在庫、added 是空的）也**必須存檔**。
+#    只看 `added` 的話會印出「補標已在庫 N」卻什麼都沒寫進去——宣稱成功、
+#    實際丟失。上一版 fixture 剛好有一段是新的，`added` 非空、save 順便發生了，
+#    這個形狀從沒被測到。這正是 14 C-3b 承諾「事後補寫 T:/C: 也會生效」的路徑。
+s = _fresh_state(sp, [
+    {"id": "CNN 08-25 160106", "source": "SIDE_CNN", "raw_entry": "a",
+     "category": {"大分類": "社會", "中主題": "首爾大火"}, "script_status": "has_script"},
+    {"id": "CNN 08-25 160130", "source": "SIDE_CNN", "raw_entry": "b",
+     "category": {"大分類": "社會", "中主題": "首爾大火"}, "script_status": "has_script"},
+])
+st.cmd_add_side(s, _Args(txt=txt, file=sp))
+saved = {x["id"]: x for x in json.load(open(sp, encoding="utf-8"))["items"]}
+report("🔴 純補標重跑（added 空）也要真的存檔",
+       saved["CNN 08-25 160106"].get("tc") == {"T": ["社會"], "C": ["南韓"]}
+       and saved["CNN 08-25 160130"].get("tc") == {"T": ["社會"], "C": ["南韓"]},
+       f"得到 {saved['CNN 08-25 160106'].get('tc')} / {saved['CNN 08-25 160130'].get('tc')}")
+report("純補標重跑：raw_entry 仍然沒動",
+       saved["CNN 08-25 160106"]["raw_entry"] == "a"
+       and saved["CNN 08-25 160130"]["raw_entry"] == "b")
+
 # 已有 tc 的不覆蓋（人工用 set-tc 改過的優先）
 s = _fresh_state(sp, [{"id": "CNN 08-25 160106", "source": "SIDE_CNN",
                        "raw_entry": "x", "category": {"大分類": "社會", "中主題": "首爾大火"},
