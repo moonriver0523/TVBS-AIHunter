@@ -1153,7 +1153,16 @@ def _special_t_sweep(state):
     return out
 
 
-def _set_one_tc(state, raw_id, spec, ok_t, ok_c, notes=None):
+# ── T 的數量上限（2026-08-25 使用者定：上限 3，預設 1，有需要才多掛）──────
+# 🔴 **機動 T 不佔這 3 格。** 颱風素材是「颱風＋天災天氣」兩個；機動 T 若也計數，
+#    `_special_t_sweep` 點名「加掛颱風、原本的 T 要留著」時，就會把已滿格的素材
+#    逼去違規——自己的機制打自己。
+# ⛔ 超過上限**退該則**，不截斷取前 N：哪幾個是主軸是判斷題，機器替 agent 挑
+#    等於把判斷藏進 stdout。退件走既有 skipped 路徑，會落進 `tc_rejected`。
+T_MAX = 3
+
+
+def _set_one_tc(state, raw_id, spec, ok_t, ok_c, notes=None, special=()):
     """設定單筆 T/C。回傳錯誤訊息字串，成功回 None。
 
     spec 格式：`T1,T2/C1,C2`（T 與 C 以 `/` 分隔，各自以 `,` 分隔多個）。
@@ -1179,6 +1188,11 @@ def _set_one_tc(state, raw_id, spec, ok_t, ok_c, notes=None):
     bad = [x for x in T if x not in ok_t] + [x for x in C if x not in ok_c]
     if bad:
         return f"{i}: 不在 TC-字典 裡的名稱 {'／'.join(bad)}"
+    fixed = [x for x in T if x not in set(special)]
+    if len(fixed) > T_MAX:
+        return (f"{i}: T 掛了 {len(fixed)} 個（{'、'.join(fixed)}），上限 {T_MAX} 個"
+                f"（機動 T 不計）。挑掉次要的重下這一則——判準是"
+                f"**拿掉它這則就分類錯了**，答不出來就不該掛。")
     tc = dict(state["items"][i].get("tc") or {})
     if T:
         tc["T"] = T
@@ -1194,7 +1208,10 @@ def cmd_set_tc(state, args):
     """
     ok_t, ok_c = _load_tc_dict()
     # 機動 T 只認 active 的：retired 的歷史資料照樣留著，但不再收新素材。
-    ok_t = list(ok_t) + load_special_t()[0]
+    _sp_active, _sp_all = load_special_t()
+    ok_t = list(ok_t) + _sp_active
+    # 上限只數固定 T：機動 T（含已退場的，歷史資料還掛著）一律不佔格。
+    _sp_names = {x.get("name") for x in _sp_all if x.get("name")}
     if args.pairs and (args.id or args.tc):
         print("ERROR: --pairs 與 --id/--tc 擇一，不可混用")
         sys.exit(2)
@@ -1237,7 +1254,7 @@ def cmd_set_tc(state, args):
             skipped.append(f"「{tok}」: 缺 =（格式 id=T1,T2/C1,C2）")
             continue
         i, spec = tok.split("=", 1)
-        err = _set_one_tc(state, i, spec, ok_t, ok_c, rewrites)
+        err = _set_one_tc(state, i, spec, ok_t, ok_c, rewrites, _sp_names)
         (skipped if err else done).append(err or norm_id(i))
 
     # 拒絕要留得下痕跡：遙測只記呼叫次數、不記離開碼，整份 jsonl 沒有欄位
@@ -1252,6 +1269,15 @@ def cmd_set_tc(state, args):
     save(state, args.file)
     print(f"OK 設定 {len(done)} 則 T/C"
           f"（checkpoint {cp} 第 {used + 1}/{TC_CALLS_PER_CHECKPOINT} 次呼叫）")
+    if done:
+        _dist = {}
+        for _i in done:
+            _n = len(((state["items"].get(_i) or {}).get("tc") or {}).get("T") or [])
+            _dist[_n] = _dist.get(_n, 0) + 1
+        print("ℹ️ 本批 T 數分布："
+              + "／".join(f"{k} 個×{v}" for k, v in sorted(_dist.items()))
+              + f"（**含機動 T**，機動 T 不佔上限；固定 T 預設 1 個、上限 {T_MAX}。"
+              + "多掛一個要能說出「拿掉它這則就分類錯了」）")
     if rewrites:
         # 改寫要看得見，否則使用者會以為 C 是 agent 自己判的。
         print(f"ℹ️ T／C 依字典改寫 {len(rewrites)} 則（併入桶／改名／專項帶區域）：")
@@ -1630,7 +1656,9 @@ def cmd_add_side(state, args):
     # ⚠️ 字典外的名稱**不寫進狀態檔**，視同沒標並列進 uncat_tc 回報——
     #    寫進去會讓網頁出現一個沒有人認得的格子，比留空更難發現。
     ok_t, ok_c = _load_tc_dict()
-    ok_t = list(ok_t) + load_special_t()[0]
+    _sp_active, _sp_all = load_special_t()
+    ok_t = list(ok_t) + _sp_active
+    _sp_names = {x.get("name") for x in _sp_all if x.get("name")}
     added, updated, bad, tc_set, tc_filled, uncat_tc, tc_bad = [], [], [], [], [], [], []
     for i, src, cat, entry, tc in parsed:
         if not cat.get("大分類"):
@@ -1643,6 +1671,14 @@ def cmd_add_side(state, args):
         C = [x for x in C if x in ok_c]
         rej = [x for x in ((tc or {}).get("T") or []) if x not in ok_t] + \
               [x for x in ((tc or {}).get("C") or []) if x not in ok_c]
+        # 上限同 set-tc（機動 T 不計）。⚠️ 這裡沒有「重下一次」的機會——
+        # 來源是交件端的候選檔，所以違規的段落 T 視同沒標、C 照留，並點名回報。
+        _fixed = [x for x in T if x not in _sp_names]
+        if len(_fixed) > T_MAX:
+            tc_bad.append(f"{i}: T 掛了 {len(_fixed)} 個（{chr(12289).join(_fixed)}），"
+                          f"上限 {T_MAX} 個（機動 T 不計）；該段 T 視同沒標，"
+                          f"請交件端改候選檔後重跑")
+            T = []
         if rej:
             tc_bad.append(f"{i}: 不在 TC-字典 裡的名稱 {'／'.join(rej)}（該段視同沒標）")
         if not (T or C):

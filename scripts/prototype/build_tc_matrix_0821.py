@@ -189,6 +189,11 @@ def has(s, *kws):
     return any(k in s for k in kws)
 
 
+# 兜底截斷用的議題優先序：專項衝突 > 硬新聞 > 軟性收容。
+T_PRIORITY = ["烏俄", "美伊", "地緣衝突", "天災天氣", "政治", "社會",
+              "財經", "科技醫藥", "體育", "娛樂藝文", "話題"]
+
+
 def tag_tc(r):
     """依 TC-字典.md 掛標。機動 TAG 不開。"""
     s = blob(r)
@@ -327,6 +332,13 @@ def tag_tc(r):
         C.add("國際")
     if not C:
         C.add("國際")
+
+    # heur 兜底同樣吃 T_MAX=3（2026-08-25）：顯示 4 個 T 會跟新規則當面打臉。
+    # ⚠️ 這裡**可以**截斷——沒有 agent 在判，截的是關鍵詞湊出來的結果；
+    #    但要按議題優先序截、不能按字母序（sorted 會讓「話題」贏過「政治」）。
+    if len(T) > 3:
+        T = set(sorted(T, key=lambda x: T_PRIORITY.index(x)
+                       if x in T_PRIORITY else len(T_PRIORITY))[:3])
 
     flags = []
     seen = set()
