@@ -1737,7 +1737,10 @@ def cmd_add_side(state, args):
         print(f"   ℹ️ 沒標的那 {len(uncat_tc)} 段照樣入庫，網頁會退回關鍵詞兜底／未分類。"
               f"要補標走 set-tc（⛔ 不要用 add-side --overwrite，會蓋掉 raw_entry）。")
     if tc_bad:
-        print(f"⚠️ {len(tc_bad)} 段的 T/C 名稱不在字典裡（該段視同沒標，其餘照常入庫）：")
+        # 這桶現在收兩種：名稱不在字典裡、T 超過上限。標題只講前者的話，
+        # 超標那則的訊息會跟標題自相矛盾，交件端會去查一個不存在的錯字。
+        print(f"⚠️ {len(tc_bad)} 段的 T/C 被退（名稱不在字典裡，或 T 超過上限）"
+              f"——該段視同沒標，其餘照常入庫：")
         print("\n".join("  " + b for b in tc_bad))
     if bad:
         print(f"跳過 {len(bad)} 段：")
