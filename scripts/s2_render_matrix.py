@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(HERE, "prototype"))
 
 import s2_render_html as H          # noqa: E402  生產渲染器，唯讀使用
 import build_tc_matrix_0821 as BASE  # noqa: E402  T/C 顯示順序、emoji、tag_tc 兜底
-from s2_state import normalize_c  # noqa: E402  C 併入桶／專項帶區域，⛔ 不要複製一份
+from s2_state import normalize_c, load_special_t  # noqa: E402  ⛔ 不要複製一份
 
 # 模板放 scripts/ 而不是 scripts/prototype/——prototype 是試作區，不該在產線路徑上。
 # 與 prototype/_template_v1.html 的差異只有兩處：拿掉「v1 試作」字樣、
@@ -212,7 +212,14 @@ def build_html(state, base_mmdd, window, datebar_html=""):
 
     # 「未分類」只在**真的有**的時候才加進這一頁的顯示清單——沒有就不要多一列空格子。
     # ⚠️ 只影響本頁顯示，`TC-字典.md`（已裁決的權威名單）不動。
-    t_list = list(BASE.T_FIXED)
+    # 機動 T 排在固定 12 類**之前**（比照大分類機動格在第一格）。
+    # active 的一律顯示；retired 的只在本頁真的有素材掛著時才留一格——
+    # ⛔ 不能因為退場就抽掉，那些素材會無格可放（同墨西哥併桶時踩到的形狀）。
+    _sp_active, _sp_all = load_special_t()
+    _used = {x for r in out for x in r["T"]}
+    t_list = [(x["name"], "📌") for x in _sp_all
+              if x.get("name") and (x["name"] in _sp_active or x["name"] in _used)]
+    t_list += list(BASE.T_FIXED)
     c_list = list(BASE.C_FIXED)
     c_fb = dict(BASE.C_FALLBACK)
     if any(UNKNOWN in r["T"] for r in out):

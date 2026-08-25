@@ -610,6 +610,16 @@ def main():
         else:
             print("OK 主題重複偵測 0 命中")
 
+    # 機動 T 的觸發點：跟覆蓋率同一個位置報，agent 才會知道今天有這一格。
+    # ⛔ 只是**告知**，不是授權 agent 自己開——開／收一律使用者下令。
+    try:
+        _sp = __import__("s2_state").load_special_t()[0]
+        if _sp:
+            print(f"📌 今天有機動 T：{'、'.join(_sp)}"
+                  f"（**加掛**不是取代，符合的素材連同既有固定 T 一起下）")
+    except Exception:
+        pass
+
     # ── T/C 覆蓋率閘門（A10 v2，2026-08-24 上線當晚加）─────────────────────
     # 🔴 為什麼需要這道閘門：0824-2000 輪實證，`13f` 的 T/C 判準**完整進了 context**
     #    （rule_shas 相符、transcript 裡讀得到判準段與指令範例），agent 也照常下了

@@ -979,6 +979,111 @@ def normalize_c(names):
     return out, notes
 
 
+# ── 機動 T：議題軸的臨時 TAG（2026-08-25 上線，規劃書 §6b-2） ────────────────
+# ⛔ **只有使用者下令才開**，agent 不自行新增、不自行命名——跟大分類機動格
+#    （`special_category`）同一條鐵律。
+# 🔴 為什麼放在**設定檔**而不是狀態檔頂層：狀態檔每天重建，颱風不會只活一天。
+#    比照 `s2_resident_topics.json` 的既有模式，單一真相源、跨天生效。
+#    ⛔ 不要另外在狀態檔存一份鏡像——兩份會漂。
+SPECIAL_T_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "s2_special_t.json")
+
+
+def load_special_t():
+    """回傳 (active 名單, 全部條目)。檔案不存在或壞掉都當「沒開機動 T」。
+
+    ⚠️ 壞檔不硬失敗：機動 T 是加分項，讓它擋掉整輪掃帶不划算。
+    """
+    try:
+        with open(SPECIAL_T_PATH, encoding="utf-8-sig") as f:
+            tags = (json.load(f) or {}).get("tags") or []
+    except (OSError, json.JSONDecodeError):
+        return [], []
+    if not isinstance(tags, list):
+        return [], []
+    active = [x.get("name") for x in tags
+              if isinstance(x, dict) and x.get("name")
+              and (x.get("status") or "active") == "active"]
+    return active, tags
+
+
+def _save_special_t(tags):
+    with open(SPECIAL_T_PATH, "w", encoding="utf-8", newline="\n") as f:
+        json.dump({"_說明": _SPECIAL_T_NOTE, "tags": tags}, f,
+                  ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+_SPECIAL_T_NOTE = (
+    "機動 T（議題軸的臨時 TAG）。⛔ 只有使用者下令才開，agent 不自行新增、"
+    "不自行命名。開了就是全域生效（跨天），與 TC-字典.md 的固定 12 類並存"
+    "複選——颱風素材同時掛「颱風」＋「天災天氣」。事件冷卻後 "
+    "set-special-t --retire，⛔ 不要刪除條目：歷史狀態檔還掛著它，"
+    "刪掉那些素材在矩陣上會無格可放。")
+
+
+def cmd_special_t(state, args):
+    """開／收／看機動 T。⛔ 使用者下令才動。
+
+    例：`set-special-t --open 颱風 --charter "納里颱風相關：路徑、災情、撤離、復原"`
+        `set-special-t --retire 颱風`
+        `set-special-t`（不帶參數＝看目前有哪些）
+
+    「只併不改名」比照中主題鐵律：同名重開只更新 charter，不會產生第二筆。
+    """
+    active, tags = load_special_t()
+    if not args.open and not args.retire:
+        if not tags:
+            print("目前沒有機動 T。開一個："
+                  'set-special-t --open 颱風 --charter "收什麼"')
+            return
+        for x in tags:
+            mark = "●" if (x.get("status") or "active") == "active" else "○退場"
+            print(f"{mark} {x.get('name')}｜{x.get('charter') or '（沒寫 charter）'}"
+                  f"｜開於 {x.get('opened') or '?'}")
+        return
+    if args.open and args.retire:
+        print("ERROR --open 與 --retire 擇一", file=sys.stderr)
+        raise SystemExit(2)
+
+    if args.retire:
+        hit = [x for x in tags if x.get("name") == args.retire]
+        if not hit:
+            print(f"ERROR 沒有叫「{args.retire}」的機動 T", file=sys.stderr)
+            raise SystemExit(2)
+        # ⛔ 不刪除條目：歷史狀態檔還掛著它，刪掉那些素材在矩陣上無格可放。
+        hit[0]["status"] = "retired"
+        _save_special_t(tags)
+        print(f"OK 機動 T「{args.retire}」已退場，不再收新素材；"
+              f"已標的歷史資料不動、矩陣照樣顯示。")
+        return
+
+    ok_t, _ = _load_tc_dict()
+    if args.open in ok_t:
+        print(f"ERROR「{args.open}」是 TC-字典 的固定 T，本來就能用，"
+              f"不需要開機動 T", file=sys.stderr)
+        raise SystemExit(2)
+    if not args.charter:
+        # charter 是規劃書 §6b-2 的要求：開 TAG 當下寫一句「收什麼」，
+        # 否則下一輪的 agent 只能望文生義，機動 T 收什麼會每輪漂一次。
+        print("ERROR 需要 --charter「收什麼」，一句話即可", file=sys.stderr)
+        raise SystemExit(2)
+    hit = [x for x in tags if x.get("name") == args.open]
+    if hit:
+        hit[0]["charter"] = args.charter
+        hit[0]["status"] = "active"
+        _save_special_t(tags)
+        print(f"OK 機動 T「{args.open}」已更新 charter（同名只併不改名）")
+        return
+    tags.append({"name": args.open, "charter": args.charter,
+                 "opened": datetime.now().strftime("%Y-%m-%d"),
+                 "status": "active"})
+    _save_special_t(tags)
+    print(f"OK 已開機動 T「{args.open}」：{args.charter}")
+    print(f"⚠️ 這是**加掛**，不是取代——符合的素材要同時掛既有固定 T"
+          f"（例：颱風素材掛「{args.open}」＋「天災天氣」）。")
+
+
 def _load_tc_dict():
     """從 TC-字典.md 解析出 (T 名單, C 名單)。單一真相源，解析不到就硬失敗。"""
     try:
@@ -1045,6 +1150,8 @@ def cmd_set_tc(state, args):
     每次拒絕都是一次重試呼叫（≈$0.07），逐則退回會把品質訊號變成成本乘數。
     """
     ok_t, ok_c = _load_tc_dict()
+    # 機動 T 只認 active 的：retired 的歷史資料照樣留著，但不再收新素材。
+    ok_t = list(ok_t) + load_special_t()[0]
     if args.pairs and (args.id or args.tc):
         print("ERROR: --pairs 與 --id/--tc 擇一，不可混用")
         sys.exit(2)
@@ -1124,6 +1231,14 @@ def cmd_set_tc(state, args):
               f"**網頁與 txt 還是舊的**。收工前請再跑一次：")
         print(f'   python scripts/s2_render.py --file "{args.file}" --out "{_out}"')
     if skipped:
+        # 退場的機動 T 被退件時，訊息會長得像「打錯字」——講清楚是退場不是筆誤，
+        # 否則 agent 會反覆改字重試。
+        _retired = [x.get("name") for x in load_special_t()[1]
+                    if (x.get("status") or "active") != "active"]
+        for _r in _retired:
+            if any(_r and _r in s for s in skipped):
+                print(f"ℹ️「{_r}」是**已退場**的機動 T，不是打錯字：歷史資料照樣"
+                      f"顯示，但不再收新素材。要重開請使用者下 set-special-t --open。")
         print(f"⚠️ 退回 {len(skipped)} 則（已記進 tc_rejected，不必逐則重試，"
               f"整批改好再下一次）：")
         print("\n".join("  " + s for s in skipped))
@@ -1446,6 +1561,7 @@ def cmd_add_side(state, args):
     # ⚠️ 字典外的名稱**不寫進狀態檔**，視同沒標並列進 uncat_tc 回報——
     #    寫進去會讓網頁出現一個沒有人認得的格子，比留空更難發現。
     ok_t, ok_c = _load_tc_dict()
+    ok_t = list(ok_t) + load_special_t()[0]
     added, updated, bad, tc_set, tc_filled, uncat_tc, tc_bad = [], [], [], [], [], [], []
     for i, src, cat, entry, tc in parsed:
         if not cat.get("大分類"):
@@ -1984,6 +2100,12 @@ def main():
     sto.add_argument("--cat", required=True, help="大分類，如 天氣")
     sto.add_argument("--order", help="中主題順序，分號分隔")
     sto.add_argument("--clear", action="store_true", help="撤掉人工順序，退回自動排")
+    spt = sub.add_parser("set-special-t",
+                         help="開／收機動 T（議題軸臨時 TAG）；⛔ 使用者下令才動")
+    spt.add_argument("--open", help="要開的機動 T 名稱，如 颱風")
+    spt.add_argument("--charter", help="這個 TAG 收什麼，一句話")
+    spt.add_argument("--retire", help="要退場的機動 T 名稱")
+
     srt = sub.add_parser("set-resident-topics",
                          help="釘住某大分類每天都要列出的中主題（0 則也印空標題，跟 set-topic-order 不同）")
     srt.add_argument("--cat", required=True, help="大分類，如 烏俄")
@@ -2032,6 +2154,7 @@ def main():
         "pending": cmd_pending,
         "add-side": cmd_add_side, "set-alert": cmd_set_alert,
         "set-topic-order": cmd_set_topic_order,
+        "set-special-t": cmd_special_t,
         "set-resident-topics": cmd_set_resident_topics,
         "set-mark": cmd_set_mark, "set-aired": cmd_set_aired,
         "fix-first-seen": cmd_fix_first_seen,
