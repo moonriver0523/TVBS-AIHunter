@@ -1328,6 +1328,17 @@ def cmd_set_category(state, args):
     if _sp:
         print(f"📌 今天有機動 T：{'、'.join(_sp)}——待會下 set-tc 時，符合的素材"
               f"要**加掛**（連同既有固定 T 一起下，不是取代）。")
+    # 🔴 T/C 的觸發點要落在 render **之前**（T10）。set-category 是最後一個
+    #    「還在分類脈絡裡」的位置，這裡提醒最便宜；等 render 的覆蓋率閘門才講，
+    #    補標就會發生在 render 之後、頁面停在舊的。
+    _no_tc = [i for i, it in (state.get("items") or {}).items()
+              if (it or {}).get("script_status") != "note"
+              and not (((it or {}).get("tc") or {}).get("T")
+                       or ((it or {}).get("tc") or {}).get("C"))]
+    if _no_tc:
+        print(f"🔴 本檔還有 {len(_no_tc)} 則沒有 T／C，**趁現在跟這批一起下**："
+              f"{'、'.join(_no_tc[:8])}{'…' if len(_no_tc) > 8 else ''}")
+        print('   set-tc --pairs "id=T1,T2/C1,C2;…"（名單見 13f「議題 T」／「地緣 C」）')
     if skipped:
         print(f"跳過 {len(skipped)} 則：")
         print("\n".join("  " + s for s in skipped))
