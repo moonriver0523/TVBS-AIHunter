@@ -1130,6 +1130,52 @@ def load_validate():
     return s2_validate
 
 
+# 側錄「擬歸位」行的 T／C 後綴標籤（2026-08-25，A10 v2 收尾）。
+# 認 `T:`／`C:`（全形冒號也吃），值以 `,`／`，`／`、` 分隔多個。
+SIDE_TC_RE = re.compile(r"^([TC])\s*[：:]\s*(.*)$")
+
+
+class SideHomeError(Exception):
+    """側錄「擬歸位」行的形狀不對。帶原始值往上拋，由 cmd_add_side 明確失敗。"""
+
+
+def _split_home_line(body):
+    """把「擬歸位：」後面那串切成 (位置段, T 名單, C 名單)。
+
+    格式（2026-08-25 起）：
+
+        擬歸位：======大分類====== → 【中主題】 → 小分題 → T:政治,社會 → C:日本
+        擬歸位：======大分類====== → 【中主題】 → T:天災天氣 → C:日本   ← 省略小分題
+
+    ⛔ **T／C 用標籤不用位置。** 小分題是可省略的（`14:36`、本檔 `sub = segs[2]
+       if len(segs) > 2 else ""`），若 T/C 靠 `segs[3]`／`segs[4]` 定位，
+       省略小分題的那些則會把 `T:…` 讀成小分題——**靜默錯位，而且錯得很像對的**。
+       改成認前綴之後，舊格式（沒有 T:／C: 段）自然落在「沒有 T/C」的分支，
+       **不需要版本旗標，舊格式永久合法**。
+
+    🔴 **arity 明確失敗（本函式存在的第一個理由，2026-08-25 前是靜默丟棄）**：
+       原本 `segs[3]` 以後直接被丟掉、沒有任何檢查，於是「多一段沒人看得懂的東西」
+       跟「格式正確」在回傳碼上完全一樣（都是 0）。比照
+       `s2_platform_merge.py:110-115` 的「帶原始值明確失敗」精神改成拋例外——
+       ⚠️ 這是**既有缺陷**，跟 T/C 無關，所以先單獨修、單獨 commit，才能獨立回退。
+    """
+    segs = [x.strip() for x in re.split(r"→|->", body)]
+    pos, T, C = [], [], []
+    for s in segs:
+        m = SIDE_TC_RE.match(s)
+        if not m:
+            pos.append(s)
+            continue
+        names = [x.strip() for x in re.split(r"[,，、]", m.group(2)) if x.strip()]
+        (T if m.group(1) == "T" else C).extend(names)
+    if len(pos) > 3:
+        raise SideHomeError(
+            f"擬歸位行有 {len(pos)} 個位置段，最多只認 3 個"
+            f"（大分類 → 中主題 → 小分題）。T／C 要寫成 `→ T:…`／`→ C:…` 才認得。\n"
+            f"   原值：擬歸位：{body}")
+    return pos, T, C
+
+
 def parse_side_txt(text, source=None, homes=None, normalize=False, tc_date=None):
     """把側錄 TXT 解析成狀態檔項目。
 
@@ -1170,7 +1216,7 @@ def parse_side_txt(text, source=None, homes=None, normalize=False, tc_date=None)
         if m_home:
             flush()
             cur = None
-            segs = [x.strip() for x in re.split(r"→|->", m_home.group(1))]
+            segs, _t, _c = _split_home_line(m_home.group(1))
             big = segs[0].strip("= ") if segs else big
             mid = segs[1].strip("【】 ") if len(segs) > 1 else ""
             sub = segs[2].strip() if len(segs) > 2 else ""
