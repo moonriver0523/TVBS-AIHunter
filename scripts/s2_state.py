@@ -955,7 +955,23 @@ TC_CALLS_PER_CHECKPOINT = 8
 # ⚠️ 放在**寫入端**而不是只做驗證：13f／17 的來源預設寫的是「CNA→新加坡」，
 #    若只驗不改寫，每一處預設都得改成「新加坡,東南亞」，漏一處就退回舊行為。
 C_MERGED = {"墨西哥": "中南美", "其他地區": "國際"}   # 舊桶已刪，改寫不退件
+# T 軸同理：醫藥健康併入科技，合併後更名「科技醫藥」（2026-08-25 使用者裁示）。
+# ⚠️ **改名的那一側也要列**（科技→科技醫藥），否則舊名會被當成打錯字退件。
+T_MERGED = {"醫藥健康": "科技醫藥", "科技": "科技醫藥"}
 C_IMPLIES = {"新加坡": "東南亞", "泰國": "東南亞"}    # 專項與區域並存
+
+
+def normalize_t(names):
+    """T 的併入／改名正規化。回傳 (名單, 改寫說明)。"""
+    out, notes = [], []
+    for x in names:
+        y = T_MERGED.get(x)
+        if y:
+            notes.append(f"{x}→{y}")
+            x = y
+        if x not in out:
+            out.append(x)
+    return out, notes
 
 
 def normalize_c(names):
@@ -1112,6 +1128,31 @@ def _load_tc_dict():
     return T, C
 
 
+def _special_t_sweep(state):
+    """回傳 (機動 T 名稱 → 疑似漏標的 id 清單)。
+
+    🔴 2026-08-25 實測：`13f` 的機動 T 規則**完整進了 context**（0825-1800
+       transcript 第 29 行讀得到），render 也印了 📌 觸發點——但那行印在
+       **第 682 行**，而三次 `set-tc` 在 **620／626／629**。觸發點在決策之後
+       等於沒有，跟 T10 是同一個形狀。所以改成在**寫入端**掃：素材文字出現
+       機動 T 的名字、T 卻沒掛它，就當場點名。
+    ⚠️ 只比對**名稱**、不猜語意——「風災」不是颱風，寧可漏報也不要亂報。
+    """
+    active, _ = load_special_t()
+    if not active:
+        return {}
+    out = {}
+    for i, it in (state.get("items") or {}).items():
+        if (it or {}).get("script_status") == "note":
+            continue
+        raw = (it or {}).get("raw_entry") or ""
+        have = ((it or {}).get("tc") or {}).get("T") or []
+        for name in active:
+            if name in raw and name not in have:
+                out.setdefault(name, []).append(i)
+    return out
+
+
 def _set_one_tc(state, raw_id, spec, ok_t, ok_c, notes=None):
     """設定單筆 T/C。回傳錯誤訊息字串，成功回 None。
 
@@ -1130,7 +1171,9 @@ def _set_one_tc(state, raw_id, spec, ok_t, ok_c, notes=None):
         return f"{i}: T 與 C 不能都是空的"
     # 先正規化再驗字典：墨西哥／其他地區是**已刪的舊桶**，改寫比退件好——
     # 退件會逼 agent 多一次呼叫（≈$0.07），而正確答案是唯一的、沒有歧義。
+    T, _tnotes = normalize_t(T)
     C, _notes = normalize_c(C)
+    _notes = _tnotes + _notes
     if _notes and notes is not None:
         notes.append(f"{i}: " + "、".join(_notes))
     bad = [x for x in T if x not in ok_t] + [x for x in C if x not in ok_c]
@@ -1211,9 +1254,19 @@ def cmd_set_tc(state, args):
           f"（checkpoint {cp} 第 {used + 1}/{TC_CALLS_PER_CHECKPOINT} 次呼叫）")
     if rewrites:
         # 改寫要看得見，否則使用者會以為 C 是 agent 自己判的。
-        print(f"ℹ️ C 依字典改寫 {len(rewrites)} 則（併入桶／專項帶區域）：")
+        print(f"ℹ️ T／C 依字典改寫 {len(rewrites)} 則（併入桶／改名／專項帶區域）：")
         for _x in rewrites:
             print("  " + _x)
+    # 機動 T 漏標掃描：擺在**寫入端**，因為 render 的 📌 提示印在 set-tc 之後。
+    _miss = _special_t_sweep(state)
+    for _name, _ids in _miss.items():
+        _show = "、".join(_ids[:10]) + ("…" if len(_ids) > 10 else "")
+        print(f"🔴 機動 T「{_name}」疑似漏標 {len(_ids)} 則（文字裡有「{_name}」"
+              f"但 T 沒掛）：{_show}")
+        print(f"   確認是同一事件就補：set-tc --pairs "
+              f'"{_ids[0]}={_name},{{原本的T}}/{{原本的C}}"'
+              f"（**加掛**，原本的 T 要留著）")
+
     # 🔴 補標在 render 之後 → 頁面還是舊的（2026-08-25 實測到的「大量未分類」主因）。
     #    現行流程是 render → 覆蓋率閘門報「N 則還沒標」→ agent 補標 → **收工**，
     #    沒有人再 render 一次。0825-1200 實例：頁面上 618 列有 53 列是 heur
@@ -1270,6 +1323,11 @@ def cmd_set_category(state, args):
     if done:
         save(state, args.file)
     print(f"OK 設定 {len(done)} 則" + (f"：{','.join(done)}" if done else ""))
+    # 機動 T 的觸發點之一：set-category 跑在 set-tc **之前**，這裡講才來得及。
+    _sp = load_special_t()[0]
+    if _sp:
+        print(f"📌 今天有機動 T：{'、'.join(_sp)}——待會下 set-tc 時，符合的素材"
+              f"要**加掛**（連同既有固定 T 一起下，不是取代）。")
     if skipped:
         print(f"跳過 {len(skipped)} 則：")
         print("\n".join("  " + s for s in skipped))
@@ -1567,7 +1625,8 @@ def cmd_add_side(state, args):
         if not cat.get("大分類"):
             bad.append(f"{i}: 沒有大分類（候選 TXT 需標擬歸位，或沿用 txt 三層排版）")
             continue
-        T = [x for x in (tc or {}).get("T") or [] if x in ok_t]
+        T, _ = normalize_t((tc or {}).get("T") or [])
+        T = [x for x in T if x in ok_t]
         # ⚠️ 先正規化再過濾：舊桶（墨西哥／其他地區）在這裡會被**靜默丟棄**
         C, _ = normalize_c((tc or {}).get("C") or [])
         C = [x for x in C if x in ok_c]

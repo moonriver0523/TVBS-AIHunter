@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(HERE, "prototype"))
 
 import s2_render_html as H          # noqa: E402  生產渲染器，唯讀使用
 import build_tc_matrix_0821 as BASE  # noqa: E402  T/C 顯示順序、emoji、tag_tc 兜底
-from s2_state import normalize_c, load_special_t  # noqa: E402  ⛔ 不要複製一份
+from s2_state import normalize_c, normalize_t, load_special_t  # noqa: E402  ⛔ 不要複製一份
 
 # 模板放 scripts/ 而不是 scripts/prototype/——prototype 是試作區，不該在產線路徑上。
 # 與 prototype/_template_v1.html 的差異只有兩處：拿掉「v1 試作」字樣、
@@ -84,7 +84,8 @@ def stored_tc(state):
             # ⚠️ 歷史狀態檔存著已刪的桶（0824 有 6 則墨西哥、2 則其他地區）。
             #    不在這裡改寫的話，重 render 舊檔時那些 C 在矩陣上**無格可放**。
             C, _ = normalize_c(tc.get("C") or [])
-            out[i] = {"T": list(tc.get("T") or []), "C": C}
+            T, _ = normalize_t(tc.get("T") or [])
+            out[i] = {"T": T, "C": C}
     return out
 
 
