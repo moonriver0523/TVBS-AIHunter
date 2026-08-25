@@ -10,7 +10,10 @@
   --card:#fff; --accent:#1558c4; --accent-fg:#fff; --chip:#e7e9ee; --chipfg:#2d3138;
   --chipon:#1558c4; --warn:#c02f2f; --big:#c8481c; --midbg:#1558c4; --midfg:#fff;
   --subbg:#e6e8ec; --sidetint:#eef0f3; --urltint:#eaf1fd; --t:#0f6a4a; --c:#7a3b12;
-  --cell:#f1f3f6; --cellhot:#d9e6fb; --cellon:#1558c4; --empty:#f7f8fa;
+  --cellon:#1558c4; --mxbg:#eaedf3;
+  /* 熱區四階：矩陣要能一眼看出「今天哪幾格重」，單一 --cellhot 只有兩級、
+     而且跟底色差不到 5%，整張表讀起來是一片灰。階距刻意拉開。 */
+  --lv1:#e6edf9; --lv2:#cfe0f7; --lv3:#aecbf2; --lv4:#86b0ea; --lvfg:#0d2f5e;
   --shadow:0 1px 2px rgba(20,22,26,.06); --z-bar:40; --z-modal:50;
 }
 @media (prefers-color-scheme:dark){
@@ -19,7 +22,8 @@
     --card:#1d2026; --accent:#5d9bff; --accent-fg:#0b1220; --chip:#22252c; --chipfg:#c7cad0;
     --chipon:#3d6fc4; --warn:#ff6b6b; --big:#ff8a5c; --midbg:#2c5fa8; --midfg:#fff;
     --subbg:#2b2f37; --sidetint:#20232a; --urltint:#1b2532; --t:#5dcc9a; --c:#e0a06a;
-    --cell:#22252c; --cellhot:#24344c; --cellon:#3d6fc4; --empty:#191b20;
+    --cellon:#3d6fc4; --mxbg:#1b1e24;
+    --lv1:#1e2530; --lv2:#26344c; --lv3:#31496f; --lv4:#3f6098; --lvfg:#dce8fc;
     --shadow:0 1px 3px rgba(0,0,0,.35);
   }
 }
@@ -123,7 +127,11 @@ body{display:grid;grid-template-columns:232px 1fr;
 .flg{width:1.25em;height:.84em;object-fit:cover;vertical-align:-.12em;border-radius:2px;
      display:inline-block;box-shadow:0 0 0 1px rgba(0,0,0,.18);flex:none}
 .kindtag{font-size:10px;padding:1px 5px;border-radius:4px;background:var(--chip);color:var(--mut);align-self:start}
-.matrix-wrap{padding:8px 16px 4px;border-bottom:1px solid var(--line);background:var(--bg)}
+.matrix-wrap{margin:10px 16px;padding:9px 12px 7px;background:var(--mxbg);
+  border:1px solid var(--line);border-radius:10px;
+  /* C：只有捲動到黏住時才給陰影——靜止在原位時保持乾淨。 */
+  transition:box-shadow .18s}
+body #extra.is-stuck .matrix-wrap{box-shadow:0 6px 16px rgba(20,22,26,.12)}
 .matrix-wrap summary{cursor:pointer;font-size:12.5px;font-weight:700;color:var(--fg);padding:2px 0;list-style:none}
 .matrix-wrap summary::-webkit-details-marker{display:none}
 .matrix-wrap summary::before{content:"▾ ";color:var(--mut)}
@@ -133,9 +141,14 @@ table.mx{border-collapse:separate;border-spacing:2px;font-size:11px;font-variant
 table.mx th,table.mx td{text-align:center;min-width:28px;height:26px;padding:0 3px;border-radius:4px}
 table.mx th{color:var(--mut);font-weight:700;cursor:pointer}
 table.mx th.rowh{text-align:left;min-width:92px;color:var(--fg)}
-table.mx td{background:var(--cell);cursor:pointer}
-table.mx td.z{background:var(--empty);color:transparent;cursor:default}
-table.mx td.hot{background:var(--cellhot);font-weight:700}
+table.mx td{background:var(--lv1);cursor:pointer}
+/* 空格**透明**、只留一個極淡的點：整張表因此只剩「有東西的格子」有重量，
+   自己浮出一張熱區地圖。改動前空格是 --empty（#f7f8fa）的實色塊，
+   跟有值格差不到 5%，等於整片灰。 */
+table.mx td.z{background:transparent;color:var(--line);cursor:default}
+table.mx td.l2{background:var(--lv2)}
+table.mx td.l3{background:var(--lv3);font-weight:700}
+table.mx td.l4{background:var(--lv4);color:var(--lvfg);font-weight:700}
 table.mx td.on,table.mx th.on{background:var(--cellon);color:#fff}
 .toast{position:fixed;bottom:64px;left:50%;transform:translateX(-50%) translateY(12px);opacity:0;
   background:#111;color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;pointer-events:none;
@@ -388,7 +401,11 @@ function buildMatrixEl(){
       if(!n){ td.className="z"; td.textContent="·"; }
       else{
         td.textContent=n;
-        if(n>=5) td.classList.add("hot");
+        // ⚠️ 門檻是**絕對值**不是相對最大值：相對分級會讓同一格的顏色
+        //    每天跳動（今天最大 20、明天最大 6），編輯的肌肉記憶就沒了。
+        if(n>=10) td.classList.add("l4");
+        else if(n>=6) td.classList.add("l3");
+        else if(n>=3) td.classList.add("l2");
         if(F.T.has(t) && F.C.has(c)) td.classList.add("on");
         td.onclick=()=>{
           if(F.T.size===1 && F.T.has(t) && F.C.size===1 && F.C.has(c)){
@@ -406,11 +423,28 @@ function buildMatrixEl(){
   scroll.append(tb); wrap.append(sum, scroll);
   return wrap;
 }
+// C：#extra 是 sticky 的，黏住時才加陰影（`.is-stuck`）——浮層要被讀成浮層。
+// ⚠️ rAF 節流：scroll 事件每秒可觸發上百次，直接量 rect 會在長清單上掉幀。
+let _stuckTick = false;
+function updateStuck(){
+  const el = document.getElementById("extra");
+  if(!el || !el.firstChild) return;          // 手機版矩陣在側欄，#extra 是空的
+  const top = parseFloat(getComputedStyle(document.documentElement)
+                         .getPropertyValue("--stickyh")) || 0;
+  el.classList.toggle("is-stuck", el.getBoundingClientRect().top <= top + 1);
+}
+addEventListener("scroll", () => {
+  if(_stuckTick) return;
+  _stuckTick = true;
+  requestAnimationFrame(() => { _stuckTick = false; updateStuck(); });
+}, {passive:true});
+
 function renderExtra(){
   const el=document.getElementById("extra"); el.innerHTML="";
   if(!isMobile()){
     el.append(buildMatrixEl());
   }
+  updateStuck();
 }
 function tagPills(r){
   const d=document.createElement("div"); d.className="tags";
