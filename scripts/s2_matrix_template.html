@@ -99,6 +99,9 @@ body{display:grid;grid-template-columns:232px 1fr;
 .sub{margin:8px 0 4px}
 .subtxt{background:var(--subbg);padding:1px 8px;border-radius:4px;font-weight:600}
 .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cp{opacity:0;pointer-events:none;transition:opacity .12s}
+.hd:hover .cp,.item:hover .cp,.sticky .bar:hover .cp,.cp:focus-visible{opacity:1;pointer-events:auto}
+@media (hover:none){.cp{opacity:1;pointer-events:auto}}
 .item{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:start;
   padding:7px 8px;margin:3px 0;background:var(--card);border:1px solid var(--line);border-radius:8px}
 .item.side{background:var(--sidetint)}
@@ -174,7 +177,6 @@ table.mx td.on,table.mx th.on{background:var(--cellon);color:#fff}
   <h1>__TITLE__</h1>
   <span class="win">__WINDOW__</span>
   <span class="stamp" id="stamp"></span>
-  <span class="note">__STATS__</span>
   <div class="meta" id="meta">__META__</div>
 </header>
 <!-- 不要再包一層 histbar：build_datebar() 回傳的已是完整元素（含標籤與捲軸容器）。
@@ -192,7 +194,7 @@ __LOGO__
   <div class="bar">
     <input id="q" type="search" placeholder="搜尋標題／摘要／編號" autocomplete="off">
     <span class="count" id="cnt"></span>
-    <button class="act" id="copyAll">複製目前篩選結果</button>
+    <button class="act cp" id="copyAll">複製目前篩選結果</button>
     <button class="act" id="reset">清除篩選</button>
   </div>
 </div>
@@ -285,7 +287,7 @@ function copy(text, msg){
   }else legacy();
 }
 function btn(label, fn){
-  const b=document.createElement("button"); b.className="act"; b.textContent=label;
+  const b=document.createElement("button"); b.className="act cp"; b.textContent=label;
   b.onclick=e=>{e.stopPropagation(); fn();}; return b;
 }
 function subText(sub,its){return (sub?sub+"\n":"")+its.map(r=>r.text).join("\n");}
@@ -329,7 +331,7 @@ function renderPanel(){
     g.append(bar); p.append(g);
   };
   const srcs=uniq("src").sort((a,b)=> (SRC_ORDER.indexOf(a)<0?99:SRC_ORDER.indexOf(a))-(SRC_ORDER.indexOf(b)<0?99:SRC_ORDER.indexOf(b)));
-  addGroup("來源","src",srcs,SRC_LABEL);
+  addGroup(`來源 ${ROWS.length}`,"src",srcs,SRC_LABEL);
   addGroup("重大","alert",uniq("alert").sort((a,b)=>({"⭐":0,"🔴":1,"🟡":2}[a]??9)-({"⭐":0,"🔴":1,"🟡":2}[b]??9)), {"⭐":"⭐ 推薦","🔴":"🔴 重大","🟡":"🟡 次重大"});
   addGroup("畫面亮點","hilite",uniq("hilite"),{"🔖":"🔖 畫面好"});
   addGroup("時段","mark",uniq("mark"),MARK_LABEL);
@@ -481,10 +483,8 @@ function renderList(){
   // 2026-08-23 使用者裁決：側錄計入總則數（原本拆開報有邏輯矛盾），
   // 側錄以「摺疊後單元」為 1 則（Python 端已依 (src,大,中,小) 摺好），
   // 所以這裡直接數列數即可，跟檔頭「側錄 N 則」同一套語意。
-  const nSide=rows.filter(r=>r.kind==="side").length;
   const total=ROWS.length;
-  document.getElementById("cnt").textContent =
-    `${rows.length} / ${total} 則` + (nSide?`（含側錄 ${nSide} 則）`:"");
+  document.getElementById("cnt").textContent = `${rows.length} / ${total} 則`;
   if(!rows.length){
     const e=document.createElement("div"); e.className="sub"; e.textContent="沒有符合條件的素材。"; list.append(e); return;
   }

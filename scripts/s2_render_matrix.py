@@ -186,7 +186,11 @@ def build_html(state, base_mmdd, window, datebar_html=""):
     #    總則數），所以跳過它以免同一個數字出現兩次、還可能不一致。
     # 🔴 重大提醒必須跳出來——那是編輯最需要一眼看到的東西。
     #    比照 s2_render_html.build_html()：先整段 escape，再把 🔴 那幾行包上 .alert。
-    meta_lines = [h for i, h in enumerate(head) if i >= 2 and not h.startswith("收錄外電共")]
+    # 🔴 「標記：△=… 🔴=… 🟡=…」也不進網頁（2026-08-25 使用者要求）：那些符號
+    #    在列上本來就看得到，側欄還能篩。⛔ TXT 版照舊——那份要能單獨貼給人看。
+    meta_lines = [h for i, h in enumerate(head)
+                  if i >= 2 and not h.startswith("收錄外電共")
+                  and not h.startswith("標記：")]
     meta_html = _html.escape("\n".join(meta_lines))
     for a in (h for h in meta_lines if h.startswith("🔴")):
         meta_html = meta_html.replace(_html.escape(a),
