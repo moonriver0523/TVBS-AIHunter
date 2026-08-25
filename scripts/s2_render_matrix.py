@@ -85,9 +85,15 @@ def stored_tc(state):
 
 
 def join_tc(r, stored):
-    """有存的用存的 → 沒有的跑 tag_tc() → 再沒有就「未分類」。"""
+    """有存的用存的 → 沒有的跑 tag_tc() → 再沒有就「未分類」。
+
+    ⚠️ 側錄單元查的是 `tc_id`（單元內**第一個有 T/C 的段**）而不是 `id`
+    （＝第一列）。`add-side` 現在會把 T/C 寫進區段每一段，兩者通常相同；
+    但混合情形（舊格式先入庫、事後才用 `set-tc` 補標到某一段）下，
+    只認第一列會讓整個單元看起來沒標。見 fold_side。
+    """
     T, C, flags = tag_tc(r)
-    s = stored.get(r.get("id") or "")
+    s = stored.get(r.get("tc_id") or r.get("id") or "")
     if not s:
         return T, C, flags, "heur"
     got_t, got_c = bool(s["T"]), bool(s["C"])
@@ -95,12 +101,23 @@ def join_tc(r, stored):
             "stored" if (got_t and got_c) else "mixed")
 
 
-def fold_side(rows):
+def fold_side(rows, stored=None):
     """側錄列依 (src,大,中,小) 摺成單元；其餘列原樣保留、順序不變。
 
     txt 檔頭的「側錄 N 則」就是這個數字（`s2_validate.side_units`）；
     網頁若照列數算，一段連線的十幾個 TC 會被當成十幾則、數字灌爆。
+
+    `stored`（2026-08-25，A10 v2 收尾）：有給的話順便挑出單元內**第一個有 T/C
+    的段**，記進 `tc_id` 供 `join_tc` 查。⛔ 不是改 `id`——`id` 是單元的身分
+    （矩陣格、對帳都靠它），換掉會動到不相干的東西；只多帶一個查詢用的鍵。
+    沒給 `stored` 時行為與改動前完全相同（`tc_id` 就是第一列的 id）。
     """
+    stored = stored or {}
+
+    def _has(r):
+        s = stored.get(r.get("id") or "")
+        return bool(s and (s.get("T") or s.get("C")))
+
     out, cur, curkey = [], None, None
     for r in rows:
         if r.get("kind") != "side":
@@ -114,11 +131,14 @@ def fold_side(rows):
             cur["text"] = cur["text"] + "\n" + (r.get("text") or "")
             cur["q"] = cur["q"] + " " + (r.get("q") or "")
             cur["segs"] += 1
+            if not cur.get("tc_id") and _has(r):
+                cur["tc_id"] = r.get("id")
             continue
         if cur:
             out.append(cur)
         cur, curkey = dict(r), k
         cur["segs"] = 1
+        cur["tc_id"] = r.get("id") if _has(r) else None
     if cur:
         out.append(cur)
     return out
@@ -168,8 +188,8 @@ def build_html(state, base_mmdd, window, datebar_html=""):
                                       f'<span class="alert">{_html.escape(a)}</span>')
 
     raw = [r for r in H.collect(state, base_mmdd) if r.get("kind") != "empty"]
-    rows = fold_side(raw)
     stored = stored_tc(state)
+    rows = fold_side(raw, stored)
 
     out = []
     for r in rows:
@@ -227,8 +247,8 @@ def build_html(state, base_mmdd, window, datebar_html=""):
 def tc_stats(state, base_mmdd):
     """驗收用：回傳 (總則數, 已存, 半存, 兜底, 與 tag_tc 相異的 id 清單)。"""
     raw = [r for r in H.collect(state, base_mmdd) if r.get("kind") != "empty"]
-    rows = fold_side(raw)
     stored = stored_tc(state)
+    rows = fold_side(raw, stored)
     n_stored = n_mixed = 0
     diff = []
     for r in rows:

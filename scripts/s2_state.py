@@ -1190,7 +1190,9 @@ def parse_side_txt(text, source=None, homes=None, normalize=False, tc_date=None)
     `homes`：`{TC 數字: (大分類, 中主題, 小分題)}`，給檔內沒寫「擬歸位」的情形——
     agent 只要吐 TC 就能指定歸位，不必把整段逐字內容重打一遍（省 token）。
 
-    回傳 [(id, source, category, raw_entry)]；raw_entry 是**去掉時段標記後的原文**
+    回傳 [(id, source, category, raw_entry, tc)]；`tc` ＝ `{"T": [...], "C": [...]}`，
+    來自該段所屬「擬歸位」行的 `T:`／`C:` 後綴（舊格式沒有 → 兩個都是空 list）。
+    raw_entry 是**去掉時段標記後的原文**
     （TC 行＋內容行），時段標記由 render 依 first_seen_checkpoint 自動補。
     """
     sv = load_validate()
@@ -1203,6 +1205,7 @@ def parse_side_txt(text, source=None, homes=None, normalize=False, tc_date=None)
                  if bare.match(l.strip()) else l for l in lines]
     homes = homes or {}
     big = mid = sub = ""
+    home_t, home_c = [], []
     out, cur = [], None
 
     def flush():
@@ -1216,7 +1219,7 @@ def parse_side_txt(text, source=None, homes=None, normalize=False, tc_date=None)
         if m_home:
             flush()
             cur = None
-            segs, _t, _c = _split_home_line(m_home.group(1))
+            segs, home_t, home_c = _split_home_line(m_home.group(1))
             big = segs[0].strip("= ") if segs else big
             mid = segs[1].strip("【】 ") if len(segs) > 1 else ""
             sub = segs[2].strip() if len(segs) > 2 else ""
@@ -1225,11 +1228,13 @@ def parse_side_txt(text, source=None, homes=None, normalize=False, tc_date=None)
             flush()
             cur = None
             big, mid, sub = s.strip("= "), "", ""
+            home_t, home_c = [], []      # 換大分類＝離開上一個擬歸位區段，T/C 不可沿用
             continue
         if s.startswith("【") and s.endswith("】"):
             flush()
             cur = None
             mid, sub = s.strip("【】"), ""
+            home_t, home_c = [], []      # 同上：純 txt 排版換中主題時也要清掉
             continue
         if s == "+":
             flush()
@@ -1251,14 +1256,19 @@ def parse_side_txt(text, source=None, homes=None, normalize=False, tc_date=None)
             if s2:
                 cat["小分題"] = s2
             key = " ".join(x for x in (src, dt or "", tc) if x)
-            cur = (key, f"SIDE_{src}", cat, l.rstrip())
+            # 🔴 T／C 寫進**這個區段的每一段**，不是只寫第一段。
+            #    render 的 `fold_side()` 把單元摺成一列時取的是第一列，
+            #    只標第一段的話「第一段沒標、後面有標」整個單元就會看起來沒標；
+            #    反過來只標第一段、後面沒有，補標時又會漏掉後面那些 item。
+            cur = (key, f"SIDE_{src}", cat, l.rstrip(),
+                   {"T": list(home_t), "C": list(home_c)})
             continue
         if sv.LINE_RE.match(l):   # 通訊社素材行：不是側錄，跳過（供混排 txt 直接餵）
             flush()
             cur = None
             continue
         if cur:                   # 內容行：接在 TC 行底下
-            cur = (cur[0], cur[1], cur[2], cur[3] + "\n" + l.rstrip())
+            cur = (cur[0], cur[1], cur[2], cur[3] + "\n" + l.rstrip(), cur[4])
         else:                     # 裸行且不在區塊內＝小分題標題
             sub = s
     flush()
@@ -1345,7 +1355,13 @@ def cmd_add_side(state, args):
     if not tc_date:
         m = re.match(r"(\d{2})(\d{2})", args.checkpoint or "")
         tc_date = f"{m.group(1)}-{m.group(2)}" if m else None
-    parsed = parse_side_txt(text, args.source, homes, args.normalize, tc_date)
+    try:
+        parsed = parse_side_txt(text, args.source, homes, args.normalize, tc_date)
+    except SideHomeError as e:
+        # ⛔ 明確失敗、且**一個字都還沒寫進狀態檔**——交件者改好檔案重跑即可，
+        #    素材不會消失。比照 s2_platform_merge.py:110-115。
+        print(f"⛔ 側錄檔的擬歸位行格式不對，整份未入庫：\n   {e}")
+        sys.exit(2)
 
     # ⚠️ 跨夜防呆：凌晨的輪次收到晚上的 TC，多半是**前一天**錄的。
     #    這裡只警告不自動改——猜錯會把日期寫成錯的，而錯的日期比沒有日期更難發現。
@@ -1361,13 +1377,33 @@ def cmd_add_side(state, args):
     if not parsed:
         print("ERROR: 沒解析到任何側錄段落（TC 行格式須為 `CNN 160106（主播）`）")
         sys.exit(2)
-    added, updated, bad = [], [], []
-    for i, src, cat, entry in parsed:
+    # T／C 名稱一律對 TC-字典 驗名（單一真相源，與 set-tc 同一份）。
+    # ⚠️ 字典外的名稱**不寫進狀態檔**，視同沒標並列進 uncat_tc 回報——
+    #    寫進去會讓網頁出現一個沒有人認得的格子，比留空更難發現。
+    ok_t, ok_c = _load_tc_dict()
+    added, updated, bad, tc_set, tc_filled, uncat_tc, tc_bad = [], [], [], [], [], [], []
+    for i, src, cat, entry, tc in parsed:
         if not cat.get("大分類"):
             bad.append(f"{i}: 沒有大分類（候選 TXT 需標擬歸位，或沿用 txt 三層排版）")
             continue
+        T = [x for x in (tc or {}).get("T") or [] if x in ok_t]
+        C = [x for x in (tc or {}).get("C") or [] if x in ok_c]
+        rej = [x for x in ((tc or {}).get("T") or []) if x not in ok_t] + \
+              [x for x in ((tc or {}).get("C") or []) if x not in ok_c]
+        if rej:
+            tc_bad.append(f"{i}: 不在 TC-字典 裡的名稱 {'／'.join(rej)}（該段視同沒標）")
+        if not (T or C):
+            uncat_tc.append(i)
         if i in state["items"] and not args.overwrite:
             updated.append(i)      # 已在庫＝往輪次重跑，內容照舊不動（側錄人工定稿）
+            # ⚠️ 但 T／C 是**另一條軸**、不是逐字內容：已在庫卻還沒標的，這裡補上。
+            #    候選檔是 append 模式、add-side 每輪重讀整份，交件端事後補了 T:／C:
+            #    才有機會生效；⛔ 不可為此改走 --overwrite——那會連 raw_entry
+            #    （人工定稿的逐字內容）一起蓋掉。
+            cur_tc = state["items"][i].get("tc") or {}
+            if (T or C) and not (cur_tc.get("T") or cur_tc.get("C")):
+                state["items"][i]["tc"] = {"T": T, "C": C}
+                tc_filled.append(i)
             continue
         it = state["items"].get(i) or new_item(src, args.checkpoint, "has_script", entry)
         it["source"] = src
@@ -1375,12 +1411,17 @@ def cmd_add_side(state, args):
         it["category"] = cat
         it["entry_updated"] = args.checkpoint
         it["entry_updated_ts"] = now_ts()
+        if T or C:
+            # ⛔ 頂層 `tc` 鍵，**不可以塞進 `category`**——`_set_one_category`
+            #    是整包覆寫，寄生其中會被後續 set-category／apply_reclass 無聲抹掉。
+            it["tc"] = {"T": T, "C": C}
+            tc_set.append(i)
         state["items"][i] = it
         added.append(i)
     if args.dry_run:
         print(f"DRY-RUN 解析 {len(parsed)} 段：新增/覆寫 {len(added)}、已在庫略過 {len(updated)}")
         # 預覽前兩段：格式錯了要當場看得出來，不要等進了狀態檔才發現
-        for i, src, cat, entry in parsed[:2]:
+        for i, src, cat, entry, tc in parsed[:2]:
             print(f"  ── {i}（{src}）→ {cat.get('大分類') or '(缺大分類)'}／"
                   f"{cat.get('中主題') or '(缺中主題)'}／{cat.get('小分題') or '-'}")
             for ln in entry.split("\n")[:2]:
@@ -1392,6 +1433,19 @@ def cmd_add_side(state, args):
                                             else (f"：{','.join(added)}" if added else "")))
         if updated:
             print(f"已在庫略過 {len(updated)} 段（要覆蓋加 --overwrite）")
+    # ── T／C 回報（2026-08-25，A10 v2 收尾）─────────────────────────────
+    # 過渡期要看得出「新格式幾段／舊格式幾段」，才知道交件端跟上了沒有（計畫 2.7）。
+    n_new = len(parsed) - len(uncat_tc)
+    print(f"T/C：新格式 {n_new} 段已標／舊格式 {len(uncat_tc)} 段沒標"
+          + (f"（本次寫入 {len(tc_set)}、補標已在庫 {len(tc_filled)}）" if (tc_set or tc_filled) else ""))
+    if uncat_tc:
+        # 🔴 缺 T/C **照樣入庫**（比照 s2_platform_merge.py:78-80 的裁定：
+        #    分類可以事後補、素材消失補不回來）。舊格式永久合法，⛔ 不設旗標。
+        print(f"   ℹ️ 沒標的那 {len(uncat_tc)} 段照樣入庫，網頁會退回關鍵詞兜底／未分類。"
+              f"要補標走 set-tc（⛔ 不要用 add-side --overwrite，會蓋掉 raw_entry）。")
+    if tc_bad:
+        print(f"⚠️ {len(tc_bad)} 段的 T/C 名稱不在字典裡（該段視同沒標，其餘照常入庫）：")
+        print("\n".join("  " + b for b in tc_bad))
     if bad:
         print(f"跳過 {len(bad)} 段：")
         print("\n".join("  " + b for b in bad))
