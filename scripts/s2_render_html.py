@@ -132,10 +132,21 @@ def collect(state, base_mmdd):
                     #   （0802 訂案：一段連線常切成十幾個 TC，計入會把則數灌爆）。
                     #   網頁版的筆數必須照同一套語意，否則同一份資料兩個數字，編輯會困惑。
                     kind = "side" if src.startswith("SIDE_") else ("url" if src == "YT" else "wire")
+                    # 顯示用來源代碼：source=="YT" 在狀態檔裡是解析器用的統一標記
+                    # （見 s2_parse.py，跟 YNA/CNA 是不是網址素材無關），韓聯社／CNA
+                    # 都會落在這裡，要另外從 id 前綴分出來才能對到 SRC_LABEL 顯示成
+                    # 「韓聯社」「CNA」，否則全部顯示成籠統的「網址素材」。
+                    item_id = it.get("id") or ""
+                    if src == "YT" and item_id.startswith("YNA"):
+                        display_src = "YNA"
+                    elif src == "YT" and item_id.startswith("CNA"):
+                        display_src = "CNA"
+                    else:
+                        display_src = src
                     rows.append({
                         "big": big or "", "mid": mid or "", "sub": sub or "",
-                        "id": it.get("id") or "",
-                        "src": src, "kind": kind,
+                        "id": item_id,
+                        "src": display_src, "kind": kind,
                         "mark": R.mark_for(it.get("first_seen_checkpoint") or "", base_mmdd) or "",
                         # 重大層級（2026-08-09 使用者要求可篩）：🔴＝檔頭重大、🟡＝重大未進檔頭、
                         # ⭐＝推薦（2026-08-19，三者互斥）。從**渲染後的成品**認，不從

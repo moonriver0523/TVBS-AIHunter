@@ -72,6 +72,28 @@ def keys_in_state(state_path):
     return side_tc, ids
 
 
+def companion_candidate_json(txt_path):
+    """`{MMDD}-{站}.txt` 的整併用夥伴檔是 `{MMDD}-{站}-state.json`（§2 兩份一起交）。
+
+    ENEX／ABC 候選 txt 裡的「排除清單」項目沒有固定的段落標頭（agent 手寫，
+    格式不受控），CODE 正則沒有能力分辨「這行是收錄還是排除」——與其在 txt
+    裡臆測段落邊界，不如直接信任候選 JSON 的 `skipped` 陣列，那是機器寫的、
+    有結構的權威來源。找不到夥伴檔就回傳 None，呼叫端退回原本行為。
+    """
+    if not txt_path.endswith(".txt"):
+        return None
+    candidate = txt_path[: -len(".txt")] + "-state.json"
+    return candidate if os.path.isfile(candidate) else None
+
+
+def skipped_ids_in_candidate(json_path):
+    try:
+        jj = json.load(open(json_path, encoding="utf-8-sig"))
+    except Exception:
+        return set()
+    return {s["id"] for s in jj.get("skipped", []) if isinstance(s, dict) and s.get("id")}
+
+
 def main():
     ap = argparse.ArgumentParser(description="驗證 _待整併 交件檔是否已入庫，並標記檔名")
     ap.add_argument("--file", required=True, help="狀態檔路徑")
@@ -107,7 +129,11 @@ def main():
         if total == 0:
             skip.append((fn, "解析不到任何代碼／TC——格式不認得，人工看"))
             continue
-        missing = [t for t in ftcs if t not in side_tc] + [c for c in fcodes if c not in ids]
+        companion = companion_candidate_json(p)
+        skipped_ids = skipped_ids_in_candidate(companion) if companion else set()
+        missing = [t for t in ftcs if t not in side_tc] + [
+            c for c in fcodes if c not in ids and c not in skipped_ids
+        ]
         if missing:
             todo.append((fn, total, missing))
         else:
