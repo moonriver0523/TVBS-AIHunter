@@ -76,6 +76,24 @@ def default_file():
                 f"     pwsh -File scripts\\s2_scan.ps1 -Checkpoint {today}-1600 -DryRun\n"
                 f"   確定要對上一班那份動作，就明確帶 --file 指定它。")
         newest = max(cands, key=lambda f: os.path.getmtime(os.path.join(STATE_DIR, f)))
+        # ⚠️ 2026-08-26 補（0430 事故 P2）：「最新修改」曾經是自我強化陷阱本身——
+        # 誤建的空殼檔會立刻變成 mtime 最新，之後每個沒帶 --file 的呼叫都撿到它。
+        # `save()` 現在拒絕憑空新建（見上方註解），這裡再加一層：候選裡若有正常
+        # 大小的檔案、但「最新修改」那份的則數明顯是空殼（≤5 則），別默默選它，
+        # 大聲喊出來，逼人明確指定 --file。
+        if len(cands) > 1:
+            try:
+                with open(os.path.join(STATE_DIR, newest), encoding="utf-8-sig") as f:
+                    n_items = len(json.load(f).get("items", []))
+            except (OSError, json.JSONDecodeError):
+                n_items = None
+            if n_items is not None and n_items <= 5:
+                others = [c for c in cands if c != newest]
+                raise SystemExit(
+                    f"⛔ 「最新修改」的狀態檔 {newest} 只有 {n_items} 則，像是誤建的空殼"
+                    f"（0430 事故的形狀）。資料夾裡其他候選：{', '.join(sorted(others))}\n"
+                    f"   請明確帶 --file 指到正確檔案；若 {newest} 真的是今天要用的新檔，"
+                    f"也請明確帶 --file 確認。")
         return os.path.join(STATE_DIR, newest)
     return os.path.join(STATE_DIR, f"{datetime.now().strftime('%m%d')}-s2-state.json")
 
@@ -101,9 +119,17 @@ TOP_FIELDS = ("checkpoint", "updated_at", "window_local",
 
 
 def load(path):
-    """讀取正式 schema（items 為陣列）並在記憶體中轉成 dict 方便索引。"""
+    """讀取正式 schema（items 為陣列）並在記憶體中轉成 dict 方便索引。
+
+    ⚠️ **2026-08-26 修（0430 事故根因）**：`date` 欄位缺失時**不再**用
+    `datetime.now()` 補假值——那個假值會讓 `cmd_resume` 印出「今天日期」，
+    即使實際讀到的是昨天開的檔（跨午夜後常態）。agent 依那個假日期推論出
+    錯的檔名、對不存在的路徑下 `set-tc --file`，`save()` 又無條件新建空檔
+    覆蓋掉「最新修改」的位置，整輪中止。缺失就回 `None`，讓呼叫端老實印
+    「(未記錄)」——檔名才是唯一不會說謊的資訊，見 `cmd_resume`。
+    """
     if not os.path.exists(path):
-        return {"date": datetime.now().strftime("%m%d"), "_top": {}, "items": {}}
+        return {"date": None, "_top": {}, "items": {}}
     try:
         with open(path, encoding="utf-8-sig") as f:
             raw = json.load(f)
@@ -116,16 +142,40 @@ def load(path):
     items = raw.get("items", [])
     if isinstance(items, list):  # 正式 schema
         items = {it["id"]: {k: v for k, v in it.items() if k != "id"} for it in items}
-    return {"date": raw.get("date", datetime.now().strftime("%m%d")),
-            "_top": top, "items": items}
+    return {"date": raw.get("date"), "_top": top, "items": items}
 
 
-def save(state, path):
-    """寫回正式 schema：items 還原成陣列、每筆帶回 id。"""
+def save(state, path, allow_create=False):
+    """寫回正式 schema：items 還原成陣列、每筆帶回 id。
+
+    ⚠️ **2026-08-26 修（0430 事故 P0）**：目標檔案不存在時預設拒絕——
+    正常情況下新班次的狀態檔是 `s2_scan.ps1` 的 `New-ShiftState` 直接寫檔，
+    `s2_state.py` 不負責開檔，走到這裡的路徑理應已存在。打錯 `--file`
+    （例如日期算錯）時，舊行為是靜默新建一份空殼並覆蓋掉「資料夾裡最新
+    修改」的位置，導致之後所有沒帶 `--file` 的呼叫都被導向那份空檔——
+    錯誤會自我強化。現在改成大聲失敗、列出資料夾現有候選；只有真正的
+    建檔類指令（`add`／`add-batch`，用於真的一份都沒有的全新一天）才傳
+    `allow_create=True` 放行。
+    """
+    if not allow_create and not os.path.exists(path):
+        cands = []
+        try:
+            d = os.path.dirname(path) or "."
+            cands = [f for f in os.listdir(d) if re.fullmatch(r"\d{4}-s2-state\.json", f)]
+        except OSError:
+            pass
+        hint = ""
+        if cands:
+            newest = max(cands, key=lambda f: os.path.getmtime(os.path.join(os.path.dirname(path), f)))
+            hint = f"\n   資料夾現有：{', '.join(sorted(cands))}（最新修改：{newest}）"
+        sys.exit(f"⛔ 找不到 {path}，而 s2_state.py 不會憑空開新檔。{hint}\n"
+                  f"   要對既有檔動作就把 --file 指到正確檔名；真要開新班次請走 s2_scan.ps1。")
     d = os.path.dirname(path)
     if d:
         os.makedirs(d, exist_ok=True)
     out = dict(state.get("_top", {}))
+    if state.get("date"):
+        out["date"] = state["date"]
     out["updated_at"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S+08:00")
     out["items"] = [dict(id=i, **v) for i, v in state["items"].items()]
     tmp = path + ".tmp"
@@ -175,13 +225,17 @@ def changed_since_render(v, last_render_ts):
 
 
 def cmd_resume(state, args):
+    """⚠️ **2026-08-26 修（0430 事故根因）**：不再印「日期」——那是靠
+    `datetime.now()` 補的假值，跨午夜後會騙人（明明讀的是昨天開的檔，卻印
+    今天日期），agent 依假日期推論檔名、對不存在的路徑寫入釀成事故。
+    改印**實際讀到的檔名**：檔名是唯一不會說謊的資訊。"""
     items = state["items"]
     last_render = state.get("_top", {}).get("last_render_ts") or ""
     pend = [i for i, v in items.items() if v.get("script_status") == "pending"]
     todo = [i for i, v in items.items() if changed_since_render(v, last_render)]
     review = [i for i, v in items.items() if v.get("needs_review")]
     cps = sorted({v.get("last_checked_checkpoint", "") for v in items.values() if v.get("last_checked_checkpoint")})
-    print(f"日期:{state.get('date','?')} 共{len(items)}則 pending:{len(pend)} "
+    print(f"狀態檔:{os.path.basename(args.file)} 共{len(items)}則 pending:{len(pend)} "
           f"上次render後有變動:{len(todo)} 待人工:{len(review)}")
     print(f"最近檢查點:{cps[-1] if cps else '無'}｜上次render:{last_render or '（尚未）'}")
     if pend:
@@ -397,7 +451,7 @@ def cmd_add(state, args):
     doubt = bite_doubt(entry, args.sb_count, args.footage_type)
     if doubt:
         state["items"][i]["needs_review"] = doubt
-    save(state, args.file)
+    save(state, args.file, allow_create=True)
     print(f"OK 已新增 {i}（{args.status}）")
     report_fmt([f"{i}: {r}" for r in fmt_issues(entry)])
     if doubt:
@@ -498,7 +552,7 @@ def cmd_add_batch(state, args):
             fmt.append(f"{i}: {reason}")
         added.append(i)
     if added:
-        save(state, args.file)
+        save(state, args.file, allow_create=True)
     print(f"OK 新增 {len(added)} 則" + (f"：{','.join(added)}" if added else ""))
     if no_src:
         print(f"⚠️ {len(no_src)} 則沒帶 src_text（站方原文＝事後離線查證的唯一依據，13b §543）："
