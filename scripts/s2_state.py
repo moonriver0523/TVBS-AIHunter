@@ -14,6 +14,10 @@ import re
 import sys
 from datetime import datetime
 
+# 待整併偵測（2026-08-26）。⛔ 反過來 import 會炸：s2_state 在 module level
+#    跑 default_file()，那支在 16:00 後可能 raise SystemExit。s2_pending 保持零副作用。
+import s2_pending
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import s2_parse as sp  # noqa: E402  raw_entry → 結構化欄位（寫入時自動推導）
 
@@ -242,6 +246,9 @@ def cmd_resume(state, args):
         print("pending: " + ",".join(sorted(pend)))
     if review:
         print("待人工: " + ",".join(sorted(review)))
+    # 🔴 觸發點要印在「下一步」之前：agent 讀到指引就會開始動作，
+    #    提醒排在指引後面等於沒印。`13c2` §2 早就承諾 resume 會報待整併。
+    s2_pending.warn(where="resume")
     print("下一步：批次擷取用 diff 找新素材；整併用 set-category --pairs 後跑 s2_render.py。")
 
 

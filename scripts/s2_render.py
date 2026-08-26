@@ -29,7 +29,8 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import s2_validate as sv  # noqa: E402  共用行辨識 regex 與檔頭生成，不重寫一套
-import s2_topic_dedupe as td  # noqa: E402  render 後同名小分題跨大分類重複偵測
+import s2_topic_dedupe as td
+import s2_pending  # noqa: E402  待整併偵測（零副作用，不會拉進 s2_state）  # noqa: E402  render 後同名小分題跨大分類重複偵測
 
 # ⚠️ 用 reconfigure 不用 TextIOWrapper：包第二層時（例如 s2_state 匯入 s2_validate）
 # 舊寫法會讓其中一個 wrapper 被回收時關掉底層 buffer，整支腳本以 "I/O operation on
@@ -597,6 +598,9 @@ def main():
     if not args.no_touch_state:
         touch_last_render(args.file, text)
     print(f"OK 已渲染 {args.out}（{len(text.splitlines())} 行 / {len(text)} 字元）")
+    # 收工保險（2026-08-26）：agent 不保證每輪都跑 resume（0825-2200 就沒跑）。
+    # ⛔ 只警告不擋——無人值守的排程硬擋會讓整輪產不出交接檔。
+    s2_pending.warn(where="render")
     reconcile(old, text)
     if not args.no_check:
         sv.check(args.out)
