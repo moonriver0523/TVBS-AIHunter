@@ -42,6 +42,7 @@ from dataclasses import asdict, dataclass, field
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import sb_format as SBF  # noqa: E402
+import side_precut as SP  # noqa: E402
 
 # fastapi 必須在模組層 import——理由見 build_app() 的 docstring。
 # 沒裝 fastapi 時仍可 import 本檔用 scan_dir／transcribe／build_candidates（測試就是這樣跑）。
@@ -744,6 +745,107 @@ def build_app(default_dir: str | None):
     # 背景轉錄工作——同步跑 65 分鐘素材要 160 秒以上，fetch 會在那裡
     # 靜默乾等；改成「啟動就回、前端輪詢進度」。
     jobs: dict = {}
+
+    def _precut_run(m: Material):
+        job = jobs[f"precut:{m.name}"]
+        try:
+            data = SP.analyze_file(
+                m.path, m.offset,
+                on_phase=lambda p: job.update(phase=p),
+            )
+            job.update(state="done", phase="完成", **data)
+        except Exception as e:
+            job.update(state="error", error=str(e))
+
+    @app.post("/api/precut")
+    def api_precut(payload: dict):
+        m = get_material(payload["name"])
+        force = bool(payload.get("force"))
+        key = f"precut:{m.name}"
+        if jobs.get(key, {}).get("state") == "running":
+            raise HTTPException(409, "這支素材的初處理分析已在跑，別重複啟動")
+        cached = SP.load_cache(m.path)
+        if cached and not force:
+            stale = SP.cache_stale(m.path, cached)
+            jobs[key] = {"state": "done", "phase": "快取", "stale": stale, **cached}
+            return {"state": "done", "stale": stale}
+        try:
+            SP.require_ocr()
+        except FileNotFoundError as e:
+            raise HTTPException(400, str(e))
+        jobs[key] = {"state": "running", "phase": "啟動中", "started": time.time()}
+        threading.Thread(target=_precut_run, args=(m,), daemon=True).start()
+        return {"state": "running"}
+
+    @app.get("/api/precut/status")
+    def api_precut_status(name: str):
+        job = jobs.get(f"precut:{name}")
+        if not job:
+            m = get_material(name)
+            cached = SP.load_cache(m.path)
+            if not cached:
+                return {"state": "none"}
+            return {"state": "done", "phase": "快取",
+                    "stale": SP.cache_stale(m.path, cached), **cached}
+        out = dict(job)
+        if "started" in out:
+            out["elapsed"] = round(time.time() - out.pop("started"), 1)
+        return out
+
+    @app.post("/api/precut/save")
+    def api_precut_save(payload: dict):
+        m = get_material(payload["name"])
+        segs = SP.dicts_to_segs(payload.get("segments") or [])
+        SP.save_cache(m.path, m.offset, segs)
+        overlap = SP.segs_overlap(segs)
+        return {"ok": True, "overlap": overlap,
+                "segments": [SP.seg_to_dict(s, m.offset) for s in segs]}
+
+    def _export_run(m: Material, segs, mode, accurate):
+        job = jobs[f"export:{m.name}"]
+        try:
+            paths = SP.export_segs(
+                m.path, segs, mode=mode, accurate=accurate,
+                source=m.source or "SIDE", offset_sec=m.offset,
+            )
+            job.update(state="done", phase="完成", files=paths,
+                       dir=SP.export_dir(m.path))
+        except Exception as e:
+            job.update(state="error", error=str(e))
+
+    @app.post("/api/precut/export")
+    def api_precut_export(payload: dict):
+        m = get_material(payload["name"])
+        mode = payload.get("mode") or "non_ad"
+        if mode not in ("non_ad", "selected"):
+            raise HTTPException(400, "mode 只能是 non_ad 或 selected")
+        accurate = bool(payload.get("accurate"))
+        rows = payload.get("segments")
+        if rows is None:
+            cached = SP.load_cache(m.path) or {}
+            rows = cached.get("segments") or []
+        segs = SP.dicts_to_segs(rows)
+        SP.save_cache(m.path, m.offset, segs)  # 匯出前先落地人改的
+        key = f"export:{m.name}"
+        if jobs.get(key, {}).get("state") == "running":
+            raise HTTPException(409, "這支素材正在剪檔")
+        overlap = SP.segs_overlap(segs)
+        jobs[key] = {"state": "running", "phase": "剪檔", "started": time.time(),
+                     "overlap": overlap}
+        threading.Thread(
+            target=_export_run, args=(m, segs, mode, accurate), daemon=True
+        ).start()
+        return {"state": "running", "overlap": overlap}
+
+    @app.get("/api/precut/export/status")
+    def api_precut_export_status(name: str):
+        job = jobs.get(f"export:{name}")
+        if not job:
+            return {"state": "none"}
+        out = dict(job)
+        if "started" in out:
+            out["elapsed"] = round(time.time() - out.pop("started"), 1)
+        return out
 
     def _job_run(m: Material, language: str):
         job = jobs[m.name]
