@@ -62,5 +62,33 @@ class TestExportName(unittest.TestCase):
         )
 
 
+FFMPEG_SILENCE = """
+[silencedetect @ 000] silence_start: 10.0
+[silencedetect @ 000] silence_end: 10.8 | silence_duration: 0.8
+[silencedetect @ 000] silence_start: 40.0
+[silencedetect @ 000] silence_end: 45.0 | silence_duration: 5.0
+[silencedetect @ 000] silence_start: 90.0
+[silencedetect @ 000] silence_end: 91.2 | silence_duration: 1.2
+"""
+
+
+class TestSilence(unittest.TestCase):
+    def test_parse兩端時間(self):
+        sil = P.parse_silencedetect(FFMPEG_SILENCE)
+        self.assertEqual(sil, [(10.0, 10.8), (40.0, 45.0), (90.0, 91.2)])
+
+    def test_短氣口合併長靜音切開(self):
+        # duration=100；0.8s 與 1.2s 氣口併掉，5s 切開
+        blocks = P.speech_blocks(100.0, [(10.0, 10.8), (40.0, 45.0), (90.0, 91.2)])
+        self.assertEqual(len(blocks), 2)
+        self.assertAlmostEqual(blocks[0][0], 0.0)
+        self.assertAlmostEqual(blocks[0][1], 40.0)
+        self.assertAlmostEqual(blocks[1][0], 45.0)
+        self.assertAlmostEqual(blocks[1][1], 100.0)
+
+    def test_沒有靜音就是整段(self):
+        self.assertEqual(P.speech_blocks(50.0, []), [(0.0, 50.0)])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

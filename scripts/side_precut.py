@@ -63,3 +63,46 @@ def export_dir(video_path: str) -> str:
     parent, name = os.path.split(video_path)
     stem, _ = os.path.splitext(name)
     return os.path.join(parent, stem + " 初處理")
+
+
+BREATH_MAX = 1.5
+SILENCE_START_RE = re.compile(r"silence_start:\s*([0-9.]+)")
+SILENCE_END_RE = re.compile(r"silence_end:\s*([0-9.]+)")
+
+
+def parse_silencedetect(stderr: str) -> list[tuple[float, float]]:
+    starts, ends = [], []
+    for line in stderr.splitlines():
+        m = SILENCE_START_RE.search(line)
+        if m:
+            starts.append(float(m.group(1)))
+            continue
+        m = SILENCE_END_RE.search(line)
+        if m:
+            ends.append(float(m.group(1)))
+    out = []
+    for i, s in enumerate(starts):
+        e = ends[i] if i < len(ends) else s
+        out.append((s, e))
+    return out
+
+
+def speech_blocks(
+    duration: float,
+    silences: list[tuple[float, float]],
+    breath_max: float = BREATH_MAX,
+) -> list[tuple[float, float]]:
+    if duration <= 0:
+        return []
+    long_sil = [(s, e) for s, e in silences if (e - s) >= breath_max]
+    if not long_sil:
+        return [(0.0, duration)]
+    blocks = []
+    t = 0.0
+    for s, e in long_sil:
+        if s > t:
+            blocks.append((t, s))
+        t = max(t, e)
+    if t < duration:
+        blocks.append((t, duration))
+    return [(a, b) for a, b in blocks if b - a >= 0.2]
