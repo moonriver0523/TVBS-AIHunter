@@ -459,41 +459,82 @@ renderMaterials = function(list) {
 };
 
 function pcPick(m) {
-  PC_MAT = m; PC_SEGS = []; PC_SEL = -1;
+  PC_MAT = m; PC_SEGS = []; PC_SEL = -1; pcSeek = null;
+  if (pcTimer) { clearInterval(pcTimer); pcTimer = null; }
+  if (pcExTimer) { clearInterval(pcExTimer); pcExTimer = null; }
   $('pcPlayer').src = '/media?name=' + encodeURIComponent(m.name);
   $('pcNote').textContent = m.offset ? ('母帶 offset +' + m.offset + ' 秒') : '檔名沒 6 碼 TC，offset＝0';
   pcLoadStatus(false);
 }
 
+function pcWatchAnalyze(name) {
+  name = name || (PC_MAT && PC_MAT.name);
+  if (!name) return;
+  clearInterval(pcTimer);
+  pcTimer = setInterval(async () => {
+    if (!PC_MAT || PC_MAT.name !== name) { clearInterval(pcTimer); pcTimer = null; return; }
+    const j = await api('/api/precut/status?name=' + encodeURIComponent(name));
+    status((j.phase || j.state) + (j.elapsed ? ' ' + j.elapsed + 's' : ''));
+    if (j.state === 'done') {
+      clearInterval(pcTimer); pcTimer = null;
+      PC_SEGS = j.segments || []; renderPcSegs(); drawWave();
+      status('分析完成 ' + PC_SEGS.length + ' 段');
+    }
+    if (j.state === 'error') { clearInterval(pcTimer); pcTimer = null; status(j.error, true); }
+  }, 800);
+}
+
+function pcWatchExport(name) {
+  name = name || (PC_MAT && PC_MAT.name);
+  if (!name) return;
+  clearInterval(pcExTimer);
+  pcExTimer = setInterval(async () => {
+    if (!PC_MAT || PC_MAT.name !== name) { clearInterval(pcExTimer); pcExTimer = null; return; }
+    const s = await api('/api/precut/export/status?name=' + encodeURIComponent(name));
+    if (s.state === 'done') {
+      clearInterval(pcExTimer); pcExTimer = null;
+      status('剪完 ' + (s.files||[]).length + ' 檔 → ' + (s.dir||''));
+    }
+    if (s.state === 'error') { clearInterval(pcExTimer); pcExTimer = null; status(s.error, true); }
+  }, 800);
+}
+
 async function pcLoadStatus(startIfNone) {
   if (!PC_MAT) return;
-  const j = await api('/api/precut/status?name=' + encodeURIComponent(PC_MAT.name));
+  const name = PC_MAT.name;
+  const j = await api('/api/precut/status?name=' + encodeURIComponent(name));
+  if (!PC_MAT || PC_MAT.name !== name) return;
   if (j.state === 'done' && j.segments) {
     PC_SEGS = j.segments;
     if (j.stale) status('原片比快取新，建議重跑分析', false);
     renderPcSegs(); drawWave();
-    return;
+  } else if (j.state === 'running') {
+    status((j.phase || j.state) + (j.elapsed ? ' ' + j.elapsed + 's' : ''));
+    pcWatchAnalyze(name);
+  } else if (j.state === 'error') {
+    status(j.error, true);
+  } else if (startIfNone && j.state === 'none') {
+    pcAnalyze();
   }
-  if (startIfNone && j.state === 'none') pcAnalyze();
+  const ex = await api('/api/precut/export/status?name=' + encodeURIComponent(name));
+  if (!PC_MAT || PC_MAT.name !== name) return;
+  if (ex.state === 'running') pcWatchExport(name);
 }
 
 async function pcAnalyze() {
   if (!PC_MAT) return;
+  const name = PC_MAT.name;
   status('分析中…');
   try {
     await api('/api/precut', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({name: PC_MAT.name, force: true})});
-  } catch (e) { status(e.message, true); return; }
-  clearInterval(pcTimer);
-  pcTimer = setInterval(async () => {
-    const j = await api('/api/precut/status?name=' + encodeURIComponent(PC_MAT.name));
-    status((j.phase || j.state) + (j.elapsed ? ' ' + j.elapsed + 's' : ''));
-    if (j.state === 'done') {
-      clearInterval(pcTimer); PC_SEGS = j.segments || []; renderPcSegs(); drawWave();
-      status('分析完成 ' + PC_SEGS.length + ' 段');
-    }
-    if (j.state === 'error') { clearInterval(pcTimer); status(j.error, true); }
-  }, 800);
+      body: JSON.stringify({name, force: true})});
+  } catch (e) {
+    status(e.message, true);
+    const j = await api('/api/precut/status?name=' + encodeURIComponent(name)).catch(() => null);
+    if (!j || j.state !== 'running') return;
+  }
+  if (!PC_MAT || PC_MAT.name !== name) return;
+  pcWatchAnalyze(name);
 }
 $('pcAnalyze').onclick = pcAnalyze;
 
@@ -525,10 +566,16 @@ function pcSelect(i) {
   $('pcT0').value = s.t0;
   $('pcT1').value = s.t1;
   $('pcTc').textContent = '母帶 ' + pcFmt(s.tc0) + '–' + pcFmt(s.tc1);
-  const v = $('pcPlayer');
-  const go = () => { v.currentTime = s.t0; };
-  if (v.readyState >= 1) go(); else { pcSeek = s.t0; v.onloadedmetadata = () => { if (pcSeek!=null) v.currentTime = pcSeek; }; }
+  pcSeekTo(s.t0);
 }
+function pcSeekTo(t) {
+  const v = $('pcPlayer');
+  if (v.readyState >= 1) v.currentTime = t;
+  else pcSeek = t;
+}
+$('pcPlayer').addEventListener('loadedmetadata', () => {
+  if (pcSeek != null) { const t = pcSeek; pcSeek = null; pcSeekTo(t); }
+});
 $('pcKind').onchange = () => { if (PC_SEL>=0) { PC_SEGS[PC_SEL].kind = $('pcKind').value; renderPcSegs(); drawWave(); } };
 $('pcTopic').oninput = () => { if (PC_SEL>=0) PC_SEGS[PC_SEL].topic = $('pcTopic').value; };
 function pcRetime() {
@@ -569,19 +616,19 @@ $('pcSave').onclick = () => pcSave().catch(e => status(e.message, true));
 
 async function pcExport(mode) {
   if (!PC_MAT) return;
+  const name = PC_MAT.name;
   status('剪檔中…');
-  const j = await api('/api/precut/export', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name: PC_MAT.name, mode, accurate: $('pcAccurate').checked, segments: PC_SEGS})});
-  if (j.overlap) status('邊界重疊，仍繼續剪…');
-  clearInterval(pcExTimer);
-  pcExTimer = setInterval(async () => {
-    const s = await api('/api/precut/export/status?name=' + encodeURIComponent(PC_MAT.name));
-    if (s.state === 'done') {
-      clearInterval(pcExTimer);
-      status('剪完 ' + (s.files||[]).length + ' 檔 → ' + (s.dir||''));
-    }
-    if (s.state === 'error') { clearInterval(pcExTimer); status(s.error, true); }
-  }, 800);
+  try {
+    const j = await api('/api/precut/export', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name, mode, accurate: $('pcAccurate').checked, segments: PC_SEGS})});
+    if (j.overlap) status('邊界重疊，仍繼續剪…');
+  } catch (e) {
+    status(e.message, true);
+    const s = await api('/api/precut/export/status?name=' + encodeURIComponent(name)).catch(() => null);
+    if (!s || s.state !== 'running') throw e;
+  }
+  if (!PC_MAT || PC_MAT.name !== name) return;
+  pcWatchExport(name);
 }
 $('pcExportAll').onclick = () => pcExport('non_ad').catch(e => status(e.message, true));
 $('pcExportSel').onclick = () => pcExport('selected').catch(e => status(e.message, true));
