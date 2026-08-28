@@ -204,5 +204,63 @@ class TestCacheAndAnalyze(unittest.TestCase):
         self.assertAlmostEqual(pts[1], 0.3)
 
 
+class TestAdapters(unittest.TestCase):
+    def test_沒裝OCR時require會說明怎麼裝(self):
+        # 用注入：把 _ocr_mod 設成 None
+        old = getattr(P, "_ocr_mod", "missing")
+        P._ocr_mod = None
+        self.addCleanup(lambda: setattr(P, "_ocr_mod", old) if old != "missing" else None)
+        with self.assertRaises(FileNotFoundError) as ctx:
+            P.require_ocr()
+        self.assertIn("rapidocr-onnxruntime", str(ctx.exception))
+
+    def test_export非廣告略過ad(self):
+        calls = []
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            class R:
+                returncode = 0
+                stderr = ""
+            return R()
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        vid = os.path.join(d, "CNN 075658 x.mp4")
+        open(vid, "wb").close()
+        segs = [
+            P.PrecutSeg("s1", 0, 10, "ad", selected=False),
+            P.PrecutSeg("s2", 10, 20, "anchor", topic="主題", selected=True),
+        ]
+        paths = P.export_segs(
+            vid, segs, mode="non_ad", accurate=False,
+            source="CNN", offset_sec=0, run=fake_run,
+        )
+        self.assertEqual(len(paths), 1)
+        self.assertTrue(paths[0].endswith("CNN 000010-000020 主播 主題.mp4"))
+        self.assertEqual(len(calls), 1)
+
+    def test_export只出勾選(self):
+        calls = []
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            class R:
+                returncode = 0
+            return R()
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        vid = os.path.join(d, "a.mp4")
+        open(vid, "wb").close()
+        segs = [
+            P.PrecutSeg("s1", 0, 5, "anchor", selected=False),
+            P.PrecutSeg("s2", 5, 9, "ad", selected=True),
+        ]
+        paths = P.export_segs(
+            vid, segs, mode="selected", accurate=True,
+            source="CNN", offset_sec=0, run=fake_run,
+        )
+        self.assertEqual(len(paths), 1)
+        self.assertIn("廣告", paths[0])
+        self.assertIn("libx264", calls[0])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -6,6 +6,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 from dataclasses import asdict, dataclass
 
 import sb_format as SBF
@@ -261,3 +264,150 @@ def cut_cmd(video_path: str, seg: PrecutSeg, dest: str, *, accurate: bool) -> li
         "ffmpeg", "-y", "-i", video_path, "-ss", ss, "-to", to,
         "-c", "copy", "-avoid_negative_ts", "make_zero", dest,
     ]
+
+
+_ocr_mod = "unset"
+OCR_IMPORT_HINT = "pip install rapidocr-onnxruntime"
+CROP_BOTTOM = 0.28  # CNN 720x480 下方約 28%
+
+
+def require_ocr() -> None:
+    global _ocr_mod
+    if _ocr_mod is None:
+        raise FileNotFoundError(
+            f"沒有 RapidOCR，無法分析字卡。安裝：{OCR_IMPORT_HINT}"
+        )
+    if _ocr_mod == "unset":
+        try:
+            from rapidocr_onnxruntime import RapidOCR  # type: ignore
+            _ocr_mod = RapidOCR
+        except ImportError:
+            _ocr_mod = None
+            raise FileNotFoundError(
+                f"沒有 RapidOCR，無法分析字卡。安裝：{OCR_IMPORT_HINT}"
+            )
+
+
+def _run(cmd: list[str], timeout: int = 3600) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        cmd, capture_output=True, text=True, timeout=timeout,
+        encoding="utf-8", errors="replace",
+    )
+
+
+def ffprobe_duration(path: str) -> float:
+    r = _run([
+        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+        "-of", "default=nk=1:nw=1", path,
+    ])
+    if r.returncode:
+        raise RuntimeError(r.stderr.strip() or "ffprobe 失敗")
+    return float(r.stdout.strip())
+
+
+def run_silence_ffmpeg(path: str) -> str:
+    # 閾值可實調；規格允許不寫進規則文件
+    r = _run([
+        "ffmpeg", "-hide_banner", "-nostats", "-i", path,
+        "-af", "silencedetect=noise=-30dB:d=0.6", "-f", "null", "-",
+    ])
+    return (r.stderr or "") + (r.stdout or "")
+
+
+def rms_ffmpeg(path: str, t0: float, t1: float) -> float:
+    dur = max(0.05, t1 - t0)
+    r = _run([
+        "ffmpeg", "-hide_banner", "-nostats",
+        "-ss", f"{t0:.3f}", "-t", f"{dur:.3f}", "-i", path,
+        "-af", "volumedetect", "-f", "null", "-",
+    ])
+    m = re.search(r"max_volume:\s*([-\d.]+)\s*dB", r.stderr or "")
+    if not m:
+        return 0.0
+    db = float(m.group(1))
+    # 0 dB → 1.0；-20 dB → ~0.1。廣告啟發式用相對值。
+    return max(0.0, min(1.0, 10 ** (db / 20)))
+
+
+def black_ffmpeg(path: str, t0: float, t1: float) -> bool:
+    dur = max(0.05, min(2.0, t1 - t0))
+    r = _run([
+        "ffmpeg", "-hide_banner", "-nostats",
+        "-ss", f"{t0:.3f}", "-t", f"{dur:.3f}", "-i", path,
+        "-vf", "blackdetect=d=0.2:pix_th=0.10", "-f", "null", "-",
+    ])
+    return "black_start" in (r.stderr or "")
+
+
+def _maybe_opencc(text: str) -> str:
+    try:
+        import opencc  # type: ignore
+        return opencc.OpenCC("s2twp").convert(text)
+    except Exception:
+        return text
+
+
+def ocr_at(path: str, t_mid: float) -> str:
+    require_ocr()
+    tmp = tempfile.mkdtemp(prefix="precut_")
+    try:
+        png = os.path.join(tmp, "f.png")
+        r = _run([
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-ss", f"{t_mid:.3f}", "-i", path, "-frames:v", "1",
+            "-vf", f"crop=iw:ih*{CROP_BOTTOM}:0:ih*(1-{CROP_BOTTOM})",
+            png,
+        ])
+        if r.returncode or not os.path.isfile(png):
+            return ""
+        engine = _ocr_mod()
+        result, _ = engine(png)
+        if not result:
+            return ""
+        lines = [row[1] for row in result if len(row) > 1 and row[1]]
+        return _maybe_opencc(" ".join(lines).strip())
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def analyze_file(path: str, offset_sec: int, on_phase=None) -> dict:
+    require_ocr()
+    duration = ffprobe_duration(path)
+    return analyze(
+        path, offset_sec=offset_sec, duration=duration,
+        run_silence=run_silence_ffmpeg,
+        rms_of=lambda a, b: rms_ffmpeg(path, a, b),
+        ocr_of=lambda t: ocr_at(path, t),
+        black_of=lambda a, b: black_ffmpeg(path, a, b),
+        on_phase=on_phase,
+    )
+
+
+def segs_overlap(segs: list[PrecutSeg]) -> bool:
+    ordered = sorted(segs, key=lambda s: s.t0)
+    for a, b in zip(ordered, ordered[1:]):
+        if b.t0 < a.t1 - 0.05:
+            return True
+    return False
+
+
+def export_segs(video_path, segs, *, mode, accurate, source, offset_sec, run=subprocess.run) -> list[str]:
+    chosen = []
+    for s in segs:
+        if mode == "non_ad" and s.kind == "ad":
+            continue
+        if mode == "selected" and not s.selected:
+            continue
+        chosen.append(s)
+    dest_dir = export_dir(video_path)
+    os.makedirs(dest_dir, exist_ok=True)
+    paths = []
+    for s in chosen:
+        dest = os.path.join(dest_dir, export_filename(source, s, offset_sec))
+        cmd = cut_cmd(video_path, s, dest, accurate=accurate)
+        r = run(cmd, capture_output=True, text=True)
+        if getattr(r, "returncode", 0):
+            err = (getattr(r, "stderr", None) or "")[-400:]
+            raise RuntimeError(f"ffmpeg 剪檔失敗：{err}")
+        paths.append(dest)
+    return paths
