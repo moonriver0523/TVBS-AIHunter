@@ -58,17 +58,32 @@
   .lint .f { color:var(--fail); } .lint .w { color:var(--warn); }
   .row { display:flex; gap:6px; } .row > * { flex:1; }
   #status { font-size:12px; color:var(--dim); margin-left:auto; max-width:50%; }
+  #tabs { display:flex; gap:0; }
+  .tab { border-radius:6px 6px 0 0; }
+  .tab.on { background:var(--accent); color:#08121f; font-weight:600; }
+  #viewPrecut { display:grid; grid-template-columns:260px 1fr; height:calc(100vh - 53px); }
+  #viewPrecut[hidden] { display:none !important; }
+  #viewBite[hidden] { display:none !important; }
+  #pcTop { display:grid; grid-template-columns:1.2fr 1fr; gap:8px; }
+  #pcPlayer { width:100%; max-height:280px; background:#000; border-radius:8px; }
+  #pcWave { width:100%; display:block; background:#0e1013; border:1px solid var(--line); border-radius:6px; margin:8px 0; cursor:pointer; }
+  .pcseg { display:flex; gap:8px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:6px; cursor:pointer; }
+  .pcseg.on { border-color:var(--accent); background:#182430; }
+  .pcseg.ad { border-color:#5a2a2a; }
 </style>
 </head>
 <body>
 <header>
-  <h1>掐BITE 工作台</h1>
+  <nav id="tabs">
+    <button type="button" id="tabBtnBite" class="tab on">掐BITE</button>
+    <button type="button" id="tabBtnPrecut" class="tab">側錄初處理</button>
+  </nav>
   <input type="text" id="dir" size="52" placeholder="素材資料夾路徑">
   <button id="load">讀取</button>
   <span id="status"></span>
 </header>
 
-<main>
+<main id="viewBite">
   <section id="materials"></section>
 
   <section id="center">
@@ -112,6 +127,42 @@
   </section>
 </main>
 
+<main id="viewPrecut" hidden>
+  <section id="pcMats"></section>
+  <section id="pcMain">
+    <div id="pcTop">
+      <video id="pcPlayer" controls preload="metadata"></video>
+      <div id="pcForm">
+        <div class="note" id="pcNote">不跑 ASR。分析用靜音＋下標 OCR，類型請人改。</div>
+        <label>類型</label>
+        <select id="pcKind">
+          <option value="ad">廣告</option>
+          <option value="anchor">主播</option>
+          <option value="reporter">記者</option>
+          <option value="interview">訪問</option>
+          <option value="other">其他</option>
+        </select>
+        <label>主題（字卡，可改）</label>
+        <input type="text" id="pcTopic" style="width:100%">
+        <div class="row">
+          <div><label>檔內起（秒）</label><input type="text" id="pcT0"></div>
+          <div><label>檔內訖（秒）</label><input type="text" id="pcT1"></div>
+        </div>
+        <div id="pcTc" class="note"></div>
+        <label><input type="checkbox" id="pcAccurate">精準重編（慢，切點對齊秒）</label>
+        <div class="row" style="margin-top:8px">
+          <button id="pcAnalyze">分析</button>
+          <button class="primary" id="pcExportAll">一鍵出全部非廣告</button>
+          <button id="pcExportSel">只出勾選</button>
+          <button id="pcSave">存回 PRECUT.json</button>
+        </div>
+      </div>
+    </div>
+    <canvas id="pcWave" height="72"></canvas>
+    <div id="pcSegs"></div>
+  </section>
+</main>
+
 <script>
 const $ = id => document.getElementById(id);
 let MAT = null, SEGS = [], SEL = -1, stopAt = null, pendingSeek = null, pollTimer = null, zhTimer = null, TR_WARN = '';
@@ -148,7 +199,7 @@ function renderMaterials(list) {
          ${m.has_subtitle ? '<span class="tag has">有字幕</span>' : ''}
        </div>
      </div>`).join('');
-  [...document.querySelectorAll('.mat')].forEach(el =>
+  $('materials').querySelectorAll('.mat').forEach(el =>
     el.onclick = () => pickMaterial(list[+el.dataset.i], el));
 }
 
@@ -156,7 +207,7 @@ function pickMaterial(m, el) {
   MAT = m; SEL = -1; SEGS = []; stopAt = null; pendingSeek = null;
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (zhTimer) { clearInterval(zhTimer); zhTimer = null; }
-  document.querySelectorAll('.mat').forEach(e => e.classList.remove('on'));
+  $('materials').querySelectorAll('.mat').forEach(e => e.classList.remove('on'));
   el.classList.add('on');
   $('player').src = '/media?name=' + encodeURIComponent(m.name);
   $('siderow').style.display = m.kind === 'side' ? 'flex' : 'none';
@@ -374,6 +425,168 @@ $('translate').onclick = translateZh;
 $('gen').onclick = generate;
 $('copy').onclick = () => { navigator.clipboard.writeText($('out').textContent); status('已複製'); };
 ['f_official', 'f_short', 'f_handoff'].forEach(id => $(id).onchange = renderSegments);
+
+let PC_MAT = null, PC_SEGS = [], PC_SEL = -1, pcSeek = null, pcTimer = null, pcExTimer = null;
+const KIND_ZH = {ad:'廣告', anchor:'主播', reporter:'記者', interview:'訪問', other:'其他'};
+const KIND_COLOR = {ad:'#f2555a', anchor:'#4da3ff', reporter:'#f0b429', interview:'#4cc38a', other:'#9aa2b1'};
+
+function showTab(which) {
+  const bite = which === 'bite';
+  $('viewBite').hidden = !bite;
+  $('viewPrecut').hidden = bite;
+  $('tabBtnBite').classList.toggle('on', bite);
+  $('tabBtnPrecut').classList.toggle('on', !bite);
+  if (!bite) drawWave();
+}
+$('tabBtnBite').onclick = () => showTab('bite');
+$('tabBtnPrecut').onclick = () => showTab('precut');
+
+function pcFmt(tc) { return tc ? tc.slice(0,2)+':'+tc.slice(2,4)+':'+tc.slice(4,6) : ''; }
+
+function renderPcMats(list) {
+  $('pcMats').innerHTML = list.map((m,i) =>
+    `<div class="mat" data-i="${i}"><div class="n">${m.name}</div>
+     <span class="tag">${m.kind}</span>
+     ${m.offset ? `<span class="tag has">offset ${m.offset}</span>` : `<span class="tag warn">無 6 碼 TC</span>`}
+    </div>`).join('');
+  $('pcMats').querySelectorAll('.mat').forEach(el => el.onclick = () => pcPick(list[+el.dataset.i]));
+}
+
+const _renderMaterials = renderMaterials;
+renderMaterials = function(list) {
+  _renderMaterials(list);
+  renderPcMats(list);
+};
+
+function pcPick(m) {
+  PC_MAT = m; PC_SEGS = []; PC_SEL = -1;
+  $('pcPlayer').src = '/media?name=' + encodeURIComponent(m.name);
+  $('pcNote').textContent = m.offset ? ('母帶 offset +' + m.offset + ' 秒') : '檔名沒 6 碼 TC，offset＝0';
+  pcLoadStatus(false);
+}
+
+async function pcLoadStatus(startIfNone) {
+  if (!PC_MAT) return;
+  const j = await api('/api/precut/status?name=' + encodeURIComponent(PC_MAT.name));
+  if (j.state === 'done' && j.segments) {
+    PC_SEGS = j.segments;
+    if (j.stale) status('原片比快取新，建議重跑分析', false);
+    renderPcSegs(); drawWave();
+    return;
+  }
+  if (startIfNone && j.state === 'none') pcAnalyze();
+}
+
+async function pcAnalyze() {
+  if (!PC_MAT) return;
+  status('分析中…');
+  try {
+    await api('/api/precut', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name: PC_MAT.name, force: true})});
+  } catch (e) { status(e.message, true); return; }
+  clearInterval(pcTimer);
+  pcTimer = setInterval(async () => {
+    const j = await api('/api/precut/status?name=' + encodeURIComponent(PC_MAT.name));
+    status((j.phase || j.state) + (j.elapsed ? ' ' + j.elapsed + 's' : ''));
+    if (j.state === 'done') {
+      clearInterval(pcTimer); PC_SEGS = j.segments || []; renderPcSegs(); drawWave();
+      status('分析完成 ' + PC_SEGS.length + ' 段');
+    }
+    if (j.state === 'error') { clearInterval(pcTimer); status(j.error, true); }
+  }, 800);
+}
+$('pcAnalyze').onclick = pcAnalyze;
+
+function renderPcSegs() {
+  $('pcSegs').innerHTML = PC_SEGS.map((s,i) =>
+    `<div class="pcseg ${s.kind}${i===PC_SEL?' on':''}" data-i="${i}">
+      <input type="checkbox" ${s.selected!==false?'checked':''} data-chk="${i}">
+      <div>
+        <div class="meta">${KIND_ZH[s.kind]||s.kind} · ${pcFmt(s.tc0)}–${pcFmt(s.tc1)} · ${s.duration}s</div>
+        <div>${s.topic || '（無字卡）'}</div>
+      </div>
+    </div>`).join('');
+  $('pcSegs').querySelectorAll('.pcseg').forEach(el => el.onclick = ev => {
+    if (ev.target.dataset.chk != null) return;
+    pcSelect(+el.dataset.i);
+  });
+  $('pcSegs').querySelectorAll('[data-chk]').forEach(el => el.onchange = ev => {
+    PC_SEGS[+el.dataset.chk].selected = el.checked;
+    ev.stopPropagation();
+  });
+}
+
+function pcSelect(i) {
+  PC_SEL = i;
+  const s = PC_SEGS[i]; if (!s) return;
+  renderPcSegs();
+  $('pcKind').value = s.kind;
+  $('pcTopic').value = s.topic || '';
+  $('pcT0').value = s.t0;
+  $('pcT1').value = s.t1;
+  $('pcTc').textContent = '母帶 ' + pcFmt(s.tc0) + '–' + pcFmt(s.tc1);
+  const v = $('pcPlayer');
+  const go = () => { v.currentTime = s.t0; };
+  if (v.readyState >= 1) go(); else { pcSeek = s.t0; v.onloadedmetadata = () => { if (pcSeek!=null) v.currentTime = pcSeek; }; }
+}
+$('pcKind').onchange = () => { if (PC_SEL>=0) { PC_SEGS[PC_SEL].kind = $('pcKind').value; renderPcSegs(); drawWave(); } };
+$('pcTopic').oninput = () => { if (PC_SEL>=0) PC_SEGS[PC_SEL].topic = $('pcTopic').value; };
+function pcRetime() {
+  if (PC_SEL<0) return;
+  PC_SEGS[PC_SEL].t0 = parseFloat($('pcT0').value);
+  PC_SEGS[PC_SEL].t1 = parseFloat($('pcT1').value);
+}
+$('pcT0').onchange = pcRetime; $('pcT1').onchange = pcRetime;
+
+function drawWave() {
+  const c = $('pcWave'); const w = c.parentElement.clientWidth || 800;
+  c.width = w; const h = c.height; const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0e1013'; ctx.fillRect(0,0,w,h);
+  if (!PC_SEGS.length) return;
+  const T = Math.max(...PC_SEGS.map(s => s.t1), 1);
+  PC_SEGS.forEach(s => {
+    const x = s.t0 / T * w, ww = Math.max(2, (s.t1-s.t0)/T*w);
+    ctx.fillStyle = KIND_COLOR[s.kind] || '#9aa2b1';
+    ctx.globalAlpha = 0.45; ctx.fillRect(x, 8, ww, h-16); ctx.globalAlpha = 1;
+  });
+}
+$('pcWave').onclick = ev => {
+  if (!PC_SEGS.length) return;
+  const T = Math.max(...PC_SEGS.map(s => s.t1), 1);
+  const t = ev.offsetX / $('pcWave').width * T;
+  const i = PC_SEGS.findIndex(s => t >= s.t0 && t < s.t1);
+  if (i>=0) pcSelect(i);
+};
+
+async function pcSave() {
+  if (!PC_MAT) return;
+  const j = await api('/api/precut/save', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: PC_MAT.name, segments: PC_SEGS})});
+  PC_SEGS = j.segments; renderPcSegs();
+  status(j.overlap ? '已存（警告：段落邊界重疊）' : '已存 PRECUT.json', j.overlap);
+}
+$('pcSave').onclick = () => pcSave().catch(e => status(e.message, true));
+
+async function pcExport(mode) {
+  if (!PC_MAT) return;
+  status('剪檔中…');
+  const j = await api('/api/precut/export', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name: PC_MAT.name, mode, accurate: $('pcAccurate').checked, segments: PC_SEGS})});
+  if (j.overlap) status('邊界重疊，仍繼續剪…');
+  clearInterval(pcExTimer);
+  pcExTimer = setInterval(async () => {
+    const s = await api('/api/precut/export/status?name=' + encodeURIComponent(PC_MAT.name));
+    if (s.state === 'done') {
+      clearInterval(pcExTimer);
+      status('剪完 ' + (s.files||[]).length + ' 檔 → ' + (s.dir||''));
+    }
+    if (s.state === 'error') { clearInterval(pcExTimer); status(s.error, true); }
+  }, 800);
+}
+$('pcExportAll').onclick = () => pcExport('non_ad').catch(e => status(e.message, true));
+$('pcExportSel').onclick = () => pcExport('selected').catch(e => status(e.message, true));
+
+showTab('bite');
 
 (async () => {
   const j = await api('/api/materials').catch(() => null);
