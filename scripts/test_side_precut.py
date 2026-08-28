@@ -143,5 +143,66 @@ class TestMergeTopics(unittest.TestCase):
         self.assertEqual(len(P.merge_topic_runs(segs)), 3)
 
 
+class TestCacheAndAnalyze(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.d, ignore_errors=True))
+        self.vid = os.path.join(self.d, "CNN 075658 0817 增強藥專題.mp4")
+        open(self.vid, "wb").close()
+
+    def test_旁路檔名(self):
+        self.assertTrue(P.cache_path(self.vid).endswith("CNN 075658 0817 增強藥專題 PRECUT.json"))
+
+    def test_存讀往返(self):
+        segs = [P.PrecutSeg("s1", 0, 10, "anchor", topic="X")]
+        P.save_cache(self.vid, 28618, segs, mtime=1)
+        data = P.load_cache(self.vid)
+        self.assertEqual(data["offset_sec"], 28618)
+        self.assertEqual(data["segments"][0]["topic"], "X")
+        self.assertEqual(data["segments"][0]["tc0"], "075658")
+
+    def test_mtime更新算stale(self):
+        P.save_cache(self.vid, 0, [], mtime=1)
+        self.assertTrue(P.cache_stale(self.vid, {"mtime": 1, "segments": []}))
+        # 檔案 mtime 一定 ≥1；明確用比較：cache mtime 小於真實 mtime → stale
+        cache = P.load_cache(self.vid)
+        cache["mtime"] = 0
+        self.assertTrue(P.cache_stale(self.vid, cache))
+
+    def test_分析用注入假靜音與OCR(self):
+        stderr = (
+            "[silencedetect] silence_start: 20.0\n"
+            "[silencedetect] silence_end: 28.0 | silence_duration: 8.0\n"
+        )
+        def ocr_of(t):
+            return "" if t >= 24 else "BREAKING"
+        out = P.analyze(
+            self.vid, offset_sec=28618, duration=60.0,
+            run_silence=lambda p: stderr,
+            rms_of=lambda a, b: 0.4 if a >= 20 else 0.05,
+            ocr_of=ocr_of,
+            black_of=lambda a, b: False,
+        )
+        kinds = [s["kind"] for s in out["segments"]]
+        self.assertIn("anchor", kinds)
+        self.assertIn("ad", kinds)
+        self.assertEqual(out["offset_sec"], 28618)
+
+    def test_copy與精準命令(self):
+        seg = P.PrecutSeg("s1", 10.0, 20.0, "anchor")
+        copy = P.cut_cmd("in.mp4", seg, "out.mp4", accurate=False)
+        self.assertIn("-c", copy)
+        self.assertIn("copy", copy)
+        acc = P.cut_cmd("in.mp4", seg, "out.mp4", accurate=True)
+        self.assertTrue(any(x in acc for x in ("libx264", "crf")))
+        self.assertNotIn("copy", acc)
+
+    def test_waveform分桶取max(self):
+        pts = P.waveform_points([0.1, 0.9, 0.2, 0.3], buckets=2)
+        self.assertEqual(len(pts), 2)
+        self.assertAlmostEqual(pts[0], 0.9)
+        self.assertAlmostEqual(pts[1], 0.3)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

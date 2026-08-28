@@ -3,6 +3,7 @@
 `common/plans/2026-08-28-側錄初處理工作台-design.md`。"""
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import asdict, dataclass
@@ -151,3 +152,112 @@ def merge_topic_runs(segs: list[PrecutSeg]) -> list[PrecutSeg]:
         s.id = f"s{i}"
         s.selected = s.kind != "ad"
     return out
+
+
+def cache_path(video_path: str) -> str:
+    stem, _ = os.path.splitext(video_path)
+    return stem + " PRECUT.json"
+
+
+def save_cache(video_path: str, offset_sec: int, segs: list[PrecutSeg], mtime: float | None = None) -> str:
+    path = cache_path(video_path)
+    if mtime is None:
+        mtime = os.path.getmtime(video_path)
+    payload = {
+        "source": os.path.basename(video_path),
+        "offset_sec": offset_sec,
+        "mtime": mtime,
+        "segments": [seg_to_dict(s, offset_sec) for s in segs],
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    return path
+
+
+def load_cache(video_path: str) -> dict | None:
+    path = cache_path(video_path)
+    if not os.path.isfile(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def cache_stale(video_path: str, cache: dict) -> bool:
+    try:
+        return float(cache.get("mtime") or 0) < os.path.getmtime(video_path) - 0.01
+    except OSError:
+        return True
+
+
+def dicts_to_segs(rows: list[dict]) -> list[PrecutSeg]:
+    out = []
+    for i, r in enumerate(rows, 1):
+        out.append(PrecutSeg(
+            id=r.get("id") or f"s{i}",
+            t0=float(r["t0"]), t1=float(r["t1"]),
+            kind=r.get("kind") or "other",
+            topic=r.get("topic") or "",
+            ocr=r.get("ocr") or "",
+            selected=bool(r["selected"]) if "selected" in r else (r.get("kind") != "ad"),
+        ))
+    return out
+
+
+def waveform_points(rms_series: list[float], buckets: int = 800) -> list[float]:
+    if not rms_series:
+        return [0.0] * buckets
+    n = len(rms_series)
+    out = []
+    for i in range(buckets):
+        a = int(i * n / buckets)
+        b = max(a + 1, int((i + 1) * n / buckets))
+        out.append(max(rms_series[a:b]))
+    return out
+
+
+def analyze(video_path: str, *, offset_sec: int, duration: float,
+            run_silence, rms_of, ocr_of, black_of, on_phase=None) -> dict:
+    def phase(msg: str):
+        if on_phase:
+            on_phase(msg)
+    phase("靜音偵測")
+    sil = parse_silencedetect(run_silence(video_path))
+    blocks = speech_blocks(duration, sil)
+    segs: list[PrecutSeg] = []
+    for i, (a, b) in enumerate(blocks, 1):
+        phase(f"標段 {i}/{len(blocks)}")
+        ocr = ocr_of((a + b) / 2) or ""
+        kind = classify_kind(
+            rms=float(rms_of(a, b)), ocr=ocr, duration=b - a,
+            near_black=bool(black_of(a, b)),
+        )
+        segs.append(PrecutSeg(
+            id=f"s{i}", t0=a, t1=b, kind=kind,
+            topic=ocr.replace("\n", " ").strip(), ocr=ocr,
+            selected=kind != "ad",
+        ))
+    segs = merge_topic_runs(segs)
+    mtime = os.path.getmtime(video_path) if os.path.isfile(video_path) else 0
+    save_cache(video_path, offset_sec, segs, mtime=mtime)
+    return {
+        "source": os.path.basename(video_path),
+        "offset_sec": offset_sec,
+        "mtime": mtime,
+        "stale": False,
+        "segments": [seg_to_dict(s, offset_sec) for s in segs],
+    }
+
+
+def cut_cmd(video_path: str, seg: PrecutSeg, dest: str, *, accurate: bool) -> list[str]:
+    ss = f"{seg.t0:.3f}"
+    to = f"{seg.t1:.3f}"
+    if accurate:
+        return [
+            "ffmpeg", "-y", "-ss", ss, "-to", to, "-i", video_path,
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+            "-c:a", "aac", dest,
+        ]
+    return [
+        "ffmpeg", "-y", "-i", video_path, "-ss", ss, "-to", to,
+        "-c", "copy", "-avoid_negative_ts", "make_zero", dest,
+    ]
