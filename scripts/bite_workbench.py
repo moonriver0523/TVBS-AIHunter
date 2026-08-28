@@ -701,6 +701,26 @@ def translate_zh(text: str, speaker: str = "", context: str = "") -> dict:
 
 # ---------------------------------------------------------------- HTTP
 
+def precut_status_payload(job, cached, stale, now=None):
+    """組 /api/precut/status 回傳。running／error 先回 job，其餘才讀快取。"""
+    if now is None:
+        now = time.time()
+    if job and job.get("state") in ("running", "error"):
+        out = dict(job)
+        if "started" in out:
+            out["elapsed"] = round(now - out.pop("started"), 1)
+        return out
+    if cached:
+        phase = (job or {}).get("phase") or "快取"
+        return {"state": "done", "phase": phase, "stale": stale, **cached}
+    if not job:
+        return {"state": "none"}
+    out = dict(job)
+    if "started" in out:
+        out["elapsed"] = round(now - out.pop("started"), 1)
+    return out
+
+
 def build_app(default_dir: str | None):
     """⚠️ FastAPI 的型別註解必須解析得到——本檔用了 `from __future__ import
     annotations`（註解變字串），若把 `Request` 這類型別 import 在函式區域，
@@ -780,23 +800,14 @@ def build_app(default_dir: str | None):
     @app.get("/api/precut/status")
     def api_precut_status(name: str):
         job = jobs.get(f"precut:{name}")
-        if job and job.get("state") == "running":
-            out = dict(job)
-            if "started" in out:
-                out["elapsed"] = round(time.time() - out.pop("started"), 1)
-            return out
-        m = get_material(name)
-        cached = SP.load_cache(m.path)
-        if cached:
-            phase = (job or {}).get("phase") or "快取"
-            return {"state": "done", "phase": phase,
-                    "stale": SP.cache_stale(m.path, cached), **cached}
-        if not job:
-            return {"state": "none"}
-        out = dict(job)
-        if "started" in out:
-            out["elapsed"] = round(time.time() - out.pop("started"), 1)
-        return out
+        if job and job.get("state") in ("running", "error"):
+            cached = None
+            stale = False
+        else:
+            m = get_material(name)
+            cached = SP.load_cache(m.path)
+            stale = SP.cache_stale(m.path, cached) if cached else False
+        return precut_status_payload(job, cached, stale)
 
     @app.post("/api/precut/save")
     def api_precut_save(payload: dict):

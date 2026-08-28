@@ -238,5 +238,51 @@ class TestScanDir(unittest.TestCase):
         self.assertIsNone(m.script_path)
 
 
+class TestPrecutStatusPayload(unittest.TestCase):
+    CACHED = {
+        "source": "SIDE",
+        "offset_sec": 28618,
+        "mtime": 2000.0,
+        "segments": [{"id": "cached", "topic": "存回後"}],
+    }
+
+    def test_error加快取仍回error(self):
+        job = {"state": "error", "error": "ffmpeg failed"}
+        out = W.precut_status_payload(job, self.CACHED, False)
+        self.assertEqual(out["state"], "error")
+        self.assertEqual(out["error"], "ffmpeg failed")
+        self.assertNotEqual(out.get("segments"), self.CACHED["segments"])
+
+    def test_running忽略快取(self):
+        job = {"state": "running", "phase": "OCR", "started": 1000.0}
+        out = W.precut_status_payload(job, self.CACHED, False, now=1005.0)
+        self.assertEqual(out["state"], "running")
+        self.assertEqual(out["phase"], "OCR")
+        self.assertEqual(out["elapsed"], 5.0)
+        self.assertNotIn("started", out)
+        self.assertNotIn("segments", out)
+
+    def test_done記憶體舊段改讀快取(self):
+        job = {
+            "state": "done",
+            "phase": "完成",
+            "segments": [{"id": "stale-mem", "topic": "分析當下"}],
+        }
+        out = W.precut_status_payload(job, self.CACHED, False)
+        self.assertEqual(out["state"], "done")
+        self.assertEqual(out["segments"], self.CACHED["segments"])
+        self.assertEqual(out["stale"], False)
+
+    def test_無job有快取回done(self):
+        out = W.precut_status_payload(None, self.CACHED, True)
+        self.assertEqual(out["state"], "done")
+        self.assertEqual(out["phase"], "快取")
+        self.assertEqual(out["stale"], True)
+        self.assertEqual(out["segments"], self.CACHED["segments"])
+
+    def test_無job無快取回none(self):
+        self.assertEqual(W.precut_status_payload(None, None, False), {"state": "none"})
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
