@@ -780,13 +780,19 @@ def build_app(default_dir: str | None):
     @app.get("/api/precut/status")
     def api_precut_status(name: str):
         job = jobs.get(f"precut:{name}")
-        if not job:
-            m = get_material(name)
-            cached = SP.load_cache(m.path)
-            if not cached:
-                return {"state": "none"}
-            return {"state": "done", "phase": "快取",
+        if job and job.get("state") == "running":
+            out = dict(job)
+            if "started" in out:
+                out["elapsed"] = round(time.time() - out.pop("started"), 1)
+            return out
+        m = get_material(name)
+        cached = SP.load_cache(m.path)
+        if cached:
+            phase = (job or {}).get("phase") or "快取"
+            return {"state": "done", "phase": phase,
                     "stale": SP.cache_stale(m.path, cached), **cached}
+        if not job:
+            return {"state": "none"}
         out = dict(job)
         if "started" in out:
             out["elapsed"] = round(time.time() - out.pop("started"), 1)
@@ -798,8 +804,11 @@ def build_app(default_dir: str | None):
         segs = SP.dicts_to_segs(payload.get("segments") or [])
         SP.save_cache(m.path, m.offset, segs)
         overlap = SP.segs_overlap(segs)
-        return {"ok": True, "overlap": overlap,
-                "segments": [SP.seg_to_dict(s, m.offset) for s in segs]}
+        rows = [SP.seg_to_dict(s, m.offset) for s in segs]
+        key = f"precut:{m.name}"
+        if jobs.get(key, {}).get("state") == "done":
+            jobs[key]["segments"] = rows
+        return {"ok": True, "overlap": overlap, "segments": rows}
 
     def _export_run(m: Material, segs, mode, accurate):
         job = jobs[f"export:{m.name}"]
