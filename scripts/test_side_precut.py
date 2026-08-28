@@ -90,5 +90,58 @@ class TestSilence(unittest.TestCase):
         self.assertEqual(P.speech_blocks(50.0, []), [(0.0, 50.0)])
 
 
+class TestClassify(unittest.TestCase):
+    def test_無字高音量偏廣告(self):
+        self.assertEqual(
+            P.classify_kind(rms=0.4, ocr="", duration=20, near_black=False),
+            "ad",
+        )
+
+    def test_無字但兩頭黑也偏廣告(self):
+        self.assertEqual(
+            P.classify_kind(rms=0.05, ocr="", duration=25, near_black=True),
+            "ad",
+        )
+
+    def test_有字卡預設主播(self):
+        self.assertEqual(
+            P.classify_kind(rms=0.1, ocr="BREAKING NEWS", duration=40, near_black=False),
+            "anchor",
+        )
+
+    def test_記者關鍵字(self):
+        self.assertEqual(
+            P.classify_kind(rms=0.1, ocr="CNN's Jane Doe", duration=30, near_black=False),
+            "reporter",
+        )
+
+    def test_其餘無字是other(self):
+        self.assertEqual(
+            P.classify_kind(rms=0.05, ocr="", duration=8, near_black=False),
+            "other",
+        )
+
+
+class TestMergeTopics(unittest.TestCase):
+    def test_相鄰同主題非廣告合併(self):
+        segs = [
+            P.PrecutSeg("s1", 0, 10, "anchor", topic="增強藥", ocr="增強藥"),
+            P.PrecutSeg("s2", 10, 20, "anchor", topic="增強藥", ocr="增強藥"),
+            P.PrecutSeg("s3", 20, 30, "ad", topic=""),
+        ]
+        out = P.merge_topic_runs(segs)
+        self.assertEqual(len(out), 2)
+        self.assertEqual((out[0].t0, out[0].t1, out[0].kind), (0, 20, "anchor"))
+        self.assertEqual(out[1].kind, "ad")
+
+    def test_廣告不與兩邊合併(self):
+        segs = [
+            P.PrecutSeg("a", 0, 10, "anchor", topic="A"),
+            P.PrecutSeg("b", 10, 20, "ad", topic="A"),
+            P.PrecutSeg("c", 20, 30, "anchor", topic="A"),
+        ]
+        self.assertEqual(len(P.merge_topic_runs(segs)), 3)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

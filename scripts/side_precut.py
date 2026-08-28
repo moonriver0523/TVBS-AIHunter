@@ -106,3 +106,48 @@ def speech_blocks(
     if t < duration:
         blocks.append((t, duration))
     return [(a, b) for a, b in blocks if b - a >= 0.2]
+
+
+RMS_AD = 0.25
+REPORTER_RE = re.compile(r"\bCNN'?s\b|\breport(er|ing)\b|特派|記者", re.I)
+INTERVIEW_RE = re.compile(r"\b(analyst|professor|minister|official)\b|訪問|專家", re.I)
+
+
+def norm_topic(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "")).strip().lower()
+
+
+def classify_kind(*, rms: float, ocr: str, duration: float, near_black: bool) -> str:
+    text = (ocr or "").strip()
+    if not text and duration >= 8 and (rms >= RMS_AD or near_black):
+        return "ad"
+    if INTERVIEW_RE.search(text):
+        return "interview"
+    if REPORTER_RE.search(text):
+        return "reporter"
+    if text:
+        return "anchor"
+    return "other"
+
+
+def merge_topic_runs(segs: list[PrecutSeg]) -> list[PrecutSeg]:
+    if not segs:
+        return []
+    out = [PrecutSeg(**{**asdict(segs[0])})]
+    for s in segs[1:]:
+        prev = out[-1]
+        same = (
+            prev.kind != "ad"
+            and s.kind != "ad"
+            and prev.kind == s.kind
+            and norm_topic(prev.topic) != ""
+            and norm_topic(prev.topic) == norm_topic(s.topic)
+        )
+        if same:
+            prev.t1 = s.t1
+            continue
+        out.append(PrecutSeg(**{**asdict(s)}))
+    for i, s in enumerate(out, 1):
+        s.id = f"s{i}"
+        s.selected = s.kind != "ad"
+    return out
