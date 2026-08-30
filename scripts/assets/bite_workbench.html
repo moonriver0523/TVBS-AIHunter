@@ -31,6 +31,7 @@
   .mat .n { font-size:12px; word-break:break-all; }
   .tag { display:inline-block; font-size:11px; padding:1px 6px; border-radius:10px;
          background:#2a2f38; color:var(--dim); margin-right:4px; }
+  .tc-srcs { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0; }
   .tag.has { background:#1e3a2c; color:var(--ok); }
   .tag.official { background:#173049; color:var(--accent); }
   .tag.warn { background:#3a2f14; color:var(--warn); }
@@ -61,16 +62,28 @@
   #tabs { display:flex; gap:0; }
   .tab { border-radius:6px 6px 0 0; }
   .tab.on { background:var(--accent); color:#08121f; font-weight:600; }
-  #viewPrecut { display:grid; grid-template-columns:260px 1fr; height:calc(100vh - 53px); }
+  #viewPrecut { display:grid; grid-template-columns:260px 1fr 340px; height:calc(100vh - 53px); overflow:hidden; }
   #viewPrecut[hidden] { display:none !important; }
   #viewBite[hidden] { display:none !important; }
-  #pcTop { display:grid; grid-template-columns:1.2fr 1fr; gap:8px; }
-  #pcPlayer { width:100%; max-height:280px; background:#000; border-radius:8px; }
-  #pcWave { width:100%; display:block; background:#0e1013; border:1px solid var(--line); border-radius:6px; margin:8px 0; cursor:pointer; }
-  .pcseg { display:flex; gap:8px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:8px; margin-bottom:6px; cursor:pointer; }
+  #pcMats { border-right:1px solid var(--line); }
+  #pcMain { display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+  #pcForm { border-left:1px solid var(--line); overflow:auto; }
+  #pcPlayer { width:100%; max-height:220px; background:#000; border-radius:8px; flex-shrink:0; }
+  #pcWave { width:100%; display:block; background:#0e1013; border:1px solid var(--line); border-radius:6px; margin:8px 0; cursor:pointer; flex-shrink:0; }
+  #pcSegs { flex:1; overflow:auto; min-height:0; }
+  #pcForm select { width:100%; background:#0e1013; color:var(--fg); border:1px solid var(--line);
+                   border-radius:6px; padding:6px 9px; font:inherit; }
+  #pcActions { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+  #pcActions button { width:100%; }
+  .pcseg { display:flex; gap:8px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:7px 10px; margin-bottom:4px; cursor:pointer; }
   .pcseg.on { border-color:var(--accent); background:#182430; }
   .pcseg.ad { border-color:#5a2a2a; }
-</style>
+  .pcseg .meta { font-size:12px; color:var(--dim); display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:3px; }
+  .pcseg .topic { font-size:15px; font-weight:600; line-height:1.35; color:var(--fg); }
+  .pcseg .topic.empty { color:var(--dim); font-weight:400; }
+  .pcgap { height:8px; margin:14px 6px 8px; border-top:1px dashed var(--line); }
+  .pcpack { font-size:13px; font-weight:600; padding:4px 8px 8px; }
+  .pcpack label { display:flex; align-items:center; gap:8px; margin:0; color:var(--fg); cursor:pointer; }</style>
 </head>
 <body>
 <header>
@@ -109,7 +122,7 @@
     <input type="text" id="speaker" style="width:100%">
     <label>第 3 行 中文翻譯（不帶「」；代名詞指涉不明用半形括號補主詞）</label>
     <textarea id="zh" rows="4"></textarea>
-    <button id="translate" style="width:100%">AI 翻譯（Claude）</button>
+    <button id="translate" style="width:100%">翻譯（NLLB 本機優先）</button>
     <label>第 5 行 原文逐字</label>
     <textarea id="original" rows="4"></textarea>
     <div class="row">
@@ -130,42 +143,41 @@
 <main id="viewPrecut" hidden>
   <section id="pcMats"></section>
   <section id="pcMain">
-    <div id="pcTop">
-      <video id="pcPlayer" controls preload="metadata"></video>
-      <div id="pcForm">
-        <div class="note" id="pcNote">不跑 ASR。分析用靜音＋下標 OCR，類型請人改。</div>
-        <label>類型</label>
-        <select id="pcKind">
-          <option value="ad">廣告</option>
-          <option value="anchor">主播</option>
-          <option value="reporter">記者</option>
-          <option value="interview">訪問</option>
-          <option value="other">其他</option>
-        </select>
-        <label>主題（字卡，可改）</label>
-        <input type="text" id="pcTopic" style="width:100%">
-        <div class="row">
-          <div><label>檔內起（秒）</label><input type="text" id="pcT0"></div>
-          <div><label>檔內訖（秒）</label><input type="text" id="pcT1"></div>
-        </div>
-        <div id="pcTc" class="note"></div>
-        <label><input type="checkbox" id="pcAccurate">精準重編（慢，切點對齊秒）</label>
-        <div class="row" style="margin-top:8px">
-          <button id="pcAnalyze">分析</button>
-          <button class="primary" id="pcExportAll">一鍵出全部非廣告</button>
-          <button id="pcExportSel">只出勾選</button>
-          <button id="pcSave">存回 PRECUT.json</button>
-        </div>
-      </div>
-    </div>
+    <video id="pcPlayer" controls preload="metadata"></video>
     <canvas id="pcWave" height="72"></canvas>
     <div id="pcSegs"></div>
+  </section>
+  <section id="pcForm">
+    <div class="note" id="pcNote">不跑 ASR。分析用靜音＋下標 OCR，類型請人改。</div>
+    <label>類型</label>
+    <select id="pcKind">
+      <option value="ad">廣告</option>
+      <option value="anchor">主播</option>
+      <option value="reporter">記者</option>
+      <option value="interview">訪問</option>
+      <option value="other">其他</option>
+    </select>
+    <label>主題（字卡，可改）</label>
+    <input type="text" id="pcTopic" style="width:100%">
+    <div class="row">
+      <div><label>檔內起（秒）</label><input type="text" id="pcT0"></div>
+      <div><label>檔內訖（秒）</label><input type="text" id="pcT1"></div>
+    </div>
+    <div id="pcTc" class="note"></div>
+    <label style="display:flex;align-items:center;gap:6px;color:var(--fg)"><input type="checkbox" id="pcAccurate">精準重編（慢，切點對齊秒）</label>
+    <div id="pcActions">
+      <button id="pcAnalyze">分析</button>
+      <button class="primary" id="pcExportAll">一鍵出全部非廣告</button>
+      <button id="pcExportSel">只出勾選</button>
+      <button id="pcInvert">全部反選</button>
+      <button id="pcSave">存回 PRECUT.json</button>
+    </div>
   </section>
 </main>
 
 <script>
 const $ = id => document.getElementById(id);
-let MAT = null, SEGS = [], SEL = -1, stopAt = null, pendingSeek = null, pollTimer = null, zhTimer = null, TR_WARN = '';
+let MAT = null, SEGS = [], SEL = -1, stopAt = null, pendingSeek = null, pollTimer = null, zhTimer = null, TR_WARN = '', LOADED_DIR = '';
 const NLLB_HINT = '[WARN] NLLB 草稿：已知會掉句尾（殘譯）且用詞生硬——請逐句對照第 5 行原文核對，缺的自己補';
 
 const status = (t, err) => { $('status').textContent = t; $('status').style.color = err ? 'var(--fail)' : 'var(--dim)'; };
@@ -177,12 +189,48 @@ async function api(url, opts) {
   return j;
 }
 
+function resetBiteForm() {
+  ['speaker', 'zh', 'original', 'start', 'end'].forEach(id => $(id).value = '');
+  $('out').textContent = '';
+  $('lint').innerHTML = '';
+  TR_WARN = '';
+}
+
+function resetBiteFilters() {
+  ['f_official', 'f_short', 'f_handoff'].forEach(id => $(id).checked = false);
+}
+
+function clearBiteSelection() {
+  MAT = null; SEL = -1; SEGS = []; stopAt = null; pendingSeek = null;
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (zhTimer) { clearInterval(zhTimer); zhTimer = null; }
+  const p = $('player');
+  p.pause(); p.removeAttribute('src'); p.src = ''; p.load();
+  $('segs').innerHTML = ''; $('note').textContent = ''; $('filters').style.display = 'none';
+  $('siderow').style.display = 'none';
+  $('source').value = ''; $('md').value = '';
+  $('transcribe').disabled = false;
+  resetBiteForm();
+  resetBiteFilters();
+}
+
 async function loadDir() {
   const dir = $('dir').value.trim();
   status('讀取中…');
   try {
     const j = await api('/api/materials?dir=' + encodeURIComponent(dir));
+    const sameDir = LOADED_DIR === dir;
+    LOADED_DIR = dir;
+    const keepName = sameDir && MAT && j.materials.some(m => m.name === MAT.name) ? MAT.name : null;
     renderMaterials(j.materials);
+    if (keepName) {
+      const m = j.materials.find(x => x.name === keepName);
+      const el = [...$('materials').querySelectorAll('.mat')]
+        .find(e => e.querySelector('.n').textContent === keepName);
+      if (m && el) { MAT = m; el.classList.add('on'); }
+    } else {
+      clearBiteSelection();
+    }
     status(j.materials.length + ' 個素材');
   } catch (e) { status(e.message, true); }
 }
@@ -207,13 +255,16 @@ function pickMaterial(m, el) {
   MAT = m; SEL = -1; SEGS = []; stopAt = null; pendingSeek = null;
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   if (zhTimer) { clearInterval(zhTimer); zhTimer = null; }
+  $('transcribe').disabled = false;
   $('materials').querySelectorAll('.mat').forEach(e => e.classList.remove('on'));
   el.classList.add('on');
   $('player').src = '/media?name=' + encodeURIComponent(m.name);
   $('siderow').style.display = m.kind === 'side' ? 'flex' : 'none';
-  if (m.source) $('source').value = m.source;
-  if (m.md) $('md').value = m.md;
+  $('source').value = m.source || '';
+  $('md').value = m.md || '';
   $('segs').innerHTML = ''; $('note').textContent = ''; $('filters').style.display = 'none';
+  resetBiteForm();
+  resetBiteFilters();
   if (m.has_asr || m.has_subtitle) loadSegments();
   else $('note').textContent = '這支還沒有時間軸來源（無字幕、無 ASR）——按「跑轉錄」。';
 }
@@ -260,9 +311,10 @@ async function loadSegments() {
     const j = await api('/api/segments?name=' + encodeURIComponent(MAT.name));
     SEGS = j.segments;
     const srcs = (j.tc_sources || []).map(s =>
-      `<span class="tag${s.available ? ' has' : ''}">${s.rank}. ${esc(s.label)}${s.available ? ' ✓' : ''}</span>`).join('');
+      `<span class="tag${s.available ? ' has' : ''}">${s.rank}. ${esc(s.label)}${s.available ? ' ✓' : ''}</span>`
+    ).join('<span class="tc-sep"> · </span>');
     $('note').innerHTML = `<div>時間軸來源：${esc(j.timeline_note || '')}</div>
-      <div style="margin:4px 0">${srcs}</div><div>${esc(j.note)}</div>`;
+      <div class="tc-srcs">${srcs}</div><div>${esc(j.note)}</div>`;
     $('filters').style.display = 'flex';
     renderSegments();
     ensureBatchZh();
@@ -369,12 +421,12 @@ $('player').addEventListener('timeupdate', () => {
   if (stopAt !== null && $('player').currentTime >= stopAt) { $('player').pause(); stopAt = null; }
 });
 
-// ---- 中文翻譯（後端呼叫 Claude；Key 不進 HTML）----
+// ---- 中文翻譯（NLLB 本機優先，失敗才 Claude；Key 不進 HTML）----
 async function translateZh() {
   const text = $('original').value.trim();
   if (!text) { status('第 5 行原文是空的，沒東西可翻', true); return false; }
   $('translate').disabled = true;
-  status('AI 翻譯中…');
+  status('翻譯中…');
   try {
     const ctx = SEL >= 0 ? [SEGS[SEL - 1], SEGS[SEL + 1]]
       .filter(Boolean).map(s => s.asr_text || s.text).join(' … ') : '';
@@ -445,9 +497,9 @@ function pcFmt(tc) { return tc ? tc.slice(0,2)+':'+tc.slice(2,4)+':'+tc.slice(4,
 
 function renderPcMats(list) {
   $('pcMats').innerHTML = list.map((m,i) =>
-    `<div class="mat" data-i="${i}"><div class="n">${m.name}</div>
-     <span class="tag">${m.kind}</span>
-     ${m.offset ? `<span class="tag has">offset ${m.offset}</span>` : `<span class="tag warn">無 6 碼 TC</span>`}
+    `<div class="mat" data-i="${i}"><div class="n">${esc(m.name)}</div>
+     <span class="tag">${m.kind === 'numbered' ? '#' + m.material_no : m.kind === 'side' ? '側錄' : '無編號'}</span>
+     ${m.offset ? `<span class="tag has">offset ${hhmmss(m.offset)}</span>` : `<span class="tag warn">無 6 碼 TC</span>`}
     </div>`).join('');
   $('pcMats').querySelectorAll('.mat').forEach(el => el.onclick = () => pcPick(list[+el.dataset.i]));
 }
@@ -509,12 +561,16 @@ async function pcLoadStatus(startIfNone) {
     if (j.stale) status('原片比快取新，建議重跑分析', false);
     renderPcSegs(); drawWave();
   } else if (j.state === 'running') {
+    PC_SEGS = []; renderPcSegs();
     status((j.phase || j.state) + (j.elapsed ? ' ' + j.elapsed + 's' : ''));
     pcWatchAnalyze(name);
   } else if (j.state === 'error') {
+    PC_SEGS = []; renderPcSegs();
     status(j.error, true);
-  } else if (startIfNone && j.state === 'none') {
-    pcAnalyze();
+  } else {
+    PC_SEGS = []; renderPcSegs(); drawWave();
+    if (startIfNone && j.state === 'none') pcAnalyze();
+    else if (j.state === 'none') status('這支還沒分析——按「分析」（整點片約 1 小時，0 token）');
   }
   const ex = await api('/api/precut/export/status?name=' + encodeURIComponent(name));
   if (!PC_MAT || PC_MAT.name !== name) return;
@@ -538,15 +594,67 @@ async function pcAnalyze() {
 }
 $('pcAnalyze').onclick = pcAnalyze;
 
+function pcDur(sec) {
+  const n = Math.max(0, Math.round(Number(sec) || 0));
+  if (n < 60) return n + '秒';
+  const m = Math.floor(n / 60), r = n % 60;
+  return r ? m + '分' + r + '秒' : m + '分';
+}
+function pcTopicKey(s) {
+  const t = (s.topic || '').trim();
+  return t || '（無字卡）';
+}
+function pcTopicIdxs(key) {
+  return PC_SEGS.map((s, i) => pcTopicKey(s) === key ? i : -1).filter(i => i >= 0);
+}
+function pcTopicRuns() {
+  const g = [];
+  PC_SEGS.forEach((s, i) => {
+    const key = pcTopicKey(s);
+    if (!g.length || g[g.length - 1].key !== key) g.push({ key, idxs: [i] });
+    else g[g.length - 1].idxs.push(i);
+  });
+  return g;
+}
 function renderPcSegs() {
-  $('pcSegs').innerHTML = PC_SEGS.map((s,i) =>
-    `<div class="pcseg ${s.kind}${i===PC_SEL?' on':''}" data-i="${i}">
-      <input type="checkbox" ${s.selected!==false?'checked':''} data-chk="${i}">
-      <div>
-        <div class="meta">${KIND_ZH[s.kind]||s.kind} · ${pcFmt(s.tc0)}–${pcFmt(s.tc1)} · ${s.duration}s</div>
-        <div>${s.topic || '（無字卡）'}</div>
-      </div>
-    </div>`).join('');
+  const runs = pcTopicRuns();
+  const seen = new Set();
+  let html = '';
+  runs.forEach((g, gi) => {
+    if (gi) html += '<div class="pcgap"></div>';
+    const allIdx = pcTopicIdxs(g.key);
+    if (!seen.has(g.key) && allIdx.length > 1) {
+      seen.add(g.key);
+      const allOn = allIdx.every(i => PC_SEGS[i].selected !== false);
+      html += `<div class="pcpack"><label><input type="checkbox" data-pack="${esc(g.key)}" ${allOn ? 'checked' : ''}> ${esc(g.key)} · ${allIdx.length} 段（整組勾選）</label></div>`;
+    } else {
+      seen.add(g.key);
+    }
+    g.idxs.forEach(i => {
+      const s = PC_SEGS[i];
+      const zh = KIND_ZH[s.kind] || s.kind;
+      const topic = (s.topic || '').trim();
+      html += `<div class="pcseg ${s.kind}${i === PC_SEL ? ' on' : ''}" data-i="${i}">
+        <input type="checkbox" ${s.selected !== false ? 'checked' : ''} data-chk="${i}">
+        <div>
+          <div class="topic${topic ? '' : ' empty'}">${esc(topic || '（無字卡）')}</div>
+          <div class="meta"><span class="tag has">${esc(zh)}</span>${pcFmt(s.tc0)}–${pcFmt(s.tc1)} · ${pcDur(s.duration)}</div>
+        </div>
+      </div>`;
+    });
+  });
+  $('pcSegs').innerHTML = html;
+  $('pcSegs').querySelectorAll('[data-pack]').forEach(el => {
+    const idxs = pcTopicIdxs(el.dataset.pack);
+    const allOn = idxs.every(i => PC_SEGS[i].selected !== false);
+    const someOn = idxs.some(i => PC_SEGS[i].selected !== false);
+    el.indeterminate = someOn && !allOn;
+    el.onchange = ev => {
+      idxs.forEach(i => { PC_SEGS[i].selected = el.checked; });
+      ev.stopPropagation();
+      renderPcSegs();
+    };
+  });
   $('pcSegs').querySelectorAll('.pcseg').forEach(el => el.onclick = ev => {
     if (ev.target.dataset.chk != null) return;
     pcSelect(+el.dataset.i);
@@ -554,6 +662,7 @@ function renderPcSegs() {
   $('pcSegs').querySelectorAll('[data-chk]').forEach(el => el.onchange = ev => {
     PC_SEGS[+el.dataset.chk].selected = el.checked;
     ev.stopPropagation();
+    renderPcSegs();
   });
 }
 
@@ -576,8 +685,24 @@ function pcSeekTo(t) {
 $('pcPlayer').addEventListener('loadedmetadata', () => {
   if (pcSeek != null) { const t = pcSeek; pcSeek = null; pcSeekTo(t); }
 });
-$('pcKind').onchange = () => { if (PC_SEL>=0) { PC_SEGS[PC_SEL].kind = $('pcKind').value; renderPcSegs(); drawWave(); } };
-$('pcTopic').oninput = () => { if (PC_SEL>=0) PC_SEGS[PC_SEL].topic = $('pcTopic').value; };
+$('pcKind').onchange = () => {
+  if (PC_SEL<0) return;
+  PC_SEGS[PC_SEL].kind = $('pcKind').value;
+  const el = $('pcSegs').querySelector(`.pcseg[data-i="${PC_SEL}"]`);
+  if (el) {
+    el.className = `pcseg ${PC_SEGS[PC_SEL].kind}${PC_SEL === PC_SEL ? ' on' : ''}`;
+    const tag = el.querySelector('.tag');
+    if (tag) tag.textContent = KIND_ZH[PC_SEGS[PC_SEL].kind] || PC_SEGS[PC_SEL].kind;
+  }
+  drawWave();
+};
+$('pcTopic').oninput = () => {
+  if (PC_SEL<0) return;
+  PC_SEGS[PC_SEL].topic = $('pcTopic').value;
+  const el = $('pcSegs').querySelector(`.pcseg[data-i="${PC_SEL}"] .topic`);
+  if (el) el.textContent = $('pcTopic').value || '（無字卡）';
+};
+$('pcTopic').onchange = () => { if (PC_SEL>=0) renderPcSegs(); };
 function pcRetime() {
   if (PC_SEL<0) return;
   PC_SEGS[PC_SEL].t0 = parseFloat($('pcT0').value);
@@ -632,6 +757,10 @@ async function pcExport(mode) {
 }
 $('pcExportAll').onclick = () => pcExport('non_ad').catch(e => status(e.message, true));
 $('pcExportSel').onclick = () => pcExport('selected').catch(e => status(e.message, true));
+$('pcInvert').onclick = () => {
+  PC_SEGS.forEach(s => { s.selected = s.selected === false; });
+  renderPcSegs();
+};
 
 showTab('bite');
 

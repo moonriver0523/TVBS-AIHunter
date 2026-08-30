@@ -17,6 +17,66 @@ class TestKinds(unittest.TestCase):
         })
 
 
+class TestTopicZh(unittest.TestCase):
+    def test_短代碼與中文不送翻(self):
+        self.assertFalse(P.looks_english("MD"))
+        self.assertFalse(P.looks_english("CNN"))
+        self.assertFalse(P.looks_english("驗收仍在-重選"))
+        self.assertFalse(P.looks_english(""))
+        self.assertTrue(P.looks_english("HIGHLIGHT CNN"))
+        self.assertTrue(P.looks_english("THE CNN- WHOLE STORY"))
+
+    def test_套用對照表只改英文主題(self):
+        segs = [
+            P.PrecutSeg("s1", 0, 1, "anchor", topic="HIGHLIGHT CNN"),
+            P.PrecutSeg("s2", 1, 2, "anchor", topic="MD"),
+        ]
+        P.apply_topic_zh(segs, {"HIGHLIGHT CNN": "CNN精華"})
+        self.assertEqual(segs[0].topic, "CNN精華")
+        self.assertEqual(segs[1].topic, "MD")
+
+    def test_字卡對照成繁中(self):
+        self.assertIn("全記錄", P.topic_from_ocr("THE CNN- WHOLE STORY"))
+        self.assertEqual(P.topic_from_ocr("HIGHLIGHT CNN"), "精華")
+        self.assertEqual(P.topic_from_ocr("HIGHLIGHT 30 CNN SECONDS OF CALM"), "精華")
+        zh = P.topic_from_ocr("ISOBELYEUNG MD CNNINTERNATIONALCORRESPONDENT")
+        self.assertIn("伊莎貝·楊", zh)
+        self.assertIn("國際特派", zh)
+        blob = P.topic_from_ocr(
+            'THEWHOLESTORY LIVE "STACKED:INSIDETHEENHANCEMENTCRAZE"'
+            "PREMIERESTONIGHTAT8PM"
+        )
+        self.assertIn("全記錄", blob)
+        self.assertIn("整形熱潮", blob)
+        self.assertIn("今晚首播", blob)
+        news = P.topic_from_ocr(
+            "U.S.-CANADATRADEWAR LIVE CANADA DETAILS RETALIATORY TARIFFS CNNNEWSROOM"
+        )
+        self.assertIn("美加貿易戰", news)
+        self.assertIn("新聞室", news)
+        self.assertIn("現場", news)
+        self.assertNotIn("KOSPI", P.topic_from_ocr("LIVE KOSPI 65.47 CNN NEWSROOM"))
+        self.assertIn("美國大選", P.topic_from_ocr("AMERICA'SCHOICE LIVE DARLINE GRAHAM CNN NEWSROOM"))
+        self.assertEqual(P.topic_from_ocr("Call to Earth NND"), "地球呼叫")
+        news2 = P.topic_from_ocr(
+            "LIVE CN DIRECTOROFCOMMUNICATIONS HAVE BEEN PLACED ON LEAVE CNNNEWSROOM"
+        )
+        self.assertIn("現場", news2)
+        self.assertIn("新聞室", news2)
+        self.assertIn("DIRECTOROFCOMMUNICATIONS", news2)
+        self.assertIn("LEAVE", news2)
+
+    def test_已是中文的主題不覆蓋(self):
+        segs = [P.PrecutSeg("s1", 0, 1, "reporter", topic="驗收仍在-重選", ocr="CNN KOSPIA 164.60")]
+        P.apply_topic_zh(segs)
+        self.assertEqual(segs[0].topic, "驗收仍在-重選")
+
+    def test_NLLB殘譯被字卡對照蓋掉(self):
+        segs = [P.PrecutSeg("s1", 0, 1, "anchor", topic="美國CNN", ocr="HIGHLIGHT CNN")]
+        P.apply_topic_zh(segs)
+        self.assertEqual(segs[0].topic, "精華")
+
+
 class TestMasterTc(unittest.TestCase):
     def test_檔內秒加offset成六碼(self):
         off = 7 * 3600 + 56 * 60 + 58  # 075658

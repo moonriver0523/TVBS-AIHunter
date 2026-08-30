@@ -121,6 +121,252 @@ def norm_topic(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip().lower()
 
 
+_LATIN_RE = re.compile(r"[A-Za-z]")
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+NLLB_PY = os.environ.get(
+    "NLLB_PY",
+    r"C:\Users\User\AppData\Local\Programs\Python\Python310\python.exe",
+)
+NLLB_SCRIPTS = r"C:\Users\User\AppData\Local\nllb200-ct2\scripts"
+
+
+def looks_english(s: str) -> bool:
+    """夠長的拉丁字才送翻譯；MD/CNN/已是中文的字卡略過。"""
+    s = (s or "").strip()
+    if not s:
+        return False
+    latin = len(_LATIN_RE.findall(s))
+    cjk = len(_CJK_RE.findall(s))
+    if cjk >= 2 and latin < 8:
+        return False
+    return latin >= 8
+
+
+def _topic_mixed_fail(s: str) -> bool:
+    """NLLB 殘譯：中英夾雜且英文字還很多。"""
+    s = (s or "").strip()
+    return len(_CJK_RE.findall(s)) >= 1 and len(_LATIN_RE.findall(s)) >= 8
+
+
+_SPLIT_KEYS = sorted([
+    ("INTERNATIONALCORRESPONDENT", "INTERNATIONAL CORRESPONDENT"),
+    ("USCANADATRADEWAR", "US CANADA TRADE WAR"),
+    ("CANADATRADEWAR", "CANADA TRADE WAR"),
+    ("IMMIGRATIONCRACKDOWN", "IMMIGRATION CRACKDOWN"),
+    ("DEVELOPINGSTORY", "DEVELOPING STORY"),
+    ("AMERICASCHOICE", "AMERICA S CHOICE"),
+    ("ENHANCEMENTCRAZE", "ENHANCEMENT CRAZE"),
+    ("THEWHOLESTORY", "THE WHOLE STORY"),
+    ("PREMIERESTONIGHT", "PREMIERES TONIGHT"),
+    ("SECONDSOFCALM", "SECONDS OF CALM"),
+    ("DARLINEGRAHAM", "DARLINE GRAHAM"),
+    ("DOLLYPARTON", "DOLLY PARTON"),
+    ("CALLTOEARTH", "CALL TO EARTH"),
+    ("AFRICANVOICES", "AFRICAN VOICES"),
+    ("WORLDSPORT", "WORLD SPORT"),
+    ("WARWITHIRAN", "WAR WITH IRAN"),
+    ("ISOBELYEUNG", "ISOBEL YEUNG"),
+    ("CORRESPONDENT", "CORRESPONDENT"),
+    ("TRADEWAR", "TRADE WAR"),
+    ("COMINGUP", "COMING UP"),
+    ("HIGHLIGHT", "HIGHLIGHT"),
+    ("NEWSROOM", "NEWSROOM"),
+    ("HEADLINES", "HEADLINES"),
+    ("BREAKING", "BREAKING"),
+    ("STACKED", "STACKED"),
+    ("INSIDE", "INSIDE"),
+    ("PREMIERES", "PREMIERES"),
+    ("TONIGHT", "TONIGHT"),
+    ("WHOLE", "WHOLE"),
+    ("STORY", "STORY"),
+    ("LIVE", "LIVE"),
+    ("CNN", "CNN"),
+], key=lambda x: len(x[0]), reverse=True)
+
+_GLOSSARY = [
+    (re.compile(r"INTERNATIONAL\s*CORRESPONDENT", re.I), "國際特派"),
+    (re.compile(r"(?:U\.?\s*S\.?|US)\s*[-–]?\s*CANADA\s*TRADE\s*WAR|CANADA\s*TRADE\s*WAR", re.I), "美加貿易戰"),
+    (re.compile(r"U\.?S\.?\s*IMMIGRATION\s*CRACKDOWN", re.I), "美國移民掃蕩"),
+    (re.compile(r"(?:THE\s*)?(?:CNN\s*)?WHOLE\s*STORY", re.I), "《全記錄》"),
+    (re.compile(r"PREMIERES?\s*TONIGHT(?:\s*AT\s*\d+\s*P\.?M\.?)?", re.I), "今晚首播"),
+    (re.compile(r"STACKED|INSIDE\s*THE\s*ENHANCEMENT\s*CRAZE|ENHANCEMENT\s*CRAZE", re.I), "整形熱潮"),
+    (re.compile(r"HIGHLIGHT(?:\s*\d+)?(?:\s*CNN)?(?:\s*SECONDS\s*OF\s*CALM)?", re.I), "精華"),
+    (re.compile(r"SECONDS\s*OF\s*CALM", re.I), "片刻平靜"),
+    (re.compile(r"DEVELOPING\s*STORYS?", re.I), "最新消息"),
+    (re.compile(r"AMERICA\s*'?S?\s*CHOICE", re.I), "美國大選"),
+    (re.compile(r"CALL\s*TO\s*EARTH", re.I), "地球呼叫"),
+    (re.compile(r"AFRICAN\s*VOICES", re.I), "非洲之聲"),
+    (re.compile(r"WORLD\s*SPORT", re.I), "全球體育"),
+    (re.compile(r"CNN\s*NEWSROOM|\bNEWSROOM\b", re.I), "新聞室"),
+    (re.compile(r"COMING\s*UP", re.I), "即將播出"),
+    (re.compile(r"DOLLY\s*PARTON", re.I), "多莉·巴頓"),
+    (re.compile(r"DARLINE\s*GRAHAM", re.I), "達琳·葛拉漢"),
+    (re.compile(r"WAR\s*(?:WITH\s*)?IRAN", re.I), "伊朗戰事"),
+    (re.compile(r"ISOBEL\s*YEUNG|ISOBELYEUNG", re.I), "伊莎貝·楊"),
+    (re.compile(r"\bCORRESPONDENT\b", re.I), "特派"),
+    (re.compile(r"\bHEADLINES?\b", re.I), "頭條"),
+    (re.compile(r"\bBREAKING\b", re.I), "突發"),
+    (re.compile(r"\bLIVE\b", re.I), "現場"),
+    (re.compile(r"\bUS\s*OPEN\b", re.I), "美網"),
+]
+
+_JUNK = re.compile(
+    r"Cable\s*News\s*Network|WARNER\s*BROS\.?\s*DISCOVERY|All\s*rights\s*reserved|"
+    r"\b(?:KOSPI|FTSE|DAX|HSI|SMI|NIKKEI|NASDAQ)\s*[▼▼\-–]?\s*[\d.]*|"
+    r"\d{1,2}:\d{2}\s*[AP]M\s*(?:GMT|CET|ET|PT)?|"
+    r"\b(?:GMT|CET)\b|"
+    r"(?:CNN\.)COM(?:/\w+)?|\bCOM\b|"
+    r"\bC[MW]\.com\b|"
+    r"1946\s*-?\s*2026|"
+    r"SINCE\s*I?8T8|"
+    r"B\.?\s*GRIMM|DANGOTE",
+    re.I,
+)
+_DROP_TOK = {
+    "MD", "ND", "CN", "CM", "CW", "CTT", "NND", "NIKKEI", "KOSPI", "FTSE", "DAX",
+    "HSI", "SMI", "COM", "GMT", "CET", "ET", "PT", "AM", "PM", "AT", "THE", "OF",
+    "FOR", "AND", "YET", "ANOTHER", "ROUND", "MARKING", "AS", "STIS", "BRACING",
+    "DRENCHING", "STORMS", "ARI", "ONA", "GPBANGKOK", "WORLD", "SPORT", "WARI",
+    "NE", "A", "AN", "TO", "ON", "IN", "OR", "BY", "WITH",
+}
+
+
+def split_glued_ocr(s: str) -> str:
+    s = (s or "").replace('"', " ").replace("'", " ")
+    s = re.sub(r"\d{1,2}:\d{2}\s*[AP]M\s*(CET|ET|PT)?", " ", s, flags=re.I)
+    s = re.sub(r"[\d:.\-]+", " ", s)
+
+    def split_run(run: str) -> str:
+        u, i, out = run.upper(), 0, []
+        while i < len(u):
+            hit = next((w for w in _SPLIT_KEYS if u.startswith(w[0], i)), None)
+            if hit:
+                out.append(hit[1])
+                i += len(hit[0])
+            else:
+                j = i + 1
+                while j < len(u) and not any(u.startswith(w[0], j) for w in _SPLIT_KEYS):
+                    j += 1
+                out.append(u[i:j])
+                i = j
+        return " ".join(out)
+
+    return re.sub(r"[A-Za-z]+", lambda m: split_run(m.group()), s)
+
+
+def topic_parts(ocr: str) -> tuple[str, str]:
+    """回傳 (繁中主題, 待翻英文字卡)。"""
+    text = split_glued_ocr(ocr)
+    text = _JUNK.sub(" ", text)
+    for pat, zh in _GLOSSARY:
+        text = pat.sub(zh, text)
+    text = re.sub(
+        r"\b(MD|ND|CN|CM|CW|CET|AM|PM|AT|THE|OF|FOR|YET|ANOTHER|ROUND|MARKING|AS|STIS|BRACING|DRENCHING|STORMS)\b",
+        " ", text, flags=re.I,
+    )
+    zh_parts: list[str] = []
+    lat_parts: list[str] = []
+    for p in re.split(r"[\s／/]+", text):
+        p = p.strip(" ·,;:\"'")
+        if not p:
+            continue
+        if p.upper() in _DROP_TOK:
+            continue
+        if len(p) == 1 and p.isascii() and p.isalpha():
+            continue
+        if p.upper() == "CNN" and (zh_parts or lat_parts):
+            continue
+        if _CJK_RE.search(p):
+            if p not in zh_parts:
+                zh_parts.append(p)
+        elif p.isascii() and len(p) >= 3:
+            lat_parts.append(p)
+    return "／".join(zh_parts), " ".join(lat_parts)
+
+
+def topic_from_ocr(ocr: str) -> str:
+    zh, lat = topic_parts(ocr)
+    return "／".join(p for p in (zh, lat) if p)
+
+
+def nllb_map(texts: list[str], run=subprocess.run) -> dict[str, str]:
+    uniq: list[str] = []
+    seen: set[str] = set()
+    for t in texts:
+        t = (t or "").strip()
+        if not looks_english(t) or t in seen:
+            continue
+        seen.add(t)
+        uniq.append(t)
+    if not uniq or not os.path.isfile(NLLB_PY):
+        return {}
+    code = (
+        "import json,sys;"
+        f"sys.path.insert(0,{NLLB_SCRIPTS!r});"
+        "from translate import translate;"
+        "xs=json.loads(sys.stdin.read());"
+        "print(json.dumps([translate(x,'eng_Latn','zho_Hant') for x in xs],"
+        "ensure_ascii=False))"
+    )
+    r = run(
+        [NLLB_PY, "-c", code],
+        input=json.dumps(uniq, ensure_ascii=False),
+        capture_output=True, text=True, encoding="utf-8",
+        timeout=180,
+    )
+    if r.returncode:
+        return {}
+    lines = (r.stdout or "").strip().splitlines()
+    if not lines:
+        return {}
+    out = json.loads(lines[-1])
+    return {u: _maybe_opencc(str(v).strip()) for u, v in zip(uniq, out) if str(v).strip()}
+
+
+_STRONG_ZH = re.compile(
+    r"全記錄|精華|特派|現場|整形|今晚首播|伊莎貝|新聞室|美加|伊朗|美國大選|"
+    r"多莉|地球呼叫|非洲|全球體育|最新消息|即將播出|頭條|美網|達琳|移民"
+)
+
+
+def apply_topic_zh(segs: list[PrecutSeg], mapping: dict[str, str] | None = None, nllb: bool = True) -> list[PrecutSeg]:
+    if mapping is not None:
+        for s in segs:
+            t = (s.topic or "").strip()
+            if t in mapping:
+                s.topic = mapping[t]
+        return segs
+    pending: list[tuple[PrecutSeg, str, str]] = []
+    leftover_txt: list[str] = []
+    for s in segs:
+        cur = (s.topic or "").strip()
+        src = (s.ocr or s.topic or "").strip()
+        zh, lat = topic_parts(src)
+        human = len(_CJK_RE.findall(cur)) >= 2 and not _topic_mixed_fail(cur)
+        if human and not _STRONG_ZH.search(zh or ""):
+            continue
+        if lat and looks_english(lat):
+            pending.append((s, lat, zh))
+            leftover_txt.append(lat)
+            s.topic = "／".join(p for p in (zh, lat) if p)
+        elif zh:
+            s.topic = zh
+        elif looks_english(src) or looks_english(lat):
+            pending.append((s, lat or src, zh))
+            leftover_txt.append(lat or src)
+            s.topic = "／".join(p for p in (zh, lat or src) if p)
+        elif not human:
+            s.topic = zh
+    if leftover_txt and nllb:
+        m = nllb_map(leftover_txt)
+        for s, lat, zh in pending:
+            extra = (m.get(lat) or "").strip()
+            if extra and _topic_mixed_fail(extra):
+                extra = lat
+            s.topic = "／".join(p for p in (zh, extra or lat) if p)
+    return segs
+
+
 def classify_kind(*, rms: float, ocr: str, duration: float, near_black: bool) -> str:
     text = (ocr or "").strip()
     if not text and duration >= 8 and (rms >= RMS_AD or near_black):
@@ -182,7 +428,12 @@ def load_cache(video_path: str) -> dict | None:
     if not os.path.isfile(path):
         return None
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    segs = dicts_to_segs(data.get("segments") or [])
+    apply_topic_zh(segs, nllb=False)
+    off = int(data.get("offset_sec") or 0)
+    data["segments"] = [seg_to_dict(s, off) for s in segs]
+    return data
 
 
 def cache_stale(video_path: str, cache: dict) -> bool:
@@ -219,7 +470,7 @@ def waveform_points(rms_series: list[float], buckets: int = 800) -> list[float]:
 
 
 def analyze(video_path: str, *, offset_sec: int, duration: float,
-            run_silence, rms_of, ocr_of, black_of, on_phase=None) -> dict:
+            run_silence, rms_of, ocr_of, black_of, on_phase=None, zh_of=None) -> dict:
     def phase(msg: str):
         if on_phase:
             on_phase(msg)
@@ -240,6 +491,8 @@ def analyze(video_path: str, *, offset_sec: int, duration: float,
             selected=kind != "ad",
         ))
     segs = merge_topic_runs(segs)
+    if zh_of:
+        zh_of(segs)
     mtime = os.path.getmtime(video_path) if os.path.isfile(video_path) else 0
     save_cache(video_path, offset_sec, segs, mtime=mtime)
     return {
@@ -373,6 +626,10 @@ def ocr_at(path: str, t_mid: float) -> str:
 def analyze_file(path: str, offset_sec: int, on_phase=None) -> dict:
     require_ocr()
     duration = ffprobe_duration(path)
+    def zh_of(segs):
+        if on_phase:
+            on_phase("翻譯主題")
+        apply_topic_zh(segs)
     return analyze(
         path, offset_sec=offset_sec, duration=duration,
         run_silence=run_silence_ffmpeg,
@@ -380,6 +637,7 @@ def analyze_file(path: str, offset_sec: int, on_phase=None) -> dict:
         ocr_of=lambda t: ocr_at(path, t),
         black_of=lambda a, b: black_ffmpeg(path, a, b),
         on_phase=on_phase,
+        zh_of=zh_of,
     )
 
 
