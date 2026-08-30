@@ -515,6 +515,31 @@ o, c = run(bp.cmd_collate_category, Args(batches=[CAT1, CAT2]))
 check('collate-category 可一次收多個 batch.json（三站各一個的場景）',
       c == 0 and 'AP1=政治/選舉' in o and 'RT1=國際/烏俄' in o)
 
+# ── concat（2026-08-31 補：23 個命中／約 9-10 個不同日期反覆出現的
+#    `a=json.load(...); b=json.load(...); json.dump(a+b,...)` 替代品）───
+CC_A = write_json('cc_a.json', [{'id': 'AP1'}, {'id': 'AP2'}])
+CC_B = write_json('cc_b.json', [{'id': 'AP3'}, {'id': 'AP2'}])
+
+o, c = run(bp.cmd_concat, Args(files=[CC_A, CC_B], site=None, out=None))
+check('concat 不給 --site 就純合併、不去重（4 筆全留）',
+      c == 0 and o.count('"id"') == 4)
+
+o, c = run(bp.cmd_concat, Args(files=[CC_A, CC_B], site='ap', out=None))
+check('concat 給 --site 才去重，保留第一次出現的 AP2', c == 0 and '共 3 筆' in o)
+check('concat 去重丟掉的重複 id 有警告，不是靜默', 'AP2' in o and '丟掉' in o)
+
+CC_OUT = os.path.join(TMP, 'cc_out.json')
+o, c = run(bp.cmd_concat, Args(files=[CC_A, CC_B], site=None, out=CC_OUT))
+check('concat --out 落檔且是合法 json 陣列',
+      c == 0 and os.path.exists(CC_OUT)
+      and len(json.load(open(CC_OUT, encoding='utf-8'))) == 4)
+
+CC_RT = write_json('cc_rt.json', [{'code': 'RT1'}, {'code': 'RT2'}])
+CC_RT2 = write_json('cc_rt2.json', [{'code': 'RT2'}, {'code': 'RT3'}])
+o, c = run(bp.cmd_concat, Args(files=[CC_RT, CC_RT2], site='rt', out=None))
+check('concat 對 RT 用 code 當 id 去重（per-site adapter 沒漏接）',
+      c == 0 and '共 3 筆' in o and 'RT2' in o)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)

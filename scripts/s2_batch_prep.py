@@ -990,6 +990,54 @@ def cmd_collate_category(args):
               f'{", ".join(str(s) for s in skipped)}', file=sys.stderr)
 
 
+def cmd_concat(args):
+    """把兩份以上的 json 陣列檔案（分頁清單、多來源分批的 batch 等）合併成一份。
+    取代 0813／0814／0820／0821／0825／0827／0829／0831 反覆出現的
+    `python -c "a=json.load(...); b=json.load(...); json.dump(a+b, ...)"`
+    這批臨時合併腳本——出現頻率比 fill-src-text 還高（23 個命中／約 9-10 個
+    不同日期），形狀卻更單純：純粹合併陣列，頂多再去重，沒有 timeline 那種
+    per-site 時區假設要猜（那次猜錯過一次，這支刻意不猜任何語意）。
+
+    給 `--site` 才會去重（保留第一次出現的 id，其餘丟棄並警告）；不給就是
+    純合併、保留全部（例如合併 batch.json 這種本來就不該去重的用途）。"""
+    all_items = []
+    shells = []
+    for path in args.files:
+        try:
+            items, shell_desc = _load_raw_any(path)
+        except ValueError as e:
+            print(f'✗ 讀取失敗 {path}：{e}', file=sys.stderr)
+            sys.exit(1)
+        shells.append(f'{os.path.basename(path)}（{shell_desc}）')
+        all_items.extend(items)
+
+    dup_ids = []
+    if args.site:
+        seen = {}
+        kept = []
+        for i, it in enumerate(all_items):
+            view = _dedup_view(it) if isinstance(it, dict) else {}
+            rid = _dedup_id(args.site, view, i)
+            if rid in seen:
+                dup_ids.append(rid)
+                continue
+            seen[rid] = True
+            kept.append(it)
+        all_items = kept
+
+    out = args.out
+    if out:
+        with open(out, 'w', encoding='utf-8') as f:
+            json.dump(all_items, f, ensure_ascii=False, indent=2)
+        print(f'已寫入 {out}（{len(all_items)} 筆，來源：{"、".join(shells)}）', file=sys.stderr)
+    else:
+        print(json.dumps(all_items, ensure_ascii=False, indent=2))
+        print(f'共 {len(all_items)} 筆（來源：{"、".join(shells)}）', file=sys.stderr)
+    if dup_ids:
+        print(f'⚠️ 給了 --site，去重時丟掉 {len(dup_ids)} 個重複 id（保留第一次出現的）：'
+              f'{", ".join(dup_ids)}', file=sys.stderr)
+
+
 # batch 每筆該有的欄位。src_text 是 13d §5 的鐵律（事後查證的唯一依據），
 # 漏帶過兩次整批（0812-2200 的 65 則、0813-1200 的 80 則），所以預設就要查。
 DEFAULT_REQUIRED = ('id', 'source', 'checkpoint', 'status', 'entry', 'src_text')
@@ -1298,6 +1346,12 @@ def main():
     p_cat = sub.add_parser('collate-category', help='把 batch.json 裡各則的 category 收成 set-category --pairs 吃得下的字串')
     p_cat.add_argument('batches', nargs='+', help='一或多個 batch.json（例如三站各一個）')
     p_cat.set_defaults(func=cmd_collate_category)
+
+    p_cat_c = sub.add_parser('concat', help='合併兩份以上 json 陣列檔案（分頁清單、多來源分批 batch）')
+    p_cat_c.add_argument('files', nargs='+', help='兩個以上的檔案（裸陣列或已知殼型皆可）')
+    p_cat_c.add_argument('--site', choices=['ns', 'ap', 'rt'], help='給了才去重（保留第一次出現的 id）；不給就純合併')
+    p_cat_c.add_argument('--out', help='輸出路徑；不給就印到 stdout')
+    p_cat_c.set_defaults(func=cmd_concat)
 
     p_cmp = sub.add_parser('compare', help='raw 與 batch 對照，只印缺 id／缺欄位')
     p_cmp.add_argument('--raw', required=True)
