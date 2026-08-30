@@ -46,7 +46,7 @@
 **① 開工第一件事，先跑這一支（唯讀、不到一秒）：**
 
 ```
-python scripts\s2_rules_check.py
+python scripts/s2_rules_check.py
 ```
 
 它會印出六份必讀檔的尺寸、有沒有超出安全預算、以及每份的 `RULES-EOF` 代號。
@@ -123,14 +123,14 @@ python scripts\s2_rules_check.py
 0. **套用分類收斂建議（若有）＋標記已入庫的交件檔**——兩支都在 render **之前**跑：
 
    ```
-   cd E:\GitHub\TVBS-AIHunter
+   cd E:/GitHub/TVBS-AIHunter
    # ① 分類收斂建議（獨立 agent 產的；沒有這個檔就跳過，⛔ 不要自己生一份）
-   python scripts\s2_apply_reclass.py --file "…\{MMDD}-s2-state.json" \
-       --suggest "…\_待整併\{MMDD}-分類收斂建議.txt" --dry-run
+   python scripts/s2_apply_reclass.py --file "…/{MMDD}-s2-state.json" \
+       --suggest "…/_待整併/{MMDD}-分類收斂建議.txt" --dry-run
    # 看過沒問題再拿掉 --dry-run
 
    # ② 把 `_待整併` 裡確認已入庫的交件檔標成「已入庫_」前綴
-   python scripts\s2_mark_ingested.py --file "…\{MMDD}-s2-state.json" --apply
+   python scripts/s2_mark_ingested.py --file "…/{MMDD}-s2-state.json" --apply
    ```
 
    ⚠️ ② 會**先逐筆比對狀態檔、全在庫才改名**；它報「尚未入庫或有缺」的那些
@@ -139,8 +139,8 @@ python scripts\s2_rules_check.py
 1. 三站清單各存一份快照到 scratch dir（每行 `CODE|MM/DD/YYYY HH:MM` 或 JSON）
 2. 跑稽核＋清單對帳：
    ```
-   cd E:\GitHub\TVBS-AIHunter
-   python scripts\s2_audit.py --mmdd {MMDD} --rt-list <檔> --ap-list <檔> --ns-list <檔>
+   cd E:/GitHub/TVBS-AIHunter
+   python scripts/s2_audit.py --mmdd {MMDD} --rt-list <檔> --ap-list <檔> --ns-list <檔>
    ```
 3. 稽核**嚴重級**的直接處理，或 `needs-review add` 記錄。**不要只在回報裡講一句**——
    排程情境下根本沒有人在看終端機，那等於沒發生過。
