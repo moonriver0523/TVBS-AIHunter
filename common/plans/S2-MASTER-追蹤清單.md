@@ -127,6 +127,7 @@
 | A22 | NS單一則被拆出主批次外個別補寫(src_text缺漏) | 0821-2000體檢(使用者要求查2000輪疑似浪費) | — | ⬜列入觀察 | `wx20fr_fix.json`：WX-20FR(長島水龍捲)未帶R9強制欄位`src_text`，事後用單獨小檔案補寫，未併入`ns_batch_2000.json`主批次一次做完。與A17(RT batch無謂拆成6段Write)同屬「該一次做完卻被拆件」浪費家族，這次樣本在NS站、單則規模。僅1個樣本，先列入觀察 |
 | A23 | `set-category` 同 checkpoint 第 5 次硬拒絕（T7 牙齒） | 0821-1000 三刀建議 刀1 | 1 | ⬜待做 | T7 規則已在（3 站＋1 補刀），1000 打了 8 次。不是 D-。修 `s2_state.py set-category` |
 | A24 | `inspect` 單 id 連打提示 ＋ `from-raw` 產 batch 骨架 | 0821-1000 三刀建議 刀3；連 A15／A2 | 2 | ⬜待做（3a 短／3b 先 prototype） | 1000：NS 69 次、`batch_prep` 63、Write `_build_batch*.py` 再跑。**不准砍 src_text**。3a 警告不擋；3b 磁碟產出 id/src_text/footage_type，agent 只補 entry |
+| A27 | `_待整併/` 零偵測：交件檔躺著沒人整併 | 0825-2200 輪（4 份交件檔零整併）；0825 快照定調「只加 A」 | 1 | ✅2026-08-26（`7a2b8fa`）／2026-08-30 補測試與本列 | **規則字數增加 0**：`13c2` §2 指令表早就承諾 `resume` 會報待整併，`cmd_resume` 從來沒印過——補的是既有承諾，不是新規則，沒有「載入 ≠ 遵守」風險。新增 `scripts/s2_pending.py`（零副作用、不反向 import `s2_state`），掛 **`cmd_resume`**（開工，落在掃站與 `set-category` 之前，補進來的素材才趕得上同一批 `set-tc`）＋ **`s2_render.py:603`**（收工保險，agent 不保證每輪跑 `resume`）。🔴 render 那道**只警告不擋**，比照清單對帳閘門——漏整併是少收素材，產不出檔是整晚白做。判準用 **mtime 不用檔名日期**（檔名格式是外部交件端定的，跨夜時「今天」有兩個日期）。⚠️ **落點與 0825 快照的方案不同**：快照原訂「共用出口＋頂層 flag 每 checkpoint 喊一次」，實作改為 resume＋render 兩點（158 次呼叫會洗版；render 每輪必跑，保險效果相同而成本低），理由完整寫在 `s2_pending.py` docstring。**2026-08-30 補**：`scripts/test_s2_pending.py` **21 項全 PASS**（tmp dir 注入 `pend_dir`，零生產路徑），詳情見 [A.md](master-detail/A.md)。 |
 
 ### D — 待使用者裁決（未裁定前不得動工） → 詳情：[master-detail/D.md](master-detail/D.md)
 
