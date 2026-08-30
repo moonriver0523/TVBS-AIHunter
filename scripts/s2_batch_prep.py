@@ -104,6 +104,7 @@ batch 檔），實測發現三站清單原始檔各包一層不同的站方外�
     python s2_batch_prep.py dedup-check ap_list_2200.json --site ap --ids AP5467677,AP5467678 --fields title,headline
 """
 import argparse
+import datetime
 import io
 import json
 import os
@@ -787,6 +788,208 @@ def cmd_snapshot(args):
     print(f'快照已寫入 {out}（{len(items)} 筆）')
 
 
+# 三站清單各自的「上站時間」欄位＋格式。NS `created`＝ISO 帶微秒 UTC（13c/13d §8：
+# `created: it.createdDate`）；AP `ts`＝ISO 秒 UTC（13c §2：`ts: s.firstcreated`）；
+# RT `at`＝DOM 直接擷取的 `MM/DD/YYYY HH:MM`。
+#
+# 🔴 **2026-08-31 訂正（獨立 review 抓到、已用真實落檔覆核）**：原本這裡寫
+# 「RT `at` 已經是台北當地時間，不要再 +8h」——13c2 §1b 那句「判窗內外用」
+# 只是講這個欄位的**用途**，不是講它的**時區**，是我自己誤讀成當地時間，
+# 不是規則文件寫錯。實測反證（`20260830/_rt_list_1600.json`，檔案落地時間
+# 台北 16:08）：40 筆 `at` 最大值 `08/30/2026 07:57`——比擷取當下早 8 小時
+# 11 分。同一輪 AP `ap_list_1600.json`（落地 16:31）`ts` 最大值換算 UTC+8
+# 後是 16:27，跟擷取時間吻合。兩站抓的都是「最新 N 筆」，時間窗理應重疊：
+# 把 RT 當 UTC 轉換，兩站窗口幾乎完全重合；當成當地時間則整整差 8 小時、
+# 等於路透在擷取前連續 8 小時零產出，不合理。**RT `at` 其實也是 UTC**，
+# 跟 NS／AP 同一套規則，不要再假設它免轉。
+TIMELINE_SPEC = {
+    'ns': {'fields': ('created', 'createdDate'), 'utc': True,
+           'fmt': '%Y-%m-%dT%H:%M:%S.%fZ'},
+    'ap': {'fields': ('ts', 'firstcreated'), 'utc': True,
+           'fmt': '%Y-%m-%dT%H:%M:%SZ'},
+    'rt': {'fields': ('at',), 'utc': True, 'fmt': '%m/%d/%Y %H:%M'},
+}
+
+
+def _parse_ts(raw_ts, spec):
+    """回傳台北當地時間字串 `MM/DD/YYYY HH:MM`，解析失敗回 None（不猜、不吞）。"""
+    if not raw_ts:
+        return None
+    if not spec['utc']:
+        return raw_ts.strip() or None
+    fmts = [spec['fmt'], '%Y-%m-%dT%H:%M:%S.%fZ', '%Y-%m-%dT%H:%M:%SZ',
+            '%m/%d/%Y %H:%M']
+    for fmt in fmts:
+        try:
+            dt = datetime.datetime.strptime(raw_ts, fmt) + datetime.timedelta(hours=8)
+            return dt.strftime('%m/%d/%Y %H:%M')
+        except ValueError:
+            continue
+    return None
+
+
+def cmd_timeline(args):
+    """把一份 raw 檔轉成「id｜台北當地時間」清單，供跨站對帳（窗內外／有沒有
+    銜接落差）用。取代 0730 那種自寫 `_mk_*_snapshot.py` 逐站算時區的臨時腳本——
+    三站欄位名與是否要 +8h 全部寫死在 TIMELINE_SPEC，不必每輪重寫換算邏輯。"""
+    try:
+        items, shell_desc = _load_raw_any(args.raw)
+    except ValueError as e:
+        print(f'✗ 讀取失敗：{e}', file=sys.stderr)
+        sys.exit(1)
+
+    spec = TIMELINE_SPEC[args.site]
+    rows = []
+    no_ts = []
+    for i, raw_it in enumerate(items):
+        it = _dedup_view(raw_it) if isinstance(raw_it, dict) else {}
+        item_id = _dedup_id(args.site, it, i)
+        raw_ts = next((it[f] for f in spec['fields'] if it.get(f)), None)
+        local = _parse_ts(raw_ts, spec)
+        if local is None:
+            no_ts.append(item_id)
+        rows.append((item_id, local or ''))
+
+    # 依時間排序（沒有時間的排最後，方便一眼看出哪些缺時間）——跟 raw 原始
+    # 順序無關，跨站對帳要的是時間軸，不是抽取順序。
+    rows.sort(key=lambda r: (r[1] == '', r[1]))
+
+    lines = [f'{iid}|{ts}' for iid, ts in rows]
+    out = args.out
+    if out:
+        with open(out, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(lines) + '\n')
+        print(f'時間軸已寫入 {out}（{len(rows)} 筆，{shell_desc}）', file=sys.stderr)
+    for ln in lines:
+        print(ln)
+    if no_ts:
+        print(f'⚠️ {len(no_ts)} 筆解不出時間（欄位缺或格式不符，見 {spec["fields"]}）：'
+              f'{", ".join(no_ts[:20])}', file=sys.stderr)
+
+
+# 各站原始 detail 檔裡，正文欄位的名字（依序嘗試，第一個有內容的勝出）——
+# 跟 SITE_SPEC 的 src_text_of 是同一組欄位，只是這裡不強制併成固定格式，
+# 讓 fill-src-text 用 raw 的「一個」欄位就好（多欄位ときは join）。
+FILL_SRC_FIELDS = {
+    'ns': ('desc', 'script'),
+    'ap': ('head', 'script'),
+    'rt': ('head', 'story'),
+}
+
+
+def cmd_fill_src_text(args):
+    """把 raw／detail 檔的正文，依 id 對應填進 batch.json 的 `src_text` 欄位——
+    取代 0818/0820/0825/0828/0829 反覆出現的 `_merge_src_*.py`／`_fill_*srctext.py`／
+    `_fix_src_*.py` 這批臨時腳本（都是同一件事：raw 有正文、batch 還沒填，逐 id 對應
+    貼過去）。**只填空的**，不覆寫 batch 裡已經有內容的 `src_text`（避免蓋掉手動修過
+    的原文）。"""
+    try:
+        raw_items, raw_shell = _load_raw_any(args.raw)
+    except ValueError as e:
+        print(f'✗ raw 讀取失敗：{e}', file=sys.stderr)
+        sys.exit(1)
+    try:
+        with open(args.batch, encoding='utf-8') as f:
+            batch = json.load(f)
+    except OSError as e:
+        print(f'✗ batch 讀不到：{e}', file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(batch, list):
+        print(f'✗ {args.batch} 頂層不是陣列，不像 add-batch 用的 batch.json', file=sys.stderr)
+        sys.exit(1)
+
+    fields = ([f.strip() for f in args.fields.split(',') if f.strip()]
+              if args.fields else list(FILL_SRC_FIELDS[args.site]))
+
+    # 保留第一次出現的那筆、重複的丟掉並警告——跟 dedup_by_id／build 同一套
+    # 規則（2026-08-31 review 修正：原本後面的會靜默蓋掉前面的，沒有任何提示）。
+    raw_by_id = {}
+    dup_ids = []
+    for i, raw_it in enumerate(raw_items):
+        it = _dedup_view(raw_it) if isinstance(raw_it, dict) else {}
+        rid = _dedup_id(args.site, it, i)
+        if rid in raw_by_id:
+            dup_ids.append(rid)
+            continue
+        raw_by_id[rid] = it
+    if dup_ids:
+        print(f'⚠️ raw 裡有重複 id，只保留第一次出現的那筆：{", ".join(dup_ids)}',
+              file=sys.stderr)
+
+    filled, already, missing = [], [], []
+    for item in batch:
+        iid = item.get('id')
+        if item.get('src_text'):
+            already.append(iid)
+            continue
+        r = raw_by_id.get(iid)
+        if not r:
+            missing.append(iid)
+            continue
+        parts = [str(r[f]) for f in fields if r.get(f)]
+        if not parts:
+            missing.append(iid)
+            continue
+        item['src_text'] = truncate('\n---\n'.join(parts))
+        filled.append(iid)
+
+    out = args.out or args.batch
+    with open(out, 'w', encoding='utf-8') as f:
+        # indent=2 對齊 build 的輸出格式（2026-08-31 review 修正：原本 indent=1，
+        # 就地覆寫時會把整份 batch.json 的排版跟 build 的產物不一致）。
+        json.dump(batch, f, ensure_ascii=False, indent=2)
+
+    print(f'已寫入 {out}（raw：{raw_shell}）', file=sys.stderr)
+    print(f'填入 {len(filled)} 則：{", ".join(filled) if filled else "（無）"}')
+    if already:
+        print(f'已有 src_text 未動 {len(already)} 則：{", ".join(already)}', file=sys.stderr)
+    if missing:
+        print(f'⚠️ raw 裡找不到或欄位都空、沒填到 {len(missing)} 則'
+              f'（要嘛 id 對不起來、要嘛 raw 那批本來就沒收這幾則）：'
+              f'{", ".join(missing)}', file=sys.stderr)
+
+
+def cmd_collate_category(args):
+    """把一批（或多批）batch.json 裡各則自己標好的 `category`
+    （`{"大分類":…, "中主題":…, "小分題":…}`）收成一條可以直接貼給
+    `s2_state.py set-category --pairs` 的字串。取代 0810／0827-1000 那種
+    `run_setcat_1000.py`／`_tmp_ns_cat.py`——手動把三站 batch 掃過一遍拼字串
+    再自己 subprocess 呼叫 set-category 的臨時腳本。**只組字串，不呼叫
+    set-category**——送不送、送之前要不要再看一眼，仍是 agent 的判斷。"""
+    pairs = []
+    skipped = []
+    for path in args.batches:
+        try:
+            with open(path, encoding='utf-8') as f:
+                items = json.load(f)
+        except OSError as e:
+            print(f'✗ 讀不到 {path}：{e}', file=sys.stderr)
+            sys.exit(1)
+        if not isinstance(items, list):
+            print(f'✗ {path} 頂層不是陣列，不像 batch.json', file=sys.stderr)
+            sys.exit(1)
+        for item in items:
+            iid = item.get('id')
+            cat = item.get('category') or {}
+            big, mid, sub = cat.get('大分類'), cat.get('中主題'), cat.get('小分題')
+            if not (big and mid):
+                skipped.append(iid or f'({path} 裡無 id 的一筆)')
+                continue
+            seg = f'{big}/{mid}' + (f'/{sub}' if sub else '')
+            pairs.append(f'{iid}={seg}')
+
+    if not pairs:
+        print('✗ 一則可用的 category 都沒收到——batch.json 裡的 items 要先自己標好'
+              ' `category` 欄位，這支只負責收集、不負責判斷分類', file=sys.stderr)
+        sys.exit(1)
+
+    print(';'.join(pairs))
+    print(f'共 {len(pairs)} 則可送出', file=sys.stderr)
+    if skipped:
+        print(f'⚠️ {len(skipped)} 則缺 category（或缺大分類／中主題），沒收進來：'
+              f'{", ".join(str(s) for s in skipped)}', file=sys.stderr)
+
+
 # batch 每筆該有的欄位。src_text 是 13d §5 的鐵律（事後查證的唯一依據），
 # 漏帶過兩次整批（0812-2200 的 65 則、0813-1200 的 80 則），所以預設就要查。
 DEFAULT_REQUIRED = ('id', 'source', 'checkpoint', 'status', 'entry', 'src_text')
@@ -1077,6 +1280,24 @@ def main():
     p_snap.add_argument('--checkpoint', help='用來組預設檔名 _audit_{site}_{HHMM}.txt')
     p_snap.add_argument('--out', help='輸出路徑；不給就用 --checkpoint 組')
     p_snap.set_defaults(func=cmd_snapshot)
+
+    p_tl = sub.add_parser('timeline', help='raw 檔轉成「id｜台北當地時間」清單，供跨站對帳窗內外用')
+    p_tl.add_argument('raw')
+    p_tl.add_argument('--site', required=True, choices=['ns', 'ap', 'rt'])
+    p_tl.add_argument('--out', help='同時存成檔案（不給只印到 stdout）')
+    p_tl.set_defaults(func=cmd_timeline)
+
+    p_fill = sub.add_parser('fill-src-text', help='raw／detail 檔的正文依 id 填進 batch.json 的 src_text（只填空的）')
+    p_fill.add_argument('--batch', required=True)
+    p_fill.add_argument('--raw', required=True)
+    p_fill.add_argument('--site', required=True, choices=['ns', 'ap', 'rt'])
+    p_fill.add_argument('--fields', help='raw 裡取正文的欄位，逗號分隔、依序取第一個有內容的；不給用預設 (desc/script、head/script、head/story)')
+    p_fill.add_argument('--out', help='輸出路徑；不給就地覆寫 --batch')
+    p_fill.set_defaults(func=cmd_fill_src_text)
+
+    p_cat = sub.add_parser('collate-category', help='把 batch.json 裡各則的 category 收成 set-category --pairs 吃得下的字串')
+    p_cat.add_argument('batches', nargs='+', help='一或多個 batch.json（例如三站各一個）')
+    p_cat.set_defaults(func=cmd_collate_category)
 
     p_cmp = sub.add_parser('compare', help='raw 與 batch 對照，只印缺 id／缺欄位')
     p_cmp.add_argument('--raw', required=True)

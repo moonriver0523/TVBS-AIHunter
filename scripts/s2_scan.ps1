@@ -419,9 +419,42 @@ try {
     Write-Run "START`tmodel=$Model`teffort=$Effort$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
     Write-Host "START [$Checkpoint] model=$Model effort=$Effort log=$runLog"
 
-    $t0 = Get-Date
-    claude @claudeArgs *> $runLog
-    $code = $LASTEXITCODE
+    # 🔴 2026-08-30 修：`*>` 重導向讀取子行程 stdout 是照 [Console]::OutputEncoding／
+    # $OutputEncoding 解碼，預設常是系統 ANSI（繁中機器＝Big5/950），而 `claude` 吐的是
+    # UTF-8 JSONL——不設就整份 log 的中文全部變亂碼（PUA 替代字元），當天發現時
+    # 0100／0730／2000 三輪的 log 都已經中招，執行結果本身沒事（只是 log 檔看不懂）。
+    #
+    # 🔴 2026-08-31 訂正（獨立 review 抓到）：這支修正上線後從沒實跑過就被拿去審查，
+    # 審查抓到讀寫 `[Console]::OutputEncoding` 這兩行原本在 try 外面——排程工作用
+    # `-WindowStyle Hidden` 跑、可能沒有真正的 console handle，這個 getter／setter
+    # 在那種情境下已知會丟 `IOException`（handle 無效），會在進到 `claude` 呼叫前就
+    # 把整輪掃帶炸掉，剛好違反這支腳本自己的哲學（輔助性的東西不准弄死主流程，
+    # 見量測／推播那幾段的 try/catch）。改成編碼設定本身包一層 try/catch、失敗只
+    # 留痕不中斷，還原也同樣包一層。
+    $encodingChanged = $false
+    try {
+        $prevOutputEncoding = $OutputEncoding
+        $prevConsoleEncoding = [Console]::OutputEncoding
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        $OutputEncoding = [System.Text.Encoding]::UTF8
+        $encodingChanged = $true
+    } catch {
+        Write-Run "UTF-8 輸出編碼設定失敗，不影響本輪（log 可能又變亂碼）：$($_.Exception.Message)"
+    }
+    try {
+        $t0 = Get-Date
+        claude @claudeArgs *> $runLog
+        $code = $LASTEXITCODE
+    } finally {
+        if ($encodingChanged) {
+            try {
+                [Console]::OutputEncoding = $prevConsoleEncoding
+                $OutputEncoding = $prevOutputEncoding
+            } catch {
+                Write-Run "還原主控台編碼失敗，不影響本輪：$($_.Exception.Message)"
+            }
+        }
+    }
     $mins = [Math]::Round(((Get-Date) - $t0).TotalMinutes, 1)
 
     # ⚠️ 離開碼 0 不代表掃帶做完了。**只檢查「檔案在不在」也不夠**——

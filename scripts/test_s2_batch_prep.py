@@ -427,6 +427,94 @@ o, c = run(bp.cmd_inspect, Args(raw=NITF, ids=None, fields='script',
 check('T9-2 dict 欄位也要計入預算（原本算 0，會靜默爆 30k）',
       c == 0 and (len(o) <= 30000 or '超過' in o))
 
+# ── timeline（2026-08-30 補：0730 輪 `_mk_audit_snapshots.py`／`_mk_ns_snapshot.py`
+#    這種自算時區的臨時腳本的替代品）────────────────────────────
+TL_NS = write_json('tl_ns.json', [
+    {'id': 'IN-01SU', 'created': '2026-08-30T14:05:37.905000Z'},
+    {'id': 'IN-02SU', 'created': '2026-08-30T13:10:00.000000Z'},
+])
+o, c = run(bp.cmd_timeline, Args(raw=TL_NS, site='ns', out=None))
+check('timeline NS：created 是 ISO 帶微秒 UTC，要 +8h 轉台北',
+      c == 0 and '08/30/2026 22:05' in o and '08/30/2026 21:10' in o)
+check('timeline 依時間排序（早的在前）',
+      o.index('IN-02SU') < o.index('IN-01SU'))
+
+TL_AP = write_json('tl_ap.json', [
+    {'id': 'AP4681284', 'ts': '2026-08-30T14:20:00Z'},
+    {'id': 'AP4681283', 'ts': '2026-08-30T13:00:00Z'},
+])
+o, c = run(bp.cmd_timeline, Args(raw=TL_AP, site='ap', out=None))
+check('timeline AP：ts 是 ISO 秒 UTC，要 +8h 轉台北',
+      c == 0 and '08/30/2026 22:20' in o and '08/30/2026 21:00' in o)
+
+# 2026-08-31 訂正：RT 的 at 其實也是 UTC，不是台北當地時間（獨立 review 用
+# 20260830/_rt_list_1600.json vs ap_list_1600.json 的實測窗口交叉比對抓到，
+# 原本這條測試把「免轉」的錯誤假設原樣抄成斷言，通過不代表行為對——現在
+# 改成斷言正確的 +8h 轉換，並用真實案例的量級當 fixture（0730 輪 21:50 UTC
+# 上站，換算台北該是隔天 05:50）。
+TL_RT = write_json('tl_rt.json', [
+    {'code': 'RT8928', 'at': '08/30/2026 21:50'},
+    {'code': 'RT8927', 'at': ''},
+])
+o, c = run(bp.cmd_timeline, Args(raw=TL_RT, site='rt', out=None))
+check('timeline RT：at 其實也是 UTC，要 +8h 轉台北（2026-08-31 訂正，見 TIMELINE_SPEC 註解）',
+      c == 0 and '08/31/2026 05:50' in o and '21:50' not in o)
+check('timeline 缺時間的筆數印警告到 stderr，不吞不猜',
+      'RT8927' in o and '解不出時間' in o)
+
+tl_out = os.path.join(TMP, 'tl_ns_out.txt')
+o, c = run(bp.cmd_timeline, Args(raw=TL_NS, site='ns', out=tl_out))
+check('timeline --out 落檔且內容跟 stdout 一致',
+      c == 0 and os.path.exists(tl_out)
+      and open(tl_out, encoding='utf-8').read().strip().splitlines()
+          == [ln for ln in o.strip().splitlines() if '|' in ln])
+
+# ── fill-src-text（2026-08-31 補：0818/0820/0825/0828/0829 反覆出現的
+#    `_merge_src_*.py`／`_fix_src_*.py` 替代品）───────────────────
+FS_RAW = write_json('fs_raw.json', [
+    {'id': 'AP4681284', 'head': 'Headline one', 'script': 'Full body one.'},
+    {'id': 'AP4681283', 'head': 'Headline two', 'script': ''},
+])
+FS_BATCH = write_json('fs_batch.json', [
+    {'id': 'AP4681284', 'src_text': ''},
+    {'id': 'AP4681283', 'src_text': ''},
+    {'id': 'AP9999999', 'src_text': 'already have text'},
+])
+o, c = run(bp.cmd_fill_src_text, Args(batch=FS_BATCH, raw=FS_RAW, site='ap',
+                                       fields=None, out=None))
+check('fill-src-text 只填空的 src_text，不覆寫已有內容',
+      c == 0 and 'already have text' == json.load(open(FS_BATCH, encoding='utf-8'))[2]['src_text'])
+check('fill-src-text 依欄位優先序（head 有內容就併，script 空也照樣併非空欄位）',
+      'Headline one' in json.load(open(FS_BATCH, encoding='utf-8'))[0]['src_text']
+      and 'Full body one.' in json.load(open(FS_BATCH, encoding='utf-8'))[0]['src_text'])
+check('fill-src-text 回報填入筆數', c == 0 and '填入 2 則' in o)
+
+FS_BATCH2 = write_json('fs_batch2.json', [{'id': 'AP_NOT_IN_RAW', 'src_text': ''}])
+o, c = run(bp.cmd_fill_src_text, Args(batch=FS_BATCH2, raw=FS_RAW, site='ap',
+                                       fields=None, out=None))
+check('fill-src-text raw 裡找不到的 id → 印警告不吞、不當錯誤中止',
+      c == 0 and 'AP_NOT_IN_RAW' in o and '找不到' in o)
+
+# ── collate-category（2026-08-31 補：0810/0827-1000 的 `run_setcat_1000.py`／
+#    `_tmp_ns_cat.py` 替代品）──────────────────────────────────
+CAT1 = write_json('cat1.json', [
+    {'id': 'AP1', 'category': {'大分類': '政治', '中主題': '選舉'}},
+    {'id': 'AP2', 'category': {'大分類': '社會', '中主題': '案件', '小分題': '審判'}},
+    {'id': 'AP3'},
+])
+o, c = run(bp.cmd_collate_category, Args(batches=[CAT1]))
+check('collate-category 組出 set-category --pairs 吃得下的字串',
+      c == 0 and 'AP1=政治/選舉' in o and 'AP2=社會/案件/審判' in o)
+check('collate-category 缺 category 的則不進 pairs、印警告',
+      'AP3' not in o.split('\n')[0] and 'AP3' in o)
+
+CAT2 = write_json('cat2.json', [
+    {'id': 'RT1', 'category': {'大分類': '國際', '中主題': '烏俄'}},
+])
+o, c = run(bp.cmd_collate_category, Args(batches=[CAT1, CAT2]))
+check('collate-category 可一次收多個 batch.json（三站各一個的場景）',
+      c == 0 and 'AP1=政治/選舉' in o and 'RT1=國際/烏俄' in o)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)
