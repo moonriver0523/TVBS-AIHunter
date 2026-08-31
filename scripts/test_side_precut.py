@@ -150,6 +150,51 @@ class TestSilence(unittest.TestCase):
         self.assertEqual(P.speech_blocks(50.0, []), [(0.0, 50.0)])
 
 
+class TestSplitLongBlocks(unittest.TestCase):
+    def test_短段落不動也不叫OCR(self):
+        calls = []
+
+        def ocr_of(t):
+            calls.append(t)
+            return "不該被呼叫"
+
+        out = P.split_long_blocks([(0.0, 15.0)], ocr_of)
+        self.assertEqual(out, [(0.0, 15.0)])
+        self.assertEqual(calls, [])
+
+    def test_長段落依字卡變化切開(self):
+        # 60 秒的段落，broadcast 內容其實換了兩次主題但中間都沒有靜音
+        topics_by_time = {
+            5.0: "INSIDE AFRICA",
+            20.0: "INSIDE AFRICA",
+            35.0: "HIGHLIGHT",
+            50.0: "HIGHLIGHT",
+            59.5: "MORNING ROUNDUP",
+        }
+
+        def ocr_of(t):
+            # 取最接近的取樣點對應主題（模擬固定字卡文字）
+            key = min(topics_by_time, key=lambda k: abs(k - t))
+            return topics_by_time[key]
+
+        out = P.split_long_blocks(
+            [(0.0, 60.0)], ocr_of, max_span=20.0, step=15.0,
+        )
+        self.assertGreater(len(out), 1)
+        self.assertAlmostEqual(out[0][0], 0.0)
+        self.assertAlmostEqual(out[-1][1], 60.0)
+        # 涵蓋整段、無重疊無縫隙
+        for (a1, b1), (a2, b2) in zip(out, out[1:]):
+            self.assertAlmostEqual(b1, a2)
+
+    def test_長段落但字卡沒變不切(self):
+        def ocr_of(t):
+            return "同一張字卡"
+
+        out = P.split_long_blocks([(0.0, 60.0)], ocr_of, max_span=20.0, step=15.0)
+        self.assertEqual(out, [(0.0, 60.0)])
+
+
 class TestClassify(unittest.TestCase):
     def test_無字高音量偏廣告(self):
         self.assertEqual(
@@ -229,6 +274,43 @@ class TestCacheAndAnalyze(unittest.TestCase):
         cache["mtime"] = 0
         self.assertTrue(P.cache_stale(self.vid, cache))
 
+    def test_分析預設不翻譯只有OCR英文原字(self):
+        stderr = (
+            "[silencedetect] silence_start: 20.0\n"
+            "[silencedetect] silence_end: 28.0 | silence_duration: 8.0\n"
+        )
+        called = []
+        orig_nllb = P.nllb_map
+        P.nllb_map = lambda texts, run=None: (called.append(texts) or {})
+        try:
+            data = P.analyze(
+                self.vid, offset_sec=0, duration=60.0,
+                run_silence=lambda p: stderr,
+                rms_of=lambda a, b: 0.05,
+                ocr_of=lambda t: "BREAKING NEWS TONIGHT",
+                black_of=lambda a, b: False,
+                zh_of=None,
+            )
+        finally:
+            P.nllb_map = orig_nllb
+        self.assertEqual(called, [])
+        self.assertIn("BREAKING", data["segments"][0]["topic"])
+
+    def test_translate_cache手動翻譯已存在的快取(self):
+        segs = [P.PrecutSeg("s1", 0, 10, "anchor", topic="HIGHLIGHT CNN", ocr="HIGHLIGHT CNN")]
+        P.save_cache(self.vid, 0, segs, mtime=1)
+        orig_nllb = P.nllb_map
+        P.nllb_map = lambda texts, run=None: {t: "精華" for t in texts}
+        try:
+            data = P.translate_cache(self.vid, 0)
+        finally:
+            P.nllb_map = orig_nllb
+        self.assertIn("精華", data["segments"][0]["topic"])
+
+    def test_translate_cache沒快取就報錯(self):
+        with self.assertRaises(FileNotFoundError):
+            P.translate_cache(self.vid, 0)
+
     def test_分析用注入假靜音與OCR(self):
         stderr = (
             "[silencedetect] silence_start: 20.0\n"
@@ -298,7 +380,7 @@ class TestAdapters(unittest.TestCase):
         self.assertTrue(paths[0].endswith("CNN 000010-000020 主播 主題.mp4"))
         self.assertEqual(len(calls), 1)
 
-    def test_export只出勾選(self):
+    def test_export只出勾選_單段直接剪不用合併(self):
         calls = []
         def fake_run(cmd, **kw):
             calls.append(cmd)
@@ -318,8 +400,97 @@ class TestAdapters(unittest.TestCase):
             source="CNN", offset_sec=0, run=fake_run,
         )
         self.assertEqual(len(paths), 1)
-        self.assertIn("廣告", paths[0])
+        self.assertTrue(os.path.basename(paths[0]).startswith("CNN 000005 合併"))
+        self.assertEqual(len(calls), 1)
+
+    def test_export只出勾選_自訂檔名(self):
+        calls = []
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            class R:
+                returncode = 0
+            return R()
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        vid = os.path.join(d, "a.mp4")
+        open(vid, "wb").close()
+        segs = [P.PrecutSeg("s1", 0, 5, "anchor", selected=True)]
+        paths = P.export_segs(
+            vid, segs, mode="selected", accurate=True,
+            source="CNN", offset_sec=0, filename="我的片段", run=fake_run,
+        )
+        # 自訂檔名要保留「來源＋起始TC」字首，不能整段被自訂名蓋掉
+        self.assertEqual(os.path.basename(paths[0]), "CNN 000000 我的片段.mp4")
+
+    def test_export只出勾選_自訂檔名已帶副檔名不重複加(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        vid = os.path.join(d, "a.mp4")
+        open(vid, "wb").close()
+        segs = [P.PrecutSeg("s1", 0, 5, "anchor", selected=True)]
+        paths = P.export_segs(
+            vid, segs, mode="selected", accurate=True,
+            source="CNN", offset_sec=0, filename="片段.mp4",
+            run=lambda *a, **k: type("R", (), {"returncode": 0})(),
+        )
+        self.assertEqual(os.path.basename(paths[0]), "CNN 000000 片段.mp4")
+
+    def test_export只出勾選_檔名空白等同自動命名(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        vid = os.path.join(d, "a.mp4")
+        open(vid, "wb").close()
+        segs = [P.PrecutSeg("s1", 0, 5, "anchor", selected=True)]
+        paths = P.export_segs(
+            vid, segs, mode="selected", accurate=True,
+            source="CNN", offset_sec=0, filename="   ",
+            run=lambda *a, **k: type("R", (), {"returncode": 0})(),
+        )
+        self.assertTrue(os.path.basename(paths[0]).startswith("CNN 000000 合併"))
+
+    def test_export只出勾選_多段合併成一支(self):
+        calls = []
+        def fake_run(cmd, **kw):
+            calls.append(cmd)
+            class R:
+                returncode = 0
+            return R()
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        vid = os.path.join(d, "a.mp4")
+        open(vid, "wb").close()
+        segs = [
+            P.PrecutSeg("s1", 0, 5, "anchor", selected=True),
+            P.PrecutSeg("s2", 5, 9, "ad", selected=False),
+            P.PrecutSeg("s3", 9, 15, "anchor", selected=True),
+        ]
+        paths = P.export_segs(
+            vid, segs, mode="selected", accurate=False,
+            source="CNN", offset_sec=0, run=fake_run,
+        )
+        self.assertEqual(len(paths), 1)
+        # 檔名只帶起始 TC（第一個勾選段 s1 的 t0=0），不是每段的區間
+        self.assertTrue(os.path.basename(paths[0]).startswith("CNN 000000 合併"))
+        # 兩段各剪一次 + 最後 concat 一次
+        self.assertEqual(len(calls), 3)
+        self.assertIn("-f", calls[-1])
+        self.assertIn("concat", calls[-1])
+        # accurate=False 也要被合併模式蓋成精準重編——不精準剪法遇到片段沒跨到
+        # keyframe 會整段沒有影像，合併起來就是壞檔（實測重現過）。
         self.assertIn("libx264", calls[0])
+        self.assertIn("libx264", calls[1])
+
+    def test_export只出勾選_沒勾就不輸出(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        vid = os.path.join(d, "a.mp4")
+        open(vid, "wb").close()
+        segs = [P.PrecutSeg("s1", 0, 5, "anchor", selected=False)]
+        paths = P.export_segs(
+            vid, segs, mode="selected", accurate=False,
+            source="CNN", offset_sec=0, run=lambda *a, **k: None,
+        )
+        self.assertEqual(paths, [])
 
 
 if __name__ == "__main__":

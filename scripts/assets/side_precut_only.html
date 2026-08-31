@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<title>掐BITE 工作台</title>
+<title>側錄初處理</title>
 <style>
   :root {
     --bg:#14161a; --panel:#1d2027; --line:#2e333d; --fg:#e6e8ec; --dim:#9aa2b1;
@@ -21,50 +21,21 @@
   button:hover { border-color:var(--accent); }
   button.primary { background:var(--accent); border-color:var(--accent); color:#08121f; font-weight:600; }
   button:disabled { opacity:.45; cursor:not-allowed; }
-  main { display:grid; grid-template-columns:260px 1fr 400px; gap:0; height:calc(100vh - 53px); }
   section { overflow:auto; padding:12px; }
-  #materials { border-right:1px solid var(--line); }
-  #right { border-left:1px solid var(--line); }
   .mat { padding:8px 10px; border:1px solid var(--line); border-radius:6px; margin-bottom:6px; cursor:pointer; }
   .mat:hover { border-color:var(--accent); }
   .mat.on { border-color:var(--accent); background:#1a2634; }
   .mat .n { font-size:12px; word-break:break-all; }
   .tag { display:inline-block; font-size:11px; padding:1px 6px; border-radius:10px;
          background:#2a2f38; color:var(--dim); margin-right:4px; }
-  .tc-srcs { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0; }
   .tag.has { background:#1e3a2c; color:var(--ok); }
-  .tag.official { background:#173049; color:var(--accent); }
   .tag.warn { background:#3a2f14; color:var(--warn); }
-  video { width:100%; max-height:340px; background:#000; border-radius:8px; }
-  #filters { display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:12px;
-             color:var(--dim); margin:8px 0; padding:6px 8px; background:var(--panel);
-             border:1px solid var(--line); border-radius:6px; }
-  #filters label { display:inline-flex; align-items:center; gap:4px; margin:0; cursor:pointer; }
-  .seg { border:1px solid var(--line); border-radius:8px; padding:9px 11px; margin-bottom:8px; cursor:pointer; }
-  .seg:hover { border-color:var(--accent); }
-  .seg.on { border-color:var(--accent); background:#182430; }
-  .seg .meta { font-size:12px; color:var(--dim); display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-  .seg .txt { margin-top:4px; }
-  .seg .zht { margin-top:2px; color:var(--dim); font-size:13px; }
-  .flag { font-size:12px; margin-top:4px; color:var(--warn); }
-  .flag.fail { color:var(--fail); }
   .note { font-size:12px; color:var(--dim); border-left:2px solid var(--line);
           padding-left:8px; margin:6px 0 12px; }
   label { display:block; font-size:12px; color:var(--dim); margin:9px 0 3px; }
-  textarea { width:100%; background:#0e1013; color:var(--fg); border:1px solid var(--line);
-             border-radius:6px; padding:7px 9px; font:inherit; resize:vertical; }
-  #out { white-space:pre-wrap; background:#0e1013; border:1px solid var(--line);
-         border-radius:6px; padding:10px; margin-top:8px; min-height:70px; font-size:13px; }
-  .lint { font-size:12px; margin-top:6px; }
-  .lint .f { color:var(--fail); } .lint .w { color:var(--warn); }
   .row { display:flex; gap:6px; } .row > * { flex:1; }
   #status { font-size:12px; color:var(--dim); margin-left:auto; max-width:50%; }
-  #tabs { display:flex; gap:0; }
-  .tab { border-radius:6px 6px 0 0; }
-  .tab.on { background:var(--accent); color:#08121f; font-weight:600; }
   #viewPrecut { display:grid; grid-template-columns:260px 1fr 340px; height:calc(100vh - 53px); overflow:hidden; }
-  #viewPrecut[hidden] { display:none !important; }
-  #viewBite[hidden] { display:none !important; }
   #pcMats { border-right:1px solid var(--line); }
   #pcMain { display:flex; flex-direction:column; overflow:hidden; min-width:0; }
   #pcForm { border-left:1px solid var(--line); overflow:auto; }
@@ -87,60 +58,13 @@
 </head>
 <body>
 <header>
-  <nav id="tabs">
-    <button type="button" id="tabBtnBite" class="tab on">掐BITE</button>
-    <button type="button" id="tabBtnPrecut" class="tab">側錄初處理</button>
-  </nav>
+  <h1>側錄初處理</h1>
   <input type="text" id="dir" size="52" placeholder="素材資料夾路徑">
   <button id="load">讀取</button>
   <span id="status"></span>
 </header>
 
-<main id="viewBite">
-  <section id="materials"></section>
-
-  <section id="center">
-    <video id="player" controls preload="metadata"></video>
-    <div class="row" style="margin:8px 0">
-      <button id="transcribe">跑轉錄（whisper.cpp + VAD）</button>
-      <button id="resegment">重列段落</button>
-    </div>
-    <div id="note" class="note"></div>
-    <div id="filters" style="display:none">
-      <span id="segcount"></span>
-      <label><input type="checkbox" id="f_official">只看官方引言</label>
-      <label><input type="checkbox" id="f_short">隱藏 8 秒以下</label>
-      <label><input type="checkbox" id="f_handoff">隱藏疑似交接語</label>
-    </div>
-    <div id="segs"></div>
-  </section>
-
-  <section id="right">
-    <strong>產生 SB</strong>
-    <div class="note">第 3 行中文翻譯由 AI 產草稿（殘譯與括號主詞仍要人核）。第 5 行原文有官方稿時逐字取自官方稿，ASR 只用來定位時間。</div>
-    <label>第 2 行 職稱 姓名（SUPER：姓名英文原名、職稱中文）</label>
-    <input type="text" id="speaker" style="width:100%">
-    <label>第 3 行 中文翻譯（不帶「」；代名詞指涉不明用半形括號補主詞）</label>
-    <textarea id="zh" rows="4"></textarea>
-    <button id="translate" style="width:100%">翻譯（NLLB 本機優先）</button>
-    <label>第 5 行 原文逐字</label>
-    <textarea id="original" rows="4"></textarea>
-    <div class="row">
-      <div><label>TC 起（秒）</label><input type="text" id="start" style="width:100%"></div>
-      <div><label>TC 訖（秒）</label><input type="text" id="end" style="width:100%"></div>
-    </div>
-    <div class="row" id="siderow" style="display:none">
-      <div><label>側錄來源</label><input type="text" id="source" style="width:100%" placeholder="CNN"></div>
-      <div><label>母帶日期 M/D</label><input type="text" id="md" style="width:100%" placeholder="7/28"></div>
-    </div>
-    <button class="primary" id="gen" style="margin-top:12px;width:100%">產生五行（中文空白時先自動翻譯）</button>
-    <div id="out"></div>
-    <div id="lint" class="lint"></div>
-    <button id="copy" style="margin-top:8px;width:100%">複製</button>
-  </section>
-</main>
-
-<main id="viewPrecut" hidden>
+<main id="viewPrecut">
   <section id="pcMats"></section>
   <section id="pcMain">
     <video id="pcPlayer" controls preload="metadata"></video>
@@ -180,9 +104,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
-let MAT = null, SEGS = [], SEL = -1, stopAt = null, pendingSeek = null, pollTimer = null, zhTimer = null, TR_WARN = '', LOADED_DIR = '';
-const NLLB_HINT = '[WARN] NLLB 草稿：已知會掉句尾（殘譯）且用詞生硬——請逐句對照第 5 行原文核對，缺的自己補';
-
+let LOADED_DIR = '';
 const status = (t, err) => { $('status').textContent = t; $('status').style.color = err ? 'var(--fail)' : 'var(--dim)'; };
 
 async function api(url, opts) {
@@ -192,284 +114,8 @@ async function api(url, opts) {
   return j;
 }
 
-function resetBiteForm() {
-  ['speaker', 'zh', 'original', 'start', 'end'].forEach(id => $(id).value = '');
-  $('out').textContent = '';
-  $('lint').innerHTML = '';
-  TR_WARN = '';
-}
-
-function resetBiteFilters() {
-  ['f_official', 'f_short', 'f_handoff'].forEach(id => $(id).checked = false);
-}
-
-function clearBiteSelection() {
-  MAT = null; SEL = -1; SEGS = []; stopAt = null; pendingSeek = null;
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-  if (zhTimer) { clearInterval(zhTimer); zhTimer = null; }
-  const p = $('player');
-  p.pause(); p.removeAttribute('src'); p.src = ''; p.load();
-  $('segs').innerHTML = ''; $('note').textContent = ''; $('filters').style.display = 'none';
-  $('siderow').style.display = 'none';
-  $('source').value = ''; $('md').value = '';
-  $('transcribe').disabled = false;
-  resetBiteForm();
-  resetBiteFilters();
-}
-
-async function loadDir() {
-  const dir = $('dir').value.trim();
-  status('讀取中…');
-  try {
-    const j = await api('/api/materials?dir=' + encodeURIComponent(dir));
-    const sameDir = LOADED_DIR === dir;
-    LOADED_DIR = dir;
-    const keepName = sameDir && MAT && j.materials.some(m => m.name === MAT.name) ? MAT.name : null;
-    renderMaterials(j.materials);
-    if (keepName) {
-      const m = j.materials.find(x => x.name === keepName);
-      const el = [...$('materials').querySelectorAll('.mat')]
-        .find(e => e.querySelector('.n').textContent === keepName);
-      if (m && el) { MAT = m; el.classList.add('on'); }
-    } else {
-      clearBiteSelection();
-    }
-    status(j.materials.length + ' 個素材');
-  } catch (e) { status(e.message, true); }
-}
-
-function renderMaterials(list) {
-  $('materials').innerHTML = list.map((m, i) =>
-    `<div class="mat" data-i="${i}">
-       <div class="n">${esc(m.name)}</div>
-       <div style="margin-top:4px">
-         <span class="tag">${m.kind === 'numbered' ? '#' + m.material_no : m.kind === 'side' ? '側錄' : '無編號'}</span>
-         ${m.offset ? `<span class="tag">offset ${hhmmss(m.offset)}</span>` : ''}
-         ${m.script_path ? '<span class="tag has">有文稿</span>' : '<span class="tag">無文稿</span>'}
-         ${m.has_asr ? '<span class="tag has">有ASR</span>' : ''}
-         ${m.has_subtitle ? '<span class="tag has">有字幕</span>' : ''}
-       </div>
-     </div>`).join('');
-  $('materials').querySelectorAll('.mat').forEach(el =>
-    el.onclick = () => pickMaterial(list[+el.dataset.i], el));
-}
-
-function pickMaterial(m, el) {
-  MAT = m; SEL = -1; SEGS = []; stopAt = null; pendingSeek = null;
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-  if (zhTimer) { clearInterval(zhTimer); zhTimer = null; }
-  $('transcribe').disabled = false;
-  $('materials').querySelectorAll('.mat').forEach(e => e.classList.remove('on'));
-  el.classList.add('on');
-  $('player').src = '/media?name=' + encodeURIComponent(m.name);
-  $('siderow').style.display = m.kind === 'side' ? 'flex' : 'none';
-  $('source').value = m.source || '';
-  $('md').value = m.md || '';
-  $('segs').innerHTML = ''; $('note').textContent = ''; $('filters').style.display = 'none';
-  resetBiteForm();
-  resetBiteFilters();
-  if (m.has_asr || m.has_subtitle) loadSegments();
-  else $('note').textContent = '這支還沒有時間軸來源（無字幕、無 ASR）——按「跑轉錄」。';
-}
-
-// ---- 轉錄：啟動背景工作＋輪詢，不再同步乾等 160 秒 ----
-async function transcribe() {
-  if (!MAT) return status('先選一支素材', true);
-  $('transcribe').disabled = true;
-  try {
-    const j = await api('/api/transcribe', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: MAT.name })
-    });
-    if (j.state === 'done') {           // 已有旁路 ASR 檔
-      MAT.has_asr = true; $('transcribe').disabled = false;
-      status(j.note || '已有 ASR'); return loadSegments();
-    }
-    status('轉錄啟動…（8 分鐘片約 25 秒、65 分鐘片約 165 秒）');
-    pollTimer = setInterval(pollTranscribe, 2000);
-  } catch (e) { status(e.message, true); $('transcribe').disabled = false; }
-}
-
-async function pollTranscribe() {
-  try {
-    const j = await api('/api/transcribe/status?name=' + encodeURIComponent(MAT.name));
-    if (j.state === 'running') {
-      status(`轉錄中：${j.phase || ''}（已 ${Math.round(j.elapsed || 0)} 秒）`);
-    } else {
-      clearInterval(pollTimer); pollTimer = null; $('transcribe').disabled = false;
-      if (j.state === 'done') {
-        MAT.has_asr = true;
-        status(`轉錄完成：${j.segments} 段／${j.words} 個詞級時間點`);
-        await loadSegments();
-      } else {
-        status('轉錄失敗：' + (j.error || '未知錯誤'), true);
-      }
-    }
-  } catch (e) { clearInterval(pollTimer); pollTimer = null; $('transcribe').disabled = false; status(e.message, true); }
-}
-
-async function loadSegments() {
-  if (!MAT) return;
-  try {
-    const j = await api('/api/segments?name=' + encodeURIComponent(MAT.name));
-    SEGS = j.segments;
-    const srcs = (j.tc_sources || []).map(s =>
-      `<span class="tag${s.available ? ' has' : ''}">${s.rank}. ${esc(s.label)}${s.available ? ' ✓' : ''}</span>`
-    ).join('<span class="tc-sep"> · </span>');
-    $('note').innerHTML = `<div>時間軸來源：${esc(j.timeline_note || '')}</div>
-      <div class="tc-srcs">${srcs}</div><div>${esc(j.note)}</div>`;
-    $('filters').style.display = 'flex';
-    renderSegments();
-    ensureBatchZh();
-  } catch (e) { status(e.message, true); $('segs').innerHTML = ''; }
-}
-
-// ---- 批次翻譯：段落載入後自動補中文（NLLB 本機、進快取，翻過不重翻）----
-async function ensureBatchZh() {
-  if (!SEGS.some(s => s.text && !s.zh) || zhTimer) return;
-  const name = MAT.name;
-  try {
-    const j = await api('/api/translate_all', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name })
-    });
-    if (j.state !== 'running') return;
-    zhTimer = setInterval(async () => {
-      if (!MAT || MAT.name !== name) { clearInterval(zhTimer); zhTimer = null; return; }
-      try {
-        const st = await api('/api/translate_all/status?name=' + encodeURIComponent(name));
-        if (st.state === 'running') {
-          status(`批次翻譯中（NLLB）：${st.done}／${st.total} 句`);
-          await refreshZh();
-        } else {
-          clearInterval(zhTimer); zhTimer = null;
-          await refreshZh();
-          status(st.state === 'done' ? '批次翻譯完成——NLLB 草稿可能殘譯，用前請對照原文'
-                                     : '批次翻譯失敗：' + (st.error || ''), st.state !== 'done');
-        }
-      } catch (e) { clearInterval(zhTimer); zhTimer = null; status(e.message, true); }
-    }, 3000);
-  } catch (e) { status(e.message, true); }
-}
-
-async function refreshZh() {   // 只更新 zh 欄位，不動選取狀態與播放
-  const j = await api('/api/segments?name=' + encodeURIComponent(MAT.name));
-  j.segments.forEach((s, i) => { if (SEGS[i]) SEGS[i].zh = s.zh; });
-  renderSegments();
-}
-
-function visibleSegs() {
-  return SEGS.map((s, i) => [s, i]).filter(([s]) => {
-    if ($('f_official').checked && s.origin !== 'official') return false;
-    if ($('f_short').checked && s.end > s.start && s.duration < 8) return false;
-    if ($('f_handoff').checked && (s.tags || []).includes('疑似交接語')) return false;
-    return true;
-  });
-}
-
-function renderSegments() {
-  const vis = visibleSegs();
-  $('segcount').textContent = `顯示 ${vis.length}／全部 ${SEGS.length} 段`;
-  $('segs').innerHTML = vis.map(([s, i]) => {
-    const tags = (s.tags || []).map(t =>
-      `<span class="tag${t === '官方引言' ? ' official' : t === '疑似交接語' || t === '>25秒' ? ' warn' : ''}">${esc(t)}</span>`).join('');
-    const flags = (s.flags || []).map(f =>
-      `<div class="flag${f.includes('FAIL') || f.includes('定位失敗') ? ' fail' : ''}">${esc(f)}</div>`).join('');
-    return `<div class="seg${i === SEL ? ' on' : ''}" data-i="${i}">
-      <div class="meta">
-        <span>${s.end > s.start ? mmss(s.start) + '–' + mmss(s.end) : 'TC 未定'}</span>
-        <span>${s.duration ? s.duration.toFixed(1) + '秒' : ''}</span>
-        ${tags}
-        ${s.confidence !== null ? `<span>命中 ${Math.round(s.confidence * 100)}%</span>` : ''}
-        ${s.speaker_hint ? `<span>${esc(s.speaker_hint)}</span>` : ''}
-      </div>
-      <div class="txt">${esc(s.text.slice(0, 300))}${s.text.length > 300 ? '…' : ''}</div>
-      ${s.zh ? `<div class="zht">譯 ${esc(s.zh.slice(0, 150))}${s.zh.length > 150 ? '…' : ''}</div>` : ''}
-      ${flags}
-    </div>`;
-  }).join('');
-  [...document.querySelectorAll('.seg')].forEach(el =>
-    el.onclick = () => pickSegment(+el.dataset.i, el));
-}
-
-function pickSegment(i, el) {
-  const s = SEGS[i];
-  document.querySelectorAll('.seg').forEach(e => e.classList.remove('on'));
-  el.classList.add('on');
-  $('start').value = s.start.toFixed(2);
-  $('end').value = s.end.toFixed(2);
-  $('original').value = s.text;
-  if (i !== SEL) {
-    // 換段落：有批次翻譯就預填（NLLB 草稿，警語照掛）；重點同段落只是回看畫面
-    $('zh').value = s.zh || '';
-    TR_WARN = s.zh ? NLLB_HINT : '';
-    $('speaker').value = s.speaker_hint || ''; // 無 hint 也要清空，否則殘留上一位講者
-  }
-  SEL = i;
-  // 點列即跳 TC 播放——這一步就是輸出前的人工核對（計畫書 §4.1）
-  if (s.end > s.start) seekPlay(Math.max(0, s.start - 0.3), s.end + 0.3);
-}
-
-// 剛換素材時 <video> 可能還沒 loadedmetadata，直接設 currentTime 會被
-// 靜默忽略——metadata 未就緒就先記下來，等 loadedmetadata 再補跳。
-function seekPlay(t, stop) {
-  const p = $('player');
-  if (p.readyState >= 1) { p.currentTime = t; stopAt = stop; p.play(); }
-  else pendingSeek = [t, stop];
-}
-$('player').addEventListener('loadedmetadata', () => {
-  if (pendingSeek) { const [t, stop] = pendingSeek; pendingSeek = null; seekPlay(t, stop); }
-});
-$('player').addEventListener('timeupdate', () => {
-  if (stopAt !== null && $('player').currentTime >= stopAt) { $('player').pause(); stopAt = null; }
-});
-
-// ---- 中文翻譯（NLLB 本機優先，失敗才 Claude；Key 不進 HTML）----
-async function translateZh() {
-  const text = $('original').value.trim();
-  if (!text) { status('第 5 行原文是空的，沒東西可翻', true); return false; }
-  $('translate').disabled = true;
-  status('翻譯中…');
-  try {
-    const ctx = SEL >= 0 ? [SEGS[SEL - 1], SEGS[SEL + 1]]
-      .filter(Boolean).map(s => s.asr_text || s.text).join(' … ') : '';
-    const j = await api('/api/translate', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, speaker: $('speaker').value, context: ctx })
-    });
-    $('zh').value = j.zh;
-    TR_WARN = j.warning ? '[WARN] ' + j.warning + '（引擎：' + j.engine + '）' : '';
-    status('翻譯完成（' + j.engine + '）——' + (j.warning || '殘譯與括號主詞請自行核對'), !!j.warning);
-    return true;
-  } catch (e) { status('翻譯失敗：' + e.message, true); return false; }
-  finally { $('translate').disabled = false; }
-}
-
-async function generate() {
-  if (!MAT) return status('先選一支素材', true);
-  if (!$('zh').value.trim()) {
-    const ok = await translateZh();       // 需求：中文翻譯要自動產生，不留白
-    if (!ok) return;
-  }
-  try {
-    const j = await api('/api/sb', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        name: MAT.name, start: parseFloat($('start').value), end: parseFloat($('end').value),
-        speaker: $('speaker').value, zh: $('zh').value, original: $('original').value,
-        source: $('source').value, md: $('md').value
-      })
-    });
-    $('out').textContent = j.text;
-    $('lint').innerHTML = (j.lint || []).concat(TR_WARN ? [TR_WARN] : []).map(m =>
-      `<div class="${m.startsWith('[FAIL]') ? 'f' : 'w'}">${esc(m)}</div>`).join('');
-    status('已產生');
-  } catch (e) { status(e.message, true); }
-}
-
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const pad = n => String(n).padStart(2, '0');
-const mmss = s => pad(Math.floor(s / 60)) + ':' + pad(Math.floor(s % 60));
 const hhmmss = s => pad(Math.floor(s / 3600)) + ':' + pad(Math.floor(s % 3600 / 60)) + ':' + pad(Math.floor(s % 60));
 const sec2hhmmss6 = s => {
   s = Math.max(0, Math.round(Number(s) || 0));
@@ -481,33 +127,14 @@ const hhmmss62sec = str => {
   return (+m[1]) * 3600 + (+m[2]) * 60 + (+m[3]);
 };
 
-$('load').onclick = loadDir;
-$('dir').onkeydown = e => { if (e.key === 'Enter') loadDir(); };
-$('transcribe').onclick = transcribe;
-$('resegment').onclick = loadSegments;
-$('translate').onclick = translateZh;
-$('gen').onclick = generate;
-$('copy').onclick = () => { navigator.clipboard.writeText($('out').textContent); status('已複製'); };
-['f_official', 'f_short', 'f_handoff'].forEach(id => $(id).onchange = renderSegments);
-
-let PC_MAT = null, PC_SEGS = [], PC_SEL = -1, pcSeek = null, pcTimer = null, pcExTimer = null, pcTrTimer = null;
+let PC_MAT = null, PC_SEGS = [], PC_SEL = -1, pcSeek = null, pcTimer = null, pcExTimer = null, pcTrTimer = null, PC_MATS = [];
 const KIND_ZH = {ad:'廣告', anchor:'主播', reporter:'記者', interview:'訪問', other:'其他'};
 const KIND_COLOR = {ad:'#f2555a', anchor:'#4da3ff', reporter:'#f0b429', interview:'#4cc38a', other:'#9aa2b1'};
-
-function showTab(which) {
-  const bite = which === 'bite';
-  $('viewBite').hidden = !bite;
-  $('viewPrecut').hidden = bite;
-  $('tabBtnBite').classList.toggle('on', bite);
-  $('tabBtnPrecut').classList.toggle('on', !bite);
-  if (!bite) drawWave();
-}
-$('tabBtnBite').onclick = () => showTab('bite');
-$('tabBtnPrecut').onclick = () => showTab('precut');
 
 function pcFmt(tc) { return tc ? tc.slice(0,2)+':'+tc.slice(2,4)+':'+tc.slice(4,6) : ''; }
 
 function renderPcMats(list) {
+  PC_MATS = list;
   $('pcMats').innerHTML = list.map((m,i) =>
     `<div class="mat" data-i="${i}"><div class="n">${esc(m.name)}</div>
      <span class="tag">${m.kind === 'numbered' ? '#' + m.material_no : m.kind === 'side' ? '側錄' : '無編號'}</span>
@@ -516,11 +143,24 @@ function renderPcMats(list) {
   $('pcMats').querySelectorAll('.mat').forEach(el => el.onclick = () => pcPick(list[+el.dataset.i]));
 }
 
-const _renderMaterials = renderMaterials;
-renderMaterials = function(list) {
-  _renderMaterials(list);
-  renderPcMats(list);
-};
+async function loadDir() {
+  const dir = $('dir').value.trim();
+  status('讀取中…');
+  try {
+    const j = await api('/api/materials?dir=' + encodeURIComponent(dir));
+    const sameDir = LOADED_DIR === dir;
+    LOADED_DIR = dir;
+    const keepName = sameDir && PC_MAT && j.materials.some(m => m.name === PC_MAT.name) ? PC_MAT.name : null;
+    renderPcMats(j.materials);
+    if (!keepName) {
+      PC_MAT = null; PC_SEGS = []; PC_SEL = -1;
+      const v = $('pcPlayer'); v.pause(); v.removeAttribute('src'); v.src = ''; v.load();
+      $('pcNote').textContent = '';
+      renderPcSegs(); drawWave();
+    }
+    status(j.materials.length + ' 個素材');
+  } catch (e) { status(e.message, true); }
+}
 
 function pcPick(m) {
   PC_MAT = m; PC_SEGS = []; PC_SEL = -1; pcSeek = null;
@@ -813,11 +453,12 @@ $('pcInvert').onclick = () => {
   renderPcSegs();
 };
 
-showTab('bite');
+$('load').onclick = loadDir;
+$('dir').onkeydown = e => { if (e.key === 'Enter') loadDir(); };
 
 (async () => {
   const j = await api('/api/materials').catch(() => null);
-  if (j && j.dir) { $('dir').value = j.dir; renderMaterials(j.materials); status(j.materials.length + ' 個素材'); }
+  if (j && j.dir) { $('dir').value = j.dir; renderPcMats(j.materials); status(j.materials.length + ' 個素材'); }
 })();
 </script>
 </body>

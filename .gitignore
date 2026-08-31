@@ -37,3 +37,8 @@ scripts/prototype/*-tc-matrix-*.html
 scripts/prototype/0*.html
 
 scripts/_guard_calls.log*
+
+# PyInstaller 打包產物（scripts/build_*.md 或指令重跑即可重建，不進 repo）
+scripts/build/
+scripts/dist/
+scripts/*.spec

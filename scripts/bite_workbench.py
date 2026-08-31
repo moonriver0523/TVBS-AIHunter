@@ -39,8 +39,14 @@ import threading
 import time
 from dataclasses import asdict, dataclass, field
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+if getattr(sys, "frozen", False):
+    # PyInstaller 打包後 __file__ 不再指向真正的資料夾——資料檔（assets/*.html）
+    # 一律從 sys._MEIPASS 找；side_precut／sb_format 已被打包進可執行檔，不用再
+    # sys.path.insert。
+    HERE = sys._MEIPASS  # type: ignore[attr-defined]
+else:
+    HERE = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, HERE)
 import sb_format as SBF  # noqa: E402
 import side_precut as SP  # noqa: E402
 
@@ -721,12 +727,15 @@ def precut_status_payload(job, cached, stale, now=None):
     return out
 
 
-def build_app(default_dir: str | None):
+def build_app(default_dir: str | None, precut_only: bool = False):
     """⚠️ FastAPI 的型別註解必須解析得到——本檔用了 `from __future__ import
     annotations`（註解變字串），若把 `Request` 這類型別 import 在函式區域，
     FastAPI 會在模組 globals 裡找不到它，把 `request` 當成缺少的 query 參數
-    回 422。所以 fastapi 的名稱一律 import 在模組層（見檔案上方）。"""
-    app = FastAPI(title="掐BITE 工作台")
+    回 422。所以 fastapi 的名稱一律 import 在模組層（見檔案上方）。
+
+    precut_only：只掛側錄初處理相關 API／頁面，不掛掐BITE（轉錄／段落／翻譯／SB）——
+    給獨立打包的側錄初處理 exe 用，不對外露出掐BITE功能。"""
+    app = FastAPI(title="側錄初處理" if precut_only else "掐BITE 工作台")
     state: dict = {"dir": default_dir, "materials": []}
 
     def refresh(path: str) -> list[Material]:
@@ -746,9 +755,11 @@ def build_app(default_dir: str | None):
                 return m
         raise HTTPException(404, f"素材不在目前清單：{name}")
 
+    html_name = "side_precut_only.html" if precut_only else "bite_workbench.html"
+
     @app.get("/", response_class=HTMLResponse)
     def index():
-        with open(os.path.join(HERE, "assets", "bite_workbench.html"), encoding="utf-8") as f:
+        with open(os.path.join(HERE, "assets", html_name), encoding="utf-8") as f:
             return f.read()
 
     @app.get("/api/materials")
@@ -772,8 +783,23 @@ def build_app(default_dir: str | None):
             data = SP.analyze_file(
                 m.path, m.offset,
                 on_phase=lambda p: job.update(phase=p),
+                translate=False,
             )
             job.update(state="done", phase="完成", **data)
+        except Exception as e:
+            job.update(state="error", error=str(e))
+
+    def _translate_run(m: Material):
+        job = jobs[f"translate:{m.name}"]
+        try:
+            data = SP.translate_cache(
+                m.path, m.offset,
+                on_phase=lambda p: job.update(phase=p),
+            )
+            job.update(state="done", phase="完成", **data)
+            precut_job = jobs.get(f"precut:{m.name}")
+            if precut_job and precut_job.get("state") == "done":
+                precut_job["segments"] = data["segments"]
         except Exception as e:
             job.update(state="error", error=str(e))
 
@@ -809,6 +835,21 @@ def build_app(default_dir: str | None):
             stale = SP.cache_stale(m.path, cached) if cached else False
         return precut_status_payload(job, cached, stale)
 
+    @app.post("/api/precut/translate")
+    def api_precut_translate(payload: dict):
+        m = get_material(payload["name"])
+        key = f"translate:{m.name}"
+        if jobs.get(key, {}).get("state") == "running":
+            raise HTTPException(409, "這支素材正在翻譯，別重複啟動")
+        jobs[key] = {"state": "running", "phase": "啟動中", "started": time.time()}
+        threading.Thread(target=_translate_run, args=(m,), daemon=True).start()
+        return {"state": "running"}
+
+    @app.get("/api/precut/translate/status")
+    def api_precut_translate_status(name: str):
+        job = jobs.get(f"translate:{name}") or {"state": "none"}
+        return job
+
     @app.post("/api/precut/save")
     def api_precut_save(payload: dict):
         m = get_material(payload["name"])
@@ -821,12 +862,12 @@ def build_app(default_dir: str | None):
             jobs[key]["segments"] = rows
         return {"ok": True, "overlap": overlap, "segments": rows}
 
-    def _export_run(m: Material, segs, mode, accurate):
+    def _export_run(m: Material, segs, mode, accurate, filename):
         job = jobs[f"export:{m.name}"]
         try:
             paths = SP.export_segs(
                 m.path, segs, mode=mode, accurate=accurate,
-                source=m.source or "SIDE", offset_sec=m.offset,
+                source=m.source or "SIDE", offset_sec=m.offset, filename=filename,
             )
             job.update(state="done", phase="完成", files=paths,
                        dir=SP.export_dir(m.path))
@@ -840,6 +881,7 @@ def build_app(default_dir: str | None):
         if mode not in ("non_ad", "selected"):
             raise HTTPException(400, "mode 只能是 non_ad 或 selected")
         accurate = bool(payload.get("accurate"))
+        filename = payload.get("filename") or None  # 只有 mode=selected（合併）才會用到
         rows = payload.get("segments")
         if rows is None:
             cached = SP.load_cache(m.path) or {}
@@ -853,7 +895,7 @@ def build_app(default_dir: str | None):
         jobs[key] = {"state": "running", "phase": "剪檔", "started": time.time(),
                      "overlap": overlap}
         threading.Thread(
-            target=_export_run, args=(m, segs, mode, accurate), daemon=True
+            target=_export_run, args=(m, segs, mode, accurate, filename), daemon=True
         ).start()
         return {"state": "running", "overlap": overlap}
 
@@ -867,145 +909,146 @@ def build_app(default_dir: str | None):
             out["elapsed"] = round(time.time() - out.pop("started"), 1)
         return out
 
-    def _job_run(m: Material, language: str):
-        job = jobs[m.name]
-        try:
-            data = transcribe(m, language,
-                              on_phase=lambda p: job.update(phase=p))
-            m.has_asr = True
-            job.update(state="done", phase="完成",
-                       segments=len(data.get("segments", [])),
-                       words=len(data.get("words", [])))
-        except Exception as e:
-            job.update(state="error", error=str(e))
+    if not precut_only:
+        def _job_run(m: Material, language: str):
+            job = jobs[m.name]
+            try:
+                data = transcribe(m, language,
+                                  on_phase=lambda p: job.update(phase=p))
+                m.has_asr = True
+                job.update(state="done", phase="完成",
+                           segments=len(data.get("segments", [])),
+                           words=len(data.get("words", [])))
+            except Exception as e:
+                job.update(state="error", error=str(e))
 
-    @app.post("/api/transcribe")
-    def api_transcribe(payload: dict):
-        m = get_material(payload["name"])
-        force = bool(payload.get("force"))
-        # `07` 找 TC 優先序：找到有 TC 的來源就停，不要繼續往下多做。
-        if m.has_subtitle and not force:
-            raise HTTPException(409, "這支素材已有字幕檔（自帶時間碼，優先序高於 ASR）——"
-                                     "不需要跑轉錄。真的要重跑請帶 force。")
-        job = jobs.get(m.name)
-        if job and job.get("state") == "running":
-            raise HTTPException(409, "這支素材的轉錄已在跑，別重複啟動")
-        if not force and load_asr(m) is not None:
-            m.has_asr = True
-            return {"state": "done", "note": "已有 ASR 旁路檔，直接沿用"}
-        jobs[m.name] = {"state": "running", "phase": "啟動中", "started": time.time()}
-        threading.Thread(target=_job_run, args=(m, payload.get("language", "auto")),
-                         daemon=True).start()
-        return {"state": "running"}
-
-    @app.get("/api/transcribe/status")
-    def api_transcribe_status(name: str):
-        job = jobs.get(name)
-        if not job:
-            return {"state": "none"}
-        out = dict(job)
-        if "started" in out:
-            out["elapsed"] = round(time.time() - out.pop("started"), 1)
-        return out
-
-    @app.get("/api/segments")
-    def api_segments(name: str):
-        m = get_material(name)
-        timeline, tl_note = timeline_for(m)
-        if timeline is None:
-            raise HTTPException(409, "這支素材沒有可用的時間軸來源（無字幕、無 ASR），先按「跑轉錄」")
-        quotes = parse_official_quotes(m.script_path)
-        segs = build_segments(timeline, quotes)
-        attach_zh(segs, load_zh_cache(m))
-        return {
-            "material": asdict(m),
-            "official_quotes": len(quotes),
-            "tc_sources": tc_sources(m),
-            "timeline_note": tl_note,
-            "note": ("官方文稿有引言標記（已標「官方引言」），輸出用字以官方稿為準；"
-                     "其餘段落仍全部列出供挑選"
-                     if quotes else
-                     "官方文稿沒有引言標記（或沒有文稿）——不代表沒有 BITE（P-046），"
-                     "段落文字來自轉錄結果，用字須自行核對"),
-            "segments": [{**asdict(s), "duration": round(s.duration, 2)} for s in segs],
-        }
-
-    def _zh_job_run(m: Material, texts: list[str]):
-        job = jobs[f"zh:{m.name}"]
-        cache = load_zh_cache(m)
-        try:
-            for i, t in enumerate(texts):
-                if t not in cache:
-                    cache[t] = _nllb_translate(t)
-                    if i % 10 == 0:
-                        save_zh_cache(m, cache)   # 邊跑邊落地，中斷不用重來
-                job.update(done=i + 1)
-            save_zh_cache(m, cache)
-            job.update(state="done")
-        except Exception as e:
-            save_zh_cache(m, cache)
-            job.update(state="error", error=str(e))
-
-    @app.post("/api/translate_all")
-    def api_translate_all(payload: dict):
-        """整支素材所有段落的 NLLB 批次翻譯（背景），結果進旁路快取。
-        只走本機 NLLB——批次量大，不 fallback 到 LLM（token／額度成本）。"""
-        m = get_material(payload["name"])
-        if not os.path.isdir(NLLB_DIR):
-            raise HTTPException(409, "批次翻譯需要本機 NLLB 模型（不在就只能逐句用 AI 翻譯鈕）")
-        key = f"zh:{m.name}"
-        if jobs.get(key, {}).get("state") == "running":
+        @app.post("/api/transcribe")
+        def api_transcribe(payload: dict):
+            m = get_material(payload["name"])
+            force = bool(payload.get("force"))
+            # `07` 找 TC 優先序：找到有 TC 的來源就停，不要繼續往下多做。
+            if m.has_subtitle and not force:
+                raise HTTPException(409, "這支素材已有字幕檔（自帶時間碼，優先序高於 ASR）——"
+                                         "不需要跑轉錄。真的要重跑請帶 force。")
+            job = jobs.get(m.name)
+            if job and job.get("state") == "running":
+                raise HTTPException(409, "這支素材的轉錄已在跑，別重複啟動")
+            if not force and load_asr(m) is not None:
+                m.has_asr = True
+                return {"state": "done", "note": "已有 ASR 旁路檔，直接沿用"}
+            jobs[m.name] = {"state": "running", "phase": "啟動中", "started": time.time()}
+            threading.Thread(target=_job_run, args=(m, payload.get("language", "auto")),
+                             daemon=True).start()
             return {"state": "running"}
-        timeline, _ = timeline_for(m)
-        if timeline is None:
-            raise HTTPException(409, "先跑轉錄才有段落可翻")
-        segs = build_segments(timeline, parse_official_quotes(m.script_path))
-        cache = load_zh_cache(m)
-        texts = list(dict.fromkeys(s.text for s in segs if s.text and s.text not in cache))
-        if not texts:
-            return {"state": "done", "total": 0}
-        jobs[key] = {"state": "running", "done": 0, "total": len(texts), "started": time.time()}
-        threading.Thread(target=_zh_job_run, args=(m, texts), daemon=True).start()
-        return {"state": "running", "total": len(texts)}
 
-    @app.get("/api/translate_all/status")
-    def api_translate_all_status(name: str):
-        job = jobs.get(f"zh:{name}")
-        if not job:
-            return {"state": "none"}
-        out = dict(job)
-        out.pop("started", None)
-        return out
+        @app.get("/api/transcribe/status")
+        def api_transcribe_status(name: str):
+            job = jobs.get(name)
+            if not job:
+                return {"state": "none"}
+            out = dict(job)
+            if "started" in out:
+                out["elapsed"] = round(time.time() - out.pop("started"), 1)
+            return out
 
-    @app.post("/api/translate")
-    def api_translate(payload: dict):
-        try:
-            return translate_zh(payload.get("text", ""),
-                                speaker=payload.get("speaker", ""),
-                                context=payload.get("context", ""))
-        except ValueError as e:
-            raise HTTPException(400, str(e))
-        except Exception as e:
-            raise HTTPException(500, str(e))
+        @app.get("/api/segments")
+        def api_segments(name: str):
+            m = get_material(name)
+            timeline, tl_note = timeline_for(m)
+            if timeline is None:
+                raise HTTPException(409, "這支素材沒有可用的時間軸來源（無字幕、無 ASR），先按「跑轉錄」")
+            quotes = parse_official_quotes(m.script_path)
+            segs = build_segments(timeline, quotes)
+            attach_zh(segs, load_zh_cache(m))
+            return {
+                "material": asdict(m),
+                "official_quotes": len(quotes),
+                "tc_sources": tc_sources(m),
+                "timeline_note": tl_note,
+                "note": ("官方文稿有引言標記（已標「官方引言」），輸出用字以官方稿為準；"
+                         "其餘段落仍全部列出供挑選"
+                         if quotes else
+                         "官方文稿沒有引言標記（或沒有文稿）——不代表沒有 BITE（P-046），"
+                         "段落文字來自轉錄結果，用字須自行核對"),
+                "segments": [{**asdict(s), "duration": round(s.duration, 2)} for s in segs],
+            }
 
-    @app.post("/api/sb")
-    def api_sb(payload: dict):
-        m = get_material(payload["name"])
-        start, end = float(payload["start"]), float(payload["end"])
-        kind = payload.get("kind") or m.kind
-        try:
-            tc = SBF.tc_field(
-                kind, start, end,
-                material_no=payload.get("material_no") or m.material_no,
-                source=payload.get("source") or m.source,
-                md=payload.get("md") or m.md, offset=m.offset,
-            )
-        except ValueError as e:
-            raise HTTPException(400, str(e))
-        sb = SBF.SB(speaker=payload.get("speaker", ""), zh=payload.get("zh", ""),
-                    tc=tc, original=payload.get("original", ""))
-        return {"text": SBF.render_sb(sb),
-                "lint": SBF.lint_sb(sb, duration=end - start)}
+        def _zh_job_run(m: Material, texts: list[str]):
+            job = jobs[f"zh:{m.name}"]
+            cache = load_zh_cache(m)
+            try:
+                for i, t in enumerate(texts):
+                    if t not in cache:
+                        cache[t] = _nllb_translate(t)
+                        if i % 10 == 0:
+                            save_zh_cache(m, cache)   # 邊跑邊落地，中斷不用重來
+                    job.update(done=i + 1)
+                save_zh_cache(m, cache)
+                job.update(state="done")
+            except Exception as e:
+                save_zh_cache(m, cache)
+                job.update(state="error", error=str(e))
+
+        @app.post("/api/translate_all")
+        def api_translate_all(payload: dict):
+            """整支素材所有段落的 NLLB 批次翻譯（背景），結果進旁路快取。
+            只走本機 NLLB——批次量大，不 fallback 到 LLM（token／額度成本）。"""
+            m = get_material(payload["name"])
+            if not os.path.isdir(NLLB_DIR):
+                raise HTTPException(409, "批次翻譯需要本機 NLLB 模型（不在就只能逐句用 AI 翻譯鈕）")
+            key = f"zh:{m.name}"
+            if jobs.get(key, {}).get("state") == "running":
+                return {"state": "running"}
+            timeline, _ = timeline_for(m)
+            if timeline is None:
+                raise HTTPException(409, "先跑轉錄才有段落可翻")
+            segs = build_segments(timeline, parse_official_quotes(m.script_path))
+            cache = load_zh_cache(m)
+            texts = list(dict.fromkeys(s.text for s in segs if s.text and s.text not in cache))
+            if not texts:
+                return {"state": "done", "total": 0}
+            jobs[key] = {"state": "running", "done": 0, "total": len(texts), "started": time.time()}
+            threading.Thread(target=_zh_job_run, args=(m, texts), daemon=True).start()
+            return {"state": "running", "total": len(texts)}
+
+        @app.get("/api/translate_all/status")
+        def api_translate_all_status(name: str):
+            job = jobs.get(f"zh:{name}")
+            if not job:
+                return {"state": "none"}
+            out = dict(job)
+            out.pop("started", None)
+            return out
+
+        @app.post("/api/translate")
+        def api_translate(payload: dict):
+            try:
+                return translate_zh(payload.get("text", ""),
+                                    speaker=payload.get("speaker", ""),
+                                    context=payload.get("context", ""))
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            except Exception as e:
+                raise HTTPException(500, str(e))
+
+        @app.post("/api/sb")
+        def api_sb(payload: dict):
+            m = get_material(payload["name"])
+            start, end = float(payload["start"]), float(payload["end"])
+            kind = payload.get("kind") or m.kind
+            try:
+                tc = SBF.tc_field(
+                    kind, start, end,
+                    material_no=payload.get("material_no") or m.material_no,
+                    source=payload.get("source") or m.source,
+                    md=payload.get("md") or m.md, offset=m.offset,
+                )
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            sb = SBF.SB(speaker=payload.get("speaker", ""), zh=payload.get("zh", ""),
+                        tc=tc, original=payload.get("original", ""))
+            return {"text": SBF.render_sb(sb),
+                    "lint": SBF.lint_sb(sb, duration=end - start)}
 
     @app.get("/media")
     def media(name: str):
@@ -1027,11 +1070,15 @@ def main() -> int:
     ap.add_argument("--dir", help="素材資料夾（例如 SOT自動寫稿測試\\{SLUG}）")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--precut-only", action="store_true",
+                     help="只開側錄初處理，不掛掐BITE（給獨立打包的 exe 用）")
     args = ap.parse_args()
 
     import uvicorn
-    print(f"掐BITE 工作台 → http://{args.host}:{args.port}")
-    uvicorn.run(build_app(args.dir), host=args.host, port=args.port, log_level="warning")
+    title = "側錄初處理" if args.precut_only else "掐BITE 工作台"
+    print(f"{title} → http://{args.host}:{args.port}")
+    uvicorn.run(build_app(args.dir, precut_only=args.precut_only),
+                host=args.host, port=args.port, log_level="warning")
     return 0
 
 

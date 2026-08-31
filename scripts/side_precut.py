@@ -32,7 +32,7 @@ class PrecutSeg:
     kind: str = "other"
     topic: str = ""
     ocr: str = ""
-    selected: bool = True
+    selected: bool = False
 
 
 def master_tc(t: float, offset_sec: int) -> str:
@@ -110,6 +110,61 @@ def speech_blocks(
     if t < duration:
         blocks.append((t, duration))
     return [(a, b) for a, b in blocks if b - a >= 0.2]
+
+
+LONG_BLOCK_MAX = 90.0
+LONG_BLOCK_STEP = 30.0
+LONG_BLOCK_MAX_SAMPLES = 8  # 每個超長段落最多補幾次OCR，避免極端長段落把成本炸開
+
+
+def _long_block_samples(a: float, b: float, step: float, max_samples: int) -> list[float]:
+    span = b - a
+    n = max(2, min(max_samples, int(span // step) + 1))
+    eff_step = span / n
+    return [a + i * eff_step for i in range(n)]
+
+
+def split_long_blocks(
+    blocks: list[tuple[float, float]],
+    ocr_of,
+    max_span: float = LONG_BLOCK_MAX,
+    step: float = LONG_BLOCK_STEP,
+    max_samples: int = LONG_BLOCK_MAX_SAMPLES,
+    on_phase=None,
+) -> list[tuple[float, float]]:
+    """靜音偵測對長時間沒有明顯停頓的段落沒用（廣告/轉場常靠音樂銜接、不留靜音），
+    對超過 max_span 的段落改用字卡主題變化找斷點，避免不同內容黏在同一段。
+    每次取樣都是一次 ffmpeg 截圖＋OCR，成本不小，只對確實過長的段落做，且每段最多取 max_samples 次。"""
+    out: list[tuple[float, float]] = []
+    long_spans = [(a, b) for a, b in blocks if b - a > max_span]
+    total_samples = sum(
+        len(_long_block_samples(a, b, step, max_samples)) for a, b in long_spans
+    )
+    done = 0
+    for a, b in blocks:
+        if b - a <= max_span:
+            out.append((a, b))
+            continue
+        samples = _long_block_samples(a, b, step, max_samples)
+        topics = []
+        for s in samples:
+            topics.append(norm_topic(topic_from_ocr(ocr_of(min(s, b - 0.1)) or "")))
+            done += 1
+            if on_phase:
+                on_phase(f"長段落補切 {done}/{total_samples}")
+        cuts = {a, b}
+        for i in range(1, len(samples)):
+            if topics[i] != topics[i - 1]:
+                cuts.add(samples[i])
+        prev = None
+        for c in sorted(cuts):
+            if prev is None:
+                prev = c
+                continue
+            if c - prev >= 0.5:
+                out.append((prev, c))
+            prev = c
+    return out
 
 
 RMS_AD = 0.25
@@ -308,11 +363,15 @@ def nllb_map(texts: list[str], run=subprocess.run) -> dict[str, str]:
         "print(json.dumps([translate(x,'eng_Latn','zho_Hant') for x in xs],"
         "ensure_ascii=False))"
     )
+    # 實測約 4.4 秒/條（含首條的模型載入），段落切得越細、待翻字卡越多，
+    # 固定 300 秒在段落數多時會不夠，改成依待翻字數量估算並留餘裕。
+    timeout = max(300, 8 * len(uniq))
     r = run(
         [NLLB_PY, "-c", code],
         input=json.dumps(uniq, ensure_ascii=False),
-        capture_output=True, text=True, encoding="utf-8",
-        timeout=180,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=timeout,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
     )
     if r.returncode:
         return {}
@@ -399,7 +458,7 @@ def merge_topic_runs(segs: list[PrecutSeg]) -> list[PrecutSeg]:
         out.append(PrecutSeg(**{**asdict(s)}))
     for i, s in enumerate(out, 1):
         s.id = f"s{i}"
-        s.selected = s.kind != "ad"
+        s.selected = False
     return out
 
 
@@ -452,7 +511,7 @@ def dicts_to_segs(rows: list[dict]) -> list[PrecutSeg]:
             kind=r.get("kind") or "other",
             topic=r.get("topic") or "",
             ocr=r.get("ocr") or "",
-            selected=bool(r["selected"]) if "selected" in r else (r.get("kind") != "ad"),
+            selected=bool(r["selected"]) if "selected" in r else False,
         ))
     return out
 
@@ -477,6 +536,7 @@ def analyze(video_path: str, *, offset_sec: int, duration: float,
     phase("靜音偵測")
     sil = parse_silencedetect(run_silence(video_path))
     blocks = speech_blocks(duration, sil)
+    # split_long_blocks() 曾試過用字卡變化補切過長段落，實測顆粒太碎，先停用回到純靜音切段。
     segs: list[PrecutSeg] = []
     for i, (a, b) in enumerate(blocks, 1):
         phase(f"標段 {i}/{len(blocks)}")
@@ -488,7 +548,7 @@ def analyze(video_path: str, *, offset_sec: int, duration: float,
         segs.append(PrecutSeg(
             id=f"s{i}", t0=a, t1=b, kind=kind,
             topic=ocr.replace("\n", " ").strip(), ocr=ocr,
-            selected=kind != "ad",
+            selected=False,
         ))
     segs = merge_topic_runs(segs)
     if zh_of:
@@ -520,6 +580,7 @@ def cut_cmd(video_path: str, seg: PrecutSeg, dest: str, *, accurate: bool) -> li
 
 
 _ocr_mod = "unset"
+_ocr_engine = None
 OCR_IMPORT_HINT = "pip install rapidocr-onnxruntime"
 CROP_BOTTOM = 0.28  # CNN 720x480 下方約 28%
 
@@ -539,6 +600,15 @@ def require_ocr() -> None:
             raise FileNotFoundError(
                 f"沒有 RapidOCR，無法分析字卡。安裝：{OCR_IMPORT_HINT}"
             )
+
+
+def _get_ocr_engine():
+    """RapidOCR() 建構會重新載入 ONNX 模型，很吃 CPU；同一個 process 內只建一次重複用。"""
+    global _ocr_engine
+    require_ocr()
+    if _ocr_engine is None:
+        _ocr_engine = _ocr_mod()
+    return _ocr_engine
 
 
 def _run(cmd: list[str], timeout: int = 3600) -> subprocess.CompletedProcess:
@@ -613,7 +683,7 @@ def ocr_at(path: str, t_mid: float) -> str:
         ])
         if r.returncode or not os.path.isfile(png):
             return ""
-        engine = _ocr_mod()
+        engine = _get_ocr_engine()
         result, _ = engine(png)
         if not result:
             return ""
@@ -623,7 +693,7 @@ def ocr_at(path: str, t_mid: float) -> str:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def analyze_file(path: str, offset_sec: int, on_phase=None) -> dict:
+def analyze_file(path: str, offset_sec: int, on_phase=None, translate: bool = True) -> dict:
     require_ocr()
     duration = ffprobe_duration(path)
     def zh_of(segs):
@@ -637,8 +707,28 @@ def analyze_file(path: str, offset_sec: int, on_phase=None) -> dict:
         ocr_of=lambda t: ocr_at(path, t),
         black_of=lambda a, b: black_ffmpeg(path, a, b),
         on_phase=on_phase,
-        zh_of=zh_of,
+        zh_of=zh_of if translate else None,
     )
+
+
+def translate_cache(video_path: str, offset_sec: int, on_phase=None) -> dict:
+    """對已存在的快取跑一次 NLLB 翻譯（手動觸發，不在分析時自動跑）。"""
+    cached = load_cache(video_path)
+    if not cached:
+        raise FileNotFoundError("還沒有分析結果，無法翻譯")
+    segs = dicts_to_segs(cached.get("segments") or [])
+    if on_phase:
+        on_phase("翻譯主題")
+    apply_topic_zh(segs, nllb=True)
+    mtime = os.path.getmtime(video_path) if os.path.isfile(video_path) else 0
+    save_cache(video_path, offset_sec, segs, mtime=mtime)
+    return {
+        "source": os.path.basename(video_path),
+        "offset_sec": offset_sec,
+        "mtime": mtime,
+        "stale": False,
+        "segments": [seg_to_dict(s, offset_sec) for s in segs],
+    }
 
 
 def segs_overlap(segs: list[PrecutSeg]) -> bool:
@@ -649,7 +739,16 @@ def segs_overlap(segs: list[PrecutSeg]) -> bool:
     return False
 
 
-def export_segs(video_path, segs, *, mode, accurate, source, offset_sec, run=subprocess.run) -> list[str]:
+def export_filename_merged(source: str, segs: list[PrecutSeg], offset_sec: int, label: str = "合併") -> str:
+    """勾選出的多段合併成一支——檔名帶「來源＋起始 TC」（不是每段的區間），
+    後面接 label；自訂檔名也要保留這個字首，不能整段被蓋掉。"""
+    src = sanitize_filename_part(source or "SIDE")
+    first = min(segs, key=lambda s: s.t0)
+    return f"{src} {master_tc(first.t0, offset_sec)} {label}.mp4"
+
+
+def export_segs(video_path, segs, *, mode, accurate, source, offset_sec, filename=None,
+                 run=subprocess.run) -> list[str]:
     chosen = []
     for s in segs:
         if mode == "non_ad" and s.kind == "ad":
@@ -659,13 +758,54 @@ def export_segs(video_path, segs, *, mode, accurate, source, offset_sec, run=sub
         chosen.append(s)
     dest_dir = export_dir(video_path)
     os.makedirs(dest_dir, exist_ok=True)
-    paths = []
-    for s in chosen:
-        dest = os.path.join(dest_dir, export_filename(source, s, offset_sec))
+
+    def cut_one(s: PrecutSeg, dest: str, *, accurate: bool) -> None:
         cmd = cut_cmd(video_path, s, dest, accurate=accurate)
-        r = run(cmd, capture_output=True, text=True)
+        r = run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if getattr(r, "returncode", 0):
             err = (getattr(r, "stderr", None) or "")[-400:]
             raise RuntimeError(f"ffmpeg 剪檔失敗：{err}")
+
+    if mode == "selected":
+        # 勾選常常是同一支帶不連續的多段——合併成一支，不要一段一檔。
+        # 一律精準重編：不精準（stream copy）若段落沒跨到 keyframe，
+        # 剪出來的片段可能整段沒有影像（只剩聲音），合併起來就是壞檔——
+        # 不能交給「精準重編」勾選框，這裡自己蓋掉。
+        if not chosen:
+            return []
+        ordered = sorted(chosen, key=lambda s: s.t0)
+        custom = filename.strip() if filename and filename.strip() else None
+        if custom and custom.lower().endswith(".mp4"):
+            custom = custom[:-4]
+        label = sanitize_filename_part(custom) if custom else ""
+        name = export_filename_merged(source, ordered, offset_sec, label=label or "合併")
+        dest = os.path.join(dest_dir, name)
+        if len(ordered) == 1:
+            cut_one(ordered[0], dest, accurate=True)
+            return [dest]
+        tmp_dir = tempfile.mkdtemp(prefix="precut_merge_", dir=dest_dir)
+        try:
+            clip_paths = []
+            for i, s in enumerate(ordered, 1):
+                clip = os.path.join(tmp_dir, f"clip{i:03d}.mp4")
+                cut_one(s, clip, accurate=True)
+                clip_paths.append(clip)
+            list_path = os.path.join(tmp_dir, "concat.txt")
+            with open(list_path, "w", encoding="utf-8") as f:
+                for p in clip_paths:
+                    f.write("file '%s'\n" % p.replace("'", "'\\''"))
+            cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_path, "-c", "copy", dest]
+            r = run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            if getattr(r, "returncode", 0):
+                err = (getattr(r, "stderr", None) or "")[-400:]
+                raise RuntimeError(f"ffmpeg 合併失敗：{err}")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        return [dest]
+
+    paths = []
+    for s in chosen:
+        dest = os.path.join(dest_dir, export_filename(source, s, offset_sec))
+        cut_one(s, dest, accurate=accurate)
         paths.append(dest)
     return paths
