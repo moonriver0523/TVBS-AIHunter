@@ -42,8 +42,38 @@ R4／②樣板回滾），放行時什麼都不印。任何解析失敗一律放
 回退：launcher `-NoBashGuard` 開關（不與 -NoToolBan 共用，單變因可歸因）。
 """
 import json
+import os
 import re
 import sys
+
+# 🔴 2026-08-31 根因修正（0831-0430 輪 14 筆 `python -c` 全數漏擋的實錯）：
+# 原本 `json.load(sys.stdin)` 會用**行程 locale 編碼**解 stdin（本機 = cp950），
+# 但 Claude Code 送進來的 payload 是 UTF-8。中文字的 UTF-8 位元組在 cp950 下
+# 是雙位元組序列，`\` (0x5C) 落在 cp950 的合法尾位元組區間（0x40–0x7E），
+# 於是「中文字緊接反斜線」時會把 JSON 的 `\\` 吃掉一半 → `Invalid \escape`
+# → JSONDecodeError → 被下面的 fail-open 靜默吞掉。
+# 實測對照（0831 五輪 22 筆全部吻合）：
+#   指令寫 `G:\我的雲端硬碟\…\x.json`（反斜線）→ 解析爆掉 → 放行（17/17 漏擋）
+#   指令寫 `G:/我的雲端硬碟/…/x.json`（正斜線）→ 解析過 → 正常 deny（5/5）
+# 修法：自己讀 bytes、固定用 UTF-8 解，不再讓 locale 決定。
+_DECISION_LOG = os.environ.get(
+    'S2_GUARD_LOG',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), '_guard_calls.log'),
+)
+
+
+def _log(kind, detail):
+    """每次呼叫留一行，用來區分「hook 根本沒觸發」vs「觸發了但放行」。
+
+    0831-0430 那輪之所以難查，就是因為兩者在 transcript 上長得一模一樣
+    （denial_count=0）。這支 log 本身壞掉不准影響判定，整段包 try/except。
+    """
+    try:
+        with open(_DECISION_LOG, 'a', encoding='utf-8') as f:
+            f.write('%s\t%s\n' % (kind, str(detail).replace('\n', ' ')[:400]))
+    except Exception:
+        pass
+
 
 # python／python3／py（含 .exe），中間可夾 `-X utf8` 這類旗標，接 `-c`。
 # ⚠️ 必須涵蓋 `python3`：0817 體檢實際踩過「用 `python -c` grep 會漏掉 11/14 筆」。
@@ -206,16 +236,24 @@ def decide_write(file_path):
 
 def main():
     try:
-        payload = json.load(sys.stdin)
+        # ⚠️ 不可以用 `json.load(sys.stdin)`——那條路徑吃 locale 編碼，見檔頭
+        # 2026-08-31 根因說明。一律自己讀 bytes 再用 UTF-8 解。
+        raw = sys.stdin.buffer.read()
+        payload = json.loads(raw.decode('utf-8', 'replace'))
         tool_name = payload.get('tool_name', '')
         tool_input = payload.get('tool_input') or {}
         if tool_name == 'Write':
-            reason = decide_write(tool_input.get('file_path', ''))
+            target = tool_input.get('file_path', '')
+            reason = decide_write(target)
         else:
-            reason = decide(tool_name, tool_input.get('command', ''))
-    except Exception:
-        # hook 自己壞掉不准弄死掃帶輪：靜默放行
+            target = tool_input.get('command', '')
+            reason = decide(tool_name, target)
+    except Exception as exc:
+        # hook 自己壞掉不准弄死掃帶輪：放行——但要留痕，不准再靜默
+        _log('ERROR', repr(exc))
         return 0
+
+    _log('DENY' if reason else 'ALLOW', '%s | %s' % (tool_name, target))
 
     if reason:
         print(json.dumps({

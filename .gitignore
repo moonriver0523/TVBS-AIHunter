@@ -35,3 +35,5 @@ scripts/_task2_test_out/
 # 只留腳本與模板；成品一律寫 D:\Downloads（見 scripts/prototype/*.py 檔頭）。
 scripts/prototype/*-tc-matrix-*.html
 scripts/prototype/0*.html
+
+scripts/_guard_calls.log
