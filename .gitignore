@@ -36,4 +36,4 @@ scripts/_task2_test_out/
 scripts/prototype/*-tc-matrix-*.html
 scripts/prototype/0*.html
 
-scripts/_guard_calls.log
+scripts/_guard_calls.log*

@@ -42,6 +42,7 @@ R4 是錯的，R4（`R.md:13`）講的是 truncate() 長度溢出，跟編碼無
 
 回退：launcher `-NoBashGuard` 開關（不與 -NoToolBan 共用，單變因可歸因）。
 """
+import datetime
 import json
 import os
 import re
@@ -61,6 +62,9 @@ _DECISION_LOG = os.environ.get(
     'S2_GUARD_LOG',
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '_guard_calls.log'),
 )
+# 單檔上限；超過就輪替成 `.1`（只留一代，磁碟用量封頂在 2×）。
+# 實測 ~1000 行／日、單行上限 400 字元 → 2MB 約可容納 5 天。
+_LOG_MAX_BYTES = 2 * 1024 * 1024
 
 
 def _log(kind, detail):
@@ -68,10 +72,21 @@ def _log(kind, detail):
 
     0831-0430 那輪之所以難查，就是因為兩者在 transcript 上長得一模一樣
     （denial_count=0）。這支 log 本身壞掉不准影響判定，整段包 try/except。
+
+    2026-08-31 補時間戳：沒有時間戳的話，單元測試餵爛 JSON 產生的 ERROR 行
+    跟生產輪次的行混在同一個檔裡分不出來——而這支 log 存在的唯一理由就是
+    消除歧義，少了時間戳等於只解決一半。
     """
     try:
+        try:
+            if os.path.getsize(_DECISION_LOG) >= _LOG_MAX_BYTES:
+                os.replace(_DECISION_LOG, _DECISION_LOG + '.1')
+        except OSError:
+            pass  # 檔案不存在／輪替搶不到，都不該影響寫入
+        stamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         with open(_DECISION_LOG, 'a', encoding='utf-8') as f:
-            f.write('%s\t%s\n' % (kind, str(detail).replace('\n', ' ')[:400]))
+            f.write('%s\t%s\t%s\n'
+                    % (stamp, kind, str(detail).replace('\n', ' ')[:400]))
     except Exception:
         pass
 
