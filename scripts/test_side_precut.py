@@ -71,6 +71,12 @@ class TestTopicZh(unittest.TestCase):
         P.apply_topic_zh(segs)
         self.assertEqual(segs[0].topic, "驗收仍在-重選")
 
+    def test_手改短主題不被洗成空字串(self):
+        # 使用者手改的主題若推導不出東西（zh 為空），要保留原值，不能清空
+        segs = [P.PrecutSeg("s1", 0, 1, "anchor", topic="X", ocr="")]
+        P.apply_topic_zh(segs, nllb=False)
+        self.assertEqual(segs[0].topic, "X")
+
     def test_NLLB殘譯被字卡對照蓋掉(self):
         segs = [P.PrecutSeg("s1", 0, 1, "anchor", topic="美國CNN", ocr="HIGHLIGHT CNN")]
         P.apply_topic_zh(segs)

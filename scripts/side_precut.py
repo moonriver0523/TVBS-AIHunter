@@ -414,7 +414,8 @@ def apply_topic_zh(segs: list[PrecutSeg], mapping: dict[str, str] | None = None,
             pending.append((s, lat or src, zh))
             leftover_txt.append(lat or src)
             s.topic = "／".join(p for p in (zh, lat or src) if p)
-        elif not human:
+        elif not human and zh:
+            # zh 為空時不動：把非空主題洗成空字串會毀掉使用者手改的短主題
             s.topic = zh
     if leftover_txt and nllb:
         m = nllb_map(leftover_txt)
@@ -488,8 +489,10 @@ def load_cache(video_path: str) -> dict | None:
         return None
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
+    # 這裡不能重跑 apply_topic_zh：快取裡存的是使用者手改後的主題，
+    # 每次載入重推導會把短主題（<2中文字、<8英文字母）洗掉。
+    # 主題整理只在 analyze_file／translate_cache 做一次。
     segs = dicts_to_segs(data.get("segments") or [])
-    apply_topic_zh(segs, nllb=False)
     off = int(data.get("offset_sec") or 0)
     data["segments"] = [seg_to_dict(s, off) for s in segs]
     return data
@@ -697,9 +700,11 @@ def analyze_file(path: str, offset_sec: int, on_phase=None, translate: bool = Tr
     require_ocr()
     duration = ffprobe_duration(path)
     def zh_of(segs):
-        if on_phase:
+        # 不翻譯也要跑一次對照表／垃圾清洗（nllb=False 只做 regex，很便宜），
+        # load_cache 不再重跑這步，所以整理必須在分析時做完存進快取。
+        if translate and on_phase:
             on_phase("翻譯主題")
-        apply_topic_zh(segs)
+        apply_topic_zh(segs, nllb=translate)
     return analyze(
         path, offset_sec=offset_sec, duration=duration,
         run_silence=run_silence_ffmpeg,
@@ -707,7 +712,7 @@ def analyze_file(path: str, offset_sec: int, on_phase=None, translate: bool = Tr
         ocr_of=lambda t: ocr_at(path, t),
         black_of=lambda a, b: black_ffmpeg(path, a, b),
         on_phase=on_phase,
-        zh_of=zh_of if translate else None,
+        zh_of=zh_of,
     )
 
 
