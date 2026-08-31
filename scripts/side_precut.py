@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 from dataclasses import asdict, dataclass
 
 import sb_format as SBF
@@ -112,59 +113,103 @@ def speech_blocks(
     return [(a, b) for a, b in blocks if b - a >= 0.2]
 
 
-LONG_BLOCK_MAX = 90.0
-LONG_BLOCK_STEP = 30.0
-LONG_BLOCK_MAX_SAMPLES = 8  # 每個超長段落最多補幾次OCR，避免極端長段落把成本炸開
+PROBE_MAX_SPAN = 120.0   # 超過這長度的段落才做黏段探測
+PROBE_MIN_SEG = 30.0     # 切出來的子段最短長度，避免碎段
+PROBE_PRECISION = 20.0   # 邊界定位誤差（夾到這個寬度就停止細分）
+PROBE_CONFIRM_GAP = 5.0  # 二次確認的外推距離
+PROBE_BUDGET = 18        # 每個段落 OCR 取樣上限（含確認），防成本爆炸
 
 
-def _long_block_samples(a: float, b: float, step: float, max_samples: int) -> list[float]:
-    span = b - a
-    n = max(2, min(max_samples, int(span // step) + 1))
-    eff_step = span / n
-    return [a + i * eff_step for i in range(n)]
+class _ProbeBudgetOut(Exception):
+    pass
 
 
-def split_long_blocks(
+def probe_split_blocks(
     blocks: list[tuple[float, float]],
     ocr_of,
-    max_span: float = LONG_BLOCK_MAX,
-    step: float = LONG_BLOCK_STEP,
-    max_samples: int = LONG_BLOCK_MAX_SAMPLES,
+    *,
+    max_span: float = PROBE_MAX_SPAN,
+    min_seg: float = PROBE_MIN_SEG,
+    precision: float = PROBE_PRECISION,
+    confirm_gap: float = PROBE_CONFIRM_GAP,
+    budget: int = PROBE_BUDGET,
     on_phase=None,
 ) -> list[tuple[float, float]]:
-    """靜音偵測對長時間沒有明顯停頓的段落沒用（廣告/轉場常靠音樂銜接、不留靜音），
-    對超過 max_span 的段落改用字卡主題變化找斷點，避免不同內容黏在同一段。
-    每次取樣都是一次 ffmpeg 截圖＋OCR，成本不小，只對確實過長的段落做，且每段最多取 max_samples 次。"""
+    """黏段補切（取代舊的均勻取樣 split_long_blocks，那版切太碎又榨乾CPU）。
+
+    靜音偵測對靠音樂銜接、不留靜音的轉場（廣告進出最常見）沒用，超長段落
+    會把不同內容黏在一起。這裡用「二分探測」找字卡主題邊界：
+    頭中尾三點同主題→視為同質直接收工（3 次 OCR）；不同→只往不一致的
+    半邊遞迴，夾到 precision 寬度後在邊界外側各補一張「二次確認」，
+    兩側都穩定才真的切——OCR 雜訊閃爍過不了確認這關。
+    切出來不足 min_seg 的碎段一律不切，機制上保證不會碎。"""
     out: list[tuple[float, float]] = []
-    long_spans = [(a, b) for a, b in blocks if b - a > max_span]
-    total_samples = sum(
-        len(_long_block_samples(a, b, step, max_samples)) for a, b in long_spans
-    )
-    done = 0
     for a, b in blocks:
         if b - a <= max_span:
             out.append((a, b))
             continue
-        samples = _long_block_samples(a, b, step, max_samples)
-        topics = []
-        for s in samples:
-            topics.append(norm_topic(topic_from_ocr(ocr_of(min(s, b - 0.1)) or "")))
-            done += 1
-            if on_phase:
-                on_phase(f"長段落補切 {done}/{total_samples}")
-        cuts = {a, b}
-        for i in range(1, len(samples)):
-            if topics[i] != topics[i - 1]:
-                cuts.add(samples[i])
-        prev = None
-        for c in sorted(cuts):
-            if prev is None:
-                prev = c
-                continue
-            if c - prev >= 0.5:
-                out.append((prev, c))
-            prev = c
+        cuts = _probe_block(
+            a, b, ocr_of, min_seg=min_seg, precision=precision,
+            confirm_gap=confirm_gap, budget=budget, on_phase=on_phase,
+        )
+        edges = [a] + cuts + [b]
+        out.extend(zip(edges, edges[1:]))
     return out
+
+
+def _probe_block(a, b, ocr_of, *, min_seg, precision, confirm_gap, budget, on_phase):
+    cache: dict[float, str] = {}
+    used = 0
+
+    def topic_at(t: float) -> str:
+        nonlocal used
+        t = min(max(t, a), b - 0.1)
+        key = round(t, 1)
+        if key not in cache:
+            if used >= budget:
+                raise _ProbeBudgetOut
+            used += 1
+            if on_phase:
+                on_phase(f"黏段探測 {used}/{budget}")
+            cache[key] = norm_topic(topic_from_ocr(ocr_of(key) or ""))
+        return cache[key]
+
+    cuts: list[float] = []
+
+    def find(lo: float, hi: float, tlo: str, thi: str) -> None:
+        if hi - lo <= precision:
+            if tlo != thi:
+                # 二次確認：邊界外側各補一張，兩側主題都穩定才切
+                if topic_at(lo - confirm_gap) == tlo and topic_at(hi + confirm_gap) == thi:
+                    cuts.append((lo + hi) / 2)
+            return
+        mid = (lo + hi) / 2
+        tm = topic_at(mid)
+        if tlo == thi:
+            if tm == tlo:
+                return  # 三點同主題，視為同質（刻意不掃內部，控制成本）
+            find(lo, mid, tlo, tm)
+            find(mid, hi, tm, thi)
+        elif tm == tlo:
+            find(mid, hi, tm, thi)
+        elif tm == thi:
+            find(lo, mid, tlo, tm)
+        else:
+            find(lo, mid, tlo, tm)
+            find(mid, hi, tm, thi)
+
+    try:
+        lo, hi = a + 1.0, b - 1.0
+        find(lo, hi, topic_at(lo), topic_at(hi))
+    except _ProbeBudgetOut:
+        pass  # 預算用完就收手，已確認的切點照用
+    kept: list[float] = []
+    prev = a
+    for c in sorted(cuts):
+        if c - prev >= min_seg and b - c >= min_seg:
+            kept.append(c)
+            prev = c
+    return kept
 
 
 RMS_AD = 0.25
@@ -539,7 +584,7 @@ def analyze(video_path: str, *, offset_sec: int, duration: float,
     phase("靜音偵測")
     sil = parse_silencedetect(run_silence(video_path))
     blocks = speech_blocks(duration, sil)
-    # split_long_blocks() 曾試過用字卡變化補切過長段落，實測顆粒太碎，先停用回到純靜音切段。
+    blocks = probe_split_blocks(blocks, ocr_of, on_phase=on_phase)
     segs: list[PrecutSeg] = []
     for i, (a, b) in enumerate(blocks, 1):
         phase(f"標段 {i}/{len(blocks)}")
@@ -584,6 +629,9 @@ def cut_cmd(video_path: str, seg: PrecutSeg, dest: str, *, accurate: bool) -> li
 
 _ocr_mod = "unset"
 _ocr_engine = None
+# 多支素材同時分析時，OCR 推論（onnxruntime 會吃滿多核心）要排隊跑，
+# 不然 4 支並行會把 CPU 榨乾、看起來像卡死（2026-08-30 實際踩過）。
+_ocr_lock = threading.Lock()
 OCR_IMPORT_HINT = "pip install rapidocr-onnxruntime"
 CROP_BOTTOM = 0.28  # CNN 720x480 下方約 28%
 
@@ -686,8 +734,9 @@ def ocr_at(path: str, t_mid: float) -> str:
         ])
         if r.returncode or not os.path.isfile(png):
             return ""
-        engine = _get_ocr_engine()
-        result, _ = engine(png)
+        with _ocr_lock:
+            engine = _get_ocr_engine()
+            result, _ = engine(png)
         if not result:
             return ""
         lines = [row[1] for row in result if len(row) > 1 and row[1]]

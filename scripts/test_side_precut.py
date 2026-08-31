@@ -156,49 +156,74 @@ class TestSilence(unittest.TestCase):
         self.assertEqual(P.speech_blocks(50.0, []), [(0.0, 50.0)])
 
 
-class TestSplitLongBlocks(unittest.TestCase):
-    def test_短段落不動也不叫OCR(self):
-        calls = []
+class TestProbeSplitBlocks(unittest.TestCase):
+    """黏段二分探測：取代舊的均勻取樣 split_long_blocks。"""
 
+    @staticmethod
+    def _counting(fn):
+        calls = []
         def ocr_of(t):
             calls.append(t)
-            return "不該被呼叫"
+            return fn(t)
+        return ocr_of, calls
 
-        out = P.split_long_blocks([(0.0, 15.0)], ocr_of)
+    def test_短段落不動也不叫OCR(self):
+        ocr_of, calls = self._counting(lambda t: "不該被呼叫")
+        out = P.probe_split_blocks([(0.0, 15.0)], ocr_of)
         self.assertEqual(out, [(0.0, 15.0)])
         self.assertEqual(calls, [])
 
-    def test_長段落依字卡變化切開(self):
-        # 60 秒的段落，broadcast 內容其實換了兩次主題但中間都沒有靜音
-        topics_by_time = {
-            5.0: "INSIDE AFRICA",
-            20.0: "INSIDE AFRICA",
-            35.0: "HIGHLIGHT",
-            50.0: "HIGHLIGHT",
-            59.5: "MORNING ROUNDUP",
-        }
+    def test_同質長段只取樣三次不切(self):
+        ocr_of, calls = self._counting(lambda t: "INSIDE AFRICA")
+        out = P.probe_split_blocks([(0.0, 300.0)], ocr_of)
+        self.assertEqual(out, [(0.0, 300.0)])
+        self.assertEqual(len(calls), 3)  # 頭、中、尾
 
-        def ocr_of(t):
-            # 取最接近的取樣點對應主題（模擬固定字卡文字）
-            key = min(topics_by_time, key=lambda k: abs(k - t))
-            return topics_by_time[key]
-
-        out = P.split_long_blocks(
-            [(0.0, 60.0)], ocr_of, max_span=20.0, step=15.0,
-        )
-        self.assertGreater(len(out), 1)
+    def test_單一邊界切在誤差內(self):
+        ocr_of, calls = self._counting(
+            lambda t: "INSIDE AFRICA" if t < 150 else "HIGHLIGHT")
+        out = P.probe_split_blocks([(0.0, 300.0)], ocr_of)
+        self.assertEqual(len(out), 2)
+        cut = out[0][1]
+        self.assertAlmostEqual(cut, out[1][0])
+        self.assertLess(abs(cut - 150.0), P.PROBE_PRECISION)
+        # 涵蓋整段、無縫隙
         self.assertAlmostEqual(out[0][0], 0.0)
-        self.assertAlmostEqual(out[-1][1], 60.0)
-        # 涵蓋整段、無重疊無縫隙
-        for (a1, b1), (a2, b2) in zip(out, out[1:]):
-            self.assertAlmostEqual(b1, a2)
+        self.assertAlmostEqual(out[-1][1], 300.0)
 
-    def test_長段落但字卡沒變不切(self):
-        def ocr_of(t):
-            return "同一張字卡"
+    def test_三主題切兩刀(self):
+        def f(t):
+            if t < 100:
+                return "INSIDE AFRICA"
+            if t < 200:
+                return "HIGHLIGHT"
+            return "MORNING ROUNDUP"
+        ocr_of, _ = self._counting(f)
+        out = P.probe_split_blocks([(0.0, 300.0)], ocr_of)
+        self.assertEqual(len(out), 3)
+        self.assertLess(abs(out[0][1] - 100.0), P.PROBE_PRECISION)
+        self.assertLess(abs(out[1][1] - 200.0), P.PROBE_PRECISION)
 
-        out = P.split_long_blocks([(0.0, 60.0)], ocr_of, max_span=20.0, step=15.0)
-        self.assertEqual(out, [(0.0, 60.0)])
+    def test_OCR雜訊閃爍不亂切(self):
+        # 只有 149~151 秒之間某幀 OCR 到別的字，其餘全程同主題：
+        # 二次確認（邊界外側 ±confirm_gap 再各補一張）要擋下這種假邊界
+        ocr_of, _ = self._counting(
+            lambda t: "FLICKER" if 149 <= t <= 151 else "INSIDE AFRICA")
+        out = P.probe_split_blocks([(0.0, 300.0)], ocr_of)
+        self.assertEqual(out, [(0.0, 300.0)])
+
+    def test_碎段被最小長度擋掉(self):
+        # 邊界在 10 秒處，切下去左片只有 10 秒 < 最小 30 秒 → 不切
+        ocr_of, _ = self._counting(
+            lambda t: "A CARD HERE" if t < 10 else "OTHER CARD")
+        out = P.probe_split_blocks([(0.0, 300.0)], ocr_of)
+        self.assertEqual(out, [(0.0, 300.0)])
+
+    def test_取樣數有預算上限(self):
+        # 病態輸入：每一秒都是不同主題，取樣數也不能爆
+        ocr_of, calls = self._counting(lambda t: f"TOPIC {int(t)}")
+        P.probe_split_blocks([(0.0, 600.0)], ocr_of)
+        self.assertLessEqual(len(calls), P.PROBE_BUDGET)
 
 
 class TestClassify(unittest.TestCase):
