@@ -53,14 +53,14 @@ def default_file():
     ⛔ **不再回傳無日期前綴的路徑**——那個檔名本身就是不合規的。
 
     ⚠️ **然後它又從反方向錯了一次（2026-08-10 實錯，本次補的就是這個）**：
-    今天（MMDD）的檔還沒建、而現在已經過了 16:00＝**班次已經換日但沒開新檔**，
+    今天（MMDD）的檔還沒建、而現在已經過了 17:00＝**班次已經換日但沒開新檔**，
     這時候「回傳最新的那份」就是回傳**昨天**那份。0810-1600 就是這樣來的——
     agent 開 `0810-s2-state.json` 拿到 FileNotFoundError，退回昨天那份繼續寫，
     昨天的 398 則全被當成今天的，**全程不報錯**。
 
     📌 **同一個函式的兩次錯誤方向剛好相反**：原本永遠找不到 → 把還在用的檔切成兩份；
     改成永遠找得到 → 從此不開新檔。**兩次都是靜默的**，所以這次改成大聲失敗。
-    正常情況下 `s2_scan.ps1` 的 `New-ShiftState` 會在 16:00 那輪先把檔建好，
+    正常情況下 `s2_scan.ps1` 的 `New-ShiftState` 會在 17:00 那輪先把檔建好，
     這個例外只在「那一步沒跑到」時觸發——那時候就該停下來，不該猜。
     """
     try:
@@ -69,15 +69,15 @@ def default_file():
         cands = []
     if cands:
         today = datetime.now().strftime("%m%d")
-        if datetime.now().hour >= 16 and f"{today}-s2-state.json" not in cands:
+        if datetime.now().hour >= 17 and f"{today}-s2-state.json" not in cands:
             newest = max(cands, key=lambda f: os.path.getmtime(os.path.join(STATE_DIR, f)))
             raise SystemExit(
                 f"⛔ 班次已換日但今天的狀態檔還沒建：找不到 {today}-s2-state.json，"
                 f"現有最新的是 {newest}（那是上一班的）。\n"
                 f"   **不要**就這樣用上一班那份——0810-1600 就是這樣把昨天 398 則"
                 f"整包當成今天的。\n"
-                f"   正常流程：`s2_scan.ps1` 的 16:00 輪會自動建檔。手動要建就跑：\n"
-                f"     pwsh -File scripts\\s2_scan.ps1 -Checkpoint {today}-1600 -DryRun\n"
+                f"   正常流程：`s2_scan.ps1` 的 17:00 輪會自動建檔。手動要建就跑：\n"
+                f"     pwsh -File scripts\\s2_scan.ps1 -Checkpoint {today}-1700 -DryRun\n"
                 f"   確定要對上一班那份動作，就明確帶 --file 指定它。")
         newest = max(cands, key=lambda f: os.path.getmtime(os.path.join(STATE_DIR, f)))
         # ⚠️ 2026-08-26 補（0430 事故 P2）：「最新修改」曾經是自我強化陷阱本身——

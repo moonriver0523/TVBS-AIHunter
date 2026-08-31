@@ -323,7 +323,7 @@ try {
     #    兩次都是靜默失敗——所以這件事不該再靠任何人記得，改由這裡做掉。
     # ⚠️ 用**前綴**比對，不要錨到結尾：16:00 整輪失敗要補跑時傳的是
     #    `0811-1600-補漏`，錨結尾就永遠不會建檔——而那正是最需要它的場合。
-    if ($Checkpoint -match '^\d{4}-1600') { New-ShiftState }
+    if ($Checkpoint -match '^\d{4}-1700') { New-ShiftState }
 
     if (-not (Test-Path $PromptFile)) { throw "找不到 prompt 範本：$PromptFile" }
     $prompt = (Get-Content $PromptFile -Raw -Encoding UTF8) -replace '\{CHECKPOINT\}', $Checkpoint

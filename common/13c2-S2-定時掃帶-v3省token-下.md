@@ -404,12 +404,12 @@ pwsh -NoProfile -File "E:\GitHub\TVBS-AIHunter\scripts\s2_scan.ps1" -Model opus
 - 跑完會驗 `{MMDD}-s2-state.json` 與 txt 在不在——**離開碼 0 不等於掃帶做完了**。
 - 排程設定完先 `-DryRun` 跑一次。⛔ 這支腳本自己也不殺任何進程。
 
-## 5a. 每天第一輪（建檔輪，16:00）的額外動作
+## 5a. 每天第一輪（建檔輪，17:00）的額外動作
 
-> 🔴 **歸檔與建檔已由腳本做掉**：`s2_scan.ps1` 的 `New-ShiftState` 在 `{MMDD}-1600` 開頭的輪次
+> 🔴 **歸檔與建檔已由腳本做掉**：`s2_scan.ps1` 的 `New-ShiftState` 在 `{MMDD}-1700` 開頭的輪次
 > ①建好 `{MMDD}-s2-state.json`（`window_start` 直接寫好＝當天 13:00）②把上一班的檔（含 `.html`）
 > 全部搬進 `Archive/{YYYYMMDD}/`。冪等，重跑不會重建也不重複歸檔。
-> `default_file()` 遇到「已過 16:00 卻沒有今天的檔」會直接報錯，不再靜靜用昨天那份。
+> `default_file()` 遇到「已過 17:00 卻沒有今天的檔」會直接報錯，不再靜靜用昨天那份。
 >
 > **你要做的只剩**：開工確認 `{MMDD}-s2-state.json` 是今天日期、且 `items` 是空的。
 > 不是就**停下來回報**，⛔ 不要自己建、不要退回用昨天那份。
