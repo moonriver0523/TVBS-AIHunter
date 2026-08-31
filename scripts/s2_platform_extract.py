@@ -49,6 +49,7 @@ ENEX／ABC 是「人工下令才跑、獨立流程」（18 檔 §0），輸出�
   提醒漏判（同 `s2_platform_merge.py` 的護欄精神：缺欄位不靜默丟）。
 """
 import argparse
+import concurrent.futures
 import json
 import re
 import subprocess
@@ -60,7 +61,15 @@ for _s in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-SRC_TEXT_MAX = 3000
+# 🔴 2026-08-31 由 3000 提高到 8000（實測改的）：附錄 A-3 原本寫「超過 3,000 截斷，
+# 目前實測最長 2,769 字元，尚未觸發過」——那個前提已經過期。0831 13:00–19:00 窗
+# 48 則裡有 **9 則（19%）** 超過 3,000，最長 5,634。而 ENEX 的 dopesheet 排列是
+# STORYLINE → SHOTLIST → **SOUNDBITE**，引言在最後面，截斷正好切掉它：
+# 實測 ENEX928973 的 4 段 SOUNDBITE 只剩 2 段、ENEX928976 的 5 段剩 4 段。
+# 而 18 檔 §2 明訂 src_text 是「事後離線查證的**唯一依據**、也是 sb_count 的判準」
+# ——截在那一段上等於毀掉它唯一的存在理由。
+# 成本可忽略：18 檔 §2 自己寫「瘦身後單則約 1–5KB」，一輪 48 則全存也才幾百 KB。
+SRC_TEXT_MAX = 8000
 
 
 def truncate(s, n=SRC_TEXT_MAX):
@@ -87,6 +96,45 @@ def probe_duration_seconds(url):
         return None
 
 
+# ffprobe 併發數。⚠️ 這是**網路 I/O 等待**不是 CPU 運算，所以開多執行緒有效
+# （每條大部分時間都卡在等 CDN 回應，不會互相搶 CPU）。
+# 8 是保守值：0831 實測 48 則序列跑 79 秒，這裡的瓶頸就是逐則往返。
+# ⛔ 不要無限開——同時打太多連線可能被 CDN 限流，那會從「慢」變成「量不到」。
+PROBE_WORKERS = 8
+
+
+def probe_durations(urls, duration_fn=None, workers=PROBE_WORKERS):
+    """一次量一批網址的時長，回傳 {網址: 秒數或 None}。
+
+    🔴 2026-08-31 加：原本在主迴圈裡逐則 `ffprobe`，48 則要 **79 秒**——
+    那是四站輪的純浪費（0811 那次加掛 ENEX 跑到 56.7 分鐘、NS token 在空窗期過期）。
+    改成併發後同一批約 10–15 秒。
+
+    ⚠️ **失敗一律回 None，絕不讓例外冒出來**——量不到時長是 `known_gaps` 的事，
+    不能讓整支腳本掛掉（同 `probe_duration_seconds` 的既有哲學）。
+    `workers<=1` 退回序列，給不想併發或要重現問題時用。
+    """
+    fn = duration_fn or probe_duration_seconds
+    uniq = [u for u in dict.fromkeys(u for u in urls if u)]
+    if not uniq:
+        return {}
+    if workers <= 1 or len(uniq) == 1:
+        return {u: _safe_probe(fn, u) for u in uniq}
+    out = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = {pool.submit(_safe_probe, fn, u): u for u in uniq}
+        for f in concurrent.futures.as_completed(futs):
+            out[futs[f]] = f.result()
+    return out
+
+
+def _safe_probe(fn, url):
+    try:
+        return fn(url)
+    except Exception:
+        return None
+
+
 def fmt_mmss(seconds):
     if seconds is None:
         return None
@@ -94,19 +142,92 @@ def fmt_mmss(seconds):
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
-def build_counts(kept_n, skipped_n):
-    return {"掃描": kept_n + skipped_n, "收錄": kept_n, "排除": skipped_n}
+def build_counts(kept_n, skipped_n, dropped_n=0):
+    """`掃描` ＝ 這一輪實際看過的 raw 則數 ＝ 收錄 ＋ 排除 ＋ **漏判**。
+
+    🔴 2026-09-01 修（獨立複查抓到）：原本 `掃描 = 收錄 + 排除`，**把 dropped 漏掉了**。
+    後果是抽取整段失敗（entries 鍵全對不上）時，48 則全進 dropped，
+    候選檔卻寫成 `{掃描:0, 收錄:0, 排除:0}`——看起來就像「這輪站方沒素材」，
+    跟真正的無聲全失敗**完全分不出來**，連 lint 想擋都沒有依據可擋。
+    18 檔 §2 的範例本來就是 `掃描 73 / 收錄 14 / 排除 13`（三者不相等），
+    所以「掃描比收錄+排除大」本來就是這個 schema 的原意。
+    """
+    return {"掃描": kept_n + skipped_n + dropped_n,
+            "收錄": kept_n, "排除": skipped_n, "漏判": dropped_n}
 
 
-def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds):
+def bare_enex_id(v):
+    """把 `ENEX929038` 與 `929038` 一律正規化成裸 id。
+
+    🔴 2026-08-31 修（實測 48 則全數蒸發）：本函式原本假設 `--raw` 的 `id` 是裸的，
+    但上游 `slimEnex()`（附錄 A-3）產的是 `id: 'ENEX' + h._id`，**帶前綴**。
+    兩種餵法都會壞，而且壞的方向不同：
+      · entries 用裸鍵（文件說的正確用法）→ `entries.get("ENEX929038")` 找不到
+        → 48 則全進 dropped → 候選檔 items 空的 → **extract 離開碼 0、lint 也 0**
+        → 整輪 ENEX 無聲收 0 則，沒有任何一處會叫。
+      · entries 用帶前綴的鍵 → code 變成 `ENEXENEX929038`（lint 有擋，離開碼 1）。
+    修法刻意做成**兩邊都容忍**，而不是要求上游改格式——上游是規則文件裡給 agent
+    照抄的 JS，改那裡只能靠自律，這裡一次擋住兩種形狀才是防呆。
+    """
+    s = str(v or "").strip()
+    return s[4:] if s.upper().startswith("ENEX") else s
+
+
+def enex_media_url(it):
+    """量時長要用的網址。
+
+    🔴 2026-08-31 修：原本量 `it["dl"]`，但 `slimEnex()` 的
+    `dl = https://members.enex.news/download/{id}` 是**要登入的下載頁、不是影片**，
+    ffprobe 一律回 `Invalid data found`（實測 48/48 全失敗）。
+    真正能量的是 `videoLowResCdn`（公開、免登入、支援 Range）——那也正是
+    `2026-08-26-ENEX-ABC技術落差更新規劃書` §35-41 查證後指定的欄位，
+    只是實作當時接錯欄位。實測同一則：dl → rc=1；videoLowResCdn → 112.36 秒。
+    `dl` 保留為退路，不主動用。
+    """
+    return it.get("url") or it.get("videoLowResCdn") or None
+
+
+def lookup_entry(entries, rid):
+    """entries 的查找**只有這一份**（2026-09-01 抽出）。
+
+    🔴 前一版併發改動留下一個坑：預先挑網址的迴圈寫 `a or b`、主迴圈寫 `if a is None: b`，
+    兩者對 **falsy 但存在**的值（例如佔位用的 `{}`）判斷不同——會出現
+    「主迴圈用裸鍵那筆組素材，時長卻來自前綴鍵那筆」這種錯配。
+    正常資料不會觸發，但兩段程式對同一件事有兩種答案，早晚會咬人。
+    ⛔ 不要在別處再抄一份查找邏輯。
+    """
+    v = entries.get(rid)
+    if v is None:
+        v = entries.get("ENEX" + rid)
+    return v
+
+
+def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds,
+                 workers=PROBE_WORKERS):
     items, skipped, dropped, known_gaps = [], [], [], []
+    # ⭐ 先把「真的要量」的網址挑出來一次量完（併發），再進主迴圈組候選。
+    #    只量會被收錄的——skip 掉的（自家素材）與 entries 沒判斷的不必浪費一次往返。
+    _need = []
     for it in raw_items:
-        rid = str(it.get("id") or it.get("_id") or "")
+        _rid = bare_enex_id(it.get("id") or it.get("_id"))
+        if not _rid:
+            continue
+        _ent = lookup_entry(entries, _rid)
+        if _ent is None or _ent.get("skip"):
+            continue
+        _u = enex_media_url(it)
+        if _u:
+            _need.append(_u)
+    dur_map = probe_durations(_need, duration_fn=duration_fn, workers=workers)
+
+    for it in raw_items:
+        rid = bare_enex_id(it.get("id") or it.get("_id"))
         if not rid:
             dropped.append({"raw": it, "why": "缺 id"})
             continue
         code = "ENEX" + rid
-        ent = entries.get(rid)
+        # entries 的鍵兩種都認（裸 id 優先，其次帶前綴），理由同 bare_enex_id
+        ent = lookup_entry(entries, rid)
         if ent is None:
             dropped.append({"id": code, "why": "raw 有但 entries 沒判斷（未收進候選，不算排除，要確認是不是漏判）"})
             continue
@@ -115,10 +236,19 @@ def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds):
             skipped.append({"id": code, "why": skip})
             continue
 
-        dur_sec = duration_fn(it.get("dl")) if it.get("dl") else None
+        media = enex_media_url(it)
+        dur_sec = dur_map.get(media) if media else None
         dur_str = fmt_mmss(dur_sec)
         if dur_str is None:
-            known_gaps.append(f"{code}: 時長抓不到（{'無 dl 網址' if not it.get('dl') else 'ffprobe 失敗'}）")
+            # ⚠️ 「還沒上架」跟「真的抓失敗」要分得出來：實測 editStatus=PUBLISHING NOW
+            # 的素材就是還沒有檔案，沒有 videoLowResCdn 屬正常，不是故障。
+            if not media:
+                why = ("尚未上架（editStatus=PUBLISHING NOW，站方還沒產生檔案）"
+                       if str(it.get("estat") or "").upper().startswith("PUBLISHING")
+                       else "沒有 videoLowResCdn 網址")
+            else:
+                why = "ffprobe 失敗"
+            known_gaps.append(f"{code}: 時長抓不到（{why}）")
 
         raw_entry = ent.get("raw_entry") or ""
         if not raw_entry:
@@ -194,12 +324,19 @@ def main():
     ap.add_argument("--window-start", required=True)
     ap.add_argument("--window-end", required=True)
     ap.add_argument("--out")
+    ap.add_argument("--probe-workers", type=int, default=PROBE_WORKERS,
+                    help=f"ffprobe 併發數（預設 {PROBE_WORKERS}）。"
+                         f"1 ＝退回序列；被 CDN 限流時調小")
     args = ap.parse_args()
 
     raw_items = load_json(args.raw)
     entries = load_json(args.entries)
     fn = EXTRACTORS[args.site]
-    items, skipped, dropped, known_gaps = fn(raw_items, entries)
+    if args.site == "enex":
+        items, skipped, dropped, known_gaps = fn(
+            raw_items, entries, workers=max(1, args.probe_workers))
+    else:
+        items, skipped, dropped, known_gaps = fn(raw_items, entries)
 
     for it in items:
         it["first_seen_checkpoint"] = args.checkpoint
@@ -211,8 +348,11 @@ def main():
         "source": args.site.upper(),
         "merged_into_handover": False,
         "reviewed": False,
-        "counts": build_counts(len(items), len(skipped)),
+        "counts": build_counts(len(items), len(skipped), len(dropped)),
         "skipped": skipped,
+        # 🔴 2026-09-01：dropped 一定要進候選檔。原本只印到 stderr，
+        # 交件端與 lint 都看不到——「整批漏判」因此變成一份看起來正常的空檔。
+        "dropped": dropped,
         "needs_review": [],
         "known_gaps": known_gaps,
         "items": items,

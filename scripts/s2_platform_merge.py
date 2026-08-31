@@ -15,6 +15,10 @@ ENEX／ABC 這一段**完全沒有工具**——0817 那批 42 則的整併，�
 （18 檔 §0 記過 2026-08-10 一次 44 處差點被無聲覆蓋）。所以 `--apply` 在**每一次**
 呼叫 `s2_state.py` 之前都重查一次鎖檔，不是開頭查一次就放行。
 
+🔴 **例外：`--in-round`（2026-08-31，V5 四站）**——ENEX 進固定輪之後，本腳本會由
+**掃帶輪內的 agent** 呼叫，而那把鎖正是該輪自己握著的，護欄會 100% 誤擋。
+帶 `--in-round` 才略過這道檢查。⛔ 人工流程一律不要帶。
+
 ⛔ **判活只看檔案存在，絕不 open 鎖檔**：`s2_scan.ps1` 用 `FileShare::None` 獨佔開啟，
 去讀它會讓**正要啟動的那一輪直接 SKIP**——為了偵測衝突而製造衝突（同 A5 看門狗
 踩過的坑）。存在性檢查與實際寫入之間仍有秒級 TOCTOU 窗口，以 2 小時輪距來說可接受；
@@ -145,12 +149,20 @@ def lock_busy():
     return os.path.exists(LOCK)
 
 
-def run_state(state_file, args, dry):
+def run_state(state_file, args, dry, in_round=False):
     cmd = [sys.executable, os.path.join(HERE, "s2_state.py"),
            "--file", state_file] + args
     if dry:
         return 0, " ".join(f'"{c}"' if " " in c else c for c in cmd)
-    if lock_busy():
+    if in_round:
+        # 🔴 V5（2026-08-31）：ENEX 進固定掃帶輪之後，這支會**在輪次內**被呼叫。
+        # 而 `s2_scan.ps1:301-304` 在叫 claude 之前就用 FileShare::None 開了鎖檔、
+        # 一路握到 finally——所以輪次內鎖檔**必定存在**，下面那道護欄會 100% 誤擋。
+        # `--in-round` 就是呼叫端明說「握著鎖的就是我自己」。
+        # ⛔ 人工流程永遠不要帶這個旗標：那道護欄對人工流程仍然必要
+        #    （18 檔 §0 記過 0810 一次 44 處差點被無聲覆蓋）。
+        pass
+    elif lock_busy():
         print(f"⛔ 偵測到掃帶鎖檔 {LOCK}——掃帶輪可能正在寫狀態檔，中止。\n"
               f"   狀態檔沒有檔案鎖，同時寫會靜靜蓋掉對方（18 檔 §0，0810 實例 44 處）。\n"
               f"   等該輪跑完（約 19 分）再重跑本指令。")
@@ -225,6 +237,9 @@ def main():
     ap.add_argument("--force", action="store_true",
                     help="lint 有必修項／候選檔已整併過時仍繼續（要有明確理由）")
     ap.add_argument("--skip-lint", action="store_true", help="不跑 lint（不建議）")
+    ap.add_argument("--in-round", action="store_true",
+                    help="**只有掃帶輪內的 agent 可以用**（V5 四站）：略過鎖檔檢查，"
+                         "因為那把鎖就是本輪自己握著的。⛔ 人工流程不要帶")
     ap.add_argument("--allow-missing-src-text", action="store_true",
                     help="轉給 lint：缺 src_text 降回 ⚠️（只給 0818 規則生效前的舊檔）")
     args = ap.parse_args()
@@ -286,12 +301,14 @@ def main():
     if not state_file:
         print("⛔ --apply 請明確帶 --file 指定狀態檔（不猜，避免寫錯班次那份）")
         return 1
-    rc, _ = run_state(state_file, add_args, dry=False)
+    if args.in_round:
+        print("ℹ️ --in-round：略過鎖檔檢查（掃帶輪自己握著 .s2-scan.lock）")
+    rc, _ = run_state(state_file, add_args, dry=False, in_round=args.in_round)
     if rc != 0:
         print(f"⛔ add-batch 失敗（離開碼 {rc}），停手，不做 set-category")
         return 1
     if cat_args:
-        rc, _ = run_state(state_file, cat_args, dry=False)
+        rc, _ = run_state(state_file, cat_args, dry=False, in_round=args.in_round)
         if rc != 0:
             print(f"⛔ set-category 失敗（離開碼 {rc}）——素材**已經入庫**，"
                   f"分類要自己補：\n   pairs 在 {pairs_path}")

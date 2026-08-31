@@ -42,3 +42,6 @@ scripts/_guard_calls.log*
 scripts/build/
 scripts/dist/
 scripts/*.spec
+
+# V5 切換器每次 -On 產生的 V4 備份（-Off 用完即可丟，不進版控）
+scripts/_s2_scan_prompt_v4.bak.md

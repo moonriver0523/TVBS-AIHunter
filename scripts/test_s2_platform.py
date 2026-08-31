@@ -440,6 +440,111 @@ else:
         # 用今天的判準回頭打分沒有意義，但看得出 lint 在真檔上不會爆掉。
         print(f"      （lint 真實檔 {fn}：{len(err)} 項必修，僅供參考不計分）")
 
+
+# ── V5 `--in-round`（2026-08-31）：輪次內略過鎖檔護欄 ─────────────────────
+# 為什麼要測：掃帶輪整輪握著 .s2-scan.lock，不略過的話 ENEX 整併 100% 誤擋；
+# 而略過得**只在明講時**發生，人工流程漏帶旗標卻被放行才是真正危險的方向。
+merge_mod = load("s2_platform_merge")
+_fake_lock = os.path.join(TMP, ".fake-scan.lock")
+open(_fake_lock, "w").close()
+merge_mod.LOCK = _fake_lock
+
+class _StubProc:
+    returncode = 0
+    stdout = ""
+    stderr = ""
+
+_calls = []
+def _stub_run(cmd, **kw):
+    _calls.append(cmd)
+    return _StubProc()
+merge_mod.subprocess.run = _stub_run
+
+buf = io.StringIO()
+with redirect_stdout(buf):
+    rc_guarded, _ = merge_mod.run_state("X.json", ["show"], dry=False)
+check("鎖檔存在＋沒帶 --in-round → 擋下（人工流程的護欄不能鬆）",
+      rc_guarded == 1 and not _calls, f"rc={rc_guarded} calls={len(_calls)}")
+
+buf = io.StringIO()
+with redirect_stdout(buf):
+    rc_inround, _ = merge_mod.run_state("X.json", ["show"], dry=False, in_round=True)
+check("鎖檔存在＋帶 --in-round → 放行（輪次內握鎖的就是自己）",
+      rc_inround == 0 and len(_calls) == 1, f"rc={rc_inround} calls={len(_calls)}")
+
+check("--in-round 有掛進 argparse",
+      "--in-round" in open(os.path.join(HERE, "s2_platform_merge.py"),
+                           encoding="utf-8").read())
+
+
+# ── 漏判（dropped）迴歸 ────────────────────────────────────────────────
+# ⚠️ 2026-09-01 重寫：前一版用手填的 `counts.掃描=48` 當判準，
+#    但 **extract 永遠產不出那個形狀**（dropped 不進掃描），等於在測一個假的失敗。
+#    改用 extract 真的會產出的形狀：整批漏判＝items 空 ＋ dropped 有東西。
+_alldrop = enex_doc()
+_alldrop["items"] = []
+_alldrop["skipped"] = []
+_alldrop["dropped"] = [{"id": f"ENEX9270{i:02d}", "why": "raw 有但 entries 沒判斷"}
+                       for i in range(48)]
+_alldrop["counts"] = {"掃描": 48, "收錄": 0, "排除": 0, "漏判": 48}
+_e, _w = run_lint(_alldrop, name="0831-ENEX-state.json")
+check("整批漏判（items 空＋dropped 48）→ 必修，擋下無聲全失敗",
+      has(_e, "48 則漏判"), str(_e[:1]))
+
+# 🔴 誤擋方向：窗內全是自家素材（全被 skip）是**合法**的，不可判必修——
+#    無人值守的排程輪會卡死在一份沒有錯的檔上。
+_allskip = enex_doc()
+_allskip["items"] = []
+_allskip["dropped"] = []
+_allskip["skipped"] = [{"id": "ENEX927228", "why": "own"},
+                       {"id": "ENEX927229", "why": "own"}]
+_allskip["counts"] = {"掃描": 2, "收錄": 0, "排除": 2, "漏判": 0}
+_e2, _w2 = run_lint(_allskip, name="0831-ENEX-state.json")
+check("窗內全被 skip（合法）→ 不判必修，只提醒",
+      not _e2 and any("都被排除" in x for x in _w2), f"err={_e2[:2]} warn={_w2[:2]}")
+
+# 部分漏判：收了一些、漏了一些，比整批失敗更難發現
+_partial = enex_doc()
+_partial["dropped"] = [{"id": "ENEX927999", "why": "raw 有但 entries 沒判斷"}]
+_partial["counts"] = {"掃描": 2, "收錄": 1, "排除": 0, "漏判": 1}
+_e3, _ = run_lint(_partial, name="0831-ENEX-state.json")
+check("部分漏判（有 items 也有 dropped）→ 一樣必修",
+      has(_e3, "1 則漏判"), str(_e3[:2]))
+
+# 舊檔沒有 dropped 欄位時，退回看 counts.漏判
+_legacy = enex_doc()
+_legacy["items"] = []
+_legacy["skipped"] = []
+_legacy["counts"] = {"掃描": 5, "收錄": 0, "排除": 0, "漏判": 5}
+_e4, _ = run_lint(_legacy, name="0831-ENEX-state.json")
+check("舊檔沒有 dropped 陣列時改看 counts.漏判", has(_e4, "5 則漏判"), str(_e4[:2]))
+
+# 真的窗內 0 則（什麼都沒有）仍只給提醒
+_zero = enex_doc()
+_zero["items"] = []; _zero["skipped"] = []; _zero["dropped"] = []
+_zero["counts"] = {"掃描": 0, "收錄": 0, "排除": 0, "漏判": 0}
+_e5, _w5 = run_lint(_zero, name="0831-ENEX-state.json")
+check("窗內真的 0 則 → 只提醒不擋", not _e5 and has(_w5, "items 是空的"), str(_e5[:2]))
+
+
+# counts 等式要含「漏判」——沒跟上的話有漏判的檔會多吐一條誤導性 ⚠️
+# （那句話叫人把差額寫進 known_gaps，但漏判該做的是回頭補判斷）
+_eq = enex_doc()
+_eq["items"] = []
+_eq["skipped"] = []
+_eq["dropped"] = [{"id": "ENEX927001", "why": "漏判"}]
+_eq["counts"] = {"掃描": 1, "收錄": 0, "排除": 0, "漏判": 1}
+_e6, _w6 = run_lint(_eq, name="0831-ENEX-state.json")
+check("counts 等式含漏判 → 不再誤吐『掃描≠收錄+排除』",
+      not any("counts 掃描" in x for x in _w6), str(_w6))
+
+# 舊檔（沒有漏判鍵）等式退回舊行為，相容
+_old = enex_doc()
+_old["counts"] = {"掃描": 1, "收錄": 1, "排除": 0}
+_e7, _w7 = run_lint(_old, name="0831-ENEX-state.json")
+check("舊檔沒有漏判鍵時等式相容（不誤報）",
+      not any("counts 掃描" in x for x in _w7), str(_w7))
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f"\nPASS={sum(results)} FAIL={len(results) - sum(results)}")
 sys.exit(0 if all(results) else 1)

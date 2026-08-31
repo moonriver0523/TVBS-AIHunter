@@ -123,7 +123,27 @@ def lint(path, allow_missing_src=False):
         err.append(f"items 應為陣列，實得 {type(items).__name__}")
         items = []
     elif not items:
-        warn.append("items 是空的（掃了一輪一則都沒收？確認不是抽取整段失敗）")
+        # 🔴 2026-09-01 重修（前一版判準是錯的，獨立複查抓到）：
+        # 前一版判「items 空 且 counts.掃描>0 ＝ 必修」，**兩個方向都錯**：
+        #   · 漏擋：真正的抽取整段失敗是「全部進 dropped」，而舊版 build_counts
+        #     沒把 dropped 算進掃描 → 候選檔寫成 掃描=0 → 判準永遠不觸發。
+        #   · 誤擋：`掃描>0 且 items 空` 唯一會自然出現的情況是**窗內全被 skip**
+        #     （例如整窗都是自家 TVBS 素材）——那是合法檔，卻會被判必修，
+        #     無人值守的排程輪會卡死在一份沒有錯的檔上。
+        # 改用真正的訊號：`dropped`（raw 有、entries 沒判斷）本身就是漏判證據。
+        # 舊檔沒有 dropped 欄位時退回看 counts.漏判，兩者都沒有才維持 ⚠️。
+        dropped = data.get("dropped")
+        n_drop = (len(dropped) if isinstance(dropped, list)
+                  else (data.get("counts") or {}).get("漏判"))
+        if isinstance(n_drop, int) and n_drop > 0:
+            err.append(f"items 是空的、而且有 {n_drop} 則漏判（dropped）——"
+                       f"抽取整段失敗（多半是 entries 的鍵跟 raw 的 id 對不上）。"
+                       f"⛔ 這種形狀不可交件：排程輪無人值守，放行等於整輪無聲收 0 則")
+        elif (data.get("skipped") or []):
+            warn.append(f"items 是空的，但 {len(data['skipped'])} 則都被排除了"
+                        f"（窗內全是不收的素材？確認排除理由對）")
+        else:
+            warn.append("items 是空的（掃了一輪一則都沒收？確認不是抽取整段失敗）")
 
     seen = {}
     for n, it in enumerate(items, 1):
@@ -157,6 +177,13 @@ def lint(path, allow_missing_src=False):
             err.append(f"{ident}: sb_count 須為整數，實得 {it['sb_count']!r}")
         err += _check_src_text(ident, it, allow_missing_src, warn)
 
+    _drop = data.get("dropped")
+    _nd = len(_drop) if isinstance(_drop, list) else (data.get("counts") or {}).get("漏判")
+    if items and isinstance(_nd, int) and _nd > 0:
+        # 收了一部分、漏判一部分＝部分靜默漏收，比整批失敗更難發現
+        err.append(f"有 {_nd} 則漏判（dropped：raw 有但 entries 沒判斷）——"
+                   f"⛔ 逐則確認是真的不收（那要寫進 skipped 並註明理由）"
+                   f"還是漏做判斷；不要就這樣交件")
     warn += _check_counts(data, items)
     warn += _check_txt_pair(path, seen)
     return err, warn
@@ -278,9 +305,16 @@ def _check_counts(data, items):
     skipped = data.get("skipped")
     if isinstance(skipped, list) and got["排除"] != len(skipped):
         out.append(f"counts.排除={got['排除']} 與 skipped 筆數 {len(skipped)} 對不上")
-    if got["掃描"] != got["收錄"] + got["排除"]:
+    # 🔴 2026-09-01：等式要含「漏判」。`build_counts` 已改成
+    #    掃描 ＝ 收錄＋排除＋漏判，這裡沒跟上的話，**任何有漏判的檔都會多吐一條
+    #    誤導性 ⚠️**，而且那句話叫人「把差額寫進 known_gaps」——漏判該做的是
+    #    回頭補判斷（同檔已由 ❌ 擋下），不是記進 known_gaps 就算了。
+    #    舊檔沒有「漏判」鍵時 `or 0`，等式退回舊行為，相容。
+    n_drop = c.get("漏判") or 0
+    if got["掃描"] != got["收錄"] + got["排除"] + n_drop:
         out.append(f"counts 掃描{got['掃描']} ≠ 收錄{got['收錄']}＋排除{got['排除']}"
-                   f"（差 {got['掃描'] - got['收錄'] - got['排除']} 則；"
+                   f"＋漏判{n_drop}"
+                   f"（差 {got['掃描'] - got['收錄'] - got['排除'] - n_drop} 則；"
                    f"若是刻意的請寫進 known_gaps）")
     return out
 

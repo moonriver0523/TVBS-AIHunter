@@ -43,10 +43,18 @@ check("fmt_mmss 69.36 秒 -> 01:09", ex.fmt_mmss(69.36) == "01:09", ex.fmt_mmss(
 check("fmt_mmss None -> None", ex.fmt_mmss(None) is None)
 
 # ---------- extract_enex：正常收錄 + 時長 ----------
+# 🔴 2026-08-31：fixture 改成 `slimEnex()`（附錄 A-3）**真正的輸出形狀**——
+#   `id` **帶 ENEX 前綴**、影片網址在 `url`（videoLowResCdn）、`dl` 是會員下載頁。
+#   舊 fixture 用裸 id ＋ 把影片網址放進 `dl`，那是「我們想像的輸入」而不是上游真的
+#   會送來的東西，所以 0831 實測抓到的兩個 bug（48 則無聲蒸發、ffprobe 量錯欄位）
+#   在舊 fixture 下**測不出來**。⛔ 不要為了讓測試好寫而把形狀改回去。
 raw_enex = [
-    {"id": "928358", "title": "t1", "desc": "STORYLINE ...", "partner": "FR BFM",
-     "cat": "Crime", "loc": "Paris", "tags": ["A"], "ts": 1, "dl": "https://x/928358.mp4", "nlid": 2365490},
-    {"id": "928999", "title": "t2", "desc": "TVBS 回流", "partner": "TVBS", "dl": None, "nlid": 1},
+    {"id": "ENEX928358", "title": "t1", "desc": "STORYLINE ...", "partner": "FR BFM",
+     "cat": "Crime", "loc": "Paris", "tags": ["A"], "ts": 1,
+     "url": "https://cdn/928358.mp4", "dl": "https://members.enex.news/download/928358",
+     "estat": "PUBLISHED", "nlid": 2365490},
+    {"id": "ENEX928999", "title": "t2", "desc": "TVBS 回流", "partner": "TVBS",
+     "url": None, "dl": None, "estat": "PUBLISHED", "nlid": 1},
 ]
 entries_enex = {
     "928358": {"category": {"大分類": "歐洲", "中主題": "測試"}, "sb_count": 0,
@@ -63,7 +71,7 @@ check("enex 沒有 dropped（entries 都有判斷）", not dropped, dropped)
 check("enex 沒有 known_gaps（raw_entry／時長都齊）", not gaps, gaps)
 
 # ---------- extract_enex：raw 有但 entries 沒判斷 → dropped，不靜默排除 ----------
-raw2 = raw_enex + [{"id": "930000", "title": "t3", "desc": "x", "dl": None}]
+raw2 = raw_enex + [{"id": "ENEX930000", "title": "t3", "desc": "x", "url": None, "dl": None}]
 items2, skipped2, dropped2, gaps2 = ex.extract_enex(raw2, entries_enex, duration_fn=lambda u: None)
 check("enex 未判斷項目進 dropped 不進 items", len(items2) == 1 and len(dropped2) == 1)
 
@@ -127,9 +135,119 @@ with open(out_path, encoding="utf-8") as f:
 check("CLI 輸出候選檔含正確 checkpoint 頂層欄位", doc["checkpoint"] == "0826-1600")
 check("CLI 輸出每筆 first_seen_checkpoint 有灌回",
       all(i["first_seen_checkpoint"] == "0826-1600" for i in doc["items"]))
-check("CLI 輸出 counts 正確", doc["counts"] == {"掃描": 1, "收錄": 1, "排除": 0}, doc["counts"])
+check("CLI 輸出 counts 正確（掃描＝收錄＋排除＋漏判）",
+      doc["counts"] == {"掃描": 1, "收錄": 1, "排除": 0, "漏判": 0}, doc["counts"])
 
 import shutil
+
+# ── 0831 真實資料實測抓到的 bug，全部釘成迴歸測試 ───────────────────────
+# ⚠️ 這幾組是「48 則真實素材打臉」換來的，⛔ 不要因為看起來瑣碎就刪。
+
+check("bare_enex_id 剝前綴", ex.bare_enex_id("ENEX929038") == "929038")
+check("bare_enex_id 裸 id 原樣", ex.bare_enex_id("929038") == "929038")
+
+_raw1 = [{"id": "ENEX928358", "title": "t", "desc": "d", "url": "u", "estat": "PUBLISHED"}]
+_ent1 = {"928358": {"category": {"大分類": "歐洲"}, "sb_count": 0,
+                    "raw_entry": "ENEX928358 (X) …"}}
+i1, _, d1, _ = ex.extract_enex(_raw1, _ent1, duration_fn=lambda u: 10.0)
+check("BUG-1：raw 帶前綴＋entries 裸鍵 → 收得到（不是 48 則全蒸發）",
+      len(i1) == 1 and not d1 and i1[0]["id"] == "ENEX928358",
+      f"items={len(i1)} dropped={len(d1)}")
+
+i2, _, _, _ = ex.extract_enex(
+    _raw1, {"ENEX928358": _ent1["928358"]}, duration_fn=lambda u: 10.0)
+check("BUG-1：entries 用帶前綴的鍵也認，且 id 不會變成 ENEXENEX…",
+      len(i2) == 1 and i2[0]["id"] == "ENEX928358", i2[0]["id"] if i2 else "無")
+
+_probed = []
+ex.extract_enex(
+    [{"id": "ENEX1", "title": "t", "desc": "d", "estat": "PUBLISHED",
+      "url": "https://cdn/ok.mp4", "dl": "https://members.enex.news/download/1"}],
+    {"1": {"category": {"大分類": "歐洲"}, "sb_count": 0, "raw_entry": "ENEX1 (X) …"}},
+    duration_fn=lambda u: (_probed.append(u), 10.0)[1])
+check("BUG-2：ffprobe 量的是 url（CDN）不是 dl（會員下載頁）",
+      _probed == ["https://cdn/ok.mp4"], _probed)
+
+_, _, _, gpub = ex.extract_enex(
+    [{"id": "ENEX2", "title": "t", "desc": "d", "estat": "PUBLISHING NOW", "url": None}],
+    {"2": {"category": {"大分類": "歐洲"}, "sb_count": 0, "raw_entry": "ENEX2 (X) …"}},
+    duration_fn=lambda u: None)
+check("尚未上架（PUBLISHING NOW）不要報成 ffprobe 失敗",
+      any("尚未上架" in x for x in gpub), gpub)
+
+check("SRC_TEXT_MAX 容得下實測最長 5,634 字元", ex.SRC_TEXT_MAX >= 5634, ex.SRC_TEXT_MAX)
+_long = "A" * 5634
+i3, _, _, _ = ex.extract_enex(
+    [{"id": "ENEX3", "title": "t", "desc": _long, "estat": "PUBLISHED", "url": "u"}],
+    {"3": {"category": {"大分類": "歐洲"}, "sb_count": 0, "raw_entry": "ENEX3 (X) …"}},
+    duration_fn=lambda u: 10.0)
+check("5,634 字元 desc 不再被截斷（SOUNDBITE 在最後面，切掉＝毀掉查證依據）",
+      i3 and i3[0]["src_text"] == _long, len(i3[0]["src_text"]) if i3 else "無")
+
+
+# ── 併發量時長（2026-09-01）─────────────────────────────────────────────
+import threading as _th
+_seen, _lock = [], _th.Lock()
+def _slow(u):
+    import time; time.sleep(0.05)
+    with _lock: _seen.append(u)
+    return 12.0
+_raw_many = [{"id": f"ENEX90{i:04d}", "title": "t", "desc": "d",
+              "estat": "PUBLISHED", "url": f"https://cdn/{i}.mp4"} for i in range(16)]
+_ent_many = {f"90{i:04d}": {"category": {"大分類": "歐洲"}, "sb_count": 0,
+                            "raw_entry": f"ENEX90{i:04d} (X) …"} for i in range(16)}
+import time as _t
+_t0 = _t.time(); _im, _, _, _ = ex.extract_enex(_raw_many, _ent_many, duration_fn=_slow, workers=8)
+_par = _t.time() - _t0
+_seen.clear()
+_t0 = _t.time(); _is, _, _, _ = ex.extract_enex(_raw_many, _ent_many, duration_fn=_slow, workers=1)
+_seq = _t.time() - _t0
+check("併發：16 則都量到、結果與序列一致",
+      len(_im) == 16 == len(_is)
+      and all(i["enex"]["duration"] == "00:12" for i in _im),
+      f"併發{len(_im)} 序列{len(_is)}")
+check("併發真的比序列快（16 則 × 0.05s）", _par < _seq / 2,
+      f"併發 {_par:.2f}s vs 序列 {_seq:.2f}s")
+
+_probed2 = []
+ex.extract_enex(
+    [{"id": "ENEX7001", "title": "t", "desc": "d", "estat": "PUBLISHED", "url": "u1"},
+     {"id": "ENEX7002", "title": "t", "desc": "d", "estat": "PUBLISHED", "url": "u2"}],
+    {"7001": {"category": {"大分類": "歐"}, "sb_count": 0, "raw_entry": "ENEX7001 (X) …"},
+     "7002": {"skip": "own"}},
+    duration_fn=lambda u: (_probed2.append(u), 5.0)[1], workers=4)
+check("被 skip 的素材不浪費一次 ffprobe 往返", _probed2 == ["u1"], _probed2)
+
+def _boom(u):
+    raise RuntimeError("ffprobe 炸了")
+_ib, _, _, _gb = ex.extract_enex(
+    [{"id": "ENEX7003", "title": "t", "desc": "d", "estat": "PUBLISHED", "url": "u"}],
+    {"7003": {"category": {"大分類": "歐"}, "sb_count": 0, "raw_entry": "ENEX7003 (X) …"}},
+    duration_fn=_boom, workers=4)
+check("量時長丟例外不會弄死整支腳本（記進 known_gaps 就好）",
+      len(_ib) == 1 and _ib[0]["enex"]["duration"] is None and _gb, _gb)
+
+check("--probe-workers 有掛進 CLI",
+      "--probe-workers" in open(os.path.join(HERE, "s2_platform_extract.py"),
+                                encoding="utf-8").read())
+
+
+# ── dropped 一定要進候選檔＋算進掃描（2026-09-01，獨立複查抓到）──────────
+_rawd = [{"id": "ENEX940001", "title": "t", "desc": "d", "url": "u", "estat": "PUBLISHED"},
+         {"id": "ENEX940002", "title": "t", "desc": "d", "url": "u", "estat": "PUBLISHED"}]
+_id_, _sk, _dp, _ = ex.extract_enex(_rawd, {"完全對不上": {}}, duration_fn=lambda u: 1.0)
+_c = ex.build_counts(len(_id_), len(_sk), len(_dp))
+check("整批對不上 → 全進 dropped", len(_id_) == 0 and len(_dp) == 2, f"{len(_id_)}/{len(_dp)}")
+check("掃描要算進漏判（否則跟『站方沒素材』分不出來）",
+      _c == {"掃描": 2, "收錄": 0, "排除": 0, "漏判": 2}, _c)
+
+# entries 的 falsy 佔位值：前迴圈與主迴圈必須選到同一筆（共用 lookup_entry）
+check("lookup_entry 裸鍵優先", ex.lookup_entry({"1": {"a": 1}, "ENEX1": {"a": 2}}, "1") == {"a": 1})
+check("lookup_entry 裸鍵不存在才用前綴鍵",
+      ex.lookup_entry({"ENEX1": {"a": 2}}, "1") == {"a": 2})
+check("lookup_entry：裸鍵是 falsy 的 {} 也算存在，不 fallback（前後迴圈才會一致）",
+      ex.lookup_entry({"1": {}, "ENEX1": {"a": 2}}, "1") == {})
+
 shutil.rmtree(TMP, ignore_errors=True)
 
 print(f"\nPASS={sum(results)} FAIL={len(results) - sum(results)}")
