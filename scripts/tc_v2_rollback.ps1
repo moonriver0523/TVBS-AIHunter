@@ -33,7 +33,9 @@ Write-Host "== A10 v2 一鍵回滾 ==" -ForegroundColor Cyan
 Write-Host "repo: $repo"
 
 # ── 閘門 1：確認沒有輪次在跑 ─────────────────────────────────────────────
-# ⛔ 不看鎖檔（R16：.s2-scan.lock 永久殘留，「檔案存在」與「有沒有在跑」零相關）。
+# ⛔ 不看鎖檔——改看 pwsh 行程判活。R16（.s2-scan.lock 永久殘留）已於 0824
+# 由 s2_keepalive.ps1 的 finally 補上 Remove-Item 修好，理由已過期，但判活
+# 邏輯本身仍正確、不改（2026-08-31 訂正註解，「萬用」查到）。
 $running = @(Get-Process -Name pwsh -ErrorAction SilentlyContinue |
              Where-Object { $_.Id -ne $PID }).Count
 if ($running -gt 0) {
