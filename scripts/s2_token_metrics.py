@@ -25,6 +25,19 @@ import re
 import subprocess
 import sys
 
+# 🔴 2026-08-31 補（全流程 locale 編碼稽核）：這支**每輪都被 `s2_scan.ps1` 呼叫**，
+# 而 launcher 是 `2>&1 | Out-Null`——stdout/stderr 都是管線（cp950）且輸出被吞掉。
+# 「分類總數 ≠ 工具呼叫數」那行警告印 `⚠️`（cp950 不可編碼）會丟
+# UnicodeEncodeError，而寫入 `_token_metrics.jsonl` 的動作在那之後，等於
+# **分桶規則改壞的那一輪，遙測整筆消失且沒有任何人看得到 traceback**——
+# 偏偏那正是最需要留下紀錄的一輪。用 reconfigure 不用 TextIOWrapper
+# （WP1 2026-08-03 實錯：雙層包覆會 "I/O operation on closed file"）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:  # py<3.7
+        pass
+
 TRANSCRIPT_DIR = os.path.expanduser(
     r'~\.claude\projects\E--GitHub-TVBS-AIHunter'
 )

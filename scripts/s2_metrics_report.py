@@ -19,6 +19,17 @@ import json
 import os
 import sys
 
+# ⚠️ 2026-08-31 補（全流程 locale 編碼稽核）：`cmd_diff()` 在兩輪 rule sha 不同時
+# 會印 `⚠️`，cp950 不可編碼 → stdout 是管線就丟 UnicodeEncodeError。`--diff` 正是
+# MASTER A1 的驗收功能本身，而且只在「規則有變」那次才炸，看起來像偶發。
+# 用 reconfigure 不用 TextIOWrapper（WP1 2026-08-03 實錯：雙層包覆會
+# "I/O operation on closed file"）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:  # py<3.7
+        pass
+
 METRICS_FILE = (
     r'G:\我的雲端硬碟\Claude共用\自動掃帶系統\S2掃帶log\_token_metrics.jsonl'
 )

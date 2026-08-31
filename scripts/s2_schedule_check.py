@@ -33,6 +33,17 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
+# ⚠️ 2026-08-31 補（全流程 locale 編碼稽核）：本檔印出的 `ℹ`／`✅`／`🔴` 在 cp950
+# 下不可編碼，stdout 一旦是管線（agent 用 Bash 呼叫時**必定**是管線）就會在
+# `main()` 印結論那一段丟 UnicodeEncodeError 整支掛掉——而且崩潰的離開碼 1 跟
+# 本工具自己的「有不一致＝1」撞號，看起來像正常回報。用 reconfigure 不用
+# TextIOWrapper（WP1 2026-08-03 實錯：雙層包覆會 "I/O operation on closed file"）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:  # py<3.7
+        pass
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WATCHDOG_PS1 = os.path.join(REPO, 'scripts', 's2_watchdog.ps1')
 BACKUP_XML = os.path.join(REPO, 'scripts', 'S2掃帶.xml')

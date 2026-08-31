@@ -105,7 +105,6 @@ batch 檔），實測發現三站清單原始檔各包一層不同的站方外�
 """
 import argparse
 import datetime
-import io
 import json
 import os
 import re
@@ -113,9 +112,18 @@ import sys
 
 # Windows 主控台常是 cp950，print() 中文欄位（entry／script 原文）會直接炸掉。
 # 這不影響 --out 落檔（那條路本來就明寫 UTF-8），只補救不帶 --out 直接印到終端機的情境。
-if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+#
+# 🔴 2026-08-31 改（全流程 locale 編碼稽核）：原本用 `io.TextIOWrapper` 包一層，
+# 那正是 WP1（2026-08-03）記過的寫法——包第二層時其中一個 wrapper 被回收會關掉
+# 底層 buffer，整支腳本以 "I/O operation on closed file" 掛掉。本檔目前沒有 import
+# 其他 s2 模組所以還沒踩到，但這是最常被呼叫的工具（inspect 每輪 25–34 次），
+# 哪天有人加一行 `import s2_state` 就會炸。統一改成 repo 其餘 20 支在用的
+# `reconfigure` 寫法，順便補 `errors="replace"`（外電原文偶爾夾代理字元）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:  # py<3.7
+        pass
 
 # src_text 是「瘦身後的站方原文」留存用（13c 規則：只准站方原文，不准判斷／說明）。
 # 跟正文擷取（script 正文取前 4,000 字元）用同一個上限，避免落檔無限長。
