@@ -36,8 +36,9 @@
 輸入：stdin 一包 JSON（Claude Code hook 協定）。Bash／PowerShell 看
 `tool_input.command`；Write 看 `tool_input.file_path`。輸出：要擋時往 stdout 印
 permissionDecision=deny 的 JSON（`ensure_ascii=True`——cp950 吞中文有前例，
-R4／②樣板回滾），放行時什麼都不印。任何解析失敗一律放行（exit 0）——hook
-壞掉不准把整輪掃帶弄死。
+見 `archive.md:38`「②強制流程＋cp950 樣板回滾」；2026-08-31 訂正：本行原引用
+R4 是錯的，R4（`R.md:13`）講的是 truncate() 長度溢出，跟編碼無關），放行時
+什麼都不印。任何解析失敗一律放行（exit 0）——hook 壞掉不准把整輪掃帶弄死。
 
 回退：launcher `-NoBashGuard` 開關（不與 -NoToolBan 共用，單變因可歸因）。
 """
