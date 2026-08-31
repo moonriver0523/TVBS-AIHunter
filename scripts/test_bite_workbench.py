@@ -284,5 +284,35 @@ class TestPrecutStatusPayload(unittest.TestCase):
         self.assertEqual(W.precut_status_payload(None, None, False), {"state": "none"})
 
 
+class TestResolveDroppedDir(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.root = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.root, ignore_errors=True))
+        self.d = os.path.join(self.root, "0830素材")
+        os.makedirs(self.d)
+        open(os.path.join(self.d, "CNN 170025.mp4"), "wb").close()
+
+    def test_資料夾名反查(self):
+        got = W.resolve_dropped_dir("0830素材", [], [self.root])
+        self.assertEqual(got, self.d)
+
+    def test_檔名驗證擋同名撞衫(self):
+        other = os.path.join(self.root, "另一區", "0830素材")
+        os.makedirs(other)
+        # 兩個候選根都有同名資料夾，只有含指定檔案的那個算數
+        roots = [os.path.join(self.root, "另一區"), self.root]
+        got = W.resolve_dropped_dir("0830素材", ["CNN 170025.mp4"], roots)
+        self.assertEqual(got, self.d)
+
+    def test_拖單檔用檔名找資料夾(self):
+        got = W.resolve_dropped_dir(None, ["CNN 170025.mp4"], [self.root, self.d])
+        self.assertEqual(got, self.d)
+
+    def test_找不到回None(self):
+        self.assertIsNone(W.resolve_dropped_dir("不存在", [], [self.root]))
+        self.assertIsNone(W.resolve_dropped_dir(None, [], [self.root]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

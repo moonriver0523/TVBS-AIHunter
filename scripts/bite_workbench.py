@@ -705,6 +705,72 @@ def translate_zh(text: str, speaker: str = "", context: str = "") -> dict:
     return {"zh": zh, "engine": engine}
 
 
+# ------------------------------------------------- 資料夾選取／拖曳反查
+
+MRU_PATH = os.path.join(os.path.expanduser("~"), ".side_precut_mru.json")
+MRU_MAX = 8
+
+
+def load_mru() -> list[str]:
+    try:
+        with open(MRU_PATH, encoding="utf-8") as f:
+            xs = json.load(f)
+        return [x for x in xs if isinstance(x, str)][:MRU_MAX]
+    except Exception:
+        return []
+
+
+def save_mru(path: str) -> None:
+    xs = [path] + [x for x in load_mru() if x != path]
+    try:
+        with open(MRU_PATH, "w", encoding="utf-8") as f:
+            json.dump(xs[:MRU_MAX], f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
+def drop_candidate_roots(mru: list[str]) -> list[str]:
+    roots: list[str] = []
+    for d in mru:
+        for p in (os.path.dirname(d), d):
+            if p and p not in roots:
+                roots.append(p)
+    home = os.path.expanduser("~")
+    for p in ("D:\\", "D:\\Downloads", "D:\\TVBS",
+              os.path.join(home, "Desktop"), os.path.join(home, "Downloads"),
+              "G:\\我的雲端硬碟\\Claude共用"):
+        if p not in roots:
+            roots.append(p)
+    return roots
+
+
+def resolve_dropped_dir(name: str | None, files: list[str], roots: list[str]) -> str | None:
+    """瀏覽器拖曳只給資料夾名＋內含檔名、拿不到絕對路徑（安全限制），
+    到常用位置（MRU 上層與固定幾個根）反查同名資料夾；有給檔名就再
+    驗證至少一個存在，避免同名資料夾撞衫。拖單一檔案時 name 為 None，
+    直接找哪個候選資料夾裡有這個檔。"""
+    files = [f for f in (files or []) if f]
+    if not name and not files:
+        return None  # 什麼線索都沒有，不能隨便回一個候選根
+
+    def ok(d: str) -> bool:
+        if not os.path.isdir(d):
+            return False
+        if not files:
+            return True
+        try:
+            have = set(os.listdir(d))
+        except OSError:
+            return False
+        return any(f in have for f in files)
+
+    for root in roots:
+        cand = os.path.join(root, name) if name else root
+        if ok(cand):
+            return cand
+    return None
+
+
 # ---------------------------------------------------------------- HTTP
 
 def precut_status_payload(job, cached, stale, now=None):
@@ -771,7 +837,41 @@ def build_app(default_dir: str | None, precut_only: bool = False):
             mats = refresh(path)
         except FileNotFoundError:
             raise HTTPException(404, f"找不到資料夾：{path}")
+        save_mru(path)  # 拖曳反查與資料夾選取視窗都以最近用過的位置當起點
         return {"dir": path, "materials": [asdict(m) for m in mats]}
+
+    pick_lock = threading.Lock()
+
+    @app.post("/api/pick_dir")
+    def api_pick_dir():
+        """開 Windows 原生資料夾選取視窗（伺服器就在本機才做得到）。"""
+        if not pick_lock.acquire(blocking=False):
+            raise HTTPException(409, "資料夾選取視窗已經開著，先處理那一個")
+        try:
+            import tkinter
+            from tkinter import filedialog
+            root = tkinter.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            initial = state.get("dir") or next(iter(load_mru()), None)
+            path = filedialog.askdirectory(
+                parent=root, initialdir=initial or None, title="選擇素材資料夾")
+            root.destroy()
+        finally:
+            pick_lock.release()
+        return {"dir": path.replace("/", "\\") if path else None}
+
+    @app.post("/api/resolve_dir")
+    def api_resolve_dir(payload: dict):
+        name = (payload.get("name") or "").strip() or None
+        files = payload.get("files") or []
+        if not name and not files:
+            raise HTTPException(400, "沒有資料夾名或檔名可反查")
+        d = resolve_dropped_dir(name, files, drop_candidate_roots(load_mru()))
+        if not d:
+            raise HTTPException(
+                404, "反查不到這個資料夾的完整路徑——請改用「瀏覽…」按鈕選取")
+        return {"dir": d}
 
     # 背景轉錄工作——同步跑 65 分鐘素材要 160 秒以上，fetch 會在那裡
     # 靜默乾等；改成「啟動就回、前端輪詢進度」。

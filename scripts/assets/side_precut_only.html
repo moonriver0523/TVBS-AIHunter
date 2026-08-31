@@ -59,7 +59,8 @@
 <body>
 <header>
   <h1>側錄初處理</h1>
-  <input type="text" id="dir" size="52" placeholder="素材資料夾路徑">
+  <input type="text" id="dir" size="52" placeholder="素材資料夾路徑（可把資料夾拖進視窗）">
+  <button id="browse">瀏覽…</button>
   <button id="load">讀取</button>
   <span id="status"></span>
 </header>
@@ -455,6 +456,40 @@ $('pcInvert').onclick = () => {
 
 $('load').onclick = loadDir;
 $('dir').onkeydown = e => { if (e.key === 'Enter') loadDir(); };
+
+$('browse').onclick = async () => {
+  status('資料夾選取視窗開啟中…（可能被其他視窗擋住）');
+  try {
+    const j = await api('/api/pick_dir', { method: 'POST' });
+    if (j.dir) { $('dir').value = j.dir; loadDir(); } else status('');
+  } catch (e) { status(e.message, true); }
+};
+
+// 拖曳資料夾（或其中一個檔案）到頁面任何位置。瀏覽器安全限制拿不到
+// 絕對路徑，只拿得到名稱——後端用「資料夾名＋內含檔名」到常用位置反查。
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', async e => {
+  e.preventDefault();
+  const it = e.dataTransfer && e.dataTransfer.items && e.dataTransfer.items[0];
+  const entry = it && it.webkitGetAsEntry && it.webkitGetAsEntry();
+  if (!entry) return;
+  let name = null, files = [];
+  if (entry.isDirectory) {
+    name = entry.name;
+    files = await new Promise(res => entry.createReader().readEntries(
+      es => res(es.filter(x => x.isFile).map(x => x.name).slice(0, 5)), () => res([])));
+  } else {
+    files = [entry.name];
+  }
+  status('反查資料夾路徑…');
+  try {
+    const j = await api('/api/resolve_dir', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, files }),
+    });
+    $('dir').value = j.dir; loadDir();
+  } catch (err) { status(err.message, true); }
+});
 
 (async () => {
   const j = await api('/api/materials').catch(() => null);
