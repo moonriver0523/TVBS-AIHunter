@@ -1,7 +1,7 @@
 # 自動寫稿(業配) — 寫稿＋配音＋剪接 變體設計
 
 - 日期：2026-08-21
-- 狀態：寫稿 overlay 已落地（`common/19-auto-script-advertorial.md`，2026-08-21 花蓮暑假2400 實戰回寫）；製片全鏈仍待實作
+- 狀態（2026-08-31 更新）：寫稿 overlay 已落地（`common/19-auto-script-advertorial.md`，2026-08-21 花蓮暑假2400 實戰回寫）；製片全鏈骨架已落地（`scripts/production_advertorial/`，commit `8b7fcb1`），並在花蓮實戰後補強終檢（commit `f367d82`，NS 乾淨度＋SB 逐字比對）。**本節「測試」章節列的 3 項最小回歸測試（`validate_sot`/`load_script`/`build_video`）尚未實作，目前只有花蓮真案例跑過，沒有可重跑的最小自測**；「索引（實作時改）」章節的 `common/12-子系統地圖.md` S9 那行也還沒把 `production_advertorial/` 列為 adapter，見下方對應章節。
 - 母本：寫稿格式＝`common/06-auto-script-sot.md`（**只引用，禁止複製／禁止改 06**）；業配例外只寫在 `19`。製片配音／上字／終檢＝`production/`＋`scripts/production/`（CTV 全鏈）；剪接＝改吃 SOT 多來源，不是 CTV 單母帶
 - 編號：原擬 `common/18-auto-script-advertorial.md`，但 `18` 已是交換平台素材整併，改放 `19`
 
@@ -153,9 +153,20 @@ SOT 口白可能超過 CTV 14 字／行：配音以稿面行為準（可長行�
 
 ## 索引（實作時改）
 
-- `README.md`：跨來源流程加「自動寫稿(業配)」→ `common/19`（寫稿 overlay 已加；製片 `production_advertorial/` 仍待實作）
-- `AGENTS.md`：業配與 SOT／CTV／準連並列；業配必讀 `19`＋需求單＋官方新聞稿（**不要改 06**）
-- `common/12-子系統地圖.md`：S8 加 `19`；S9 加 `production_advertorial/`（多來源 adapter，不是新子系統；製片列仍待實作）
+- `README.md`：跨來源流程加「自動寫稿(業配)」→ `common/19`（**已完成**）
+- `AGENTS.md`：業配與 SOT／CTV／準連並列；業配必讀 `19`＋需求單＋官方新聞稿（**已完成**，不改 06）
+- `common/12-子系統地圖.md`：S8 加 `19`（**已完成**）；S9 加 `production_advertorial/`（多來源 adapter，不是新子系統）→ **尚未完成**，S9 目前仍只列 `production/00~09`，待補一行標明業配走 `scripts/production_advertorial/` 副本
+
+## 測試（尚未實作，2026-08-31 記錄待辦）
+
+以下 3 項第一版設計時列的最小回歸測試，目前都還沒有對應的測試檔／腳本，只有花蓮暑假2400真案例跑過一次人工驗證，缺乏可重跑的自測：
+
+1. `validate_sot.py --mode sot` 吃一份最小業配完成稿（含 2 段 OS＋1 段 SB＋畫面標注）須 exit 0 — 未建最小測試稿。
+2. `load_script`（`sot_common.py`）：口白不含 `#XX TC`／畫面來源；`shots` 與 `sb` 檔號正確 — 未建單元測試。
+3. `build_video`：兩支短檔＋假稿＋現成 wav（可跳過真 TTS），SB 來自檔 A、OS 來自檔 B 的指定 TC，禁止循環 — 未建。
+4. 現有 `scripts/production/` 零 diff（回歸：業配不得改 CTV 腳本）— 可用 `git diff --stat` 人工核對，未寫成自動化檢查。
+
+未點名前不主動補測試，此節只作為待辦紀錄。
 
 ## 測試
 
