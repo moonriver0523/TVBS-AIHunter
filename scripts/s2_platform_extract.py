@@ -142,6 +142,30 @@ def fmt_mmss(seconds):
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
+_DUR_TAIL = re.compile(r"^\d{1,3}:\d{2}(?::\d{2})?$")
+
+
+def with_duration(raw_entry, dur_str):
+    """把量到的時長補成素材行最後一段 `▎MM:SS`。
+
+    🔴 2026-09-01 實錯（0901-1700 首輪四站）：ffprobe 明明 23/23 都量到時長
+    （存在候選檔 `enex.duration`），交接單上 25 則 ENEX **全部沒有時長**，
+    而 AP／RT 每行都有。原因是那時只有「怎麼量」的規則、沒有「量到要放哪裡」，
+    18 §140 還停在舊版「ENEX 抓不到時長→留白」，掃帶 agent 是照舊規則做對的事。
+
+    時長是機械事實、`dur_str` 本來就在這支手上——就別再靠 agent 逐則手抄。
+    ⛔ 兩種情況一律不動 raw_entry：
+      1. 已經有時長結尾（agent 自己寫了就以它為準，這支不覆蓋）；
+      2. `dur_str` 是 None（量不到就是留白，**不准補 `▎?`／`▎00:00` 佔位**，18 §140）。
+    """
+    if not raw_entry or not dur_str:
+        return raw_entry
+    tail = raw_entry.rstrip().rsplit("▎", 1)[-1].strip()
+    if _DUR_TAIL.match(tail):
+        return raw_entry
+    return raw_entry.rstrip() + "▎" + dur_str
+
+
 def build_counts(kept_n, skipped_n, dropped_n=0):
     """`掃描` ＝ 這一輪實際看過的 raw 則數 ＝ 收錄 ＋ 排除 ＋ **漏判**。
 
@@ -259,7 +283,7 @@ def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds,
             "source": "ENEX",
             "first_seen_checkpoint": None,  # 呼叫端統一填 checkpoint
             "script_status": "has_script",
-            "raw_entry": raw_entry,
+            "raw_entry": with_duration(raw_entry, dur_str),
             "category": ent.get("category") or {},
             "sb_count": ent.get("sb_count", 0),
             "src_text": truncate(it.get("desc", "")),

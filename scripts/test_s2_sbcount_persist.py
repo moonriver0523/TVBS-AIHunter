@@ -122,5 +122,24 @@ report("sb_count 真的是 0 且標了 (BITE) → 照樣寫 needs_review",
 report("疑慮素材仍然入庫（不准拒收，見 test_s2_ftguard）",
        "RT0004" in items_of(sp))
 
+# ── 6. platform（交換平台站台 metadata）也要落進狀態檔（2026-09-01）────────
+#    形狀跟 sb_count 一模一樣：原本只活在候選檔／中間檔裡，add-batch 收到就丟掉。
+#    0901-1700 首輪四站的實錯就是這個——ffprobe 量到的 ENEX 時長整批消失。
+d, sp = new_state()
+add_batch(sp, [{"id": "ENEX929180", "source": "ENEX", "checkpoint": "0901-1700",
+                "status": "has_script",
+                "entry": "ENEX929180 (X) ▎摘要。▎畫面：測試。▎無BITE。▎00:27",
+                "platform": {"site": "ENEX", "duration": "00:27", "newslinkId": 2377170}}])
+it = items_of(sp).get("ENEX929180", {})
+report("add-batch 的 platform 有存進狀態檔",
+       (it.get("platform") or {}).get("duration") == "00:27",
+       f"實得 {it.get('platform')!r}")
+
+d, sp = new_state()
+add_batch(sp, [{"id": "RT0005", "source": "RT", "checkpoint": "0901-1700",
+                "status": "has_script", "entry": NOBITE}])
+report("三站沒有 platform 就不要憑空長出這個欄位",
+       "platform" not in items_of(sp).get("RT0005", {}))
+
 print("\n" + ("全部通過" if ok else "有失敗"))
 sys.exit(0 if ok else 1)

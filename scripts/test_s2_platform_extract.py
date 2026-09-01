@@ -248,6 +248,32 @@ check("lookup_entry 裸鍵不存在才用前綴鍵",
 check("lookup_entry：裸鍵是 falsy 的 {} 也算存在，不 fallback（前後迴圈才會一致）",
       ex.lookup_entry({"1": {}, "ENEX1": {"a": 2}}, "1") == {})
 
+
+# ── 時長要補進素材行行尾（2026-09-01，0901-1700 首輪四站實錯）─────────────
+check("with_duration：量到就補 ▎MM:SS",
+      ex.with_duration("ENEX1 (X) ▎摘要▎畫面：…▎無BITE。", "00:27")
+      == "ENEX1 (X) ▎摘要▎畫面：…▎無BITE。▎00:27")
+check("with_duration：agent 自己寫了就不覆蓋",
+      ex.with_duration("ENEX1 (X) ▎摘要▎無BITE。▎03:12", "00:27")
+      == "ENEX1 (X) ▎摘要▎無BITE。▎03:12")
+check("with_duration：量不到就留白，⛔ 不補佔位",
+      ex.with_duration("ENEX1 (X) ▎摘要▎無BITE。", None)
+      == "ENEX1 (X) ▎摘要▎無BITE。")
+check("with_duration：raw_entry 空著不動（lint 會擋，這支不代寫）",
+      ex.with_duration("", "00:27") == "")
+check("with_duration：HH:MM:SS 也算已有時長",
+      ex.with_duration("ENEX1 (X) ▎摘要▎01:02:03", "00:27")
+      == "ENEX1 (X) ▎摘要▎01:02:03")
+
+_iw, _sw, _dw, _gw = ex.extract_enex(
+    [{"id": "ENEX7100", "title": "t", "desc": "d", "url": "u", "estat": "PUBLISHED"}],
+    {"7100": {"category": {"大分類": "歐"}, "sb_count": 0,
+              "raw_entry": "ENEX7100 (X) ▎摘要▎畫面：…▎無BITE。"}},
+    duration_fn=lambda u: 27.0)
+check("extract_enex：量到的時長真的落在 raw_entry 行尾（不是只存進子物件）",
+      _iw[0]["raw_entry"].endswith("▎00:27") and _iw[0]["enex"]["duration"] == "00:27",
+      _iw[0]["raw_entry"][-20:])
+
 shutil.rmtree(TMP, ignore_errors=True)
 
 print(f"\nPASS={sum(results)} FAIL={len(results) - sum(results)}")

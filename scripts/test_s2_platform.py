@@ -156,10 +156,38 @@ d["items"][0]["raw_entry"] = ABC_LINE.replace("▎01:26", "")
 err, _ = run_lint(d)
 check("ABC 缺 ▎MM:SS 收尾", has(err, "ABC 一律帶"))
 
+# 🔴 2026-09-01：這三條原本只有一條、而且是反的（「ENEX 有時長就違規」）。
+# ffprobe 走通之後，時長變成 ENEX 也一定要帶——擋的對象改成「編出來的數字」。
 d = enex_doc()
 d["items"][0]["raw_entry"] = ENEX_LINE + "▎02:10"
+d["items"][0].pop("enex", None)
 err, _ = run_lint(d, "0817-ENEX-state.json")
-check("ENEX 不准編時長（兩站規則相反）", has(err, "ENEX 目前抓不到時長"))
+check("ENEX 帶了時長但沒量到（＝編的）→ 必修", has(err, "enex.duration 是空的"))
+
+d = enex_doc()
+d["items"][0]["raw_entry"] = ENEX_LINE + "▎02:10"
+d["items"][0]["enex"] = {"duration": "02:10"}
+err, _ = run_lint(d, "0817-ENEX-state.json")
+check("ENEX 行尾時長＝量到的值 → 放行", not has(err, "時長"))
+
+d = enex_doc()
+d["items"][0]["raw_entry"] = ENEX_LINE + "▎02:10"
+d["items"][0]["enex"] = {"duration": "03:45"}
+err, _ = run_lint(d, "0817-ENEX-state.json")
+check("ENEX 行尾時長被手改成跟 ffprobe 不一樣 → 必修", has(err, "不符"))
+
+# 0901-1700 那一輪的實際形狀：量到了卻沒帶到行尾，整批交接單看不到時長
+d = enex_doc()
+d["items"][0]["enex"] = {"duration": "00:27"}
+err, _ = run_lint(d, "0817-ENEX-state.json")
+check("ENEX 量到時長卻沒帶到行尾 → 必修（0901-1700 實錯形狀）",
+      has(err, "卻沒帶到行尾"))
+
+# 量不到（PUBLISHING NOW）就留白，這是合法的，不准擋
+d = enex_doc()
+d["items"][0]["enex"] = {"duration": None}
+err, _ = run_lint(d, "0817-ENEX-state.json")
+check("ENEX 量不到時長 → 留白合法，不擋", not has(err, "時長"))
 
 d = abc_doc()
 d["items"][0]["raw_entry"] = ABC_LINE.replace("▎01:26", "▎URL：https://x▎01:26")
@@ -273,6 +301,21 @@ check("pairs 兩層分類", pairs == "ABC081726007=財經/聯準會利率", pair
 e2, p2, _ = merge.build(enex_doc())
 check("pairs 三層分類", p2 == "ENEX927228=大陸/解放軍演訓/黃海實彈射擊", p2)
 check("缺 src_text 逐則點名", merge.build(no_src(abc_doc()))[2]["no_src"] == ["ABC081726007"])
+
+# 🔴 2026-09-01：站台 metadata 原本整包不帶過去，extract 量到的東西一整併就蒸發
+check("ENEX 站台 metadata 帶過去（原本整包被丟掉）",
+      e2[0].get("platform") == {"itemId": "927228", "site": "ENEX"},
+      str(e2[0].get("platform")))
+_dm = enex_doc()
+_dm["items"][0]["enex"] = {"duration": "00:27", "newslinkId": 2377170}
+check("ENEX 時長跟著 platform 進狀態檔（0901-1700 那批就是在這步不見的）",
+      merge.build(_dm)[0][0]["platform"]["duration"] == "00:27")
+check("ABC 也走同一個鍵（不要每加一站就長一個欄位）",
+      merge.build(abc_doc())[0][0]["platform"]["site"] == "ABC")
+_dn = abc_doc()
+_dn["items"][0].pop("abc", None)
+check("沒有站台 metadata 就不要憑空長出 platform 鍵",
+      "platform" not in merge.build(_dn)[0][0])
 
 d = abc_doc()
 d["items"][0]["category"] = None

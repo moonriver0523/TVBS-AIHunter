@@ -411,7 +411,8 @@ def bite_doubt(entry, sb_count=None, footage_type=None):
     return None
 
 
-def new_item(source, checkpoint, status, entry, sb_count=None, src_text=None, footage_type=None):
+def new_item(source, checkpoint, status, entry, sb_count=None, src_text=None,
+             footage_type=None, platform=None):
     it = {
         "source": source,
         "first_seen_checkpoint": checkpoint,
@@ -437,6 +438,11 @@ def new_item(source, checkpoint, status, entry, sb_count=None, src_text=None, fo
         it["src_text"] = src_text
     if footage_type:
         it["footage_type"] = footage_type
+    # 交換平台（ENEX／ABC）的站台 metadata（2026-09-01 補，同一天的實錯見
+    # `s2_platform_merge.build()`）：`newslinkId`／`partner`／機械量到的時長等，
+    # 只有這包能回頭對到站方那一則。三站不帶這個欄位，沒有就不會出現。
+    if isinstance(platform, dict) and platform:
+        it["platform"] = platform
     # 結構化欄位由腳本推導（2026-08-04 新增，見 s2_parse）：agent 完全無感、
     # 不必多寫一份。解析失敗只標 parse_ok:false，**不擋入庫**。
     sp.derive(it)
@@ -549,7 +555,8 @@ def cmd_add_batch(state, args):
         # 否則稽核③ 讀狀態檔時又會拿 0 去報一次假 BITE（誤報只是換個地方出現）。
         state["items"][i] = new_item(e["source"], e["checkpoint"], e["status"],
                                      e["entry"].strip(), sb,
-                                     src_text=e.get("src_text"), footage_type=ft)
+                                     src_text=e.get("src_text"), footage_type=ft,
+                                     platform=e.get("platform"))
         if not e.get("src_text"):
             no_src.append(i)
         if doubt:

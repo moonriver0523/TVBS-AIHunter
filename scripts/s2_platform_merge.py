@@ -105,6 +105,16 @@ def build(data):
             e["src_text"] = it["src_text"]
         else:
             no_src.append(i)
+        # 站台專屬 metadata（`enex`／`abc` 那包：newslinkId／partner／時長／slug…）
+        # 🔴 2026-09-01 實錯：這裡原本只組固定幾個欄位，那包**整個沒帶過去**，
+        # 於是 extract 量到的東西一路活到候選檔就消失。AP／RT 沒事是因為它們的
+        # 時長寫在 raw_entry 文字裡，ENEX 的只活在子物件裡——一整併就蒸發。
+        # 收成單一 `platform` 鍵而不是各站各長一個鍵：狀態檔的欄位不必每加一站就長一個。
+        for site_key in ("enex", "abc"):
+            sub = it.get(site_key)
+            if isinstance(sub, dict) and sub:
+                e["platform"] = dict(sub, site=site_key.upper())
+                break
         entries.append(e)
         cat = it.get("category")
         if not isinstance(cat, dict) or not str(cat.get("大分類") or "").strip():

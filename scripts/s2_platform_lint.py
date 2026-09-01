@@ -14,7 +14,8 @@ agent「寫完自己對一遍」，0810 那批品質掃 38 個 HIT 裡 **ABC 佔
 render 用的同一套）。本檔只加**候選檔階段特有**、`check_entry` 管不到的檢查：
   - 行首時段標記（`check_entry` 會先 `strip_mark` 剝掉，違規反而看不見，見 `_mark_issue`）
   - 候選 JSON 的結構與交叉一致性（id ↔ 站別欄位 ↔ raw_entry 行首）
-  - 兩站的時長規則相反（ABC 必帶 `▎MM:SS`／ENEX 一律留白）
+  - 時長：兩站都必帶 `▎MM:SS`；ENEX 另外比對行尾是否等於機械量到的 `enex.duration`
+    （2026-09-01 改；在那之前這條是反的——「ENEX 有時長就算違規」）
 
 **分級**：❌＝交件前必修（§4 格式表＋結構錯、缺 `src_text`）；⚠️＝提醒（counts 對不上、
 成對 txt 不在等）。`src_text` 自 2026-08-18 起是 18 檔 §2 的必帶欄位（A9 子項⑧ 落地），
@@ -170,7 +171,7 @@ def lint(path, allow_missing_src=False):
         err += _check_category(ident, it.get("category"), warn)
         entry = it.get("raw_entry")
         if isinstance(entry, str) and entry.strip():
-            err += _check_entry_line(va, site, ident, i, entry)
+            err += _check_entry_line(va, site, ident, i, entry, it)
         elif entry is not None and not isinstance(entry, str):
             err.append(f"{ident}: raw_entry 須為字串，實得 {type(entry).__name__}")
         if "sb_count" in it and not isinstance(it["sb_count"], int):
@@ -266,7 +267,7 @@ def _check_category(ident, cat, warn):
     return out
 
 
-def _check_entry_line(va, site, ident, i, entry):
+def _check_entry_line(va, site, ident, i, entry, it=None):
     out = []
     m = _mark_issue(entry)
     if m:
@@ -280,9 +281,24 @@ def _check_entry_line(va, site, ident, i, entry):
     has_dur = bool(DUR_RE.search(first))
     if site == "ABC" and not has_dur:
         out.append(f"{ident}: ABC 一律帶 ▎MM:SS 收尾（清單 Length 欄，18 檔 §4）")
-    if site == "ENEX" and has_dur:
-        out.append(f"{ident}: ENEX 目前抓不到時長，一律留白，"
-                   f"⛔ 不要編數字或佔位（18 檔 §4）")
+    # 🔴 2026-09-01：ENEX 這條原本是**反過來**的——「有時長就 ❌」。那是 ffprobe 那條路
+    # 還沒走通時訂的，現在 extract 量得到、也會自動補進行尾（`with_duration()`），
+    # 再擋就會把每一則正確的素材行都判成必修。改成只擋「量不到卻硬編」：
+    # 有 `enex.duration` 才准帶，兩者對不起來也要喊（編數字 vs 量到的不一致）。
+    if site == "ENEX":
+        measured = str(((it.get("enex") or {}) if isinstance(it, dict) else {})
+                       .get("duration") or "").strip()
+        if measured and not has_dur:
+            # ⭐ 0901-1700 那一輪的形狀：量到了，行尾卻沒有——正常流程走 extract
+            # 不會發生（`with_duration()` 會補），會走到這裡就是手組的候選檔。
+            out.append(f"{ident}: 量到時長（enex.duration={measured}）卻沒帶到行尾 "
+                       f"▎{measured}——交接單上會看不到時長（18 檔 §4）")
+        elif has_dur and not measured:
+            out.append(f"{ident}: 帶了時長但 enex.duration 是空的（ffprobe 沒量到就留白，"
+                       f"⛔ 不要編數字或佔位，18 檔 §4）")
+        elif not first.rstrip().endswith(measured):
+            out.append(f"{ident}: 行尾時長與量到的 enex.duration（{measured}）不符——"
+                       f"時長是機械事實，不要手改")
     # §4 表的其餘各項（缺 ▎畫面：、摘要 150 字、(BITE) 一致性、行尾多餘內容…）
     # 全部交給三站同一套 check_entry，這裡不重寫判準。
     out += [f"{ident}: {r}" for r in va.check_entry(first)]
