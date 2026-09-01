@@ -37,6 +37,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -132,16 +133,27 @@ def build(data):
                                       "no_src": no_src}
 
 
-def out_paths(cand, out_dir=None):
-    """輸出檔預設落在**候選檔旁**，不是 CWD。
+def out_paths(cand, out_dir=None, checkpoint=None):
+    """輸出檔預設落在**候選檔旁**，不是 CWD；檔名帶輪次。
 
     R13 連三輪再犯的坑就是這個形狀（中間檔先落在當下工作目錄，再搬一次），
     這裡從一開始就不給它機會。
+
+    🔴 2026-09-01 加輪次後綴：候選檔一天都叫 `{MMDD}-ENEX-state.json`，
+    衍生的中間檔就跟著叫 `{MMDD}-ENEX-entries.json`——**第二輪起必撞**
+    「已存在，不覆寫」而 exit 1。0901-2200 實錯：agent 為此多繞了三個往返
+    才想到加 `--overwrite`，而那個護欄本來是要防「不小心蓋掉別的東西」，
+    不是要每輪跟你收過路費。帶上輪次之後各輪各檔，護欄回到它該防的情境，
+    順便留下每一輪的中間檔可回溯（先前是後一輪直接蓋掉前一輪）。
     """
     d = out_dir or os.path.dirname(os.path.abspath(cand))
     base = os.path.basename(cand)
     stem = base[:-len("-state.json")] if base.endswith("-state.json") else \
         os.path.splitext(base)[0]
+    # checkpoint 形如 `0901-2200`，取後半的 HHMM。候選檔本身已經帶了輪次就不重複加。
+    m = re.search(r"-(\d{4})$", str(checkpoint or ""))
+    if m and not stem.endswith(m.group(1)):
+        stem = f"{stem}-{m.group(1)}"
     return (os.path.join(d, f"{stem}-entries.json"),
             os.path.join(d, f"{stem}-pairs.txt"))
 
@@ -282,7 +294,8 @@ def main():
         print("⛔ 沒有任何可整併的素材（items 全空或全數缺欄位）")
         return 1
 
-    entries_path, pairs_path = out_paths(args.candidate, args.out_dir)
+    entries_path, pairs_path = out_paths(args.candidate, args.out_dir,
+                                         data.get("checkpoint"))
     write_out(entries_path, json.dumps(entries, ensure_ascii=False, indent=2),
               args.overwrite)
     write_out(pairs_path, pairs, args.overwrite)

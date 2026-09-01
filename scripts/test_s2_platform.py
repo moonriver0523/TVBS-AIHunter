@@ -360,6 +360,19 @@ try:
     check("既有輸出不覆寫", False)
 except SystemExit as e:
     check("既有輸出不覆寫（覆寫＝銷毀依據）", "不覆寫" in str(e))
+
+# 🔴 2026-09-01：中間檔要帶輪次，否則第二輪起必撞「已存在」（0901-2200 實錯）
+ep2, pp2 = merge.out_paths(cand, checkpoint="0818-2200")
+check("中間檔帶輪次後綴（各輪各檔，不必每輪 --overwrite）",
+      ep2.endswith("0818-ABC-2200-entries.json") and pp2.endswith("0818-ABC-2200-pairs.txt"),
+      os.path.basename(ep2))
+check("同一天不同輪不會互撞",
+      merge.out_paths(cand, checkpoint="0818-1700")[0] != ep2)
+check("候選檔本身已帶輪次就不重複加",
+      merge.out_paths(os.path.join(TMP, "0818-ABC-2200-state.json"),
+                      checkpoint="0818-2200")[0].endswith("0818-ABC-2200-entries.json"))
+check("沒有 checkpoint 時維持舊檔名（舊候選檔照樣跑得動）",
+      merge.out_paths(cand)[0] == ep)
 merge.write_out(ep, "y", True)
 check("--overwrite 才覆寫", open(ep, encoding="utf-8").read() == "y")
 
@@ -391,7 +404,8 @@ check("--force 才硬上（並印出警告）", rc == 0 and "--force" in out)
 cand2 = write("0818-OK-state.json", abc_doc())
 rc, out = run_main([cand2])
 check("dry 預設：產檔＋印下一步指令，不碰狀態檔",
-      rc == 0 and os.path.exists(os.path.join(TMP, "0818-OK-entries.json"))
+      # 檔名帶候選檔 checkpoint（0817-1650）的輪次後綴，見 out_paths
+      rc == 0 and os.path.exists(os.path.join(TMP, "0818-OK-1650-entries.json"))
       and "add-batch" in out and "s2_topic_dedupe" in out)
 
 cand3 = write("已入庫_0818-OK-state.json", abc_doc())
