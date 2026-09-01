@@ -176,6 +176,19 @@ d["items"][0]["enex"] = {"duration": "03:45"}
 err, _ = run_lint(d, "0817-ENEX-state.json")
 check("ENEX 行尾時長被手改成跟 ffprobe 不一樣 → 必修", has(err, "不符"))
 
+# 🔴 0901-2000：重大／亮點標記開頭被誤判成「行首代碼與 id 不符」，害 agent 重寫
+for mk in ("🔴", "🟡", "🔖", "⭐"):
+    d = enex_doc()
+    d["items"][0]["raw_entry"] = mk + " " + ENEX_LINE
+    err, _ = run_lint(d, "0817-ENEX-state.json")
+    check(f"{mk} 開頭不算行首代碼不符（候選檔可以帶重大／亮點標記）",
+          not has(err, "與 id 不符"), str(err))
+
+d = enex_doc()
+d["items"][0]["raw_entry"] = "△ " + ENEX_LINE
+err, _ = run_lint(d, "0817-ENEX-state.json")
+check("時段標記 △ 仍要擋（render 會再補一個）", has(err, "自帶時段標記"))
+
 # 0901-1700 那一輪的實際形狀：量到了卻沒帶到行尾，整批交接單看不到時長
 d = enex_doc()
 d["items"][0]["enex"] = {"duration": "00:27"}

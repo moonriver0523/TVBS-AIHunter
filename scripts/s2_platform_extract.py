@@ -82,6 +82,23 @@ def load_json(path):
         return json.load(f)
 
 
+def raw_list(data):
+    """`--raw` 收到的可能是陣列，也可能是**包了一層的物件**。
+
+    🔴 0901-2000 實錯的真正原因：`enex_raw_2000.json` 是
+    `{"total":…, "count":…, "items":[…]}`——瀏覽器端回傳被卸載成檔案時就是這個形狀。
+    agent 直接把整個物件餵進來，這支去迭代它就拿到 dict 的**鍵（字串）**，
+    於是 `AttributeError: 'str' object has no attribute 'get'` 整支掛掉。
+    `s2_state.py cmd_add_batch` 早就有 `data.get("entries")` 的解包慣例，
+    這裡比照：包一層就拆一層，不要逼呼叫端先手工剝殼。
+    """
+    if isinstance(data, dict):
+        for k in ("items", "hits", "rows", "results"):
+            if isinstance(data.get(k), list):
+                return data[k]
+    return data
+
+
 def probe_duration_seconds(url):
     """對公開 CDN 網址跑 ffprobe 拿時長（秒）。失敗回傳 None，不拋例外——
     呼叫端要能把「量不到」明確記進 known_gaps，不是讓整支腳本掛掉。"""
@@ -140,6 +157,82 @@ def fmt_mmss(seconds):
         return None
     total = round(seconds)
     return f"{total // 60:02d}:{total % 60:02d}"
+
+
+# 時段標記：由 render 依收錄時間補，候選檔／entries 自己帶就會變成兩個（18 §2）。
+# 🔴／🟡／⭐／🟤／🔖 是**重大與畫面亮點標記**，性質不同，entries 本來就可以帶。
+PERIOD_MARKS = "△▲■◆●"
+SEVERITY_MARKS = "🔴🟡⭐🟤🔖"
+
+
+def norm_category(v):
+    """`category` 允許兩種寫法，統一成物件。
+
+    🔴 0901-2000 實錯：agent 把 category 寫成 `"烏俄/國際外交/莫迪籲普欽止戰"`
+    字串（那是 `set-category --pairs` 的語法，天天在用，寫串很自然），
+    extract 照收、lint 才在**整份 23 則都寫完之後**吐 23 個「category 須為物件」，
+    只好整份重寫一次（100 秒）。既然分隔語法本來就是 `/`、拆法唯一且無損，
+    就在這裡收下來，不要讓它變成一次全量重寫。
+    """
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, str) and v.strip():
+        parts = [p.strip() for p in v.split("/") if p.strip()][:3]
+        return dict(zip(("大分類", "中主題", "小分題"), parts))
+    return {}
+
+
+def check_entries(entries):
+    """`--entries` 的形狀預檢：**在動任何 ffprobe／寫任何檔之前**先擋下來。
+
+    要解決的是 0901-2000 那個形狀：entries 整份寫完（118 秒）→ extract →
+    lint 吐 51 項必修 → 整份重寫（100 秒）→ 再吐 4 項 → 再改。
+    一輪 ENEX 7.9 分鐘裡約 2.5 分是這樣燒掉的。
+
+    ⛔ 這裡只擋**確定要重寫**的形狀問題，不擋編輯判斷（分類對不對、摘要好不好）。
+    `raw_entry` 沒填不在此列——那是既有設計（記 known_gaps，lint 才擋），
+    因為站方還沒出稿時本來就填不了。
+    """
+    problems = []
+    if not isinstance(entries, dict):
+        return [f"--entries 應為物件（{{id: {{…}}}}），實得 {type(entries).__name__}"]
+    for k, v in entries.items():
+        if not isinstance(v, dict):
+            problems.append(f"{k}: 值不是物件（實得 {type(v).__name__}）")
+            continue
+        if v.get("skip"):
+            continue          # 排除的只需要 skip 理由，其餘欄位不要求
+        cat = v.get("category")
+        if cat is not None and not isinstance(cat, (dict, str)):
+            problems.append(f"{k}: category 須為物件或 `大分類/中主題/小分題` 字串，"
+                            f"實得 {type(cat).__name__}")
+        else:
+            c = norm_category(cat)
+            for kk in ("大分類", "中主題"):
+                if not str(c.get(kk) or "").strip():
+                    problems.append(f"{k}: category 缺 `{kk}`")
+            bad = [ch for ch in ";=" if any(ch in str(x) for x in c.values())]
+            if bad:
+                problems.append(f"{k}: category 含 {'／'.join(bad)}——"
+                                f"set-category --pairs 會被切錯")
+        if "sb_count" in v and not isinstance(v["sb_count"], int):
+            problems.append(f"{k}: sb_count 須為整數，實得 {v['sb_count']!r}")
+        raw = v.get("raw_entry")
+        if raw is None or raw == "":
+            continue          # 見上：不在此列
+        if not isinstance(raw, str):
+            problems.append(f"{k}: raw_entry 須為字串，實得 {type(raw).__name__}")
+            continue
+        first = raw.strip().split("\n")[0]
+        if first[:1] in PERIOD_MARKS:
+            problems.append(f"{k}: raw_entry 自帶時段標記「{first[:1]}」"
+                            f"（render 會依收錄時間再補一個，18 §2）"
+                            f"——🔴／🟡／🔖 可以帶，時段標記不行")
+        head = first.lstrip(PERIOD_MARKS + SEVERITY_MARKS + " ").split(" ", 1)[0]
+        bare = k[4:] if k.upper().startswith("ENEX") else k
+        if head and head not in (k, "ENEX" + bare):
+            problems.append(f"{k}: raw_entry 行首代碼是 {head!r}，與鍵值不符")
+    return problems
 
 
 _DUR_TAIL = re.compile(r"^\d{1,3}:\d{2}(?::\d{2})?$")
@@ -297,7 +390,7 @@ def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds,
             "first_seen_checkpoint": None,  # 呼叫端統一填 checkpoint
             "script_status": "has_script",
             "raw_entry": with_duration(raw_entry, dur_str),
-            "category": ent.get("category") or {},
+            "category": norm_category(ent.get("category")),
             "sb_count": ent.get("sb_count", 0),
             "src_text": truncate(it.get("desc", "")),
             "enex": {"newslinkId": it.get("nlid"), "duration": dur_str, "partner": it.get("partner")},
@@ -345,7 +438,7 @@ def extract_abc(raw_rows, entries):
             "first_seen_checkpoint": None,
             "script_status": "has_script",
             "raw_entry": raw_entry,
-            "category": ent.get("category") or {},
+            "category": norm_category(ent.get("category")),
             "sb_count": ent.get("sb_count", 0),
             "src_text": truncate(src_text),
             "abc": {"slug": row.get("Slug"), "storyNumber": story,
@@ -359,20 +452,42 @@ EXTRACTORS = {"enex": extract_enex, "abc": extract_abc}
 
 def main():
     ap = argparse.ArgumentParser(description="ENEX／ABC 候選檔擷取（機械欄位封裝）")
-    ap.add_argument("site", choices=sorted(EXTRACTORS))
-    ap.add_argument("--raw", required=True)
+    ap.add_argument("site", choices=sorted(EXTRACTORS) + ["check-entries"],
+                    help="enex／abc＝擷取；check-entries＝只驗 --entries 形狀就結束")
+    ap.add_argument("--raw")
     ap.add_argument("--entries", required=True)
-    ap.add_argument("--checkpoint", required=True)
-    ap.add_argument("--window-start", required=True)
-    ap.add_argument("--window-end", required=True)
+    ap.add_argument("--checkpoint")
+    ap.add_argument("--window-start")
+    ap.add_argument("--window-end")
     ap.add_argument("--out")
     ap.add_argument("--probe-workers", type=int, default=PROBE_WORKERS,
                     help=f"ffprobe 併發數（預設 {PROBE_WORKERS}）。"
                          f"1 ＝退回序列；被 CDN 限流時調小")
     args = ap.parse_args()
 
-    raw_items = load_json(args.raw)
     entries = load_json(args.entries)
+    # ⭐ 形狀預檢一律先跑（`check-entries` 只跑這一段就結束）：擋在 ffprobe 與
+    # 寫檔之前，錯了當場就知道，不必等 lint 在整份寫完之後才吐一長串。
+    problems = check_entries(entries)
+    if problems:
+        print(f"⛔ --entries 形狀有 {len(problems)} 項要改（在跑 extract 之前先修）：",
+              file=sys.stderr)
+        for p in problems:
+            print(f"   {p}", file=sys.stderr)
+        print("   ⚠️ 這些都是**形狀**問題，改完不必重寫摘要——"
+              "只要動到出問題的那幾筆（13g V5-2）。", file=sys.stderr)
+        return 2
+    if args.site == "check-entries":
+        print(f"✅ --entries 形狀沒問題（{len(entries)} 筆）")
+        return 0
+
+    missing = [n for n, v in (("--raw", args.raw), ("--checkpoint", args.checkpoint),
+                              ("--window-start", args.window_start),
+                              ("--window-end", args.window_end)) if not v]
+    if missing:
+        ap.error("擷取模式需要 " + "、".join(missing))
+
+    raw_items = raw_list(load_json(args.raw))
     fn = EXTRACTORS[args.site]
     if args.site == "enex":
         items, skipped, dropped, known_gaps = fn(

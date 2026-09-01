@@ -296,6 +296,66 @@ _ia, _sa, _da, _ga = ex.extract_abc(
                    "src_text": "x"}})
 check("ABC 也有同一道護欄", len(_da) == 1 and _da[0]["id"] == "第1筆", str(_da))
 
+
+# ── --raw 包一層要自動解包（0901-2000 掛掉的真正原因）──────────────────
+check("raw_list：{total,count,items:[…]} 自動拆 items",
+      ex.raw_list({"total": 9, "count": 3, "items": [{"id": "a"}]}) == [{"id": "a"}])
+check("raw_list：陣列原樣回傳", ex.raw_list([{"id": "a"}]) == [{"id": "a"}])
+check("raw_list：hits／rows／results 也認",
+      ex.raw_list({"hits": [1]}) == [1] and ex.raw_list({"rows": [2]}) == [2]
+      and ex.raw_list({"results": [3]}) == [3])
+check("raw_list：不認識的物件原樣回傳（交給下游的非物件護欄）",
+      ex.raw_list({"foo": 1}) == {"foo": 1})
+
+# ── category 兩種寫法 ─────────────────────────────────────────────
+check("norm_category：字串照 / 拆三層",
+      ex.norm_category("烏俄/國際外交/莫迪籲普欽止戰")
+      == {"大分類": "烏俄", "中主題": "國際外交", "小分題": "莫迪籲普欽止戰"})
+check("norm_category：只有兩層也行", ex.norm_category("社會/車禍")
+      == {"大分類": "社會", "中主題": "車禍"})
+check("norm_category：物件原樣", ex.norm_category({"大分類": "美國"}) == {"大分類": "美國"})
+check("norm_category：None／空字串 → {}",
+      ex.norm_category(None) == {} and ex.norm_category("  ") == {})
+
+# ── entries 形狀預檢 ──────────────────────────────────────────────
+GOOD = {"929213": {"category": {"大分類": "烏俄", "中主題": "外交"}, "sb_count": 1,
+                   "raw_entry": "ENEX929213 (X) ▎摘要▎畫面：…▎無BITE。"},
+        "929181": {"skip": "自家素材"}}
+check("預檢：正常的 entries 沒問題", ex.check_entries(GOOD) == [], str(ex.check_entries(GOOD)))
+
+_b = dict(GOOD); _b["929213"] = dict(GOOD["929213"], category="烏俄/外交")
+check("預檢：category 字串是合法寫法，不報錯", ex.check_entries(_b) == [])
+
+_b = dict(GOOD); _b["929213"] = dict(GOOD["929213"],
+                                     raw_entry="🟡 ENEX929213 (X) ▎摘要▎無BITE。")
+check("預檢：🟡／🔴／🔖 開頭合法（0901-2000 被 lint 誤判的那 4 則）",
+      ex.check_entries(_b) == [], str(ex.check_entries(_b)))
+
+_b = dict(GOOD); _b["929213"] = dict(GOOD["929213"],
+                                     raw_entry="△ ENEX929213 (X) ▎摘要▎無BITE。")
+check("預檢：時段標記 △ 要擋（render 會再補一個）",
+      any("時段標記" in p for p in ex.check_entries(_b)), str(ex.check_entries(_b)))
+
+_b = dict(GOOD); _b["929213"] = dict(GOOD["929213"], sb_count="1")
+check("預檢：sb_count 字串要擋", any("sb_count" in p for p in ex.check_entries(_b)))
+
+_b = dict(GOOD); _b["929213"] = dict(GOOD["929213"], category={"大分類": "烏俄"})
+check("預檢：category 缺中主題要擋", any("中主題" in p for p in ex.check_entries(_b)))
+
+_b = dict(GOOD); _b["929213"] = dict(GOOD["929213"],
+                                     raw_entry="ENEX929999 (X) ▎摘要▎無BITE。")
+check("預檢：行首代碼與鍵值不符要擋", any("不符" in p for p in ex.check_entries(_b)))
+
+check("預檢：整包不是物件時直接點名", len(ex.check_entries([1, 2])) == 1)
+_b = dict(GOOD); _b["929213"] = dict(GOOD["929213"])
+_b["929213"].pop("raw_entry")
+check("預檢：raw_entry 沒填不在預檢範圍（既有設計：記 known_gaps，lint 才擋）",
+      ex.check_entries(_b) == [], str(ex.check_entries(_b)))
+
+check("check-entries 有掛進 CLI",
+      "check-entries" in open(os.path.join(HERE, "s2_platform_extract.py"),
+                              encoding="utf-8").read())
+
 shutil.rmtree(TMP, ignore_errors=True)
 
 print(f"\nPASS={sum(results)} FAIL={len(results) - sum(results)}")

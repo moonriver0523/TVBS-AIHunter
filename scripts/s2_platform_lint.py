@@ -273,7 +273,13 @@ def _check_entry_line(va, site, ident, i, entry, it=None):
     if m:
         out.append(f"{ident}: {m}")
     first = entry.strip().split("\n")[0]
-    head = first.lstrip(MARKS).strip().split(" ", 1)[0]
+    # 🔴 2026-09-01：原本只 lstrip(MARKS)（時段標記），沒剝 🔴／🟡／⭐／🟤／🔖。
+    # 於是合法的 `🟡 ENEX929211 (…)` 會被算出 head='🟡'，報成「行首代碼與 id 不符」，
+    # agent 看不懂只好回頭 grep 原始碼再重寫整份 entries（0901-2000 實錯，4 則中招）。
+    # 這幾個是**重大／畫面亮點標記**，候選檔本來就可以帶——只有時段標記不行
+    # （那個由 render 依收錄時間補，見 _mark_issue）。改用 s2_validate 的
+    # strip_mark，剝法與三站完全一致，不要再自己 lstrip。
+    head = va.strip_mark(first.lstrip(MARKS).strip())[1].strip().split(" ", 1)[0]
     if i and head != i:
         out.append(f"{ident}: raw_entry 行首代碼是 {head!r}，與 id 不符")
     if "▎URL：" in first or "▎URL:" in first:
