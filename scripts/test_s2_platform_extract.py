@@ -274,6 +274,28 @@ check("extract_enex：量到的時長真的落在 raw_entry 行尾（不是只�
       _iw[0]["raw_entry"].endswith("▎00:27") and _iw[0]["enex"]["duration"] == "00:27",
       _iw[0]["raw_entry"][-20:])
 
+
+# ── --raw 元素不是物件：記進 dropped，不要吐 AttributeError（0901-2000 實錯）──
+_ir, _sr, _dr, _gr = ex.extract_enex(
+    ["這是字串不是物件",
+     {"id": "ENEX7200", "title": "t", "desc": "d", "url": "u", "estat": "PUBLISHED"}],
+    {"7200": {"category": {"大分類": "歐"}, "sb_count": 0,
+              "raw_entry": "ENEX7200 (X) ▎摘要▎畫面：…▎無BITE。"}},
+    duration_fn=lambda u: 12.0)
+check("--raw 混進字串不會整支掛掉（原本 AttributeError: 'str' has no attribute 'get'）",
+      len(_ir) == 1 and len(_dr) == 1, f"收{len(_ir)} 漏判{len(_dr)}")
+check("非物件那筆要指名第幾筆＋實得型別（不要靜默跳過）",
+      _dr[0]["id"] == "第1筆" and "str" in _dr[0]["why"], str(_dr[0]))
+check("非物件不影響同批正常那筆（含時長）",
+      _ir[0]["raw_entry"].endswith("▎00:12"), _ir[0]["raw_entry"][-12:])
+
+_ia, _sa, _da, _ga = ex.extract_abc(
+    [None, {"News Story": "080926021", "Slug": "s", "Length": "05:00"}],
+    {"080926021": {"category": {"大分類": "美國"}, "sb_count": 0,
+                   "raw_entry": "ABC080926021 (ABC) ▎摘要▎畫面：…▎無BITE。▎05:00",
+                   "src_text": "x"}})
+check("ABC 也有同一道護欄", len(_da) == 1 and _da[0]["id"] == "第1筆", str(_da))
+
 shutil.rmtree(TMP, ignore_errors=True)
 
 print(f"\nPASS={sum(results)} FAIL={len(results) - sum(results)}")

@@ -233,6 +233,8 @@ def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds,
     #    只量會被收錄的——skip 掉的（自家素材）與 entries 沒判斷的不必浪費一次往返。
     _need = []
     for it in raw_items:
+        if not isinstance(it, dict):
+            continue          # 主迴圈會把它記進 dropped，這裡只是別讓 .get 炸掉
         _rid = bare_enex_id(it.get("id") or it.get("_id"))
         if not _rid:
             continue
@@ -244,7 +246,18 @@ def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds,
             _need.append(_u)
     dur_map = probe_durations(_need, duration_fn=duration_fn, workers=workers)
 
-    for it in raw_items:
+    for n, it in enumerate(raw_items, 1):
+        # 🔴 0901-2000 實錯：`--raw` 裡的元素是字串（不是物件），這支直接吐
+        # `AttributeError: 'str' object has no attribute 'get'` 一整支掛掉，
+        # agent 還得回頭 grep 原始碼才看得懂。`s2_platform_lint.py` 早就有
+        # 「第n筆: 不是物件」的護欄——比照辦理：記進 dropped、指名第幾筆，
+        # 其餘照跑。⛔ 不要靜默跳過：漏判要看得見（同 dropped 的既有哲學）。
+        if not isinstance(it, dict):
+            dropped.append({"id": f"第{n}筆", "why":
+                            f"不是物件（實得 {type(it).__name__}）——"
+                            f"--raw 應為 slimEnex() 輸出的物件陣列，"
+                            f"檢查是不是餵成字串陣列或多包了一層"})
+            continue
         rid = bare_enex_id(it.get("id") or it.get("_id"))
         if not rid:
             dropped.append({"raw": it, "why": "缺 id"})
@@ -297,7 +310,12 @@ STORY_NUM_RE = re.compile(r"^\d{6}\d{3}$")
 
 def extract_abc(raw_rows, entries):
     items, skipped, dropped, known_gaps = [], [], [], []
-    for row in raw_rows:
+    for n, row in enumerate(raw_rows, 1):
+        if not isinstance(row, dict):   # 同 extract_enex，理由見那邊的註解
+            dropped.append({"id": f"第{n}筆", "why":
+                            f"不是物件（實得 {type(row).__name__}）——"
+                            f"--raw 應為 CSV 轉出的物件陣列"})
+            continue
         story = str(row.get("News Story") or "").strip()
         if not story:
             dropped.append({"raw": row, "why": "缺 News Story（Story Number）"})

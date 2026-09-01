@@ -335,7 +335,29 @@ def _log_reconcile(state_path, checkpoint, done):
 
 
     # ── Ⓐ 三站清單對帳（給 --rt-list／--ap-list／--ns-list 就做）──────
-def _reconcile_section(st, mmdd, args, state_path=None):
+def _find_list_snapshot(scratch, station):
+    """本輪的清單快照是不是**已經躺在暫存夾裡**了？
+
+    🔴 0901-2000 實錯：`_audit_rt_2000.txt` 明明已經產出來了，agent 下 `s2_audit.py`
+    時卻只帶了 `--ap-list`／`--ns-list`，RT 就這樣沒進 reconcile_log，
+    收工通知報「本輪沒留下清單對帳紀錄」。當時的提醒只說「補撈清單再跑一次」——
+    可是根本不用補撈，檔就在那裡。指名檔案，把提醒變成一行可以直接貼的指令。
+    """
+    if not scratch or not os.path.isdir(scratch):
+        return None
+    s = station.lower()
+    for pat in (f"_audit_{s}_*.txt", f"{s}_list_*.json", f"_{s}_list_*.json",
+                f"{s}_timeline*.txt"):
+        hits = glob.glob(os.path.join(scratch, pat))
+        if hits:
+            # 取**最後修改**的那個，不是檔名排序：同一站一天會留下好幾輪的快照
+            # （`_audit_rt_1700.txt`／`_audit_rt_2000.txt`），而且還有 `_desc` 之類
+            # 的變體，檔名排序挑不出「本輪那份」。
+            return max(hits, key=os.path.getmtime)
+    return None
+
+
+def _reconcile_section(st, mmdd, args, state_path=None, scratch=None):
     sec("Ⓐ 清單對帳（最高價值：0805 靠它抓到 47 則漏收）")
     any_, done = False, {}
     ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S+08:00")
@@ -352,8 +374,22 @@ def _reconcile_section(st, mmdd, args, state_path=None):
     if done and state_path:
         _log_reconcile(state_path, st["_top"].get("checkpoint"), done)
     if any_ and len(done) < 3:
+        missing = [s for s in ("RT", "AP", "NS") if s not in done]
         yel("三站只對了 " + ("／".join(sorted(done)) or "0 站") +
-            "——缺的那幾站等於沒驗過，補撈清單再跑一次")
+            f"——**缺 {'／'.join(missing)}**，缺的那幾站等於沒驗過，"
+            f"收工通知會報「本輪沒留下清單對帳紀錄」")
+        # 快照就在暫存夾的話，直接把指令拼給他，不要只喊「補撈」（0901-2000 實錯）
+        opt = {"RT": "--rt-list", "AP": "--ap-list", "NS": "--ns-list"}
+        found = [(s, _find_list_snapshot(scratch, s)) for s in missing]
+        have = [(s, p) for s, p in found if p]
+        if have:
+            print("        ⭐ 這幾站的快照**已經在暫存夾裡**，不必重撈，直接補跑：")
+            print(f"        python scripts/s2_audit.py --mmdd {mmdd} " +
+                  " ".join(f'{opt[s]} "{p}"' for s, p in have))
+        for s, p in found:
+            if not p:
+                print(f"        {s}：暫存夾裡找不到快照——若該站本輪整站進不去"
+                      f"（登出／連不上），那是正常的，記進 needs-review 即可，不用補撈")
     if not any_:
         yel("沒給 --rt-list／--ap-list／--ns-list，**這一項沒做**——"
             "它是價值最高的檢查，別跳過")
@@ -624,7 +660,7 @@ def audit(mmdd, state_path, txt_path, scratch):
     else:
         yel(f"找不到 {txt_path}——尚未 render？")
 
-    _reconcile_section(st, mmdd, AUDIT_ARGS, state_path)
+    _reconcile_section(st, mmdd, AUDIT_ARGS, state_path, scratch)
 
 
 def main():

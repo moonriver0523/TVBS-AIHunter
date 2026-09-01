@@ -512,14 +512,21 @@ try {
     # 殼層自動跑只會補出數字、補不出那個判斷，等於製造一份沒人看過的假紀錄。
     # 只負責偵測＋喊出來，讓當天／隔輪的人知道要回頭補（0824-0100 實錯：
     # 三站快照都存了，`s2_audit.py` 卻整段沒跑，直到使用者自己發現才補）。
+    # 缺哪幾站要**指名**（2026-09-01 補）：原本只說「沒跑或沒跑完」，
+    # 0901-1700／2000 兩輪都中，但成因完全不同——1700 是 NS 登出整站進不去（合理），
+    # 2000 是 RT 快照明明有、agent 下 s2_audit 時漏帶 --rt-list（真的漏做）。
+    # 通知裡看不出差別，就只能人工翻 log 才知道要不要處理。
     $reconcileMissing = $false
+    $reconcileGap = @()
     if ($statePath -and $st -and $st.reconcile_log) {
         $entry = $st.reconcile_log.$Checkpoint
         if (-not $entry) {
             $reconcileMissing = $true
+            $reconcileGap = @('RT', 'AP', 'NS')
         } else {
             $stations = @($entry.PSObject.Properties.Name)
-            if (@('RT', 'AP', 'NS') | Where-Object { $stations -notcontains $_ }) { $reconcileMissing = $true }
+            $reconcileGap = @(@('RT', 'AP', 'NS') | Where-Object { $stations -notcontains $_ })
+            if ($reconcileGap.Count -gt 0) { $reconcileMissing = $true }
         }
     }
 
@@ -542,8 +549,10 @@ try {
         }
     }
     if ($reconcileMissing) {
-        $bad += "本輪沒留下清單對帳紀錄（``s2_audit.py`` 沒跑或沒跑完）——" +
-                "三站快照若還在，回頭補跑 ``s2_audit.py --mmdd $mmdd --rt-list <快照> --ap-list <快照> --ns-list <快照>``"
+        $gapTxt = ($reconcileGap -join '／')
+        $bad += "本輪清單對帳**缺 $gapTxt**（``s2_audit.py`` 沒跑或漏帶該站的 --*-list）——" +
+                "若該站本輪整站進不去（登出／連不上）那是正常的，看 needs-review 即可；" +
+                "否則快照多半還在暫存夾，補跑 ``s2_audit.py --mmdd $mmdd --rt-list <快照> --ap-list <快照> --ns-list <快照>``"
     }
     Write-Run ("DONE`t離開碼=$code`t耗時=${mins}分`t本輪新增=$added 則`ttxt=$txtOk" +
                $(if ($bad) { "`t⚠️ $($bad -join '；')" } else { '' }))
