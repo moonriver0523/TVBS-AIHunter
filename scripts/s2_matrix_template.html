@@ -243,7 +243,7 @@ const SRC_LABEL = {SIDE_CNN:"CNN側錄",SIDE_NHK:"NHK側錄",YT:"網址素材",C
 const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■ 晨班","◆":"◆ 早班"};
 const SRC_ORDER = ["AP","RT","NS","SIDE_CNN","SIDE_NHK","YNA","CNA","ENEX","ABC"];
 const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(), hilite:new Set(), T:new Set(), C:new Set(), q:""};
-let matrixOpen = true;
+let matrixOpen = false;
 function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
 function hasAny(sel, arr){ if(!sel.size) return true; return (arr||[]).some(x=>sel.has(x)); }
 function passBase(r){
