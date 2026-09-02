@@ -46,6 +46,13 @@ const SITES = [
       const p = JSON.parse(atob(JSON.parse(s).token.split('.')[1]));
       return { ok: true, note: Math.round((p.exp - Date.now() / 1000)) + 's' };
     } },
+  // ABC Extreme Reach：ASP.NET Session 滑動過期（預設約 20-60 分鐘），每次造訪 cmspage 即自動刷新
+  { name: 'ABC', url: 'https://abcnews.extremereach.com/adbridge/news/cmspage/50162/abcnewsone', wait: 6000,
+    check: () => {
+      const isLogin = location.href.toLowerCase().includes('login');
+      const hasLogout = Array.from(document.querySelectorAll('a')).some(a => a.innerText.trim() === 'Logout');
+      return { ok: hasLogout && !isLogin };
+    } },
   // ⛔ AP 已於 2026-08-09 05:00 **暫時移出保活**——強烈懷疑保活本身就是元凶。
   //
   // 【證據】AP 在被納入保活之前，**一次都沒有掉過線**：

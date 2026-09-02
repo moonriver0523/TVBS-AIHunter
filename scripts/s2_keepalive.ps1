@@ -200,9 +200,9 @@ try {
         $ckNote = 'cookie檔讀不到'
     }
 
-    # 從輸出解析每站狀態，例：`NS=OK(3592s) AP=LOGGED_OUT RT=OK secs=24.0`
+    # 從輸出解析每站狀態，例：`NS=OK(3592s) ABC=OK AP=LOGGED_OUT RT=OK secs=24.0`
     $now = @{}
-    foreach ($m in [regex]::Matches($out, '\b(NS|AP|RT)=(OK|LOGGED_OUT|ERR)')) {
+    foreach ($m in [regex]::Matches($out, '\b(NS|AP|RT|ABC)=(OK|LOGGED_OUT|ERR)')) {
         $now[$m.Groups[1].Value] = $m.Groups[2].Value
     }
 
