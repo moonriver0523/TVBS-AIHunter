@@ -139,10 +139,13 @@ new, why = patch("△ 🟡 " + NOBITE_TAG, alert="red", bite=True)
 report("--alert 與 --bite 併用", new == "△ 🔴 " + NOBITE_TAG.replace(
     "(CCTV) ▎", "(CCTV) (BITE) ▎"), f"得到 {new!r}")
 
-# ── ③ 守門：側錄與非素材行不套這套格式 ─────────────────────────────
+# ── ③ 守門：非素材行不套這套格式；側錄兩行式改吃這套（A28，2026-09-02）──
 SIDE = "CNN 08-18 160000\n（主播 某某） 內容。"
 new, why = patch(SIDE, alert="red")
-report("守門：側錄兩行式不動", new is None and "非素材行" in why, why)
+report("側錄兩行式現在可套標記（patch_marks 這層不含首段檢查，見 cmd_patch_entry）",
+       new == "🔴 " + SIDE, f"得到 {new!r} / {why}")
+new, why = patch(SIDE, bite=True)
+report("守門：側錄沒有 (BITE) 機制，--bite 拒絕", new is None and "BITE" in why, why)
 new, why = patch("這不是素材行", alert="red")
 report("守門：非素材行不動", new is None, why)
 
@@ -227,6 +230,71 @@ with tempfile.TemporaryDirectory() as td:
     after = {x["id"]: x for x in json.load(open(p, encoding="utf-8"))["items"]}
     report("needs_review：本來沒有就維持沒有",
            "needs_review" not in after["RT2612"], f"得到 {after['RT2612'].get('needs_review')!r}")
+
+# ── ⑥ A28（2026-09-02）：側錄「首段代表整組」──────────────────────────
+# 真實 0902-s2-state.json 抽測發現：items 陣列順序不保證同單元彼此相鄰
+# （見 side_unit_head_id() docstring）。這裡用最小案例覆蓋：同單元非首段
+# 被擋、首段可標、跨單元／缺日期不誤判。
+
+CAT_A = {"大分類": "社會", "中主題": "測試單元", "小分題": "小題"}
+CAT_B = {"大分類": "社會", "中主題": "另一單元", "小分題": ""}
+
+
+def _side_state(path, extra_items=()):
+    items = [
+        {"id": "CNN 09-01 100000", "source": "SIDE_CNN", "category": dict(CAT_A),
+         "raw_entry": "CNN 09-01 100000 （主播）\n第一段內容。"},
+        {"id": "CNN 09-01 100200", "source": "SIDE_CNN", "category": dict(CAT_A),
+         "raw_entry": "CNN 09-01 100200 （記者 某某）\n第二段內容。"},
+        {"id": "CNN 09-01 090000", "source": "SIDE_CNN", "category": dict(CAT_B),
+         "raw_entry": "CNN 09-01 090000 （主播）\n不同單元，TC 更早也不該被算進 CAT_A。"},
+        *extra_items,
+    ]
+    json.dump({"items": items}, open(path, "w", encoding="utf-8"), ensure_ascii=False)
+    return st.load(path)
+
+
+with tempfile.TemporaryDirectory() as td:
+    p = os.path.join(td, "side.json")
+    s = _side_state(p)
+
+    report("side_unit_head_id：同單元找出 TC 最早的首段",
+           st.side_unit_head_id(s, "CNN 09-01 100200") == "CNN 09-01 100000",
+           f"得到 {st.side_unit_head_id(s, 'CNN 09-01 100200')!r}")
+    report("side_unit_head_id：首段自己查也回自己",
+           st.side_unit_head_id(s, "CNN 09-01 100000") == "CNN 09-01 100000")
+    report("side_unit_head_id：不同單元（CAT_B）不被混進來，即使 TC 更早",
+           st.side_unit_head_id(s, "CNN 09-01 090000") == "CNN 09-01 090000")
+
+    # 標非首段 → 拒絕，state 不變
+    st.cmd_patch_entry(s, _Args(ids="CNN 09-01 100200", alert="red", file=p))
+    after = {x["id"]: x for x in json.load(open(p, encoding="utf-8"))["items"]}
+    report("cmd_patch_entry：非首段被擋，raw_entry 不變",
+           after["CNN 09-01 100200"]["raw_entry"] == "CNN 09-01 100200 （記者 某某）\n第二段內容。",
+           after["CNN 09-01 100200"]["raw_entry"])
+
+    # 標首段 → 成功
+    s = st.load(p)   # 重讀，避免沿用上一步已改動的記憶體物件
+    st.cmd_patch_entry(s, _Args(ids="CNN 09-01 100000", alert="red", file=p))
+    after = {x["id"]: x for x in json.load(open(p, encoding="utf-8"))["items"]}
+    report("cmd_patch_entry：首段可標，🔴 進了 raw_entry",
+           after["CNN 09-01 100000"]["raw_entry"].startswith("🔴 CNN 09-01 100000"),
+           after["CNN 09-01 100000"]["raw_entry"])
+    report("cmd_patch_entry：標首段不影響同單元其他段",
+           after["CNN 09-01 100200"]["raw_entry"] == "CNN 09-01 100200 （記者 某某）\n第二段內容。")
+
+    # 缺日期（舊格式）混進同單元 → side_unit_head_id 回 None，不准猜
+    legacy = {"id": "CNN 100050", "source": "SIDE_CNN", "category": dict(CAT_A),
+              "raw_entry": "CNN 100050 （主播）\n舊格式沒有日期。"}
+    p2 = os.path.join(td, "side_legacy.json")
+    s2 = _side_state(p2, extra_items=[legacy])
+    report("side_unit_head_id：同單元混了缺日期舊格式 → 回 None，不猜",
+           st.side_unit_head_id(s2, "CNN 09-01 100000") is None)
+    st.cmd_patch_entry(s2, _Args(ids="CNN 09-01 100000", alert="red", file=p2))
+    after2 = {x["id"]: x for x in json.load(open(p2, encoding="utf-8"))["items"]}
+    report("cmd_patch_entry：判定失敗時整批不動（含本來該過關的首段）",
+           after2["CNN 09-01 100000"]["raw_entry"] == "CNN 09-01 100000 （主播）\n第一段內容。",
+           after2["CNN 09-01 100000"]["raw_entry"])
 
 print("\n全部通過" if ok else "\n有失敗項")
 sys.exit(0 if ok else 1)

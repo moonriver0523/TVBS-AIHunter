@@ -285,8 +285,13 @@ def read_entry(args):
     if args.entry is not None:
         return args.entry.strip()
     if args.entry_file:
-        with open(args.entry_file, encoding="utf-8-sig") as f:
-            return f.read().strip()
+        try:
+            with open(args.entry_file, encoding="utf-8-sig") as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            print(f"ERROR: --entry-file 找不到檔案：{args.entry_file}（沒有 stdin 慣例，"
+                  f"要傳內容請用 --entry 或先用 Write 落成實際檔案再指路徑）")
+            sys.exit(2)
     print("ERROR: 需要 --entry（行內短內容）或 --entry-file（長內容）")
     sys.exit(2)
 
@@ -634,8 +639,13 @@ def cmd_update_entry(state, args):
         sys.exit(2)
     src = getattr(args, "src_text", None)
     if getattr(args, "src_text_file", None):
-        with open(args.src_text_file, encoding="utf-8-sig") as f:
-            src = f.read().strip()
+        try:
+            with open(args.src_text_file, encoding="utf-8-sig") as f:
+                src = f.read().strip()
+        except FileNotFoundError:
+            print(f"ERROR: --src-text-file 找不到檔案：{args.src_text_file}（沒有 stdin 慣例，"
+                  f"要傳內容請用 --src-text 或先用 Write 落成實際檔案再指路徑）")
+            sys.exit(2)
     doubt, fmt = apply_update(state, i, read_entry(args), args.sb_count,
                               args.status, args.checkpoint,
                               getattr(args, "footage_type", None), src_text=src)
@@ -738,20 +748,72 @@ ALERT_MARKS = {"red": "🔴", "yellow": "🟡", "star": "⭐", "none": ""}
 # 政策，機械本身不擋（沒有「誰下的令」這種資訊可查）。
 
 
+def _side_cat_key(cat):
+    """側錄 `category` dict → 可比對的分組鍵（大／中／小三層）。"""
+    cat = cat or {}
+    return (cat.get("大分類", ""), cat.get("中主題", ""), cat.get("小分題", ""))
+
+
+def _side_tc_sort_key(item_id):
+    """側錄 id（`{來源} {MM-DD} {6碼TC}`）→ 可排序鍵。回傳 `None`＝缺日期（舊格式）
+    或格式認不得，**不可排序**——呼叫端要停下回報，不准用猜的決定先後順序。
+    """
+    parts = (item_id or "").split(" ")
+    if len(parts) == 3 and re.fullmatch(r"\d{2}-\d{2}", parts[1]) and re.fullmatch(r"\d{6}", parts[2]):
+        return (parts[1], parts[2])
+    return None
+
+
+def side_unit_head_id(state, item_id):
+    """回傳 `item_id` 所屬側錄單元（同 `source` ＋ 同三層歸位）裡最早（TC 最小）的段 id。
+
+    **2026-09-02（A28）查證結論（真實 `0902-s2-state.json` 抽測）**：`state["items"]`
+    的順序**不保證**同單元彼此相鄰——CNN／NHK 兩條側錄常在同一批候選檔裡交錯
+    `add-side`，同一個 `(source, category)` 會被拆成好幾段不連續的區塊。所以「首段」
+    不能用「陣列裡第一次出現」判斷（那只是插入順序，不是內容時間序），改成：
+    在全部 `items` 裡依 `(source, category)` 分組（不要求相鄰），比較每段 id 帶的
+    `MM-DD` ＋ 6 碼 TC，取時間最早的一個。
+
+    回傳 `None`：查不到 `item_id`、不是側錄項目、或該單元裡有段落缺日期／TC 格式
+    認不得而無法排序——這三種狀況呼叫端都要停下回報，不准自己猜哪一段是首段。
+    """
+    items = state["items"]
+    it = items.get(item_id)
+    if not it or not str(it.get("source", "")).startswith("SIDE_"):
+        return None
+    src = it["source"]
+    cat_key = _side_cat_key(it.get("category"))
+    group = [i for i, v in items.items()
+             if v.get("source") == src and _side_cat_key(v.get("category")) == cat_key]
+    keyed = [(i, _side_tc_sort_key(i)) for i in group]
+    if any(k is None for _, k in keyed):
+        return None
+    return min(keyed, key=lambda p: p[1])[0]
+
+
 def patch_marks(sv, entry, alert=None, add_bite=False):
     """回傳 (新 entry, 說明)。不需要改動時 `新 entry` 為 None（呼叫端據此跳過）。
 
     `alert`：`'red'`／`'yellow'`／`'star'`／`'none'`／`None`（不動）。🔴／🟡／⭐ 三者
     互斥，換標記＝先剝掉舊的再插新的，不會同時並存（同 `s2_render.strip_marks` 的約定）。
+
+    2026-09-02（A28）：**側錄（`SIDE_RE`）現在也吃這套**——時段標記 ▲／●／◆
+    早就證明同一種「行首插記號」機制能套到側錄 TC 行首，這裡只是把 🔴／🟡／⭐／🔖
+    比照辦理。⚠️ **「這一段是不是該單元首段」不在這支函式判斷**——那需要整份
+    `state["items"]` 才能比對，這裡只拿得到單一 `entry` 字串。呼叫端
+    （`cmd_patch_entry`）必須先用 `side_unit_head_id()` 擋非首段，見該函式說明。
     """
     first = (entry or "").strip().split("\n")[0]
     rest_lines = (entry or "").strip().split("\n")[1:]
     if not first:
         return None, "空內容"
-    # 側錄（多行 TC 兩行式）與非素材行不套這套格式，同 `check_entry()` 的守門。
+    # 非素材行、也不是側錄行的格式不套這套，同 `check_entry()` 的守門。
     _, bare = sv.strip_mark(first)
-    if sv.SIDE_RE.match(bare) or not sv.LINE_RE.match(bare):
+    is_side = bool(sv.SIDE_RE.match(bare))
+    if not is_side and not sv.LINE_RE.match(bare):
         return None, "非素材行（側錄／兩行式），不套標記格式"
+    if is_side and add_bite:
+        return None, "側錄沒有 (BITE) 括號機制，--bite 對側錄無效（請用 --alert）"
 
     # 拆：時段標記 → 🔴/🟡 → 🟤 → 🔖 → 本體。順序是 s2_validate 訂的，照它拆照它組。
     m = sv.MARK_RE.match(first)
@@ -849,6 +911,20 @@ def cmd_patch_entry(state, args):
 
     done, unchanged, fmt = [], [], []
     for i in ids:
+        src = state["items"][i].get("source", "")
+        # 2026-09-02（A28）：側錄「首段代表整組」——標記只准下在該單元最早的一段，
+        # 這一關必須在 patch_marks() 之前擋，因為 patch_marks() 只看得到單一 entry
+        # 字串，判斷不出「這是不是首段」需要的整份 items 分組資訊。
+        if args.alert is not None and str(src).startswith("SIDE_"):
+            head = side_unit_head_id(state, i)
+            if head is None:
+                unchanged.append(f"{i}: 側錄單元判定失敗（同組裡有段落缺日期或 TC 格式"
+                                  f"認不得，無法排序），標記前請先人工確認首段，不要用猜的")
+                continue
+            if head != i:
+                unchanged.append(f"{i}: 非本單元首段，標記只能下在首段 {head}"
+                                  f"（裁定「首段代表整組」，見 A28 計畫書）")
+                continue
         old = state["items"][i].get("raw_entry", "") or ""
         new, why = patch_marks(sv, old, args.alert, args.bite)
         if new is None:
@@ -880,10 +956,12 @@ def cmd_patch_entry(state, args):
     print(f"OK 已修補 {len(done)} 則")
     if done:
         print("\n".join("  " + x for x in done))
-    report_fmt(fmt)
     if unchanged:
+        # 2026-09-02（A28）：`unchanged` 以前收集了理由卻沒印出來——本次新增的
+        # 「非首段」擋法若不印，呼叫端看不到「該標哪個 id」，等於白擋。
         print(f"未變更 {len(unchanged)} 則：")
         print("\n".join("  " + x for x in unchanged))
+    report_fmt(fmt)
 
 
 # 地區詞 → 樣板上該去的大分類（2026-08-06 訂）。用來抓「中主題放錯大分類」。
