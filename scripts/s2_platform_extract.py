@@ -229,8 +229,8 @@ def check_entries(entries):
                             f"（render 會依收錄時間再補一個，18 §2）"
                             f"——🔴／🟡／🔖 可以帶，時段標記不行")
         head = first.lstrip(PERIOD_MARKS + SEVERITY_MARKS + " ").split(" ", 1)[0]
-        bare = k[4:] if k.upper().startswith("ENEX") else k
-        if head and head not in (k, "ENEX" + bare):
+        bare = k[3:] if k.upper().startswith("ABC") else (k[4:] if k.upper().startswith("ENEX") else k)
+        if head and head not in (k, "ENEX" + bare, "ABC" + bare):
             problems.append(f"{k}: raw_entry 行首代碼是 {head!r}，與鍵值不符")
     return problems
 

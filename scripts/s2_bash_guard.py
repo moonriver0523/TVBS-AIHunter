@@ -121,12 +121,19 @@ PY_RUN_FILE = re.compile(
 # （不是 -c）。2026-08-31 補（獨立 review F4）。
 PY_STDIN_HEREDOC = re.compile(r'\b(?:python3?|py)(?:\.exe)?\s+-?\s*<<')
 
+_RETRY_WARNING = (
+    '\n⚠️ 這條規則已經攔過你至少一次（同一輪內再撞到＝重複嘗試同一招）。'
+    '不要換個包法（heredoc、-c 換寫法、繞個變數名）再試一次——直接照上面的標準子指令下，'
+    '沒有對應功能就記進回報／needs-review，不要在這裡卡第二次。'
+)
+
 STATE_HINT = (
     '⛔ 不准用臨時 python 直讀生產狀態檔（13c §2 明文禁止，D9 hook 攔下）。'
     '請改用 s2_state.py 的查詢子指令，例如：\n'
     '  python E:/GitHub/TVBS-AIHunter/scripts/s2_state.py show --uncat\n'
     '  python E:/GitHub/TVBS-AIHunter/scripts/s2_state.py list-topics --compact\n'
     '  python E:/GitHub/TVBS-AIHunter/scripts/s2_state.py get --id <ID>'
+    + _RETRY_WARNING
 )
 
 RAW_HINT = (
@@ -139,6 +146,7 @@ RAW_HINT = (
     '  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py snapshot {first} --site <站> --checkpoint <輪次>\n'
     '（AP 清單檔會自動看穿 _source；字數檢查用 inspect --lengths；'
     '要**產出／寫入** json 檔改用 Write 工具直接寫，不要換 heredoc 或先落 .py 檔繞）'
+    + _RETRY_WARNING
 )
 
 SCRIPT_HINT = (
@@ -161,6 +169,7 @@ SCRIPT_HINT = (
     '  其餘查詢 → python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py inspect/search/compare/dedup-check ...\n'
     '真的沒有對應功能，記進回報／`needs-review`，不要自己寫腳本落地跑——'
     '工具缺口要回頭補進 `s2_batch_prep.py`，不是每輪重寫一次。'
+    + _RETRY_WARNING
 )
 
 
