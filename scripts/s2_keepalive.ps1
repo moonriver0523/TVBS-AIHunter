@@ -13,6 +13,13 @@
   ⚠️ 反過來絕對不行：保活只握鎖 10 秒，但如果讓它排隊等，就可能卡住一輪
   20 分鐘的掃帶。**寧可漏一次保活，不可漏一輪掃帶。**
 
+  🔴 2026-09-02 加保險：上面「10 秒」是設計預期，不是保證——0902 22:00 那輪
+  就撞過 NS/ABC 連線逾時讓保活吃到 52~56 秒的實例，而且沒有上限。
+  真的卡死（node/Playwright 不回應）時，原本的同步呼叫會讓 pwsh 永遠卡住、
+  鎖永遠不放，掃帶會被無限期鎖死。現在改用 Process 物件跑 node，帶 **5 分鐘
+  硬逾時**：超時就 `Kill($true)`（連子行程 chromium 一起殺）強制結束，逼進
+  finally 釋放鎖。
+
 .EXAMPLE
   pwsh -NoProfile -File E:\GitHub\TVBS-AIHunter\scripts\s2_keepalive.ps1
 #>
@@ -185,9 +192,34 @@ try {
     # 蒐證：關閉時 cookie 到底有沒有寫回磁碟（見 $CookieDb 說明）
     $ckBefore = Get-Item $CookieDb -ErrorAction SilentlyContinue
 
-    $out = node $Script 2>&1 | Out-String
-    $code = $LASTEXITCODE
-    $out = $out.Trim()
+    # ⏱️ 2026-09-02 加逾時強制結束（5 分鐘）。原本 `node $Script | Out-String` 是
+    # 同步管線呼叫，node/Playwright 若卡死（NS/ABC 曾實測連線逾時吃到 52~56 秒，
+    # 22:00 那輪就是這樣撞上掃帶的鎖），pwsh 會跟著卡住不進 finally，鎖永遠不放，
+    # 掃帶那一輪就會被鎖死撞成 SKIP。改用 Process 物件自己控管，逾時就 Kill(整棵樹)
+    # 逼進 finally 釋放鎖——寧可漏一次保活，不可讓保活把整輪掃帶鎖死。
+    $KeepaliveTimeoutSec = 300
+    $psi = [System.Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = 'node'
+    $psi.Arguments = "`"$Script`""
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $timedOut = -not $proc.WaitForExit($KeepaliveTimeoutSec * 1000)
+
+    if ($timedOut) {
+        try { $proc.Kill($true) } catch { Log "WARN 逾時強殺失敗（不影響鎖釋放，finally 仍會執行）：$($_.Exception.Message)" }
+        $stdout = try { $proc.StandardOutput.ReadToEnd() } catch { '' }
+        $stderr = try { $proc.StandardError.ReadToEnd() } catch { '' }
+        $out = "$stdout $stderr".Trim()
+        $code = -1
+        Log "ERR  離開碼=TIMEOUT(${KeepaliveTimeoutSec}秒) 已強制結束並釋放鎖 $out"
+        exit $code
+    }
+
+    $out = ($proc.StandardOutput.ReadToEnd() + "`n" + $proc.StandardError.ReadToEnd()).Trim()
+    $code = $proc.ExitCode
 
     $ckAfter = Get-Item $CookieDb -ErrorAction SilentlyContinue
     if ($ckBefore -and $ckAfter) {
