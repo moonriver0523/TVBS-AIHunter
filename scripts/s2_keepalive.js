@@ -47,6 +47,8 @@ const SITES = [
       return { ok: true, note: Math.round((p.exp - Date.now() / 1000)) + 's' };
     } },
   // ABC Extreme Reach：ASP.NET Session 滑動過期（預設約 20-60 分鐘），每次造訪 cmspage 即自動刷新
+  // ⚠️ 2026-09-03 使用者下令加回（曾於同日稍早因連線逾時暫時排除，見 git 歷史）。
+  //   逾時本身已由 s2_keepalive.ps1 的 5 分鐘硬逾時機制接住，不會再無限期鎖死掃帶。
   { name: 'ABC', url: 'https://abcnews.extremereach.com/adbridge/news/cmspage/50162/abcnewsone', wait: 6000,
     check: () => {
       const isLogin = location.href.toLowerCase().includes('login');
