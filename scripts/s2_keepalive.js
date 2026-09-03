@@ -46,15 +46,16 @@ const SITES = [
       const p = JSON.parse(atob(JSON.parse(s).token.split('.')[1]));
       return { ok: true, note: Math.round((p.exp - Date.now() / 1000)) + 's' };
     } },
+  // ⛔ ABC 已於 2026-09-03（同日第二次）由使用者指示**再次排除**，未附具體理由。
+  //   需要時加回：把下面這段解註解貼回 SITES 陣列即可，邏輯本身沒有變動。
+  //   （這站在同一天已經加回/拿掉各一次，見 git log 這支檔案的歷史）
   // ABC Extreme Reach：ASP.NET Session 滑動過期（預設約 20-60 分鐘），每次造訪 cmspage 即自動刷新
-  // ⚠️ 2026-09-03 使用者下令加回（曾於同日稍早因連線逾時暫時排除，見 git 歷史）。
-  //   逾時本身已由 s2_keepalive.ps1 的 5 分鐘硬逾時機制接住，不會再無限期鎖死掃帶。
-  { name: 'ABC', url: 'https://abcnews.extremereach.com/adbridge/news/cmspage/50162/abcnewsone', wait: 6000,
-    check: () => {
-      const isLogin = location.href.toLowerCase().includes('login');
-      const hasLogout = Array.from(document.querySelectorAll('a')).some(a => a.innerText.trim() === 'Logout');
-      return { ok: hasLogout && !isLogin };
-    } },
+  // { name: 'ABC', url: 'https://abcnews.extremereach.com/adbridge/news/cmspage/50162/abcnewsone', wait: 6000,
+  //   check: () => {
+  //     const isLogin = location.href.toLowerCase().includes('login');
+  //     const hasLogout = Array.from(document.querySelectorAll('a')).some(a => a.innerText.trim() === 'Logout');
+  //     return { ok: hasLogout && !isLogin };
+  //   } },
   // ⛔ AP 已於 2026-08-09 05:00 **暫時移出保活**——強烈懷疑保活本身就是元凶。
   //
   // 【證據】AP 在被納入保活之前，**一次都沒有掉過線**：
