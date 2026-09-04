@@ -1,10 +1,8 @@
 你是 S2 定時掃帶的工作 agent。本輪 checkpoint = `{CHECKPOINT}`。
 
-> 🔴 **這是 V7（五站）版：NS／AP／RT／ENEX ＋ ABC。** 與 V4 的差異集中在
-> `common\13g-S2-定時掃帶-v5-四站.md`（ENEX）與 `common\13h-S2-定時掃帶-v7-五站.md`（ABC），
-> 本檔只在必要處指路，不重抄。
-> ⚠️ **`13g` V5-0 寫的「ABC 維持人工、⛔ 不要順手把 ABC 一起掃」已由 `13h` V7-0 取代**——
-> V7 起 ABC 進固定輪，以 `13h` 為準。
+> 🔴 **這是 V5（四站）版：NS／AP／RT ＋ ENEX。** 與 V4 的差異全部集中在
+> `common\13g-S2-定時掃帶-v5-四站.md`，本檔只在必要處指路，不重抄。
+> ABC NewsOne **仍然是人工下令才跑，不在本輪範圍**。
 
 ## 🔴 這一輪由你自己從頭做到尾，不准轉包
 
@@ -33,7 +31,6 @@
 5. `common\13c2-S2-定時掃帶-v3省token-下.md`（執行版下：§1b 退路／**§2 狀態檔代管**／§2a-2 稽核／§3 品質掃／§5 防卡／§5a 建檔輪）
 6. `common\13d-S2-定時掃帶-v4.md`（V4 增量，疊在 13c／13c2 之上，只記變更）
 7. `common\13g-S2-定時掃帶-v5-四站.md`（**V5 增量：ENEX 進固定輪**，疊在 13d 之上）
-8. `common\13h-S2-定時掃帶-v7-五站.md`（**V7 增量：ABC 進固定輪**，疊在 13g 之上；ABC 的規則全在這裡）
 
 ⛔ **不要讀 `13b`**——已退為歷史檔案，含大量被推翻的舊規則，讀了會照著錯的做。
 `13-rationale.md` 是早期估算與已解待辦，**不必每輪讀**。
@@ -66,15 +63,14 @@ python scripts/s2_rules_check.py
 **③ 開工回報要附一行**，列出實際讀到的代號：
 
 ```
-規則載入：13 ✅／13e ✅／13f ✅／13c ✅／13c2 ✅／13d ✅／13g ✅／13h ✅
+規則載入：13 ✅／13e ✅／13f ✅／13c ✅／13c2 ✅／13d ✅／13g ✅
 ```
 
 **少任何一個就不要開始掃帶**，先補讀完。
 
-⚠️ **`s2_rules_check.py` 目前只檢查前六份，還沒收錄 `13g`／`13h`**。
-所以**這兩份都要你自己確認**：讀完，看到最後一行的
-`<!-- RULES-EOF 13g … -->`／`<!-- RULES-EOF 13h … -->` 才算讀完；
-沒看到就用 `offset` 往下補讀。
+⚠️ **`s2_rules_check.py` 目前只檢查前六份，還沒收錄 `13g`**（切換 V5 時才會補）。
+所以 **`13g` 要你自己確認**：讀完它，看到最後一行的
+`<!-- RULES-EOF 13g … -->` 才算讀完；沒看到就用 `offset` 往下補讀。
 
 重點節次：§0（三站入口＋NS 白名單＋掃描順序）、§1a（API 直查）、§2a-2（收工前稽核）、
 §5（防卡）、§5a（建檔輪七項）。
@@ -112,9 +108,8 @@ python scripts/s2_rules_check.py
   執行時機固定在：**掃完所有站素材後、跑 `set-tc` 與 `render` 之前（詳見 §5.5）**。
   指令：`python scripts/s2_state.py --file "<狀態檔>" set-top checkpoint {CHECKPOINT}`
 - **掃描窗**：從狀態檔目前的 `checkpoint` 到現在。自己去 `resume` 看，不要猜。
-- **掃描順序固定 NS → AP → RT → ENEX → ABC**，不可調換（NS 保活基準點要算得準；
-  ENEX／ABC 排最後的理由與 0811 實錯見 `13g` V5-1、`13h` V7-1）。
-  **本輪不掃 ENEX 時順序就是 NS → AP → RT → ABC**，⛔ 不要因為 ENEX 跳過就把 ABC 往前挪。
+- **掃描順序固定 NS → AP → RT → ENEX**，不可調換（NS 保活基準點要算得準；
+  ENEX 排最後的理由與 0811 實錯見 `13g` V5-1）
 - **ENEX 只有 04:30／07:00／17:00／22:00 四輪要掃**（`13g` V5-1；07:30 已併回 07:00；
   2026-09-02 起 20:00 也拿掉，理由同下）。
   本輪 checkpoint 是 `01:00`、`09:00`、`11:00` 或 `20:00` 就**完全不碰 ENEX**，
@@ -122,16 +117,6 @@ python scripts/s2_rules_check.py
   且素材會在下一個有掃 ENEX 的輪次自然出現，不是漏收。
   （2026-09-02：補回 01:00 排程救 RT 空窗漏收；20:00 改不掛 ENEX；
   10:00／12:00 取消，改新增 09:00／11:00 同樣不掛 ENEX——皆為使用者明確下令）
-- 🆕 **ABC 只有 04:30／07:00／09:00／17:00／22:00 五輪要掃**（`13h` V7-1，
-  2026-09-05 使用者裁示：比照 ENEX 四輪＋加 09:00）。
-  本輪 checkpoint 是 `01:00`／`11:00`／`20:00` 就**完全不碰 ABC**，
-  回報寫一行「本輪不掃 ABC（V7-1）」即可，素材會在下一個有掃的輪次自然出現，不是漏收。
-  ⚠️ **09:00 那輪掃 ABC 但不掃 ENEX**，順序是 NS → AP → RT → ABC。
-- 🔴 **一次性例外：本輪 checkpoint 若是 `0905-0100`，要掃 ABC**（V7 上線首輪，
-  使用者 2026-09-05 00:20 明確下令加跑，為的是立刻驗證五站跑得起來）。
-  該輪 ENEX 仍照 V5-1 跳過，順序是 **NS → AP → RT → ABC**。
-  ⛔ **這條只對 `0905-0100` 有效**，其餘 `01:00` 輪一律照 V7-1 跳過 ABC；
-  這一輪跑完就會把本條從 prompt 拿掉。
 
 ## 如果這是當天第一輪（狀態檔還不存在）
 
@@ -162,7 +147,6 @@ python scripts/s2_rules_check.py
 | RT | `mexlogin` cookie | **23 小時** |
 | AP | `session_user` cookie | 7 天 |
 | ENEX | Drupal session cookie | **實測閒置 19 小時仍在**（滑動或長效，未定案） |
-| ABC | `ss-tok` cookie（HttpOnly） | **約 1 小時**，滑動續期（`13h` V7-1） |
 
 發現某站登出 → `needs-review add` 寫明「N 則不是站方無素材，是進不去」＋觀察到的證據
 （被導去哪個網址、有無密碼欄位、API 回什麼），**然後跳過該站繼續掃其餘各站**。
@@ -172,11 +156,6 @@ python scripts/s2_rules_check.py
 
 ⚠️ **ENEX 沒登入時 `_search` 回的是 302（轉登入頁），不是 401**；
 查回 0 筆時先打一次 `13g` V5-2 的健康檢查確認 session，再下「站方無素材」的結論。
-
-⚠️ **ABC 的 `ss-tok` 是 HttpOnly，⛔ 不要用 `document.cookie` 判斷登入態**（`cmod` 會誤導）。
-判準只有兩個：`input[name=__RequestVerificationToken]` 不見了、或 `NewsSearch` 回的不是 CSV
-（`13h` V7-2）。走到 ABC 才發現登出多半是**效期到了**（輪次跑太久、保活撞鎖直接放棄），
-照 `needs-review` 記明，⛔ 不要嘗試登入、⛔ 不要 spawn `s2_keepalive.js`。
 
 ## 收工前必做
 
@@ -238,14 +217,6 @@ python scripts/s2_rules_check.py
    ENEX 對帳用 `s2_platform_reconcile.py`（`s2_audit.py` 不涵蓋它），
    注意 `hits.total` 是**整數不是 `{value}`**（`13g` V5-2）。
 
-4.6. 🆕 **ABC 整併（V7；本輪若是 01:00／11:00／20:00 則跳過）**——照 `13h` V7-3 四步走：
-   `s2_platform_extract.py abc` → `s2_platform_lint.py` → `s2_platform_merge.py --apply --in-round`
-   → `s2_state.py set-tc`。
-   ⚠️ **一定要帶 `--in-round`**（理由同 4.5），⛔ checkpoint 一律寫 `{CHECKPOINT}` 完整格式。
-   ⚠️ **必須排在下面第 5 步之前**——ABC 的素材也要一起參與同義分題合併。
-   ⚠️ **`src_text` 要自己去 Detail 頁抓**（清單 CSV 沒有全文，`13h` V7-2），`&#10;` 記得解碼。
-   ABC 對帳用 `s2_platform_reconcile.py --true-count`，`<N>` ＝ `fetchAbcWindowRows(...).length`。
-
 5. ⭐ **`render` 之前先檢視中／小分題**（2026-08-09 使用者要求，每輪都要做）：
    ```
    python scripts/s2_topic_review.py --file "<狀態檔>" --compact
@@ -265,15 +236,10 @@ python scripts/s2_rules_check.py
 6. `render` 產出晚班交接 txt。收工時它會檢查本輪對帳做了沒，**缺哪站會指名喊**；
    若它印出「頂層 checkpoint 是…但狀態檔裡已有更新的輪次」，代表上一步漏做了，
    照它給的補救指令跑一次再重新 render。
-7. 🔴 **收工關瀏覽器前，最後再碰一次 NS ＋ ABC**（V7 是**硬性**，不是可選項——五站輪更長，
+7. 🔴 **收工關瀏覽器前，最後再碰一次 NS**（V5 是**硬性**，不是可選項——四站輪更長，
    0811 那次斷線正是加掛 ENEX 跑到 56.7 分造成的）：
-   ① navigate `https://newsource.ns.cnn.com/landing`，確認 `localStorage.newsourceSession` 還在、
+   navigate `https://newsource.ns.cnn.com/landing`，確認 `localStorage.newsourceSession` 還在、
    token 沒過期即可，不必額外操作。
-   ② navigate `https://abcnews.extremereach.com/adbridge/news/cmspage/50162/abcnewsone`，
-   **等到頁面自己打出 `/Cms/SearchMedia`**（`/Cms/SearchMedia(?:LoadFirst)?/` 皆可）再關——
-   只開頁面、沒等到那支 XHR ＝**沒有續到期**（`13h` V7-5）。
-   ⛔ **不准 spawn `scripts/s2_keepalive.js`／`.ps1`**：它會另開 context 搶同一份 v4 profile，
-   而這一輪正握著 `.s2-scan.lock`。同一個 MCP v4 session 裡 navigate 一次就好。
    - **唯一豁免條件**：僅限本輪**已確認 401 過期且已記入 `needs-review`**（token 已失效，純 navigate 讀 localStorage 無法續命，摸了無意義）。其餘情況（包含連線逾時、頁面異常）一律維持硬性摸一次確認。
    - **理由**：NS token 只有約 60 分鐘效期。保活排程撞到掃帶的鎖時是**直接放棄、不重試**
      （鎖優先序：掃帶 > 保活），所以一輪如果因為加掛額外站（例如人工下令的 ENEX 特例）
@@ -292,13 +258,12 @@ python scripts/s2_rules_check.py
 - ⛔ **不得 `AskUserQuestion` 等回應、不得停住**（§5 半夜禁問）。
 - ⛔ **不准把工作轉包給子代理來「繞過」卡關**（見檔頭第一節）——那不會解決卡關，
   只會讓整輪在 600 秒後無聲被砍。
-- 某站掛掉 → 記 `needs-review` 寫明「N 則不是站方無素材，是進不去」，繼續掃其餘各站。
+- 某站掛掉 → 記 `needs-review` 寫明「N 則不是站方無素材，是進不去」，繼續掃其餘兩站。
 
 ## 回報（簡短）
 
-- 各站收錄則數、清單對帳結果（窗內未收幾則）——**ENEX 與 ABC 各單獨列一行**
-  （本輪不掃就分別寫「本輪不掃 ENEX（V5-1）」／「本輪不掃 ABC（V7-1）」；
-  ABC 有掃卻進不去，要寫明是靠哪個訊號判定登出）
+- 各站收錄則數、清單對帳結果（窗內未收幾則）——**ENEX 要單獨列一行**
+  （本輪不掃就寫「本輪不掃 ENEX（V5-1）」）
 - 稽核**嚴重／次要**各幾項、怎麼處理
 - 本輪標了幾則 🔴（檔頭）／🟡（重大未進檔頭）
 - 卡住或被拒絕的地方，**原始訊息照抄**
@@ -306,11 +271,4 @@ python scripts/s2_rules_check.py
 
 <!-- V5-FORK-BASE s2_scan_prompt.md sha256=e3fd3ad5e2c3cc112fab6060bed9e04fcc70ed57841aa093bf84bd4504b129d2（2026-08-31 分叉）
      s2_v5_switch.ps1 -Status 會比對這個值（行尾已正規化成 LF 才雜湊）；不同代表 V4 prompt 之後有改過，
-     切換前要先 re-diff，否則 V5 會少掉 V4 後來的修正。
-     📌 這是 V5 從 V4 分叉時留下的歷史紀錄，V7 沿用同一份檔案時一併帶著，⛔ 不要刪。 -->
-
-<!-- V7-FORK-BASE s2_scan_prompt.md sha256=d1dc1336d3e3f4ed3803821e7598eedfd0bd0e9bdb234d59730723f9b5a9d367
-     （2026-09-04 分叉，分叉來源＝當時生效中的 V5 live prompt，不是 s2_scan_prompt_v5.md——
-     兩者已有落差：live 多了 D9 提醒那節與 07:30／20:00 的輪次訂正。）
-     s2_v7_switch.ps1（不加參數）會比對這個值（行尾已正規化成 LF 才雜湊）；不同代表 V5 prompt 之後
-     又改過，切換前要先 re-diff，否則 V7 會少掉 V5 後來的修正。 -->
+     切換前要先 re-diff，否則 V5 會少掉 V4 後來的修正。 -->
