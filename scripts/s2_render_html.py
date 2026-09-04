@@ -56,6 +56,9 @@ def fresh_info(state, base_mmdd):
     """本輪（最新一輪掃帶）是哪一輪：回傳 `(比對用鍵, 顯示用 checkpoint 字串)`。
 
     2026-09-04 使用者要求：側邊欄要能「只看最新」——只列最近一輪新入庫的素材。
+    2026-09-04 追記：輪次之間人工要求整併的素材（CNN/NHK 側錄、韓聯社/CNA）
+    也要算「最新」，直到下一輪掃帶把頂層 checkpoint 推進為止——所以下面
+    `is_fresh()` 比的是「>= 本輪 checkpoint」的時間窗，不是精確相等。
 
     ⚠️ **頂層 `checkpoint` 是唯一真相**（agent 每輪 `set-top checkpoint` 寫的就是
     「現在這輪」）。它在、但沒有任何一則的 `first_seen_checkpoint` 對得上，
@@ -154,7 +157,12 @@ def collect(state, base_mmdd):
             return ""
         day, hhmm = R.checkpoint_time(cp or "", base_mmdd)
         # 圖示用 🔥 不用 🆕（2026-09-04 使用者回報 🆕 在他的環境顯示成空白方框）。
-        return "🔥" if (hhmm is not None and (day, hhmm) == fkey) else ""
+        # ⚠️ 比 `>=` 不是 `==`（2026-09-04 追記）：輪次中途人工整併進來的素材
+        # （CNN/NHK 側錄、韓聯社/CNA）first_seen_checkpoint 會晚於本輪 checkpoint
+        # （agent 掃帶收工才 set-top，整併是收工後才做的），但編輯仍要看到它們
+        # 算「最新」，直到下一輪 set-top 把頂層 checkpoint 推進、fkey 跟著變大
+        # 為止——那時這批間隔期間的素材才會連同上一輪一起自然掉出「只看最新」。
+        return "🔥" if (hhmm is not None and (day, hhmm) >= fkey) else ""
 
     for big, mids in ordered_groups(state, base_mmdd):
         for mid, subs in mids.items():
