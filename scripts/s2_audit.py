@@ -438,7 +438,7 @@ def audit(mmdd, state_path, txt_path, scratch):
         # 就是 △」，不是「checkpoint 判日失敗、自動退回預設 △」，兩者形狀不同，
         # 不該混在一起報。只有**沒有 override、純靠 mark_for() 自動推算出 △**
         # 時才可能是判日失敗的訊號。
-        explicit = v.get("mark") if v.get("mark") in ("△", "▲", "■", "◆", "●") else None
+        explicit = v.get("mark") if v.get("mark") in ("△", "▲", "◇", "■", "◆", "●") else None
         mk = explicit if explicit is not None else R.mark_for(v.get("first_seen_checkpoint"), mmdd)
         marks[mk] += 1
         day, _ = R.checkpoint_time(v.get("first_seen_checkpoint"), mmdd)

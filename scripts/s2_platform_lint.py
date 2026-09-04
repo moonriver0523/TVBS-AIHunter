@@ -48,9 +48,9 @@ for _s in (sys.stdout, sys.stderr):
     except (AttributeError, ValueError):
         pass          # 被重導向到不支援 reconfigure 的物件時照舊，不擋執行
 
-# 時段標記：18 檔 §2 只列了 △▲■◆ 四個，但 `s2_state.py set-mark` 的 choices 有五個
+# 時段標記：18 檔 §2 只列了 △▲◇◆ 四個，但 `s2_state.py set-mark` 的 choices 有六個
 # （多一個舊符號 ●），候選檔若寫了 ● 一樣會在 render 時變成兩個標記，一併擋。
-MARKS = "△▲■◆●"
+MARKS = "△▲◇■◆●"   # `■`／`●` 為晨班舊符號，解析仍須認得
 CODE_RE = {"ENEX": re.compile(r"^ENEX\d{4,8}$"), "ABC": re.compile(r"^ABC\d{6,16}$")}
 DUR_RE = re.compile(r"▎\d{1,3}:\d{2}\s*$")
 CKPT_RE = re.compile(r"^\d{4}-\d{4}$")
@@ -75,7 +75,7 @@ def load_validate():
 def _mark_issue(entry):
     """行首時段標記檢查——**必須在轉呼 check_entry 之前自己做**。
 
-    `check_entry()` 第一件事就是 `strip_mark()`，違規自帶的 `△▲■◆●` 會被剝乾淨後
+    `check_entry()` 第一件事就是 `strip_mark()`，違規自帶的 `△▲◇■◆●` 會被剝乾淨後
     照常通過檢查，等於這條規則在下游完全看不見。18 檔 §2 明寫 render 依收錄時間
     自動補標記，候選檔自己寫了就會變成兩個。
     """

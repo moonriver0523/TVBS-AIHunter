@@ -161,7 +161,7 @@ def fmt_mmss(seconds):
 
 # 時段標記：由 render 依收錄時間補，候選檔／entries 自己帶就會變成兩個（18 §2）。
 # 🔴／🟡／⭐／🟤／🔖 是**重大與畫面亮點標記**，性質不同，entries 本來就可以帶。
-PERIOD_MARKS = "△▲■◆●"
+PERIOD_MARKS = "△▲◇■◆●"
 SEVERITY_MARKS = "🔴🟡⭐🟤🔖"
 
 

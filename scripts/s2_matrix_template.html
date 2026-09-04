@@ -240,7 +240,9 @@ const C_FALLBACK = __C_FALLBACK__;
 const FLAGS = __FLAGS__;
 const T_EMOJI = Object.fromEntries(T_DICT);
 const SRC_LABEL = {SIDE_CNN:"CNN側錄",SIDE_NHK:"NHK側錄",YT:"網址素材",CNN_newsource:"NS",CNN:"NS",YNA:"韓聯社",CNA:"CNA",ENEX:"ENEX",ABC:"ABC"};
-const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■ 晨班","◆":"◆ 早班"};
+// `■`（2026-08-04–09-04）與 `●`（更早）是晨班的舊符號，歷史檔案還在用，label 要留著。
+const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","◇":"◇ 晨班",
+                    "■":"■ 晨班（舊）","●":"● 晨班（舊）","◆":"◆ 早班"};
 const SRC_ORDER = ["AP","RT","NS","SIDE_CNN","SIDE_NHK","YNA","CNA","ENEX","ABC"];
 const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(), hilite:new Set(), fresh:new Set(), T:new Set(), C:new Set(), q:""};
 // 最新一輪的 checkpoint（顯示用；空字串＝狀態檔沒有頂層 checkpoint）
@@ -488,7 +490,7 @@ function itemEl(r){
   const tx=document.createElement("div");
   const t=document.createElement("div"); t.className="txt";
   const full=r.text||"";
-  const bare=full.replace(/^\s*[△▲■◆●]\s*/,"");
+  const bare=full.replace(/^\s*[△▲◇■◆●]\s*/,"");
   if(r.kind==="side"){
     // 摺疊＋可展開，行為對齊生產版 s2_render_html.py。
     // ⚠️ 2026-08-23 迴歸：先前這裡一律印 r.preview（slim_text 只取第一行、截 220 字），

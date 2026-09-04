@@ -41,10 +41,10 @@ PEND = os.path.join(BASE, "_待整併")
 DONE = "已入庫_"
 
 # 側錄：`CNN 08-10 223403 （主播）` 或裸 TC `16:24:45-16:25:33 (主播)`
-SIDE_PREFIXED = re.compile(r"^(?:[🔴🟡△▲■◆●]\s*)*(?:CNN|NHK)\s+(?:\d{2}-\d{2}\s+)?(\d{1,2}:?\d{2}:?\d{2})")
+SIDE_PREFIXED = re.compile(r"^(?:[🔴🟡△▲◇■◆●]\s*)*(?:CNN|NHK)\s+(?:\d{2}-\d{2}\s+)?(\d{1,2}:?\d{2}:?\d{2})")
 SIDE_BARE = re.compile(r"^\(?(\d{1,2}:\d{2}:\d{2})")
 # 通訊社素材代碼（含 ENEX／ABC／YNA／CNA 等）
-CODE = re.compile(r"^(?:[🔴🟡△▲■◆●]\s*)*([A-Z]{2,6}[-\d][\w-]*)\s")
+CODE = re.compile(r"^(?:[🔴🟡△▲◇■◆●]\s*)*([A-Z]{2,6}[-\d][\w-]*)\s")
 
 
 def keys_in_file(path):

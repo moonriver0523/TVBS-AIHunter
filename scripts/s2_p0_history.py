@@ -28,7 +28,7 @@ _CATEGORY = re.compile(r"^={4,}\s*(.*?)\s*={6,}\s*$")
 _TOPIC = re.compile(r"^【\s*(.*?)\s*】$")
 _SOURCE_DATE = re.compile(r"^(\d{4})")
 _MATERIAL = re.compile(
-    r"^[△▲●■◆🔴🟡🟤]?\s*(?:\d{1,2}:\d{2}(?::\d{2})?|"
+    r"^[△▲●■◇◆🔴🟡🟤]?\s*(?:\d{1,2}:\d{2}(?::\d{2})?|"
     r"(?:APCCTV|AP|RT|CNN|NHK|ABC|IN|NS|YT|SIDE|PO|WE|JL|NE|PY)"
     r"[A-Za-z0-9_.-]*)\b",
     re.IGNORECASE,
@@ -40,7 +40,7 @@ _HEADER_METADATA = (
     ("標記圖例", re.compile(r"^標記：")),
 )
 _HEADER_HIGHLIGHT = re.compile(r"^🔴\s*重大：\s*(.*)$")
-_HEADER_MARKER = re.compile(r"^([△▲●■◆🔴🟡🟤])\s*")
+_HEADER_MARKER = re.compile(r"^([△▲●■◇◆🔴🟡🟤])\s*")
 _CNN_MATERIAL_CODE = re.compile(r"^(CNN\s+\d{2}-\d{2}\s+\d{6})\b", re.IGNORECASE)
 _GENERIC_MATERIAL_CODE = re.compile(r"^([A-Za-z][A-Za-z0-9_.-]*)\b")
 _IGNORED_LINE_PATTERNS = (

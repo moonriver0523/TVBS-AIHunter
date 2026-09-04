@@ -276,7 +276,7 @@ python scripts/s2_render.py --file "…" --base-date 0802          # 不給 --ou
 
 - `check` 涵蓋 V1 格式異常表全部可 regex 項目；**LLM 只處理命中清單**，不整份逐行讀。
 - render 產出順序：檔頭（🔴 取自 `alerts`）→ 16 格大分類（空格保留）→ `【中主題】` → 小分題（裸行＋`+` 分隔）→ 素材行。走 render 不必再跑 `stats`（檔頭由 render 自生）。
-- 時段標記由 render 依 `first_seen_checkpoint` 自動補：23:00 前＝`△`、23:00–07:00＝`▲`、07:00–09:00＝`■`、09:00–14:00＝`◆`。補掃輪判不準就 `set-mark` 寫死。
+- 時段標記由 render 依 `first_seen_checkpoint` 自動補：23:00 前＝`△`、23:00–07:00＝`▲`、07:00–09:00＝`◇`、09:00–14:00＝`◆`。補掃輪判不準就 `set-mark` 寫死。
 - `raw_entry` 零加工輸出；側錄照 `14-S2b` 兩行式原樣帶出。
 - YouTube 兩行式的網址行照樣帶時段標記（render 已保證標記後有半形空格）；⚠️ 小分題不要塞進 `raw_entry` 第一行——那是 `category.小分題` 的位子，`raw_entry` 只放「網址行＋備註行」。
 - 寫檔 tmp+rename 原子；覆蓋前另存 `.prev.txt`（只留最近一版，救 render 壞檔用）。

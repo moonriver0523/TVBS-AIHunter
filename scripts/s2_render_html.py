@@ -491,7 +491,9 @@ __LOGO__
 </div></div>
 <script>
 const ROWS = __ROWS__;
-const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■ 晨班","◆":"◆ 早班"};
+// `■`（2026-08-04–09-04）與 `●`（更早）是晨班的舊符號，歷史檔案還在用，label 要留著。
+const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","◇":"◇ 晨班",
+                    "■":"■ 晨班（舊）","●":"● 晨班（舊）","◆":"◆ 早班"};
 // 篩選鈕上不要出現 SIDE_CNN 這種內部代碼——那是給程式看的，不是給編輯看的
 const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","YT":"網址素材",
                    "CNN_newsource":"NS","CNN":"NS",
@@ -650,7 +652,7 @@ function draw(){
           const ktEl = kt ? (()=>{const s=document.createElement('span');
             s.className='kindtag'; s.textContent=kt; return s;})() : null;
           const tx=document.createElement('div'); tx.className='txt';
-          const bare=full.replace(/^\\s*[△▲■◆●]\\s*/,'');
+          const bare=full.replace(/^\\s*[△▲◇■◆●]\\s*/,'');
 
           if(u.kind==='side'){
             // 摺疊：側錄中位數 401 字、最長 1442（0802 實測），而一則三段式素材才 150–250 字。
