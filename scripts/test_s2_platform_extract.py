@@ -121,6 +121,14 @@ items_d, _, _, _ = ex.extract_abc(
                 "raw_entry": "ABC082601 (ABC) ▎摘要▎畫面：…"}})
 check("abc 時長自動補進素材行", items_d[0]["raw_entry"].endswith("▎01:30"), items_d[0]["raw_entry"])
 
+# 🔴 站方真的會給 Length=00:00（0905 首輪 ABC090426064）：一律當抓不到，⛔ 不補 ▎00:00
+items_z, _, _, gaps_z = ex.extract_abc(
+    [{"News Story": "090426064", "Slug": "s", "Length": "00:00"}],
+    {"090426064": {"category": {}, "sb_count": 0, "src_text": "z" * 60,
+                   "raw_entry": "ABC090426064 (ABC) ▎摘要"}})
+check("abc Length 00:00 不補佔位", items_z[0]["raw_entry"].endswith("▎摘要"), items_z[0]["raw_entry"])
+check("abc Length 00:00 記進 known_gaps", any("00:00" in g for g in gaps_z), gaps_z)
+
 # 🔴 2026-09-05 沙箱實測形狀：`:33`（只有秒，佔當日 33%）與 14 碼加盟台 Story Number
 items_s, _, _, gaps_s = ex.extract_abc(
     [{"News Story": "09042606422425", "Slug": "s", "Length": ":33"}],

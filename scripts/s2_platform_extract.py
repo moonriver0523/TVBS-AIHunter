@@ -421,12 +421,21 @@ _ABC_LEN_RE = re.compile(r"^(?:(\d{1,3}):)?(\d{0,3}):(\d{2})$")
 
 
 def abc_length_mmss(v):
-    """`05:00`／`:33`／`00:05:00`／`1:02:03` → `MM:SS`；認不得回 None（交給 known_gaps）。"""
+    """`05:00`／`:33`／`00:05:00`／`1:02:03` → `MM:SS`；認不得或 0 秒回 None。
+
+    🔴 2026-09-05（V7 首輪驗收）：站方真的會給 `Length = 00:00`
+    （`ABC090426064` ClancyTrialFriMiniPKG，0904-2300 那批），照補就會在交接單上
+    寫出 `▎00:00`——而 `18 §140` 明訂「量不到就留白，⛔ 不要編數字、不要 `▎?`／
+    `▎00:00` 佔位」。**0 秒一律當成抓不到**，改記 known_gaps 讓人看得見。
+    """
     m = _ABC_LEN_RE.match(str(v or "").strip())
     if not m:
         return None
     h, mi, se = m.groups()
-    return fmt_mmss(int(h or 0) * 3600 + int(mi or 0) * 60 + int(se))
+    total = int(h or 0) * 3600 + int(mi or 0) * 60 + int(se)
+    if total <= 0:
+        return None
+    return fmt_mmss(total)
 
 
 def extract_abc(raw_rows, entries):
@@ -468,7 +477,10 @@ def extract_abc(raw_rows, entries):
         if _mmss:
             raw_entry = with_duration(raw_entry, _mmss)
         elif _len:
-            known_gaps.append(f"{code}: Length 值 `{_len}` 不是 MM:SS／HH:MM:SS，未自動補進素材行")
+            why = ("站方給 00:00（等於沒有時長）" if _len.strip(":0") == ""
+                   else "不是 MM:SS／:SS／HH:MM:SS")
+            known_gaps.append(f"{code}: Length 值 `{_len}` {why}，未自動補進素材行——"
+                              f"⛔ 不要手動補 `▎00:00` 佔位（18 §140），留白就好")
 
         items.append({
             "id": code,
