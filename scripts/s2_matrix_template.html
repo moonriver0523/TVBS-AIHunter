@@ -242,7 +242,9 @@ const T_EMOJI = Object.fromEntries(T_DICT);
 const SRC_LABEL = {SIDE_CNN:"CNN側錄",SIDE_NHK:"NHK側錄",YT:"網址素材",CNN_newsource:"NS",CNN:"NS",YNA:"韓聯社",CNA:"CNA",ENEX:"ENEX",ABC:"ABC"};
 const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","■":"■ 晨班","◆":"◆ 早班"};
 const SRC_ORDER = ["AP","RT","NS","SIDE_CNN","SIDE_NHK","YNA","CNA","ENEX","ABC"];
-const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(), hilite:new Set(), T:new Set(), C:new Set(), q:""};
+const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(), hilite:new Set(), fresh:new Set(), T:new Set(), C:new Set(), q:""};
+// 最新一輪的 checkpoint（顯示用；空字串＝狀態檔沒有頂層 checkpoint）
+const FRESH_CP = __FRESH_CP__;
 let matrixOpen = false;
 function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
 function hasAny(sel, arr){ if(!sel.size) return true; return (arr||[]).some(x=>sel.has(x)); }
@@ -252,6 +254,7 @@ function passBase(r){
   if(F.big.size && !F.big.has(r.big)) return false;
   if(F.alert.size && !F.alert.has(r.alert)) return false;
   if(F.hilite.size && !F.hilite.has(r.hilite)) return false;
+  if(F.fresh.size && !F.fresh.has(r.fresh)) return false;
   if(F.q && !(r.q||"").includes(F.q) && !(r.text||"").toLowerCase().includes(F.q)) return false;
   return true;
 }
@@ -262,6 +265,7 @@ function passDim(r, skip){
   if(skip!=="big" && F.big.size && !F.big.has(r.big)) return false;
   if(skip!=="alert" && F.alert.size && !F.alert.has(r.alert)) return false;
   if(skip!=="hilite" && F.hilite.size && !F.hilite.has(r.hilite)) return false;
+  if(skip!=="fresh" && F.fresh.size && !F.fresh.has(r.fresh)) return false;
   if(skip!=="T" && !hasAny(F.T,r.T)) return false;
   if(skip!=="C" && !hasAny(F.C,r.C)) return false;
   if(F.q && !(r.q||"").includes(F.q) && !(r.text||"").toLowerCase().includes(F.q)) return false;
@@ -324,29 +328,43 @@ function fmtTag(kind, name){
 }
 function renderPanel(){
   const p=document.getElementById("panelBody"); p.innerHTML="";
-  const addGroup=(title, key, vals, lab, cls)=>{
+  // 一組標題底下可以放**多個**篩選維度（2026-09-04 使用者要求：重大／畫面亮點／
+  // 本輪新增不要拆成三段，擠在同一段裡）。單維度的用 addGroup 這層薄殼呼叫。
+  const addMulti=(title, defs)=>{
     const g=document.createElement("div"); g.className="fgroup";
     g.innerHTML=`<div class="flabel">${title}</div>`;
     const bar=document.createElement("div"); bar.className="bar";
-    vals.forEach(v=>{
-      const showN = countWhere(r=>{
-        if(!passDim(r, key)) return false;
-        if(key==="T") return (r.T||[]).includes(v);
-        if(key==="C") return (r.C||[]).includes(v);
-        return r[key]===v;
+    defs.forEach(({key, vals, lab, cls})=>{
+      vals.forEach(v=>{
+        const showN = countWhere(r=>{
+          if(!passDim(r, key)) return false;
+          if(key==="T") return (r.T||[]).includes(v);
+          if(key==="C") return (r.C||[]).includes(v);
+          return r[key]===v;
+        });
+        if(!showN && !F[key].has(v)) return;
+        const label=(lab&&lab[v])?lab[v]:(key==="T"||key==="C"?fmtTag(key,v):v);
+        bar.append(chipEl(`${label}<span class="n">${showN}</span>`, F[key].has(v), ()=>{
+          F[key].has(v)?F[key].delete(v):F[key].add(v); draw();
+        }, cls||""));
       });
-      if(!showN && !F[key].has(v)) return;
-      const label=(lab&&lab[v])?lab[v]:(key==="T"||key==="C"?fmtTag(key,v):v);
-      bar.append(chipEl(`${label}<span class="n">${showN}</span>`, F[key].has(v), ()=>{
-        F[key].has(v)?F[key].delete(v):F[key].add(v); draw();
-      }, cls||""));
     });
+    if(!bar.children.length) return;   // 整組都沒東西就別留一個空標題
     g.append(bar); p.append(g);
   };
+  const addGroup=(title, key, vals, lab, cls)=>addMulti(title, [{key, vals, lab, cls}]);
   const srcs=uniq("src").sort((a,b)=> (SRC_ORDER.indexOf(a)<0?99:SRC_ORDER.indexOf(a))-(SRC_ORDER.indexOf(b)<0?99:SRC_ORDER.indexOf(b)));
+  // 🔴 重大／畫面亮點／本輪新增**同一段**（2026-09-04 使用者要求，不要拆開）。
+  // 三者是不同的篩選維度（F.alert／F.hilite／F.fresh 各自獨立、可疊加），
+  // 只是版面上併成一段——擺第一組是因為手機的下方彈出面板高度有限（62vh），
+  // 這幾顆是編輯每輪最先要按的。⛔ 不要再拆回三段。
+  addMulti(FRESH_CP ? `重點篩選（本輪 ${FRESH_CP}）` : "重點篩選", [
+    {key:"alert", vals:uniq("alert").sort((a,b)=>({"⭐":0,"🔴":1,"🟡":2}[a]??9)-({"⭐":0,"🔴":1,"🟡":2}[b]??9)),
+     lab:{"⭐":"⭐ 推薦","🔴":"🔴 重大","🟡":"🟡 次重大"}},
+    {key:"hilite", vals:uniq("hilite"), lab:{"🔖":"🔖 畫面好"}},
+    {key:"fresh", vals:uniq("fresh"), lab:{"🆕":"🆕 只看新一輪"}},
+  ]);
   addGroup(`來源 ${ROWS.length}`,"src",srcs,SRC_LABEL);
-  addGroup("重大","alert",uniq("alert").sort((a,b)=>({"⭐":0,"🔴":1,"🟡":2}[a]??9)-({"⭐":0,"🔴":1,"🟡":2}[b]??9)), {"⭐":"⭐ 推薦","🔴":"🔴 重大","🟡":"🟡 次重大"});
-  addGroup("畫面亮點","hilite",uniq("hilite"),{"🔖":"🔖 畫面好"});
   addGroup("時段","mark",uniq("mark"),MARK_LABEL);
   if(isMobile()){
     p.append(buildMatrixEl());
@@ -554,7 +572,7 @@ function renderList(){
   });
 }
 function activeFilterCount(){
-  return ["src","mark","big","alert","hilite","T","C"].reduce((n,k)=>n+F[k].size,0) + (F.q?1:0);
+  return ["src","mark","big","alert","hilite","fresh","T","C"].reduce((n,k)=>n+F[k].size,0) + (F.q?1:0);
 }
 function updateFab(){
   const nf=activeFilterCount();
@@ -569,7 +587,7 @@ document.getElementById("copyAll").onclick=()=>{
   copy(rows.map(r=>r.text).join("\n"), `已複製篩選結果 ${rows.length} 則`);
 };
 document.getElementById("reset").onclick=()=>{
-  ["src","mark","big","alert","hilite","T","C"].forEach(k=>F[k].clear());
+  ["src","mark","big","alert","hilite","fresh","T","C"].forEach(k=>F[k].clear());
   F.q=""; document.getElementById("q").value=""; draw();
 };
 function openF(on){

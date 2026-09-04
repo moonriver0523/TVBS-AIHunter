@@ -52,6 +52,49 @@ def hilite_of(text):
     return "🔖" if "🔖" in (text or "").split("\n")[0] else ""
 
 
+def fresh_info(state, base_mmdd):
+    """本輪（最新一輪掃帶）是哪一輪：回傳 `(比對用鍵, 顯示用 checkpoint 字串)`。
+
+    2026-09-04 使用者要求：側邊欄要能「只看新一輪」——只列最近一輪新入庫的素材。
+
+    ⚠️ **頂層 `checkpoint` 是唯一真相**（agent 每輪 `set-top checkpoint` 寫的就是
+    「現在這輪」）。它在、但沒有任何一則的 `first_seen_checkpoint` 對得上，
+    正確答案就是「本輪 0 則新增」——⛔ 不可退回「取最晚的一則」，那會把上一輪
+    整批改標成新一輪，比沒有這個篩選更糟。只有頂層完全沒有時才用最晚的當備援
+    （沿用 `window_from_state()` 同一套備援語意）。
+
+    比對用 `R.checkpoint_time()` 的 `(第幾天, HHMM)` 而不是字串相等：checkpoint
+    標籤是 agent 自由命名的（`0904-1100`／`r13-0904-1100-RT補漏`），字串比對會把
+    同一輪的兩種寫法當成兩輪。`hhmm is None`（整串認不出時間）一律不算數，
+    否則兩個都認不出的字串會互相「相等」而被誤判成同一輪。
+    """
+    def key(cp):
+        _day, hhmm = R.checkpoint_time(cp or "", base_mmdd)
+        return None if hhmm is None else (_day, hhmm)
+
+    top = (state.get("checkpoint") or "").strip()
+    if top:
+        return key(top), top
+    items = state.get("items") or []
+    vals = items.values() if isinstance(items, dict) else items
+    best, best_cp = None, ""
+    for it in vals:
+        cp = (it or {}).get("first_seen_checkpoint") or ""
+        k = key(cp)
+        if k and (best is None or k > best):
+            best, best_cp = k, cp
+    return best, best_cp
+
+
+def fresh_label(cp):
+    """`0904-1100` → `09/04 11:00`；認不出格式就原樣回傳（不要空字串，
+    使用者至少還看得到 agent 寫的原標籤）。"""
+    m = re.search(r"(\d{2})(\d{2})-(\d{2})(\d{2})", cp or "")
+    if not m:
+        return cp or ""
+    return f"{m.group(1)}/{m.group(2)} {m.group(3)}:{m.group(4)}"
+
+
 def logo_data_uri():
     """左側篩選欄底部的 LOGO（2026-08-11 使用者要求，只在桌機顯示）。
 
@@ -104,6 +147,14 @@ def collect(state, base_mmdd):
     外加篩選要用的欄位。分組順序完全交給 `R.group_items()`，不自己排。
     """
     rows = []
+    fkey, _fcp = fresh_info(state, base_mmdd)
+
+    def is_fresh(cp):
+        if not fkey:
+            return ""
+        day, hhmm = R.checkpoint_time(cp or "", base_mmdd)
+        return "🆕" if (hhmm is not None and (day, hhmm) == fkey) else ""
+
     for big, mids in ordered_groups(state, base_mmdd):
         for mid, subs in mids.items():
             if not subs:
@@ -114,6 +165,7 @@ def collect(state, base_mmdd):
                 rows.append({
                     "big": big or "", "mid": mid or "", "sub": "", "id": "",
                     "src": "", "kind": "empty", "mark": "", "alert": "", "hilite": "",
+                    "fresh": "",
                     "cp": "", "dur": "", "bite": False, "text": "",
                     "q": f"{big} {mid}".strip().lower(),
                 })
@@ -157,6 +209,10 @@ def collect(state, base_mmdd):
                                    ("⭐" if "⭐" in text[:8] else ""))),
                         # 畫面亮點（2026-08-11 使用者要求可篩）：見 hilite_of。
                         "hilite": hilite_of(text),
+                        # 本輪新增（2026-09-04 使用者要求可篩）：見 fresh_info。
+                        # 判準是 first_seen_checkpoint＝入庫那輪，不是 last_checked——
+                        # 「新一輪」問的是「這輪多了什麼」，不是「這輪查過什麼」。
+                        "fresh": is_fresh(it.get("first_seen_checkpoint") or ""),
                         "cp": it.get("first_seen_checkpoint") or "",
                         "dur": f.get("duration") or "",
                         "bite": bool(f.get("bite")),
@@ -412,9 +468,10 @@ __DATEBAR__
 <aside id="panel">
   <div class="grip" id="grip"></div>
   <div class="phead">篩選<button class="act" id="closeF">關閉</button></div>
+  <!-- 🔴 重大／畫面亮點／本輪新增**同一段**（2026-09-04 使用者要求，不要拆開）。
+       三者仍是各自獨立的篩選維度（F.alert／F.hilite／F.fresh，可疊加），只是共用一條 bar。 -->
+  <div class="fgroup"><div class="flabel" id="lmix">重點篩選</div><div class="bar" id="fmix"></div></div>
   <div class="fgroup"><div class="flabel">來源</div><div class="bar" id="fsrc"></div></div>
-  <div class="fgroup"><div class="flabel">重大</div><div class="bar" id="falert"></div></div>
-  <div class="fgroup"><div class="flabel">畫面亮點</div><div class="bar" id="fhilite"></div></div>
   <div class="fgroup"><div class="flabel">時段</div><div class="bar" id="fmark"></div></div>
   <div class="fgroup"><div class="flabel">大分類</div><div class="bar" id="fbig"></div></div>
   <div class="fgroup bar">
@@ -439,7 +496,9 @@ const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","YT":"網址素
                    "CNN_newsource":"NS","CNN":"NS",
                    "YNA":"韓聯社","CNA":"CNA","ENEX":"ENEX","ABC":"ABC"};
 const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(),
-           hilite:new Set(), q:""};
+           hilite:new Set(), fresh:new Set(), q:""};
+// 最新一輪的 checkpoint（顯示用；空字串＝狀態檔沒有頂層 checkpoint）
+const FRESH_CP = __FRESH_CP__;
 
 function uniq(k){return [...new Set(ROWS.map(r=>r[k]).filter(Boolean))];}
 
@@ -460,6 +519,7 @@ function pass(r){
   if(F.big.size && !F.big.has(r.big)) return false;
   if(F.alert.size && !F.alert.has(r.alert)) return false;
   if(F.hilite.size && !F.hilite.has(r.hilite)) return false;
+  if(F.fresh.size && !F.fresh.has(r.fresh)) return false;
   if(F.q && !r.q.includes(F.q)) return false;
   return true;
 }
@@ -521,7 +581,7 @@ function draw(){
     `${nWire} / ${tWire} 則` + (nSide ? `　側錄 ${sideUnits} 則` : '');
   // 面板關起來時，光看浮動鈕就要知道有沒有在篩、篩了幾項——
   // 否則使用者會對著變少的清單納悶「東西怎麼變少了」。有篩時連顏色一起換。
-  const nf=F.src.size+F.mark.size+F.big.size+(F.q?1:0);
+  const nf=F.src.size+F.mark.size+F.big.size+F.alert.size+F.hilite.size+F.fresh.size+(F.q?1:0);
   const fab=document.getElementById('fab');
   fab.textContent = nf ? `篩選 (${nf})` : '篩選';
   fab.classList.toggle('on', nf>0);
@@ -643,7 +703,7 @@ document.getElementById('copyAll').onclick=()=>{
   copy(rows.map(r=>r.text).join("\\n"),`已複製篩選結果 ${rows.length} 則`);
 };
 document.getElementById('reset').onclick=()=>{
-  F.src.clear();F.mark.clear();F.big.clear();F.alert.clear();F.hilite.clear();F.q="";
+  F.src.clear();F.mark.clear();F.big.clear();F.alert.clear();F.hilite.clear();F.fresh.clear();F.q="";
   document.getElementById('q').value="";
   document.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'));
   draw();
@@ -659,13 +719,23 @@ chips('fsrc','src',uniq('src').sort((a,b)=>{
   return w(a)-w(b) || a.localeCompare(b);
 }),SRC_LABEL);
 chips('fmark','mark',uniq('mark'),MARK_LABEL);
+// ── 重點篩選（一段三維度，2026-09-04 使用者要求不要拆開）──────────────
 // 重大／推薦：⭐ 在最前（編輯先看推薦、才看紅黃標）、🔴 次之、🟡 在後（2026-08-19 使用者訂案）
 const ALERT_ORDER={"⭐":0,"🔴":1,"🟡":2};
-chips('falert','alert',uniq('alert').sort((a,b)=>ALERT_ORDER[a]-ALERT_ORDER[b]),
+chips('fmix','alert',uniq('alert').sort((a,b)=>ALERT_ORDER[a]-ALERT_ORDER[b]),
       {"⭐":"⭐ 推薦","🔴":"🔴 重大","🟡":"🟡 次重大"});
 // 畫面亮點：**只有一個鈕**，涵蓋所有標了 🔖 的（畫面好／搖晃瞬間／日後新增的標籤）。
 // 那天沒有任何 🔖 就不會長出鈕。
-chips('fhilite','hilite',uniq('hilite'),{"🔖":"🔖 畫面好"});
+chips('fmix','hilite',uniq('hilite'),{"🔖":"🔖 畫面好"});
+// 本輪新增：一顆鈕（🆕）。那輪 0 則新增時 uniq 是空的，鈕自己不會出現。
+chips('fmix','fresh',uniq('fresh'),{"🆕":"🆕 只看新一輪"});
+(function(){
+  const bar=document.getElementById('fmix');
+  const lab=document.getElementById('lmix');
+  if(FRESH_CP && [...bar.children].some(c=>c.textContent.includes('新一輪')))
+    lab.textContent='重點篩選（本輪 '+FRESH_CP+'）';
+  if(!bar.children.length) lab.parentElement.style.display='none';
+})();
 chips('fbig','big',uniq('big'));
 
 // ── 產出時間：停太久要主動變紅，不能只是印在那裡 ────────────────────
@@ -797,6 +867,9 @@ def build_html(state, base_mmdd, window, datebar_html=""):
             .replace("__BUILT__", datetime.now().strftime("%Y-%m-%d %H:%M"))
             .replace("__LOGO__", logo_html)
             .replace("__DATEBAR__", datebar_html)
+            .replace("__FRESH_CP__",
+                     json.dumps(fresh_label(fresh_info(state, base_mmdd)[1]),
+                                ensure_ascii=False))
             .replace("__ROWS__", json.dumps(rows, ensure_ascii=False)))
 
 

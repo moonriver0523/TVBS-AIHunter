@@ -136,6 +136,11 @@ def fold_side(rows, stored=None):
             cur["text"] = cur["text"] + "\n" + (r.get("text") or "")
             cur["q"] = cur["q"] + " " + (r.get("q") or "")
             cur["segs"] += 1
+            # 本輪新增（2026-09-04）：單元裡**任何一段**是這輪進來的，整個單元就算
+            # 新一輪——側錄常是「同一段連線這輪又多錄了幾個 TC」，只認第一段
+            # 會讓這輪真的有新內容的單元漏在篩選外。
+            if r.get("fresh"):
+                cur["fresh"] = r.get("fresh")
             if not cur.get("tc_id") and _has(r):
                 cur["tc_id"] = r.get("id")
             continue
@@ -208,7 +213,8 @@ def build_html(state, base_mmdd, window, datebar_html=""):
             "mid": r.get("mid") or "", "sub": r.get("sub") or "",
             "src": r.get("src") or "", "kind": r.get("kind") or "",
             "mark": r.get("mark") or "", "alert": r.get("alert") or "",
-            "hilite": r.get("hilite") or "", "text": r.get("text") or "",
+            "hilite": r.get("hilite") or "", "fresh": r.get("fresh") or "",
+            "text": r.get("text") or "",
             "preview": BASE.slim_text(r.get("text") or ""),
             "segs": r.get("segs") or 1,
             "q": (r.get("q") or "")[:400],
@@ -257,6 +263,11 @@ def build_html(state, base_mmdd, window, datebar_html=""):
             # 「幾小時前」並在超過 3.5 小時時變紅（Apps Script 會無聲退回昨天那份，
             # 沒有這個示警編輯會照舊清單發稿）。跟 s2_render_html.py:786 同一套。
             .replace("__BUILT__", datetime.now().strftime("%Y-%m-%d %H:%M"))
+            # 本輪 checkpoint（側欄「只看新一輪」的標籤）。判定本身在
+            # H.collect() 就做完了（row 的 fresh 欄位），這裡只帶顯示字串。
+            .replace("__FRESH_CP__",
+                     json.dumps(H.fresh_label(H.fresh_info(state, base_mmdd)[1]),
+                                ensure_ascii=False))
             .replace("__HISTPILLS__", datebar_html))
 
 
