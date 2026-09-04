@@ -78,6 +78,19 @@ python scripts/s2_rules_check.py
 ⚠️ **本檔案不重複規則內容，只給本輪參數。**規則與這裡衝突時，**以規則為準**——
 這份範本是固定的，規則才是最新的。
 
+## 🔴 D9 提醒：狀態檔存取只走標準子指令（2026-09-04 加，減少重試）
+
+**這條會被 hook 擋，擋下來不算失敗但白燒一次工具呼叫**——連續三輪（0700/0900/1100）
+每輪都撞到 2～3 次，全是同一個模式：先試被禁的寫法，被擋了才改走對的。提前記住可以
+省掉這幾次來回：
+
+- **查詢**狀態檔內容一律用 `python scripts/s2_state.py`（`show --uncat`／`list-topics --compact`／
+  `get --id <ID>` 等子指令），**不准**臨時 `python -c` 直讀 `*-s2-state.json`。
+- **對帳／快照**用 `python scripts/s2_batch_prep.py`（`dedup-check`／`snapshot` 等子指令）。
+- **產出／寫入** json 檔（batch.json 等）改用 **Write 工具直接寫**，不要用 heredoc、
+  不要先落一支 `.py` 檔繞、不要換個包法再試——沒有對應子指令就記進 needs-review，
+  不要在同一輪重複嘗試同一招。
+
 ## 開工先看：上一輪有沒有整站失守
 
 `resume` 之後**看一下 `needs-review`**。若出現「某站 N 則不是站方無素材，是進不去」

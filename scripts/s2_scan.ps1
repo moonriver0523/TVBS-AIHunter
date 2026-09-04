@@ -55,10 +55,13 @@ param(
     # 真正的成本變數是**工具呼叫次數**（實測 ≈ 0.25M cache_read/次，五輪一致）。
     # 維持 high 的理由是「量不出好處就不要拿分類品質去換」，不是「medium 較差」。
     # 要再動 effort 之前，先把 Task 1 基線量測器做出來，否則 5% 級的差異看不出來。
-    [ValidateSet('low', 'medium', 'high')]
+    [ValidateSet('low', 'medium', 'high', 'xhigh', 'max')]
     # 2026-08-12 使用者裁定改回 medium：1000 輪起用 high 後每輪 30 分上下，
     # 而 0430/0730 用 medium 收 138/75 則也只要 22~24 分，high 沒換到對等品質。
-    [string]$Effort = 'medium',
+    # 2026-09-04 使用者要求改 xhigh 觀察差別（CLI 新增了 xhigh/max 兩級，
+    # 0812 那次實測只比過 high／medium，沒比過這兩級）。單純是要看數據，
+    # 不是又把 effort 當省 token 手段——延續同一套「量出來再說」的做法。
+    [string]$Effort = 'xhigh',
 
     # 開工 prompt 範本；{CHECKPOINT} 會被代換掉。
     [string]$PromptFile = "$PSScriptRoot\s2_scan_prompt.md",
