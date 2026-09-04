@@ -362,7 +362,8 @@ function renderPanel(){
     {key:"alert", vals:uniq("alert").sort((a,b)=>({"⭐":0,"🔴":1,"🟡":2}[a]??9)-({"⭐":0,"🔴":1,"🟡":2}[b]??9)),
      lab:{"⭐":"⭐ 推薦","🔴":"🔴 重大","🟡":"🟡 次重大"}},
     {key:"hilite", vals:uniq("hilite"), lab:{"🔖":"🔖 畫面好"}},
-    {key:"fresh", vals:uniq("fresh"), lab:{"🆕":"🆕 只看新一輪"}},
+    // 圖示用 🔥 不用 🆕（2026-09-04 使用者回報 🆕 在他的環境顯示成空白方框）。
+    {key:"fresh", vals:uniq("fresh"), lab:{"🔥":"🔥 只看最新"}},
   ]);
   addGroup(`來源 ${ROWS.length}`,"src",srcs,SRC_LABEL);
   addGroup("時段","mark",uniq("mark"),MARK_LABEL);

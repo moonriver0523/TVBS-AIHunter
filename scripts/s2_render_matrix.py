@@ -263,7 +263,7 @@ def build_html(state, base_mmdd, window, datebar_html=""):
             # 「幾小時前」並在超過 3.5 小時時變紅（Apps Script 會無聲退回昨天那份，
             # 沒有這個示警編輯會照舊清單發稿）。跟 s2_render_html.py:786 同一套。
             .replace("__BUILT__", datetime.now().strftime("%Y-%m-%d %H:%M"))
-            # 本輪 checkpoint（側欄「只看新一輪」的標籤）。判定本身在
+            # 本輪 checkpoint（側欄「只看最新」的標籤）。判定本身在
             # H.collect() 就做完了（row 的 fresh 欄位），這裡只帶顯示字串。
             .replace("__FRESH_CP__",
                      json.dumps(H.fresh_label(H.fresh_info(state, base_mmdd)[1]),

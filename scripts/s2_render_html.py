@@ -55,7 +55,7 @@ def hilite_of(text):
 def fresh_info(state, base_mmdd):
     """本輪（最新一輪掃帶）是哪一輪：回傳 `(比對用鍵, 顯示用 checkpoint 字串)`。
 
-    2026-09-04 使用者要求：側邊欄要能「只看新一輪」——只列最近一輪新入庫的素材。
+    2026-09-04 使用者要求：側邊欄要能「只看最新」——只列最近一輪新入庫的素材。
 
     ⚠️ **頂層 `checkpoint` 是唯一真相**（agent 每輪 `set-top checkpoint` 寫的就是
     「現在這輪」）。它在、但沒有任何一則的 `first_seen_checkpoint` 對得上，
@@ -153,7 +153,8 @@ def collect(state, base_mmdd):
         if not fkey:
             return ""
         day, hhmm = R.checkpoint_time(cp or "", base_mmdd)
-        return "🆕" if (hhmm is not None and (day, hhmm) == fkey) else ""
+        # 圖示用 🔥 不用 🆕（2026-09-04 使用者回報 🆕 在他的環境顯示成空白方框）。
+        return "🔥" if (hhmm is not None and (day, hhmm) == fkey) else ""
 
     for big, mids in ordered_groups(state, base_mmdd):
         for mid, subs in mids.items():
@@ -727,12 +728,12 @@ chips('fmix','alert',uniq('alert').sort((a,b)=>ALERT_ORDER[a]-ALERT_ORDER[b]),
 // 畫面亮點：**只有一個鈕**，涵蓋所有標了 🔖 的（畫面好／搖晃瞬間／日後新增的標籤）。
 // 那天沒有任何 🔖 就不會長出鈕。
 chips('fmix','hilite',uniq('hilite'),{"🔖":"🔖 畫面好"});
-// 本輪新增：一顆鈕（🆕）。那輪 0 則新增時 uniq 是空的，鈕自己不會出現。
-chips('fmix','fresh',uniq('fresh'),{"🆕":"🆕 只看新一輪"});
+// 本輪新增：一顆鈕（🔥）。那輪 0 則新增時 uniq 是空的，鈕自己不會出現。
+chips('fmix','fresh',uniq('fresh'),{"🔥":"🔥 只看最新"});
 (function(){
   const bar=document.getElementById('fmix');
   const lab=document.getElementById('lmix');
-  if(FRESH_CP && [...bar.children].some(c=>c.textContent.includes('新一輪')))
+  if(FRESH_CP && [...bar.children].some(c=>c.textContent.includes('只看最新')))
     lab.textContent='重點篩選（本輪 '+FRESH_CP+'）';
   if(!bar.children.length) lab.parentElement.style.display='none';
 })();
