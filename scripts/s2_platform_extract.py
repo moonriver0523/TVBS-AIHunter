@@ -304,7 +304,7 @@ def enex_media_url(it):
     return it.get("url") or it.get("videoLowResCdn") or None
 
 
-def lookup_entry(entries, rid):
+def lookup_entry(entries, rid, prefix="ENEX"):
     """entries 的查找**只有這一份**（2026-09-01 抽出）。
 
     🔴 前一版併發改動留下一個坑：預先挑網址的迴圈寫 `a or b`、主迴圈寫 `if a is None: b`，
@@ -312,10 +312,15 @@ def lookup_entry(entries, rid):
     「主迴圈用裸鍵那筆組素材，時長卻來自前綴鍵那筆」這種錯配。
     正常資料不會觸發，但兩段程式對同一件事有兩種答案，早晚會咬人。
     ⛔ 不要在別處再抄一份查找邏輯。
+
+    🔴 2026-09-04（V7 準備）：`prefix` 參數是給 ABC 用的。原本 `extract_abc`
+    自己寫 `entries.get(story)`，**只認裸 Story Number**——agent 若比照 ENEX
+    的文件用 `ABC080926021` 當鍵，每一則都會落進 `dropped`、候選檔空的、
+    extract 與 lint 都回 0，就是 2026-08-31 ENEX 那個「48 則無聲蒸發」的同類。
     """
     v = entries.get(rid)
     if v is None:
-        v = entries.get("ENEX" + rid)
+        v = entries.get(prefix + rid)
     return v
 
 
@@ -416,7 +421,8 @@ def extract_abc(raw_rows, entries):
         if not STORY_NUM_RE.match(story):
             known_gaps.append(f"ABC{story}: Story Number 前 6 碼不是合法 MMDDYY 格式，人工複核")
         code = "ABC" + story
-        ent = entries.get(story)
+        # 裸 Story Number 與帶 `ABC` 前綴的鍵都認（同 extract_enex，理由見 lookup_entry）
+        ent = lookup_entry(entries, story, "ABC")
         if ent is None:
             dropped.append({"id": code, "why": "raw 有但 entries 沒判斷（未收進候選，不算排除，要確認是不是漏判）"})
             continue
@@ -431,6 +437,14 @@ def extract_abc(raw_rows, entries):
         if not raw_entry:
             known_gaps.append(f"{code}: raw_entry 尚未填（三段式中文摘要是編輯判斷，這支不代寫，"
                                f"lint 會擋，交件前要補）")
+        # 🔴 時長：ABC 的 `Length` 是清單 CSV 現成的機械欄位，比照 ENEX 的
+        # `with_duration()` 自動補成素材行行尾 `▎MM:SS`——0901-1700 那次
+        # 「量到了卻只活在子物件裡、交接單一則都沒有時長」不要在 ABC 重演。
+        _len = str(row.get("Length") or "").strip()
+        if _DUR_TAIL.match(_len):
+            raw_entry = with_duration(raw_entry, _len)
+        elif _len:
+            known_gaps.append(f"{code}: Length 值 `{_len}` 不是 MM:SS／HH:MM:SS，未自動補進素材行")
 
         items.append({
             "id": code,

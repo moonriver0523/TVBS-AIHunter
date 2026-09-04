@@ -104,6 +104,36 @@ check("abc id 加前綴", any(i["id"] == "ABC082601" for i in items_a))
 check("abc Length 原樣沿用", next(i for i in items_a if i["id"] == "ABC082601")["abc"]["duration"] == "01:30")
 check("abc 不合法 Story Number 記進 known_gaps 但仍收錄", any("MMDDYY" in g for g in gaps_a), gaps_a)
 
+# ---------- extract_abc：entries 鍵帶 ABC 前綴也認得（2026-09-04，V7 準備） ----------
+# 🔴 這條擋的是「無聲蒸發」：只認裸鍵時，agent 比照 ENEX 文件寫 ABC 前綴 →
+#    全數 dropped、候選檔空的，而 extract 與 lint 的離開碼都是 0。
+entries_abc_pref = {
+    "ABC082601": {"category": {}, "sb_count": 0, "src_text": "z" * 60,
+                  "raw_entry": "ABC082601 (ABC) …"},
+}
+items_p, _, dropped_p, _ = ex.extract_abc(raw_abc[:1], entries_abc_pref)
+check("abc entries 鍵帶前綴也認得", len(items_p) == 1 and not dropped_p, (items_p, dropped_p))
+
+# ---------- extract_abc：Length 自動補成素材行行尾 ▎MM:SS ----------
+items_d, _, _, _ = ex.extract_abc(
+    [{"News Story": "082601", "Slug": "s", "Length": "01:30"}],
+    {"082601": {"category": {}, "sb_count": 0, "src_text": "z" * 60,
+                "raw_entry": "ABC082601 (ABC) ▎摘要▎畫面：…"}})
+check("abc 時長自動補進素材行", items_d[0]["raw_entry"].endswith("▎01:30"), items_d[0]["raw_entry"])
+
+items_e, _, _, _ = ex.extract_abc(
+    [{"News Story": "082601", "Slug": "s", "Length": "01:30"}],
+    {"082601": {"category": {}, "sb_count": 0, "src_text": "z" * 60,
+                "raw_entry": "ABC082601 (ABC) ▎摘要▎02:00"}})
+check("abc 已有時長就不覆蓋", items_e[0]["raw_entry"].endswith("▎02:00"), items_e[0]["raw_entry"])
+
+items_f, _, _, gaps_f = ex.extract_abc(
+    [{"News Story": "082601", "Slug": "s", "Length": "亂七八糟"}],
+    {"082601": {"category": {}, "sb_count": 0, "src_text": "z" * 60,
+                "raw_entry": "ABC082601 (ABC) ▎摘要"}})
+check("abc Length 格式不對記 known_gaps、不亂補",
+      items_f[0]["raw_entry"].endswith("▎摘要") and any("Length" in g for g in gaps_f), gaps_f)
+
 # ---------- extract_abc：缺 src_text → known_gaps，不是靜默放行 ----------
 entries_abc_missing = {"082601": {"category": {}, "raw_entry": "x"}}
 items_b, _, _, gaps_b = ex.extract_abc(raw_abc[:1], entries_abc_missing)
