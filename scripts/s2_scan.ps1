@@ -61,7 +61,11 @@ param(
     # 2026-09-04 使用者要求改 xhigh 觀察差別（CLI 新增了 xhigh/max 兩級，
     # 0812 那次實測只比過 high／medium，沒比過這兩級）。單純是要看數據，
     # 不是又把 effort 當省 token 手段——延續同一套「量出來再說」的做法。
-    [string]$Effort = 'xhigh',
+    # 2026-09-04 晚間使用者改回 medium：實跑 4 輪 xhigh（1700/2000/2200 +
+    # 一輪換班輪）耗時全面拉長（0.45~0.49分/則 vs medium 0.33~0.39分/則），
+    # 成本方向不穩定（1700貴62%、2000持平略快、2200則數多攤薄後單則反而划算）——
+    # 訊號雜但「變慢」這點四輪一致，先改回 medium，樣本留檔比對。
+    [string]$Effort = 'medium',
 
     # 開工 prompt 範本；{CHECKPOINT} 會被代換掉。
     [string]$PromptFile = "$PSScriptRoot\s2_scan_prompt.md",
