@@ -403,22 +403,30 @@ def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds,
     return items, skipped, dropped, known_gaps
 
 
-STORY_NUM_RE = re.compile(r"^\d{6}\d{3}$")
+# `MMDDYY` ＋ 3~10 碼序號。🔴 2026-09-05 沙箱實測訂正：原本寫死 `^\d{6}\d{3}$`（9 碼），
+# 但當日 140 列裡有 **14 列是 14 碼**（`09042606422425` 這種，加盟台轉供，
+# `s2_validate.py:44-48` 早就記著「加盟台 14 碼」而放寬到 `ABC\d{6,16}`）——
+# 9 碼的規則會讓那 10% 全被誤記進 known_gaps 叫人工複核。
+STORY_NUM_RE = re.compile(r"^\d{6}\d{3,10}$")
 
 # ABC 清單 CSV 的 `Length`。0810 §二實測是 `05:00`，但站方沒有保證值域
 # （0810 §六 Phase 0 第 6 項「`Length` 值域盤點」到現在還沒做），
 # 所以 `00:05:00` 這種寫法要能吃、而且要**正規化成 MM:SS**——
 # 直接原樣接上去會讓交接單上 ABC 寫 `▎00:05:00`、AP／RT 寫 `▎05:00`，兩種格式並存。
-_ABC_LEN_RE = re.compile(r"^(?:(\d{1,3}):)?(\d{1,3}):(\d{2})$")
+# 🔴 2026-09-05 沙箱實測（daily profile，9/4~9/5 共 140 列）：`Length` 只有兩種形狀，
+#    `MM:SS`（94 列）與 **`:SS`（46 列，33%）**——後者是「只有秒」的寫法（`:33`）。
+#    ⛔ 不要只認 `MM:SS`：`s2_platform_lint.py:288` 對 ABC 是**沒有時長就報錯**，
+#    漏掉這一種等於每輪三分之一的 ABC 交件都被擋下來重寫。
+_ABC_LEN_RE = re.compile(r"^(?:(\d{1,3}):)?(\d{0,3}):(\d{2})$")
 
 
 def abc_length_mmss(v):
-    """`05:00`／`00:05:00`／`1:02:03` → `MM:SS`；認不得就回 None（交給 known_gaps）。"""
+    """`05:00`／`:33`／`00:05:00`／`1:02:03` → `MM:SS`；認不得回 None（交給 known_gaps）。"""
     m = _ABC_LEN_RE.match(str(v or "").strip())
     if not m:
         return None
     h, mi, se = m.groups()
-    return fmt_mmss(int(h or 0) * 3600 + int(mi) * 60 + int(se))
+    return fmt_mmss(int(h or 0) * 3600 + int(mi or 0) * 60 + int(se))
 
 
 def extract_abc(raw_rows, entries):
