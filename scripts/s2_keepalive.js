@@ -4,7 +4,8 @@
  * 為什麼要有這支（2026-08-07 立，0808 擴充成三站，2026-08-16 收斂回只保活 NS）：
  * 三站的憑證機制完全不同，但**都是滑動效期**——載入頁面就重新計時：
  *
- *   NS  localStorage 的 JWT     1 小時   ← 最短，沒有任何 cookie 後備，唯一還在保活的站
+ *   NS  localStorage 的 JWT     1 小時   ← 最短，沒有任何 cookie 後備
+ *   ABC HttpOnly ss-tok         1 小時   ← 2026-09-04 加回：cmspage 自發 SearchMedia 才換發（不是文件請求）
  *   RT  mexlogin cookie        23 小時   ← 2026-08-16 使用者指示移出保活（原因見下方 RT 區塊註解）
  *   AP  session_user cookie     7 天    ← 已於 2026-08-09 移出保活（見下方保留的實錯記錄）
  *
@@ -46,25 +47,40 @@ const SITES = [
       const p = JSON.parse(atob(JSON.parse(s).token.split('.')[1]));
       return { ok: true, note: Math.round((p.exp - Date.now() / 1000)) + 's' };
     } },
-  // ⛔ ABC 已於 2026-09-03（同日第二次）由使用者指示**再次排除**，未附具體理由。
-  //   需要時加回：把下面這段解註解貼回 SITES 陣列即可。
-  //   （這站在同一天已經加回/拿掉各一次，見 git log 這支檔案的歷史）
-  //
-  // 📌 2026-09-04 實測（daily profile，見 common/plans/2026-09-04-ABC保活ss-tok滑動續期實測.md）：
-  //   登入憑證是 HttpOnly `ss-tok`（約 1 小時），**會滑動續期**。觸發點不是文件請求、
-  //   也不是 NewsDeliveries，而是 cmspage 載入後自發的
-  //   GET /Cms/SearchMedia/{customerId}?pageRegionId=…（customerId 例 159381）。
-  //   0811／0826 打成 /Media/SearchMedia、/Alert/GetPriorityAlerts，才誤判「固定到期」。
-  //   `cmod` 開任何頁都會滑、但不是登入憑證。剛換發完立刻再打 SearchMedia 不會再換（有冷卻）。
-  //   wait 建議 ≥ 網頁把 SearchMedia 打完（現列 6000 可能偏緊，加回前應對一次 ttl 有沒有真的往後推）。
-  //   判準除 Logout 外，最好核 ss-tok 的 expires 有沒有移動（cookie 在 Playwright context，頁內 JS 讀不到）。
-  // ABC Extreme Reach：ss-tok 滑動續期，靠 cmspage → SearchMedia XHR，不是「開頁面」本身
-  // { name: 'ABC', url: 'https://abcnews.extremereach.com/adbridge/news/cmspage/50162/abcnewsone', wait: 6000,
-  //   check: () => {
-  //     const isLogin = location.href.toLowerCase().includes('login');
-  //     const hasLogout = Array.from(document.querySelectorAll('a')).some(a => a.innerText.trim() === 'Logout');
-  //     return { ok: hasLogout && !isLogin };
-  //   } },
+  // ABC Extreme Reach（2026-09-04 加回，方法見 common/plans/2026-09-04-ABC保活ss-tok滑動續期實測.md）
+  // ss-tok 滑動續期靠 cmspage 自發 GET /Cms/SearchMedia/{customerId}?pageRegionId=…
+  // 不是文件請求、不是 NewsDeliveries。ttl＜25 分才打缺 guid 的備援（可能 500，只當換發棒）。
+  { name: 'ABC', url: 'https://abcnews.extremereach.com/adbridge/news/cmspage/50162/abcnewsone', wait: 2000,
+    after: async (page, ctx) => {
+      try {
+        await page.waitForResponse(
+          r => /\/Cms\/SearchMedia(?:LoadFirst)?\//.test(r.url()),
+          { timeout: 10000 }
+        );
+      } catch (_) { /* 頁面沒打到也繼續，下面看 cookie */ }
+      const tok = (await ctx.cookies('https://abcnews.extremereach.com'))
+        .find(c => c.name === 'ss-tok');
+      const ttlMin = tok && tok.expires > 0 ? (tok.expires - Date.now() / 1000) / 60 : 0;
+      if (ttlMin > 0 && ttlMin < 25) {
+        await page.evaluate(async () => {
+          const t = document.body ? document.body.innerText : '';
+          const m = t.match(/Logged in as[^\n(]*\((\d+)\)/i);
+          const id = m ? m[1] : '159381';
+          await fetch('/Cms/SearchMedia/' + id + '?pageRegionId=', { credentials: 'same-origin' }).catch(() => {});
+        });
+        await page.waitForTimeout(800);
+      }
+    },
+    check: () => {
+      const isLogin = location.href.toLowerCase().includes('login');
+      const hasLogout = Array.from(document.querySelectorAll('a')).some(a => a.innerText.trim() === 'Logout');
+      return { ok: hasLogout && !isLogin };
+    },
+    note: async (ctx) => {
+      const tok = (await ctx.cookies('https://abcnews.extremereach.com')).find(c => c.name === 'ss-tok');
+      if (!tok || !(tok.expires > 0)) return 'no-tok';
+      return Math.round(tok.expires - Date.now() / 1000) + 's';
+    } },
   // ⛔ AP 已於 2026-08-09 05:00 **暫時移出保活**——強烈懷疑保活本身就是元凶。
   //
   // 【證據】AP 在被納入保活之前，**一次都沒有掉過線**：
@@ -129,10 +145,13 @@ function resolvePlaywright() {
     for (const s of SITES) {
       try {
         await page.goto(s.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        if (typeof s.after === 'function') await s.after(page, ctx);
         await page.waitForTimeout(s.wait);
         const r = await page.evaluate(s.check);
         if (r.ok) {
-          out.push(`${s.name}=OK${r.note ? '(' + r.note + ')' : ''}`);
+          let note = r.note;
+          if (!note && typeof s.note === 'function') note = await s.note(ctx);
+          out.push(`${s.name}=OK${note ? '(' + note + ')' : ''}`);
         } else {
           out.push(`${s.name}=LOGGED_OUT`);
           loggedOut = true;
