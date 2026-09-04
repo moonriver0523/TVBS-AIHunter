@@ -121,6 +121,13 @@ items_d, _, _, _ = ex.extract_abc(
                 "raw_entry": "ABC082601 (ABC) ▎摘要▎畫面：…"}})
 check("abc 時長自動補進素材行", items_d[0]["raw_entry"].endswith("▎01:30"), items_d[0]["raw_entry"])
 
+items_h, _, _, _ = ex.extract_abc(
+    [{"News Story": "082601", "Slug": "s", "Length": "00:05:00"}],
+    {"082601": {"category": {}, "sb_count": 0, "src_text": "z" * 60,
+                "raw_entry": "ABC082601 (ABC) ▎摘要"}})
+check("abc HH:MM:SS 正規化成 MM:SS", items_h[0]["raw_entry"].endswith("▎05:00"),
+      items_h[0]["raw_entry"])
+
 items_e, _, _, _ = ex.extract_abc(
     [{"News Story": "082601", "Slug": "s", "Length": "01:30"}],
     {"082601": {"category": {}, "sb_count": 0, "src_text": "z" * 60,

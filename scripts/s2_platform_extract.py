@@ -405,6 +405,21 @@ def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds,
 
 STORY_NUM_RE = re.compile(r"^\d{6}\d{3}$")
 
+# ABC 清單 CSV 的 `Length`。0810 §二實測是 `05:00`，但站方沒有保證值域
+# （0810 §六 Phase 0 第 6 項「`Length` 值域盤點」到現在還沒做），
+# 所以 `00:05:00` 這種寫法要能吃、而且要**正規化成 MM:SS**——
+# 直接原樣接上去會讓交接單上 ABC 寫 `▎00:05:00`、AP／RT 寫 `▎05:00`，兩種格式並存。
+_ABC_LEN_RE = re.compile(r"^(?:(\d{1,3}):)?(\d{1,3}):(\d{2})$")
+
+
+def abc_length_mmss(v):
+    """`05:00`／`00:05:00`／`1:02:03` → `MM:SS`；認不得就回 None（交給 known_gaps）。"""
+    m = _ABC_LEN_RE.match(str(v or "").strip())
+    if not m:
+        return None
+    h, mi, se = m.groups()
+    return fmt_mmss(int(h or 0) * 3600 + int(mi) * 60 + int(se))
+
 
 def extract_abc(raw_rows, entries):
     items, skipped, dropped, known_gaps = [], [], [], []
@@ -441,8 +456,9 @@ def extract_abc(raw_rows, entries):
         # `with_duration()` 自動補成素材行行尾 `▎MM:SS`——0901-1700 那次
         # 「量到了卻只活在子物件裡、交接單一則都沒有時長」不要在 ABC 重演。
         _len = str(row.get("Length") or "").strip()
-        if _DUR_TAIL.match(_len):
-            raw_entry = with_duration(raw_entry, _len)
+        _mmss = abc_length_mmss(_len)
+        if _mmss:
+            raw_entry = with_duration(raw_entry, _mmss)
         elif _len:
             known_gaps.append(f"{code}: Length 值 `{_len}` 不是 MM:SS／HH:MM:SS，未自動補進素材行")
 
