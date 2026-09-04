@@ -103,7 +103,8 @@ function Show-Status {
     }
     Write-Host ''
     Write-Host "V7 掃描順序：NS → AP → RT → ENEX → ABC（13h V7-1）"
-    Write-Host "ENEX 輪次（13g V5-1）：04:30／07:00／17:00／22:00；ABC **每一輪都掃**，無跳過表。"
+    Write-Host "ENEX 輪次（13g V5-1）：04:30／07:00／17:00／22:00"
+    Write-Host "ABC  輪次（13h V7-1）：04:30／07:00／09:00／17:00／22:00（2026-09-05 使用者裁示）"
     if ($ver -eq 'V7') {
         Write-Host "⛔ V7 生效中：不要跑 s2_v5_switch.ps1（它會把 V7 誤判成 V4 並蓋掉）。" -ForegroundColor Yellow
     }
