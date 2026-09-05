@@ -45,3 +45,11 @@ scripts/*.spec
 
 # V5 切換器每次 -On 產生的 V4 備份（-Off 用完即可丟，不進版控）
 scripts/_s2_scan_prompt_v4.bak.md
+
+# 掃帶輪的 scratch 誤落 repo 根目錄（cwd 不是本輪資料夾時，相對路徑就寫到這裡）。
+# 正本一律在 G:\...\自動掃帶系統\{YYYYMMDD}\，repo 這份是廢的，別進版控。
+/20[0-9][0-9][0-1][0-9][0-3][0-9]/
+
+# 一次性的 scratch／暫存腳本，跑完就丟，不進版控。
+.scratch/
+scripts/_tmp/
