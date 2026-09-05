@@ -43,6 +43,27 @@ REQUIRED = [
     ("13d",   "13d-S2-定時掃帶-v4.md",              "V4 增量"),
 ]
 
+# 版本增量檔：只有在對應版本生效時才是必讀（2026-09-05，V7 上線後補）。
+# ⛔ 不要無條件塞進 REQUIRED——`s2_v5_switch.ps1 -Off` 退回 V4 時，
+# 要求讀 13g／13h 會讓這支檢查假性失敗，而它的離開碼是「不要開始掃帶」。
+VERSIONED = [
+    ("13g", "13g-S2-定時掃帶-v5-四站.md", "V5 增量：ENEX 進固定輪", ("V5", "V7")),
+    ("13h", "13h-S2-定時掃帶-v7-五站.md", "V7 增量：ABC 進固定輪", ("V7",)),
+]
+
+
+def live_version():
+    """生效中的 scan prompt 是哪一版——比對檔頭宣告，認不出就當 V4。"""
+    p = os.path.join(HERE, "s2_scan_prompt.md")
+    try:
+        head = open(p, encoding="utf-8").read(4000)
+    except OSError:
+        return "V4"
+    for v in ("V7", "V5"):
+        if f"這是 {v}" in head:
+            return v
+    return "V4"
+
 # 高風險規則：掉了不會有錯誤訊息，只會某天某站靜靜地做錯
 # （沿用「省Token計畫 Task 4 Step 3 完整性對照測試」的要求）
 CRITICAL = [
@@ -76,10 +97,16 @@ def main():
     quiet = "--quiet" in sys.argv
     bad = []
     blob = ""
+    live = live_version()
+    required = list(REQUIRED) + [
+        (tag, fname, f"{desc}（{live} 生效中）")
+        for tag, fname, desc, vers in VERSIONED if live in vers
+    ]
 
     if not quiet:
-        print("=== 必讀規則檔（估計載入量須 < %s）===" % f"{SAFE_BUDGET:,}")
-    for tag, fname, desc in REQUIRED:
+        print("=== 必讀規則檔（估計載入量須 < %s）===  生效版本：%s"
+              % (f"{SAFE_BUDGET:,}", live))
+    for tag, fname, desc in required:
         path = os.path.join(C, fname)
         if not os.path.isfile(path):
             bad.append(f"缺檔：{fname}")
@@ -116,8 +143,9 @@ def main():
         for b in bad:
             print(f"   - {b}")
         return 1
-    print("✅ 規則載入檢查全過。讀完每一份時，記得對照這六個 RULES-EOF 代號：")
-    print("   " + "／".join(t for t, _, _ in REQUIRED))
+    print("✅ 規則載入檢查全過。讀完每一份時，記得對照這 %d 個 RULES-EOF 代號："
+          % len(required))
+    print("   " + "／".join(t for t, _, _ in required))
     return 0
 
 

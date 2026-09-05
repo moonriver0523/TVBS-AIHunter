@@ -540,6 +540,17 @@ o, c = run(bp.cmd_concat, Args(files=[CC_RT, CC_RT2], site='rt', out=None))
 check('concat 對 RT 用 code 當 id 去重（per-site adapter 沒漏接）',
       c == 0 and '共 3 筆' in o and 'RT2' in o)
 
+# ── 2026-09-05（0905-0430 實錯）：concat --site 要認得 abc／enex ─────────
+check('concat --site abc 用 News Story 當 id',
+      bp._site_id_of('abc', {'News Story': '090426151'}, 0) == 'ABC090426151')
+check('concat --site enex 帶不帶前綴都正規化成同一個 id',
+      bp._site_id_of('enex', {'id': 'ENEX929681'}, 0)
+      == bp._site_id_of('enex', {'id': '929681'}, 0) == 'ENEX929681')
+check('concat --site abc 缺欄位時退回通用猜測，不炸',
+      bp._site_id_of('abc', {'Slug': 'x'}, 7) is not None)
+check('abc／enex 沒混進 SITE_SPEC（dump／build 仍只認三站）',
+      set(bp.SITE_SPEC) == {'ns', 'ap', 'rt'})
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)

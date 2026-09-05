@@ -730,9 +730,27 @@ def cmd_search(args):
 
 # ── 稽核快照與比對（A2，2026-08-17）──────────────────────────
 
+# ENEX／ABC 只在 `concat --site` 的去重用得到（兩站的 raw→候選檔走
+# `s2_platform_extract.py`，不經 SITE_SPEC 的 dump／build）。所以**不塞進
+# SITE_SPEC**——那份的每個鍵都被 dump／build 當必備欄位讀，補半套只會讓
+# `--site abc dump` 死在 KeyError，比現在的 invalid choice 更難查。
+# 🔴 2026-09-05（0905-0430）：ABC 進固定輪後，agent 要合併分頁清單時
+# `concat --site abc` 回 invalid choice，只能改用不去重的純合併。
+PLATFORM_ID_OF = {
+    'abc': lambda it: (str(it.get('News Story') or it.get('storyNumber') or '').strip()
+                       and 'ABC' + str(it.get('News Story')
+                                       or it.get('storyNumber')).strip()),
+    'enex': lambda it: (str(it.get('id') or it.get('itemId') or '').strip()
+                        and 'ENEX' + str(it.get('id') or it.get('itemId')).strip()
+                        .removeprefix('ENEX')),
+}
+
+
 def _site_id_of(site, item, index):
     """有 --site 就走 per-site adapter（RT 用 `code` 不是 `id`），
     沒有就走通用猜測。猜測只在沒指定站別時用，指定了就以規則為準。"""
+    if site in PLATFORM_ID_OF:
+        return PLATFORM_ID_OF[site](item) or _id_of_any(item, index)
     if site:
         return SITE_SPEC[site]['id_of'](item) or _id_of_any(item, index)
     return _id_of_any(item, index)
@@ -1357,7 +1375,9 @@ def main():
 
     p_cat_c = sub.add_parser('concat', help='合併兩份以上 json 陣列檔案（分頁清單、多來源分批 batch）')
     p_cat_c.add_argument('files', nargs='+', help='兩個以上的檔案（裸陣列或已知殼型皆可）')
-    p_cat_c.add_argument('--site', choices=['ns', 'ap', 'rt'], help='給了才去重（保留第一次出現的 id）；不給就純合併')
+    p_cat_c.add_argument('--site', choices=['ns', 'ap', 'rt', 'enex', 'abc'],
+                         help='給了才去重（保留第一次出現的 id）；不給就純合併。'
+                              'enex／abc 只有這個子指令支援（其餘子指令走 SITE_SPEC，不含這兩站）')
     p_cat_c.add_argument('--out', help='輸出路徑；不給就印到 stdout')
     p_cat_c.set_defaults(func=cmd_concat)
 

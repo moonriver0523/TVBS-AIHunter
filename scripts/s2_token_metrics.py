@@ -214,10 +214,15 @@ def classify_bash_tool(cmd):
         return 's2_batch_prep.py'
     if 's2_render' in cmd:
         return 's2_render.py'
+    # 2026-09-05：ENEX／ABC 的整併三件套，原本全落在「Bash（其他）」，
+    # 兩站進固定輪後每輪都會跑，混在一起就看不出是哪一段在爆。
+    for _t in ('s2_platform_extract', 's2_platform_lint', 's2_platform_merge'):
+        if _t in cmd:
+            return _t.replace('s2_platform_', 'platform:')
     return 'Bash（其他）'
 
 
-PHASES = ('稽核', 'render', '分類', 'NS', 'AP', 'RT', '其他')
+PHASES = ('稽核', 'render', '分類', 'NS', 'AP', 'RT', 'ENEX', 'ABC', '其他')
 
 
 _FILENAME_TOKEN_RE = re.compile(r'[a-z0-9]+')
@@ -237,6 +242,12 @@ def _site_from_filename(file_hint):
         return 'AP'
     if 'ns' in tokens:
         return 'NS'
+    # 2026-09-05（V7 上線）：ENEX／ABC 進固定輪後也要能從檔名判站，
+    # 否則 abc_detail_0900.json 這種只會靠前一筆繼承，兩站成本看不見。
+    if 'enex' in tokens:
+        return 'ENEX'
+    if 'abc' in tokens:
+        return 'ABC'
     return None
 
 
@@ -264,6 +275,15 @@ def classify_phase(name, input_str, file_hint=''):
         return 'AP'
     if any(k in s for k in ('ns.cnn.com', 'newsource', '_ns_', 'cnn.com')):
         return 'NS'
+    # 2026-09-05：ENEX（V5）／ABC（V7）進固定輪，補兩桶。
+    # ⚠️ 擺在三站後面是刻意的——側錄／CNN 字樣仍歸既有的 NS 判定。
+    if any(k in s for k in ('members.enex.news', 'enex', 'extract_enex')):
+        return 'ENEX'
+    # `abc` 只認獨立 token（`s2_platform_extract.py abc`），⛔ 不可裸比對子字串：
+    # 素材代碼與雜湊字串裡的 abc 會把不相干的呼叫吸進這一桶。
+    if (any(k in s for k in ('extremereach', 'adbridge', 'newssearch', 'abc_'))
+            or re.search(r'(?<![a-z0-9])abc(?![a-z0-9])', s)):
+        return 'ABC'
     # 檔名 token 判站：Write ns_batch_0430.json／batch_ns_0730.json 這種
     # 站名不夾在底線兩側的變體，原本的字串比對接不到，只能靠上一筆繼承——
     # 而繼承來源常常是稍早的 list-topics（真的是分類），造成組稿的長思考

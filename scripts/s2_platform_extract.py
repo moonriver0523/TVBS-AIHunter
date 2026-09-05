@@ -51,6 +51,7 @@ ENEX／ABC 是「人工下令才跑、獨立流程」（18 檔 §0），輸出�
 import argparse
 import concurrent.futures
 import json
+import os
 import re
 import subprocess
 import sys
@@ -230,9 +231,35 @@ def check_entries(entries):
                             f"——🔴／🟡／🔖 可以帶，時段標記不行")
         head = first.lstrip(PERIOD_MARKS + SEVERITY_MARKS + " ").split(" ", 1)[0]
         bare = k[3:] if k.upper().startswith("ABC") else (k[4:] if k.upper().startswith("ENEX") else k)
-        if head and head not in (k, "ENEX" + bare, "ABC" + bare):
+        # 🔴 2026-09-05（0905-0900 實錯）：`--entries` 的鍵可以裸寫（`lookup_entry`
+        # 兩種都認），agent 於是也照著把 raw_entry 行首寫成裸 `090426151`，
+        # 這裡卻只認帶前綴的 → 每一輪都固定吐一輪 ❌ 再重寫一次，純內耗。
+        # 裸代碼**不是**編輯判斷問題，是機械前綴，交給 normalize_entry_head 補。
+        if head and head not in (k, bare, "ENEX" + bare, "ABC" + bare):
             problems.append(f"{k}: raw_entry 行首代碼是 {head!r}，與鍵值不符")
     return problems
+
+
+def normalize_entry_head(raw_entry, ident):
+    """行首若寫成裸代碼（`090426151`），機械補上站別前綴變成 `ABC090426151`。
+
+    🔴 2026-09-05（0905-0900）：`--entries` 允許裸鍵，agent 於是連 raw_entry 行首
+    也寫裸的，lint 一律判「行首代碼與 id 不符」→ 整批退回重寫。素材代碼是**這支
+    自己組出來的**（`"ABC" + story`），不是編輯判斷，沒有理由要 agent 再打一次。
+    ⛔ 只補前綴，其餘一個字不動；行首若是別的代碼（真的填錯）仍原樣留給 lint 擋。
+    """
+    if not raw_entry:
+        return raw_entry
+    first = raw_entry.split("\n", 1)[0]
+    lead = first[:len(first) - len(first.lstrip(PERIOD_MARKS + SEVERITY_MARKS + " "))]
+    rest = first[len(lead):]
+    head = rest.split(" ", 1)[0]
+    if not head or head == ident:
+        return raw_entry
+    for pre in ("ABC", "ENEX"):
+        if ident == pre + head:
+            return lead + ident + rest[len(head):] + raw_entry[len(first):]
+    return raw_entry
 
 
 _DUR_TAIL = re.compile(r"^\d{1,3}:\d{2}(?::\d{2})?$")
@@ -385,7 +412,7 @@ def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds,
                 why = "ffprobe 失敗"
             known_gaps.append(f"{code}: 時長抓不到（{why}）")
 
-        raw_entry = ent.get("raw_entry") or ""
+        raw_entry = normalize_entry_head(ent.get("raw_entry") or "", code)
         if not raw_entry:
             known_gaps.append(f"{code}: raw_entry 尚未填（三段式中文摘要是編輯判斷，這支不代寫，"
                                f"lint 會擋，交件前要補）")
@@ -465,7 +492,7 @@ def extract_abc(raw_rows, entries):
         src_text = ent.get("src_text") or ""
         if not src_text:
             known_gaps.append(f"{code}: 缺 src_text（ABC 全文要 agent 自己去 Detail 頁抓，這支不代抓）")
-        raw_entry = ent.get("raw_entry") or ""
+        raw_entry = normalize_entry_head(ent.get("raw_entry") or "", code)
         if not raw_entry:
             known_gaps.append(f"{code}: raw_entry 尚未填（三段式中文摘要是編輯判斷，這支不代寫，"
                                f"lint 會擋，交件前要補）")
@@ -500,6 +527,52 @@ def extract_abc(raw_rows, entries):
 EXTRACTORS = {"enex": extract_enex, "abc": extract_abc}
 
 
+def render_candidate_txt(doc):
+    """把候選 JSON 渲染成成對的 `.txt`（18 §2：兩份都要出）。
+
+    🔴 2026-09-05（0905-0900）：ABC 只出了 json，lint 吐「找不到成對的
+    0905-ABC.txt」；ENEX 0831 也踩過同一個。這份 txt 的內容**全部**來自
+    JSON 已有的欄位（分類三層＋素材行＋counts），沒有一個字需要 agent 再寫，
+    所以由這支直接產，⛔ 不要再叫人手抄一遍。
+
+    分組順序照素材第一次出現的順序，不套大分類權威排序——候選檔是交件用的
+    中繼檔，真正的排序在 render 那一關做（`13e`）。
+    """
+    c = doc.get("counts") or {}
+    head = (f'{doc.get("source", "")} 掃帶　窗 {doc.get("window_start", "")} – '
+            f'{doc.get("window_end", "")}　checkpoint {doc.get("checkpoint", "")}　（未入庫）')
+    line2 = (f'掃描 {c.get("掃描", 0)} 則／收錄 {c.get("收錄", 0)} 則／'
+             f'排除 {c.get("排除", 0)} 則')
+    if c.get("漏判"):
+        line2 += f'／漏判 {c["漏判"]} 則'
+    out = [head, line2]
+
+    groups = {}
+    for it in doc.get("items") or []:
+        cat = it.get("category") or {}
+        groups.setdefault(cat.get("大分類") or "未分類", {}) \
+              .setdefault(cat.get("中主題") or "未定中主題", []).append(it)
+    for big, mids in groups.items():
+        out.append("")
+        out.append(f"======{big}======")
+        for mid, rows in mids.items():
+            out.append("")
+            out.append(f"【{mid}】")
+            for it in rows:
+                sub = ((it.get("category") or {}).get("小分題") or "").strip()
+                if sub:
+                    out.append(sub)
+                out.append(it.get("raw_entry") or f'{it.get("id", "")}（raw_entry 未填）')
+
+    skipped = doc.get("skipped") or []
+    if skipped:
+        out.append("")
+        out.append("======排除======")
+        for sk in skipped:
+            out.append(f'{sk.get("id", "")}　{sk.get("why", "")}')
+    return "\n".join(out) + "\n"
+
+
 def main():
     ap = argparse.ArgumentParser(description="ENEX／ABC 候選檔擷取（機械欄位封裝）")
     ap.add_argument("site", choices=sorted(EXTRACTORS) + ["check-entries"],
@@ -510,6 +583,8 @@ def main():
     ap.add_argument("--window-start")
     ap.add_argument("--window-end")
     ap.add_argument("--out")
+    ap.add_argument("--no-txt", action="store_true",
+                    help="不要順手產成對的 .txt（預設會產，18 §2 要求兩份都出）")
     ap.add_argument("--probe-workers", type=int, default=PROBE_WORKERS,
                     help=f"ffprobe 併發數（預設 {PROBE_WORKERS}）。"
                          f"1 ＝退回序列；被 CDN 限流時調小")
@@ -570,6 +645,16 @@ def main():
         with open(args.out, "w", encoding="utf-8") as f:
             f.write(out)
         print(f"已寫入 {args.out}（收 {len(items)}、排除 {len(skipped)} 則）", file=sys.stderr)
+        # 18 §2：`.txt`（人看的）與 `-state.json`（機器讀的）兩份都要出。
+        # 內容全部來自上面這份 doc，沒有一個字要再判斷，所以順手產掉。
+        if args.out.endswith("-state.json") and not args.no_txt:
+            txt_path = args.out[:-len("-state.json")] + ".txt"
+            if os.path.exists(txt_path):
+                print(f"⚠️ {txt_path} 已存在，未覆寫（要重出請先改名或刪除）", file=sys.stderr)
+            else:
+                with open(txt_path, "w", encoding="utf-8") as f:
+                    f.write(render_candidate_txt(doc))
+                print(f"已寫入成對 {txt_path}", file=sys.stderr)
     else:
         print(out)
 

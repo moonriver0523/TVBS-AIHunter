@@ -411,6 +411,49 @@ check("check-entries 有掛進 CLI",
       "check-entries" in open(os.path.join(HERE, "s2_platform_extract.py"),
                               encoding="utf-8").read())
 
+# ── 2026-09-05（0905-0900 實錯）：行首裸代碼是機械前綴，不該退回重寫 ──────
+check("行首裸代碼自動補前綴（ABC）",
+      ex.normalize_entry_head("090426151 (X) \u258e摘要", "ABC090426151")
+      == "ABC090426151 (X) \u258e摘要")
+check("行首裸代碼自動補前綴（ENEX，前面還有標記）",
+      ex.normalize_entry_head("\u25b3 \U0001f534 929681 (X) \u258e摘要", "ENEX929681")
+      == "\u25b3 \U0001f534 ENEX929681 (X) \u258e摘要")
+check("已經帶前綴的不動",
+      ex.normalize_entry_head("ABC090426151 (X) \u258e摘要", "ABC090426151")
+      == "ABC090426151 (X) \u258e摘要")
+check("行首是別的代碼＝真的填錯，原樣留給 lint 擋",
+      ex.normalize_entry_head("AP123 (X) \u258e摘要", "ABC090426151")
+      == "AP123 (X) \u258e摘要")
+check("多行 raw_entry 只動第一行",
+      ex.normalize_entry_head("090426151 (X) \u258e摘要\n\u258eURL：http://a", "ABC090426151")
+      == "ABC090426151 (X) \u258e摘要\n\u258eURL：http://a")
+_b = dict(GOOD); _b["929213"] = dict(GOOD["929213"],
+                                     raw_entry="929213 (X) \u258e摘要\u258e無BITE。")
+check("預檢：裸行首代碼不再擋（交給 normalize_entry_head 補）",
+      ex.check_entries(_b) == [], str(ex.check_entries(_b)))
+
+# ── 2026-09-05：候選檔要出成對 .txt（18 §2）──────────────────────────
+_doc = {"source": "ABC", "window_start": "2026-09-05 07:00",
+        "window_end": "2026-09-05 09:25", "checkpoint": "0905-0900",
+        "counts": {"掃描": 3, "收錄": 2, "排除": 1, "漏判": 0},
+        "skipped": [{"id": "ABC090426999", "why": "體育"}],
+        "items": [
+            {"id": "ABC090426151", "raw_entry": "ABC090426151 (X) \u258e摘要",
+             "category": {"大分類": "社會", "中主題": "甲", "小分題": "子題一"}},
+            {"id": "ABC090426160", "raw_entry": "ABC090426160 (Y) \u258e摘要",
+             "category": {"大分類": "話題", "中主題": "乙", "小分題": ""}},
+        ]}
+_txt = ex.render_candidate_txt(_doc)
+check("成對 txt：檔頭有站別／窗／checkpoint",
+      "ABC 掃帶" in _txt and "0905-0900" in _txt and "（未入庫）" in _txt)
+check("成對 txt：counts 照抄", "掃描 3 則／收錄 2 則／排除 1 則" in _txt)
+check("成對 txt：大分類／中主題／小分題三層都在",
+      "======社會======" in _txt and "【甲】" in _txt and "子題一" in _txt)
+check("成對 txt：小分題空的不印空行", "\n\n ABC090426160" not in _txt)
+check("成對 txt：所有收錄 id 都在（lint 就是查這個）",
+      all(i["id"] in _txt for i in _doc["items"]))
+check("成對 txt：排除的也列出來，不靜默丟", "ABC090426999" in _txt and "體育" in _txt)
+
 shutil.rmtree(TMP, ignore_errors=True)
 
 print(f"\nPASS={sum(results)} FAIL={len(results) - sum(results)}")
