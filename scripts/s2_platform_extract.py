@@ -648,13 +648,15 @@ def main():
         # 18 §2：`.txt`（人看的）與 `-state.json`（機器讀的）兩份都要出。
         # 內容全部來自上面這份 doc，沒有一個字要再判斷，所以順手產掉。
         if args.out.endswith("-state.json") and not args.no_txt:
+            # ⛔ 不做「已存在就不覆寫」：正常流程就是 extract → lint ❌ → 改
+            # entries → 再 extract 一次（0905-0900 實際跑法）。json 每次都覆寫，
+            # txt 若留著舊的，lint 的成對檢查照樣過（id 都還在），
+            # 交件夾裡卻是過期的摘要——而 13h 已叫 agent 不要手抄，不會有人發現。
+            # txt 是 json 的衍生物，跟著一起重出才是對的。
             txt_path = args.out[:-len("-state.json")] + ".txt"
-            if os.path.exists(txt_path):
-                print(f"⚠️ {txt_path} 已存在，未覆寫（要重出請先改名或刪除）", file=sys.stderr)
-            else:
-                with open(txt_path, "w", encoding="utf-8") as f:
-                    f.write(render_candidate_txt(doc))
-                print(f"已寫入成對 {txt_path}", file=sys.stderr)
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(render_candidate_txt(doc))
+            print(f"已寫入成對 {txt_path}", file=sys.stderr)
     else:
         print(out)
 

@@ -454,6 +454,41 @@ check("成對 txt：所有收錄 id 都在（lint 就是查這個）",
       all(i["id"] in _txt for i in _doc["items"]))
 check("成對 txt：排除的也列出來，不靜默丟", "ABC090426999" in _txt and "體育" in _txt)
 
+# 🔴 重跑要覆寫：正常流程是 extract → lint ❌ → 改 entries → 再 extract。
+# txt 若留舊的，lint 的成對檢查照樣過（id 都在），交件夾卻是過期摘要。
+_p = os.path.join(TMP, "0905-ABC-state.json")
+_t = os.path.join(TMP, "0905-ABC.txt")
+_raw = [{"News Story": "090426151", "Slug": "A", "Length": "01:55"}]
+_ent1 = {"090426151": {"raw_entry": "090426151 (\u820a\u6a19\u984c) \u258e\u820a\u6458\u8981",
+                       "src_text": "x" * 60,
+                       "category": {"大分類": "社會", "中主題": "甲", "小分題": "子"}}}
+_ent2 = {"090426151": {"raw_entry": "090426151 (\u65b0\u6a19\u984c) \u258e\u65b0\u6458\u8981",
+                       "src_text": "x" * 60,
+                       "category": {"大分類": "社會", "中主題": "甲", "小分題": "子"}}}
+
+
+def _run_extract(entries):
+    ep = os.path.join(TMP, "e.json")
+    rp = os.path.join(TMP, "r.json")
+    json.dump(entries, open(ep, "w", encoding="utf-8"), ensure_ascii=False)
+    json.dump(_raw, open(rp, "w", encoding="utf-8"), ensure_ascii=False)
+    return subprocess.run(
+        [sys.executable, os.path.join(HERE, "s2_platform_extract.py"), "abc",
+         "--raw", rp, "--entries", ep, "--checkpoint", "0905-0900",
+         "--window-start", "2026-09-05 07:00", "--window-end", "2026-09-05 09:25",
+         "--out", _p],
+        capture_output=True, text=True, encoding="utf-8")
+
+
+_run_extract(_ent1)
+check("成對 txt 會自動產出", os.path.exists(_t))
+check("成對 txt 內容取自 entries", "舊標題" in open(_t, encoding="utf-8").read())
+_run_extract(_ent2)
+_body = open(_t, encoding="utf-8").read()
+check("重跑 extract 時成對 txt 跟著覆寫（⛔ 不留舊的）",
+      "新標題" in _body and "舊標題" not in _body)
+check("行首裸代碼在成對 txt 裡已補上前綴", "ABC090426151" in _body)
+
 shutil.rmtree(TMP, ignore_errors=True)
 
 print(f"\nPASS={sum(results)} FAIL={len(results) - sum(results)}")
