@@ -149,15 +149,18 @@ def _txt_row(idx, it):
 
 
 def derive_mmdd(state, file_path):
-    """`{MMDD}` 檔名前綴：優先狀態檔 `checkpoint`（如 `0906-2200`），
-    不成再退回 `--file` 檔名開頭 4 位數字；都沒有就明確失敗（不猜日期）。"""
-    ckpt = str(state.get("checkpoint") or "")
-    if re.match(r"^\d{4}", ckpt):
-        return ckpt[:4]
+    """`{MMDD}` 檔名前綴：**優先 `--file` 檔名開頭 4 位數字**（掃帶日，與狀態檔／
+    晚班交接 txt／`--base-date` 同一套慣例），不成再退回狀態檔 `checkpoint`
+    （如 `0906-2200`）；都沒有就明確失敗（不猜日期）。
+    2026-09-07 訂正：原本 checkpoint 優先，01:00 輪後同一份 0906 狀態檔會被命名成 0907，
+    隔天 0907 狀態檔又會覆蓋它，且 A33 依掃帶日找 `{MMDD}-CTV候選.json` 會找不到。"""
     base = os.path.basename(file_path)
     m = re.match(r"^(\d{4})", base)
     if m:
         return m.group(1)
+    ckpt = str(state.get("checkpoint") or "")
+    if re.match(r"^\d{4}", ckpt):
+        return ckpt[:4]
     return None
 
 
