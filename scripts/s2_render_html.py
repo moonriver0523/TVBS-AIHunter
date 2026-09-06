@@ -192,16 +192,21 @@ def collect(state, base_mmdd):
                     # ⚠️ 檔頭的「收錄外電共 N 則」**含 YT（算「其他」）、不含側錄**
                     #   （0802 訂案：一段連線常切成十幾個 TC，計入會把則數灌爆）。
                     #   網頁版的筆數必須照同一套語意，否則同一份資料兩個數字，編輯會困惑。
-                    kind = "side" if src.startswith("SIDE_") else ("url" if src == "YT" else "wire")
+                    item_id = it.get("id") or ""
+                    is_oth = item_id.startswith("OTH")
+                    kind = "side" if src.startswith("SIDE_") else ("url" if (src == "YT" or is_oth) else "wire")
                     # 顯示用來源代碼：source=="YT" 在狀態檔裡是解析器用的統一標記
                     # （見 s2_parse.py，跟 YNA/CNA 是不是網址素材無關），韓聯社／CNA
                     # 都會落在這裡，要另外從 id 前綴分出來才能對到 SRC_LABEL 顯示成
-                    # 「韓聯社」「CNA」，否則全部顯示成籠統的「網址素材」。
-                    item_id = it.get("id") or ""
+                    # 「韓聯社」「CNA」，否則全部顯示成籠統的「其他」。
+                    # OTH（common/17，2026-09-05）：source 欄位是實際平台名（X／QAB／IG…），
+                    # 五花八門不利篩選——一律併進同一個「其他」篩選鍵，不逐平台各開一個 chip。
                     if src == "YT" and item_id.startswith("YNA"):
                         display_src = "YNA"
                     elif src == "YT" and item_id.startswith("CNA"):
                         display_src = "CNA"
+                    elif src == "YT" or is_oth:
+                        display_src = "OTH"
                     else:
                         display_src = src
                     rows.append({
@@ -503,7 +508,7 @@ const ROWS = __ROWS__;
 const MARK_LABEL = {"△":"△ 晚班既有","▲":"▲ 無人值守","◇":"◇ 晨班",
                     "■":"■ 晨班（舊）","●":"● 晨班（舊）","◆":"◆ 早班"};
 // 篩選鈕上不要出現 SIDE_CNN 這種內部代碼——那是給程式看的，不是給編輯看的
-const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","YT":"網址素材",
+const SRC_LABEL = {"SIDE_CNN":"CNN側錄","SIDE_NHK":"NHK側錄","OTH":"其他",
                    "CNN_newsource":"NS","CNN":"NS",
                    "YNA":"韓聯社","CNA":"CNA","ENEX":"ENEX","ABC":"ABC"};
 const F = {src:new Set(), mark:new Set(), big:new Set(), alert:new Set(),
@@ -724,7 +729,7 @@ document.getElementById('reset').onclick=()=>{
 // 接著側錄 CNN／NHK，再來網址素材 YNA／CNA、交換平台 ENEX／ABC。名單外的排最後、按字母。
 // ⚠️ 不要改用 localeCompare 之類的「自動排序」——那會讓 AP 之外的來源
 //    隨著當天有沒有收到而跳來跳去，編輯每天看到的位置不一樣。
-const SRC_ORDER=['AP','RT','NS','SIDE_CNN','SIDE_NHK','YNA','CNA','ENEX','ABC'];
+const SRC_ORDER=['AP','RT','NS','SIDE_CNN','SIDE_NHK','YNA','CNA','ENEX','ABC','OTH'];
 chips('fsrc','src',uniq('src').sort((a,b)=>{
   const w=s=>{const i=SRC_ORDER.indexOf(s);return i<0?SRC_ORDER.length:i;};
   return w(a)-w(b) || a.localeCompare(b);
