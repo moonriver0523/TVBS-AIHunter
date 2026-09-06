@@ -4,11 +4,14 @@
 **規則全部在這裡，先讀完再動手，不要憑記憶：**
 
 ```
-E:\GitHub\TVBS-AIHunter\common\13b-S2-定時掃帶-v2省token.md   ← 找「分類收斂」那節
-E:\GitHub\TVBS-AIHunter\common\13-S2-定時掃帶.md              ← 三層骨架與小分題寫法
+E:\GitHub\TVBS-AIHunter\common\13c2-S2-定時掃帶-v3省token-下.md  ← §2a「分類收斂」規則（你的職責邊界）
+E:\GitHub\TVBS-AIHunter\common\13e-S2-素材行與分類規則.md        ← 三層骨架、庫存檔格式、小分題寫法
+E:\GitHub\TVBS-AIHunter\common\13f-S2-大分類與各站規則.md        ← 大分類清單、歸位通則、中主題命名候選判準、T/C
 ```
 
-⚠️ **本檔不重複規則內容**——規則天天在改，`13`／`13b` 才是最新的。
+⛔ 不要讀 `13b`——已退役，含被推翻的規則。
+
+⚠️ **本檔不重複規則內容**——規則天天在改，`13c2`／`13e`／`13f` 才是最新的。
 
 ## 🔴 你不寫狀態檔
 
@@ -22,7 +25,7 @@ lost update——對方的修改會靜靜消失、不報錯（0810 差點覆蓋 
 
 ```
 python scripts/s2_state.py list-topics --subs
-python scripts/s2_topic_review.py --file "…/{MMDD}-s2-state.json"
+python scripts/s2_topic_review.py --file "…/{MMDD}-s2-state.json" --compact
 python scripts/s2_topic_dedupe.py --file "…/{MMDD}-s2-state.json"
 ```
 
