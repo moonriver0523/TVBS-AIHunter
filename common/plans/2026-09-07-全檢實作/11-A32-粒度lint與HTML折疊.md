@@ -1,6 +1,6 @@
 # A32 中主題粒度 lint（只印）＋ HTML 巨格折疊 — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:test-driven-development。D17 裁決：**txt 一字不動**，只改 `s2_topic_review.py` 輸出與 `s2_render_html.py` 前端。獨立於 T12／A24，可平行。
+> **For agentic workers:** REQUIRED SUB-SKILL: superpowers:test-driven-development。D17 裁決：**txt 一字不動**，只改 `s2_topic_review.py` 輸出與 HTML 前端。**2026-09-07 範圍訂正**：正式線上頁是 `scripts/s2_matrix_template.html`（`s2_render_matrix.py` 使用），`s2_render_html.py` 僅在 `S2_HTML_LEGACY=1` 時使用；兩者都要做，驗收以 `s2_matrix_template.html` 為準。獨立於 T12／A24，可平行。
 
 **Goal:** ①`s2_topic_review.py` 新增「📐 粒度」區：巨格拆分候選、類別詞命名警告、孤兒合併候選；②網頁版中主題 ≥8 則預設折疊（🔴🟡🔖 與前 3 則展開，其餘「＋N 則」），中主題內 🔴→🟡→🔖→其餘排序（**只在 HTML**）。
 
@@ -36,7 +36,9 @@
 ### Task 3: HTML 折疊與排序
 
 **Files:**
-- Modify: `scripts/s2_render_html.py`（JS `draw()` L577–700 附近、`midText()`、CSS）
+- Modify: `scripts/s2_matrix_template.html`（正式頁，驗收目標；同等折疊／排序／複製全量）
+- Modify: `scripts/s2_render_html.py`（legacy；JS `draw()` L577–700 附近、`midText()`、CSS）
+- ⛔ 不動 `s2_render_html.py` 的 `collect()` 與 `SRC_LABEL`（另一條線在改）
 
 - [ ] **Step 1**: `draw()` 內每個中主題：`its` 依 `alert`（🔴>🟡）→`hilite`（🔖）→原序排序（**只在 DOM**，`rows` 順序不變，複製功能仍用原序）。
 - [ ] **Step 2**: `n>=8` 時，超過「alert/hilite 或前 3 則」的項目加 class `fold` 隱藏，中主題標題旁加按鈕 `＋N 則`／`收合`（沿用 `toggle()`）。側欄篩選啟動時（有任何 chip／搜尋）**不折疊**。
