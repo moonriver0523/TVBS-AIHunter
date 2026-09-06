@@ -402,6 +402,10 @@ main{padding:10px 16px 60px}
    使用者要的就是「 新加坡國慶 」這個形狀。⚠️ 只有網頁版這樣，TXT 版仍是【】。 */
 .mid .midtxt{display:inline-block;padding:3px 8px;border-radius:5px;font-size:13.5px;
      background:var(--midbg);color:var(--midfg)}
+/* A32 折疊鈕：跟旁邊的「複製」用同一顆 .act，但顏色調成次要色——
+   別讓「＋N 則」搶了「複製」的視覺份量，那顆才是編輯常用的（2026-09-07）。 */
+.mid button.foldbtn{color:var(--mut)}
+.mid button.foldbtn:hover{color:var(--accent);background:var(--urltint)}
 .sub{margin:10px 0 3px;font-size:13px;color:var(--mut)}  /* 空清單提示沿用這個灰 */
 /* 小分題反白：底色掛在文字本身（inline-block），不是整條橫幅——
    橫幅會跟上面的大分類底線打架，而且小分題常常很短，整條反白看起來像錯誤訊息。
@@ -569,6 +573,18 @@ function btn(label, fn){
   b.onclick=e=>{e.stopPropagation(); fn();}; return b;
 }
 
+// A32（2026-09-07，只影響這份 HTML 的 DOM 顯示，txt／狀態檔一字不動）：
+// 中主題 ≥8 則時，畫面預設只展開「🔴／🟡／⭐／🔖 標記過的則」與「跨小分題累計
+// 前 3 則沒標記的則」，其餘摺起來給一顆「＋N 則」鈕，避免一次刷出幾十則。
+// ⚠️ 這個 8 是姊妹常數，跟 s2_topic_review.py 的 BIG_N 意義相同（都是「巨格」
+// 判斷的則數門檻），但 Python／JS 兩邊各自維護一份——兩邊如果之後要調門檻，
+// 記得一起改，這裡不會自動同步。
+const BIG_MID_N=8;
+// 排序只影響「這顆中主題底下、這個小分題」自己的顯示順序（不跨小分題重排、
+// 不動 its 本身、複製功能永遠用 its 原序）——見 draw() 內 order 那行的註解。
+function _alertRank(r){ return r.alert==='🔴'?0:(r.alert==='🟡'?1:2); }
+function _hiliteRank(r){ return r.hilite==='🔖'?0:1; }
+
 function draw(){
   const list=document.getElementById('list'); list.innerHTML='';
   const rows=ROWS.filter(pass);
@@ -617,16 +633,24 @@ function draw(){
     bh.append(btn(`複製整格（${all.length}）`,()=>copy(blockText(big,mids),`已複製「${big}」${all.length} 則`)));
     list.append(bh);
     mids.forEach((subs,mid)=>{
+      const n=[...subs.values()].flat().filter(r=>r.kind!=='empty').length;
+      let mh=null;
       if(mid){
-        const mh=document.createElement('div'); mh.className='mid hd';
+        mh=document.createElement('div'); mh.className='mid hd';
         // 藍底白字色塊只包文字，複製鈕留在色塊外（跟小分題同一套做法）
         const mt=document.createElement('span'); mt.className='midtxt';
         mt.textContent=` ${mid} `;
         mh.append(mt);
-        const n=[...subs.values()].flat().filter(r=>r.kind!=='empty').length;
         mh.append(btn(`複製（${n}）`,()=>copy(midText(mid,subs),`已複製「${mid}」${n} 則`)));
         list.append(mh);
       }
+      // A32：中主題 ≥8 則、且側欄沒在篩（nf===0）才折——有篩選時使用者已經在
+      // 縮小範圍看，篩出來的東西不該再被二次隱藏（見 Global Constraints）。
+      // ⚠️ 必須有 `mid`（有標題色塊）才折：折起來的東西要有地方放「＋N 則」鈕，
+      // 否則像「(無中主題)」這種沒有標題列的異常分組會摺起來卻沒有展開的入口。
+      const foldOn = !!mh && n>=BIG_MID_N && nf===0;
+      let shown=0;              // 跨小分題累計「前 3 則」名額，只花在非標記則上
+      const foldedEls=[];       // 這個中主題被摺起來的 .item，供「＋N 則」鈕統一 toggle
       subs.forEach((its,sub)=>{
         if(its.length===1 && its[0].kind==='empty') return;   // 常駐標題今天 0 則：只留標題，不出空白項目
         if(sub){
@@ -637,11 +661,20 @@ function draw(){
           sh.append(btn(`複製（${its.length}）`,()=>copy(subText(sub,its),`已複製「${sub}」${its.length} 則`)));
           list.append(sh);
         }
+        // A32 排序：只在折疊有效時，重排「這個小分題自己」的顯示順序
+        // （🔴→🟡→🔖→其餘），讓標記過的則先出現在摺疊線以上。⚠️ 只建一份
+        // 給 DOM 用的副本——`its` 本身不動，subText()/midText() 複製時
+        // 仍照 s2_state.py 原始順序、複製全部（含被摺起來的）。
+        const order = foldOn
+          ? its.map((r,i)=>({r,i})).sort((a,b)=>
+              _alertRank(a.r)-_alertRank(b.r) || _hiliteRank(a.r)-_hiliteRank(b.r) || a.i-b.i
+            ).map(x=>x.r)
+          : its;
         // 側錄要「同段落同主題算一則、預設只顯示第一行、可展開」（2026-08-09 使用者訂）。
         // 連續且同來源的側錄併成一個區塊——資料裡本來就照 TC 順序排、也帶三層分類，
         // 所以「連續同類」直接就是一則連線報導，不必另外標記。
         const units=[];
-        its.forEach(r=>{
+        order.forEach(r=>{
           const last=units[units.length-1];
           if(r.kind==='side' && last && last.kind==='side' && last.rows[0].src===r.src){
             last.rows.push(r);
@@ -686,9 +719,28 @@ function draw(){
           // ⛔ 複製一律給**全文**，不是預覽——摺疊是顯示層的事，貼出去必須完整
           if(ktEl) d.append(mk,ktEl,tx,btn('複製',()=>copy(full,`已複製 ${first.id}`)));
           else d.append(mk,tx,btn('複製',()=>copy(full,`已複製 ${first.id}`)));
+          // A32 折疊：🔴／🟡／⭐／🔖 標記過的則永遠展開、不佔「前 3 則」名額；
+          // 沒標記的則跨小分題累計到第 3 則之後一律摺起來。
+          if(foldOn){
+            const marked = u.rows.some(r=>r.alert||r.hilite);
+            if(!marked && shown>=3){
+              d.classList.add('fold','off');
+              foldedEls.push(d);
+            }
+            if(!marked) shown++;
+          }
           list.append(d);
         });
       });
+      if(mh && foldedEls.length){
+        const b=btn(`＋${foldedEls.length} 則`, ()=>{
+          const willOpen = foldedEls[0].classList.contains('off');
+          foldedEls.forEach(el=>toggle(el));
+          b.textContent = willOpen ? '收合' : `＋${foldedEls.length} 則`;
+        });
+        b.classList.add('foldbtn');
+        mh.append(b);
+      }
     });
   });
   if(!rows.length){
@@ -698,6 +750,10 @@ function draw(){
 }
 
 // 以下三個組字串的函式，輸出格式與 txt 完全一致（小分題之間用 +）
+// A32 斷言：這三支永遠吃 `subs`／`its` 這兩個原始 Map／陣列（draw() 裡建 tree 時
+// push 進去、從未重排的那份），不是 draw() 為了顯示折疊而另外 sort 出來的 `order`
+// 副本——所以複製一律是**全部**（含被摺起來的）、**原始順序**（不受 A32 排序／
+// 折疊影響）。摺疊只碰 `d.classList`（單一 .item 的顯示狀態），不碰這裡的資料來源。
 function subText(sub,its){return (sub?sub+"\\n":"")+its.map(r=>r.text).join("\\n");}
 function midText(mid,subs){
   const parts=[...subs.entries()].map(([s,i])=>subText(s,i));
