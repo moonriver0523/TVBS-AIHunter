@@ -49,6 +49,19 @@ MIN_LEN = 2          # 一個字的名稱不比（「火」對上什麼都像）
 
 COMMON_AT = 4        # 同組裡出現 N 次以上的字＝沒有鑑別力（見 common_chars）
 
+# --- A32 粒度 lint（2026-09-07，只印不改，見 D-d 裁決） -------------------
+# 巨格：一個中主題底下小分題散得太開，暗示其實該拆成好幾個中主題。
+BIG_N = 8            # 則數門檻：太少則不值得拆
+SPREAD = 0.6         # k(小分題數)/n(則數) 達這個比例才算「散」
+# 命名警告：中主題名本身就是個大類別、等於沒有真的分類，容易變成什麼都塞的垃圾桶。
+# ⚠️ 上線前已用 0905／0906 實際狀態檔全部中主題名跑過一次核對——
+# 「動態」「議題」「新聞」「外交」等過寬詞刻意不收：那些是事件型結尾詞，
+# 【川普動態】【俄羅斯外交】【國際外交】之類已經在別處的巨格規則裡另抓，
+# 收進來只會對一堆正常事件型名稱誤報。
+CATEGORY_WORDS = ["體壇", "治安", "趣聞", "軟性", "政情", "司法案件", "民生", "生活服務"]
+ORPHAN_RATE_MAX = 0.30   # 孤兒率門檻（D-d）
+BIG_CELL_MAX = 5         # 巨格數門檻（D-d）
+
 
 def common_chars(names):
     """挑出同一組名稱裡「到處都有」的字——它們不能拿來當相似的證據。
@@ -111,6 +124,123 @@ def pairs_in(names):
     return sorted(out, reverse=True)
 
 
+def _connected_groups(names):
+    """把 names 依兩兩 `_lcs_len >= R._TOPIC_SIM_MIN` 連通分群。
+
+    純字面（union-find），跟 `order_topics` 判定「同族」用的門檻一致——
+    這裡只是「拆法建議」，agent 自己看群內是不是真的同一件事該拆開。
+    """
+    parent = {n: n for n in names}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            if R._lcs_len(names[i], names[j]) >= R._TOPIC_SIM_MIN:
+                ra, rb = find(names[i]), find(names[j])
+                if ra != rb:
+                    parent[ra] = rb
+
+    groups = OrderedDict()
+    for n in names:
+        groups.setdefault(find(n), []).append(n)
+    return list(groups.values())
+
+
+TOP_N_COMPACT = 5    # --compact 只印前 N 筆＋計數（見 Global Constraints）
+
+
+def granularity(tree, compact=False):
+    """A32：巨格拆分候選／類別詞命名警告／孤兒合併候選（只印，見模組頂端裁決）。
+
+    `compact`：`--compact` 模式下只印計數＋前 `TOP_N_COMPACT` 筆，且不印
+    「拆法建議」分群明細——那是給空窗慢慢看的，`--compact` 是給輪次省行數用的。
+    """
+    big_cands = []   # (big, mid, n, k, groups)
+    warns = []       # (big, mid, hit_words)
+    orphans = []     # (big, mid)
+    total_mids = 0
+
+    for big, mids in tree.items():
+        for mid, subs in mids.items():
+            total_mids += 1
+            n = sum(subs.values())
+            k = len(subs)
+            if n >= BIG_N and k and (k / n) >= SPREAD:
+                names = [s for s in subs if s] or list(subs)
+                big_cands.append((big, mid, n, k, _connected_groups(names)))
+            hit = [w for w in CATEGORY_WORDS if w in mid]
+            if hit:
+                warns.append((big, mid, hit))
+            if n == 1:
+                orphans.append((big, mid))
+
+    orphan_matches = []   # (mid, best_other)
+    orphan_alone = []     # mid
+    for big, mid in orphans:
+        best_m, best_s = None, 0
+        for om in tree[big]:
+            if om == mid:
+                continue
+            s = R._lcs_len(mid, om)
+            if s > best_s:
+                best_s, best_m = s, om
+        if best_m is not None and best_s >= R._TOPIC_SIM_MIN:
+            orphan_matches.append((mid, best_m))
+        else:
+            orphan_alone.append(mid)
+
+    print("\n" + "=" * 64)
+    print(f"📐 粒度（D-d 門檻：孤兒 <{ORPHAN_RATE_MAX:.0%}、巨格 <{BIG_CELL_MAX}）")
+
+    shown_big = big_cands[:TOP_N_COMPACT] if compact else big_cands
+    if big_cands:
+        more = f"（只列前 {TOP_N_COMPACT} 筆）" if compact and len(big_cands) > TOP_N_COMPACT else ""
+        print(f"📐 巨格候選 {len(big_cands)}：{more}")
+        for big, mid, n, k, groups in shown_big:
+            print(f"  {big}／【{mid}】{n} 則／{k} 個小分題（k/n={k / n:.0%}）")
+            if not compact:
+                group_str = "／".join(
+                    f"群{i + 1}{{{'、'.join(g)}}}" for i, g in enumerate(groups))
+                print(f"    拆法建議（純字面，自己判是否真的該拆）：{group_str}")
+    else:
+        print("📐 巨格候選 0（沒有中主題達門檻）")
+
+    shown_warns = warns[:TOP_N_COMPACT] if compact else warns
+    if warns:
+        more = f"（只列前 {TOP_N_COMPACT} 筆）" if compact and len(warns) > TOP_N_COMPACT else ""
+        print(f"⚠️ 命名警告 {len(warns)}（中主題名本身是類別詞，等於沒真的分類）：{more}")
+        for big, mid, hit in shown_warns:
+            print(f"  {big}／【{mid}】（含類別詞：{'、'.join(hit)}）")
+    else:
+        print("⚠️ 命名警告 0")
+
+    shown_matches = orphan_matches[:TOP_N_COMPACT] if compact else orphan_matches
+    if orphan_matches:
+        pairs = "、".join(f"【{m}】→【{o}】" for m, o in shown_matches)
+        more = f"（只列前 {TOP_N_COMPACT} 筆）" if compact and len(orphan_matches) > TOP_N_COMPACT else ""
+        # ⚠️ 每個孤兒各自找最佳對象，A↔B 互指會各算一筆——「N 筆」不等於
+        # 「N 個獨立合併動作」，讀者要自己看清單去重（2026-09-07 使用者要求標明）。
+        print(f"📌 孤兒合併候選 {len(orphan_matches)} 筆（含互指）：{more}{pairs}")
+    else:
+        print("📌 孤兒合併候選 0")
+    if orphan_alone:
+        shown_alone = orphan_alone[:TOP_N_COMPACT] if compact else orphan_alone
+        more = f"（只列前 {TOP_N_COMPACT} 筆）" if compact and len(orphan_alone) > TOP_N_COMPACT else ""
+        alone = "、".join(f"【{m}】" for m in shown_alone)
+        print(f"📌 孤兒無候選 {len(orphan_alone)}（同大分類沒有名稱相近的中主題）：{more}{alone}")
+
+    orphan_rate = (len(orphans) / total_mids) if total_mids else 0.0
+    mark_orphan = "✅" if orphan_rate < ORPHAN_RATE_MAX else "⚠️"
+    mark_big = "✅" if len(big_cands) < BIG_CELL_MAX else "⚠️"
+    print(f"今日孤兒率：{orphan_rate:.0%}（{len(orphans)}/{total_mids}）{mark_orphan}"
+          f"　巨格數：{len(big_cands)} {mark_big}")
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--file", default=R.DEFAULT_FILE)
@@ -168,6 +298,8 @@ def main():
     print("\n⚠️ 機械只認字面。**同義不同名（例如港譯「美斯」vs 台譯「梅西」）零共同字，"
           "永遠挑不出來**——整張表還是要自己看過一遍。")
     print("   合併方式：`s2_state.py set-category --pairs`，改完再 render。")
+
+    granularity(tree, compact=brief)
 
 
 if __name__ == "__main__":

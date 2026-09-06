@@ -100,6 +100,10 @@ body{display:grid;grid-template-columns:232px 1fr;
   font-size:15px;font-weight:800;letter-spacing:.05em;color:var(--big)}
 .mid{margin:14px 0 6px;font-weight:700}
 .midtxt{background:var(--midbg);color:var(--midfg);padding:2px 8px;border-radius:4px}
+/* A32 折疊鈕：跟旁邊的「複製」用同一顆 .act.cp（hover 才淡入），但顏色調成
+   次要色——別讓「＋N 則」搶了「複製」的視覺份量，那顆才是編輯常用的（2026-09-07）。 */
+.mid button.foldbtn{color:var(--mut)}
+.mid button.foldbtn:hover{color:var(--accent);background:var(--urltint)}
 .sub{margin:8px 0 4px}
 .subtxt{background:var(--subbg);padding:1px 8px;border-radius:4px;font-weight:600}
 .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -309,7 +313,19 @@ function btn(label, fn){
   const b=document.createElement("button"); b.className="act cp"; b.textContent=label;
   b.onclick=e=>{e.stopPropagation(); fn();}; return b;
 }
+// A32（2026-09-07，只影響這份 HTML 的 DOM 顯示，txt／狀態檔一字不動；正式線上
+// 頁面就是這份矩陣版——功能對等的另一份在 s2_render_html.py 的 legacy 版面）：
+// 中主題 ≥8 則時，畫面預設只展開「🔴／🟡／⭐／🔖 標記過的則」與「跨小分題累計
+// 前 3 則沒標記的則」，其餘摺起來給一顆「＋N 則」鈕。⚠️ 這個 8 是姊妹常數，
+// 跟 s2_topic_review.py 的 BIG_N、s2_render_html.py 的 BIG_MID_N 意義相同，
+// 三邊各自維護一份，門檻要調記得一起改。
+const BIG_MID_N=8;
+function _alertRank(r){ return r.alert==="🔴"?0:(r.alert==="🟡"?1:2); }
+function _hiliteRank(r){ return r.hilite==="🔖"?0:1; }
 function subText(sub,its){return (sub?sub+"\n":"")+its.map(r=>r.text).join("\n");}
+// A32 斷言：跟 legacy 版一樣，這兩支函式吃的是 renderList() 建 subMap/bySub 時
+// push 進去、從未重排的原始陣列，不是為了顯示折疊另外 sort 出來的副本——
+// 複製一律**全部**（含被摺起來的）、**原始順序**，不受 A32 排序／折疊影響。
 function midText(mid,subs){
   const parts=[...subs.entries()].map(([s,i])=>subText(s,i));
   return (mid?`【${mid}】\n`:"")+parts.join("\n+\n");
@@ -560,6 +576,11 @@ function renderList(){
       arr.forEach(r=>{ const k=r.sub||""; if(!subMap.has(k)) subMap.set(k,[]); subMap.get(k).push(r); });
       mh.append(btn(`複製（${arr.length}）`,()=>copy(midText(mid,subMap),`已複製「${mid}」${arr.length} 則`)));
       list.append(mh);
+      // A32：中主題 ≥8 則、且沒有任何篩選在跑（activeFilterCount()===0）才折——
+      // 有篩選時使用者已經在縮小範圍看，篩出來的東西不該再被二次隱藏。
+      const foldOn = arr.length>=BIG_MID_N && activeFilterCount()===0;
+      let shown=0;              // 跨小分題累計「前 3 則」名額，只花在非標記則上
+      const foldedEls=[];       // 這個中主題被摺起來的 .item，供「＋N 則」鈕統一 toggle
       const bySub=groupBy(arr, r=>r.sub||"");
       bySub.forEach((its, sub)=>{
         if(sub){
@@ -569,8 +590,39 @@ function renderList(){
           sh.append(btn(`複製（${its.length}）`,()=>copy(subText(sub,its),`已複製「${sub}」${its.length} 則`)));
           list.append(sh);
         }
-        its.forEach(r=>list.append(itemEl(r)));
+        // A32 排序：只在折疊有效時，重排「這個小分題自己」的顯示順序
+        // （🔴→🟡→🔖→原序），讓標記過的則先出現在摺疊線以上。⚠️ 只建一份
+        // 給 DOM 用的副本——`its` 本身不動，subText()/midText() 複製時
+        // 仍照原始順序、複製全部（含被摺起來的）。
+        const order = foldOn
+          ? its.map((r,i)=>({r,i})).sort((a,b)=>
+              _alertRank(a.r)-_alertRank(b.r) || _hiliteRank(a.r)-_hiliteRank(b.r) || a.i-b.i
+            ).map(x=>x.r)
+          : its;
+        order.forEach(r=>{
+          const el=itemEl(r);
+          // A32 折疊：🔴／🟡／⭐／🔖 標記過的則永遠展開、不佔「前 3 則」名額；
+          // 沒標記的則跨小分題累計到第 3 則之後一律摺起來。
+          if(foldOn){
+            const marked = !!(r.alert||r.hilite);
+            if(!marked && shown>=3){
+              el.classList.add("fold","off");
+              foldedEls.push(el);
+            }
+            if(!marked) shown++;
+          }
+          list.append(el);
+        });
       });
+      if(foldedEls.length){
+        const b=btn(`＋${foldedEls.length} 則`, ()=>{
+          const willOpen = foldedEls[0].classList.contains("off");
+          foldedEls.forEach(el=>el.classList.toggle("off"));
+          b.textContent = willOpen ? "收合" : `＋${foldedEls.length} 則`;
+        });
+        b.classList.add("foldbtn");
+        mh.append(b);
+      }
     });
   });
 }
