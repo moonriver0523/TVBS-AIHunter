@@ -4,7 +4,7 @@
 
 **Goal:** ①`s2_topic_review.py` 新增「📐 粒度」區：巨格拆分候選、類別詞命名警告、孤兒合併候選；②網頁版中主題 ≥8 則預設折疊（🔴🟡🔖 與前 3 則展開，其餘「＋N 則」），中主題內 🔴→🟡→🔖→其餘排序（**只在 HTML**）。
 
-**Architecture:** lint 全在 `collect()` 產出的 tree 上算，沿用 `R._lcs_len`；門檻常數放檔頭，D-d 裁決值：`BIG_N=8`、`SPREAD=0.6`、`CATEGORY_WORDS=[體壇,治安,趣聞,軟性,政情,司法案件,外交,民生,生活,動態,議題,新聞]`。HTML 只動 `draw()`／`midText()` 附近的 JS 與一段 CSS。
+**Architecture:** lint 全在 `collect()` 產出的 tree 上算，沿用 `R._lcs_len`；門檻常數放檔頭，D-d 裁決值：`BIG_N=8`、`SPREAD=0.6`、`CATEGORY_WORDS=[體壇,治安,趣聞,軟性,政情,司法案件,民生,生活服務]`（⚠️ 上線前用 0905／0906 狀態檔的全部中主題名跑一次，誤殺者刪；「動態」「議題」「新聞」「外交」等過寬詞**不收**——【川普動態】【俄羅斯外交】【國際外交】是事件型或已在巨格規則裡另抓）。HTML 只動 `draw()`／`midText()` 附近的 JS 與一段 CSS。
 
 ## Global Constraints
 

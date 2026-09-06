@@ -10,6 +10,7 @@
 - `(BITE)` 建議：`sb_count>0` 或 `has_sot` 或 entry 有 `▎BITE：`。
 - 🔖 負面：`fields.footage` 只含「受訪畫面／記者連線／站立播報／專訪／證詞」類詞而無實拍詞 → 警告（R19 判準）。
 - ⛔ **不是 collector**、不寫狀態檔、建議永遠是建議。
+- 若 09-A24 尚未上線（沒有 `from-raw` 提示表），Task 3 **跳過 Step 1**，只做 Step 2–4；09 上線後再補 Step 1。
 
 **Tech Stack:** Python；`s2_parse.parse_entry()` 取 fields。
 

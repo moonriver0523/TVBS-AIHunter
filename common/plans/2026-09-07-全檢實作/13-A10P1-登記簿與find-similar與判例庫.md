@@ -45,6 +45,7 @@
 ### Task 2: 實作
 - `cmd_add_batch`：`data` 可為 `{"entries":[…],"new_topics":{…}}`；先處理 `new_topics` → register；再逐則；未登記者 category 留空並列入「🆕 未登記」清單（不擋入庫，擋的是**沒 charter 就開名**）。
 - `cmd_list_topics --yesterday`：找 `Archive/{前一日}/{MMDD}-s2-state.json`，列 ≥3 則者。
+- 🔴 **其他產線過閘（沒這段不能上線）**：ENEX／ABC（`s2_platform_merge.py` 內部呼叫 `add-batch`＋`set-category`）、韓聯社／CNA／YouTube（`common/17` 交件檔）、側錄（`add-side`）的交件端**都沒有 `new_topics`**。處理：這三條路徑遇到未登記中主題 → **自動 register**，charter 取該中主題第一則 `fields.summary` 前 40 字，標 `auto:true`；收工清單（`13c2` §6）印「本輪自動登記 N 個中主題待補 charter：…」，由掃帶 agent 或使用者事後 `topic-register` 覆寫。`add-batch` 加 `--auto-register` 旗標給 merge 用；`add-side` 與 17 整併走同旗標。測試加一案：merge 路徑未登記名 → 自動登記、category 有寫、stdout 有「待補 charter」。
 - 空窗改 `13c2` §5a 建檔輪七項加第 8 項「跑 `list-topics --yesterday` 當今天命名參考」；`13f`「開新中主題前必跑 list-topics」段加「開新名必附 charter（batch `new_topics`）」；0805 三判準改寫為規則句（D-d 已裁）。
 - 測試 PASS；commit；1 正式輪：無「未登記」殘留到收工（agent 都補了 charter）。
 
