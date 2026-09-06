@@ -223,7 +223,9 @@ def granularity(tree, compact=False):
     if orphan_matches:
         pairs = "、".join(f"【{m}】→【{o}】" for m, o in shown_matches)
         more = f"（只列前 {TOP_N_COMPACT} 筆）" if compact and len(orphan_matches) > TOP_N_COMPACT else ""
-        print(f"📌 孤兒合併候選 {len(orphan_matches)}：{more}{pairs}")
+        # ⚠️ 每個孤兒各自找最佳對象，A↔B 互指會各算一筆——「N 筆」不等於
+        # 「N 個獨立合併動作」，讀者要自己看清單去重（2026-09-07 使用者要求標明）。
+        print(f"📌 孤兒合併候選 {len(orphan_matches)} 筆（含互指）：{more}{pairs}")
     else:
         print("📌 孤兒合併候選 0")
     if orphan_alone:
