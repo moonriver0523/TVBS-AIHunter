@@ -16,3 +16,19 @@
 | T6 | list-topics／topic_review 長輸出精簡模式 | 0100分類健檢 | 5 | ✅281d380 | 兩工具輸出過長，agent 拆 head/tail 各讀兩次（0100 輪合計 ~88s、4 次呼叫）；主題樹隨當日累積成長，晚輪更肥（2200 輪 list-topics 後接 270s 長思考）。加 --compact 或保證單次可讀。**先多收幾輪資料再動工**。0730 續證：list-topics --sub 後接 244s 長思考（隔夜主題樹 300+ 則最肥時段）、topic_review 又拆 head/tail 兩讀 |
 | T7 | 「set-category 一輪一次」規則改「一站一批」 | 0100分類健檢 | 6 | ✅281d380（13d §2） | 實際流程是邊掃邊分類（NS/AP/RT 各一批＋零星補刀），規則與流程天生打架，E4 每輪都「未達標」是量錯了尺。改規則同時更新 E4 驗收口徑（目標：一站一批＋補刀 ≤1）。**先多收幾輪資料再動工**。**2026-08-21（0821-1000）**：規則在、牙齒不在——該輪 `set-category` 8 次。執行層硬上限改立案 A23，本列保持 ✅ 不再重開 |
 
+---
+
+## 2026-09-07 全檢新增（[全檢](../2026-09-07-S2全面檢視與改進計畫.md)）
+
+### T12 `add-batch` 一次帶 `category`＋`tc`
+- **現況**：每站入庫要 `add-batch` → `set-category` → `set-tc` 三段，近 14 輪 `set-category` 2～9 次、`set-tc` 1～7 次／輪；13f 記載的兩個 T/C 時序陷阱（補標後要再 render、`set-top` 沒先下就吃前一輪配額）都是「分三段下」的副作用。
+- **做法**：batch.json 每則可帶 `category`（三鍵）與 `tc`（T/C 陣列），`add-batch` 一次寫入並沿用 `set-tc` 的字典驗證與 T_MAX；`set-category`／`set-tc` 保留給事後修補。`tc_calls` 配額桶對 `add-batch` 內建的 T/C 不計次（它本來就是為了擋逐則呼叫）。
+- **驗收**：比 normalized state mutation（同一批 raw 走舊三段 vs 新一段，狀態檔 diff 為零）；正式輪 `set-category`＋`set-tc` 合計 ≤2 次。
+- **依賴**：A24-3b from-raw 骨架（A31 pre-tagger 預填的欄位就是這兩個）。
+
+### T13 掃帶 prompt 瘦身
+- **現況**：`scripts/s2_scan_prompt.md` 約 22.5K 字元，開頭聲明「不重複規則內容」但重抄了登入態表、收工七步、🔴🟡 判準、D9 提醒、ENEX／ABC 輪次表；且含已過期敘述（「`s2_rules_check.py` 只檢查前六份」——0907 實跑已是八份）。`s2_scan_prompt_v7.md` 快照與 live 已分岔（09:00 刪除、ENEX／ABC 五輪只在 live）。
+- **做法**：prompt 只留本輪參數（checkpoint、掃哪些站、建檔輪判定、回報格式）與「本輪例外」，目標 ≤8K；規則內容刪除改指路；快照制改成切換前自動由 live 重取。
+- **順序**：T8（過期清理）→ T13 → A26 刀4 擴充，三者分開上、各隔一輪實跑。
+- ⚠️ 不承諾省錢：規則佔每次呼叫 context 約 1/3，本項主要價值是消除雙軌漂移。
+
