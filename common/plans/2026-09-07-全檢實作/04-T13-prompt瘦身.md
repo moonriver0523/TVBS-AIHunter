@@ -120,9 +120,10 @@
   ```bash
   cp scripts/s2_scan_prompt.md scripts/s2_scan_prompt_v7.md
   MSYS_NO_PATHCONV=1 pwsh -NoProfile -File scripts/s2_v7_switch.ps1
-  MSYS_NO_PATHCONV=1 pwsh -NoProfile -File scripts/s2_scan.ps1 -WhatIf 2>&1 | head -30   # 若 launcher 沒有 -WhatIf，改看 L421「以下是會送出的 prompt 前 400 字」那段的 dry-run 參數
+  MSYS_NO_PATHCONV=1 pwsh -NoProfile -File scripts/s2_scan.ps1 -DryRun -Checkpoint 0907-1700 2>&1 | tail -12
   ```
-  Expected: switch 全 OK；launcher 印出的 prompt 開頭是新版第 1 節。
+  （`-DryRun` 是 launcher 現有旗標，L417：印組出來的 claude 參數與 prompt 前 400 字後 `exit 0`，**不寫 `_輪次紀錄.txt`**、不啟動 agent；`-Checkpoint` 若 launcher 自算則省略。）
+  Expected: switch 全 OK；launcher 印出的 prompt 前 400 字是新版第 1、2 節，`{CHECKPOINT}` 已被代換。
 
 - [ ] **Step 6: commit**
   ```bash
