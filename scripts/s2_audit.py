@@ -212,6 +212,14 @@ def reconcile(st, mmdd, path, label):
     """清單 vs 狀態檔對帳：算出**窗內該收而未收**的。"""
     rows = parse_list_file(path)
     cur = set(st["items"])
+
+    def key_of(code):
+        # RT 清單快照是站方 Edit No（無前綴），狀態檔 key 帶 RT（R20，2026-09-07）——
+        # 原本直接拿快照的 code 去比對 cur，永遠比不中，把每一則已收的 RT 都
+        # 誤判成「窗內漏收」（假陽性）。只對 RT 補前綴，AP／NS 的 code 本來就
+        # 帶前綴，不受影響。
+        return code if (label != "RT" or str(code).startswith("RT")) else f"RT{code}"
+
     archive_glob = os.path.join(BASE, "Archive", "**", "[01]*-s2-state.json")
     prev = set()
     for f in glob.glob(archive_glob, recursive=True):
@@ -234,9 +242,9 @@ def reconcile(st, mmdd, path, label):
             fs_idx = _first_seen_index(st["items"], archive_glob)
             for code, t in rows:
                 ld = _list_mmdd(t)
-                fs = fs_idx.get(code)
+                fs = fs_idx.get(key_of(code))
                 if ld and fs and ld > fs:
-                    (cross_day_seen if code in cur else cross_day).add(code)
+                    (cross_day_seen if key_of(code) in cur else cross_day).add(code)
         elif rows:
             yel(f"{label} 清單快照沒有日期（純 HH:MM）——跳過跨日同號判斷，"
                 f"Edit No 撞號時可能靜默漏收；清單改存 `CODE|MM/DD/YYYY HH:MM` 才驗得出來")
@@ -271,10 +279,10 @@ def reconcile(st, mmdd, path, label):
     # 跨日撞號的 code 不算「前幾天收過」——當作沒被 prev 蓋到，重新走窗內判斷。
     effective_prev = prev - cross_day
 
-    got = [c for c, _t in rows if c in cur]
-    old_ = [c for c, _t in rows if c not in cur and c in effective_prev]
+    got = [c for c, _t in rows if key_of(c) in cur]
+    old_ = [c for c, _t in rows if key_of(c) not in cur and c in effective_prev]
     rest = [(c, t) for c, t in rows
-            if c not in cur and c not in effective_prev and c not in ruled]
+            if key_of(c) not in cur and c not in effective_prev and c not in ruled]
 
     def before_window(t):
         """0814-0100 實錯：窗判斷原本只看 HH:MM 不看日期——快照裡一則
@@ -290,7 +298,7 @@ def reconcile(st, mmdd, path, label):
                 or (norm(t) is not None and ws <= norm(t) <= we))]
     after = [(c, t) for c, t in rest if (c, t) not in inw]
 
-    hit = sorted(c for c in ruled if c in {x for x, _ in rows} and c not in cur)
+    hit = sorted(c for c in ruled if c in {x for x, _ in rows} and key_of(c) not in cur)
     print(f"     {label}：清單 {len(rows)}｜已收 {len(got)}｜前幾天收過 {len(old_)}"
           f"｜已裁定不收 {len(hit)}｜窗內未收 {len(inw)}｜窗外 {len(after)}")
     if hit:
