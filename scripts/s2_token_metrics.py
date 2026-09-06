@@ -61,9 +61,12 @@ RULE_FILES = {
     '13e': os.path.join('common', '13e-S2-素材行與分類規則.md'),
     '13f': os.path.join('common', '13f-S2-大分類與各站規則.md'),
     '13c2': os.path.join('common', '13c2-S2-定時掃帶-v3省token-下.md'),
-    '13b': os.path.join('common', '13b-S2-定時掃帶-v2省token.md'),
+    # '13b' 2026-08-24 退役，prompt 明文禁讀，不再量測。
     '13c': os.path.join('common', '13c-S2-定時掃帶-v3省token.md'),
     '13d': os.path.join('common', '13d-S2-定時掃帶-v4.md'),
+    # A26 五層合一上線後改成新檔名（見 05-A26 計畫 Task 6）。
+    '13g': os.path.join('common', '13g-S2-定時掃帶-v5-四站.md'),
+    '13h': os.path.join('common', '13h-S2-定時掃帶-v7-五站.md'),
 }
 
 
