@@ -138,5 +138,13 @@ with tempfile.TemporaryDirectory() as td:
     report("txt 第一行標記含🔴", "🔴" in lines[0].split("｜")[2], lines[0])
     report("txt 第二行標記含🟡", "🟡" in lines[1].split("｜")[2], lines[1])
 
+# derive_mmdd：檔名 stem 優先（掃帶日），checkpoint 只是備援（2026-09-07 訂正）
+report("mmdd 檔名優先於 checkpoint",
+       cc.derive_mmdd({"checkpoint": "0907-0100"}, "G:/x/0906-s2-state.json") == "0906")
+report("mmdd 無檔名日期時退回 checkpoint",
+       cc.derive_mmdd({"checkpoint": "0907-0100"}, "G:/x/state.json") == "0907")
+report("mmdd 兩者皆無→None",
+       cc.derive_mmdd({}, "G:/x/state.json") is None)
+
 print("\n" + ("全部通過" if ok else "有項目失敗"))
 sys.exit(0 if ok else 1)
