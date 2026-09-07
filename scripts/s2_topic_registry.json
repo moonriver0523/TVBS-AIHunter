@@ -1270,7 +1270,7 @@
     },
     {
       "name": "玻利維亞軍營爆炸",
-      "charter": "玻利維亞維亞查一處軍用彈藥庫週五發生大爆炸",
+      "charter": "玻利維亞維亞查軍事彈藥庫爆炸傷亡與後續調查",
       "aliases": [],
       "big": "社會",
       "tc": {
@@ -1278,7 +1278,7 @@
         "C": []
       },
       "first_seen": "2026-09-04",
-      "last_seen": "2026-09-05",
+      "last_seen": "2026-09-08",
       "resident": false
     },
     {
@@ -4095,6 +4095,241 @@
       "charter": "密西根州年度麥金諾大橋健行活動再度舉行，數千民眾徒步橫越大橋。",
       "aliases": [],
       "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "北卡總教練貝里奇克",
+      "charter": "北卡大教堂山分校美式足球總教練貝里奇克與總管人事調查追蹤",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "杭特拜登動向",
+      "charter": "前總統拜登之子杭特拜登相關政治／財務動態追蹤",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "暖新聞",
+      "charter": "軟性溫馨、勵志或感人小品新聞",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "墨西哥治安",
+      "charter": "墨西哥刑案與治安事件追蹤",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "名人動態(加密貨幣)",
+      "charter": "名人涉及加密貨幣／迷因幣的動態",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "美西風暴",
+      "charter": "美國西部／中西部強風暴災情與清理",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "美國治安案件",
+      "charter": "美國一般刑案與治安事件追蹤",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "喬治亞癌童驚喜",
+      "charter": "喬治亞州罹癌少年獲得驚喜活動的溫馨報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "巴拿馬運河首位女性掌舵人",
+      "charter": "巴拿馬運河首位女性總管就任與相關政策方向",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "保羅格林葛拉斯回顧",
+      "charter": "英國導演保羅格林葛拉斯生涯作品回顧訪談",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "伊朗油價上調",
+      "charter": "伊朗國內油價調漲與民生經濟衝擊",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "巴西大選前哨",
+      "charter": "巴西2026大選前候選人造勢與政情動態",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "皇室動態",
+      "charter": "英國王室成員動態與相關社會反應",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "美國緝毒行動",
+      "charter": "美軍在拉美海域執行緝毒攔截行動",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "陸電影文化外交",
+      "charter": "中國大陸電影與文化輸出相關外交敘事報導",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "墨西哥環保抗議",
+      "charter": "墨西哥各地環保／工業開發爭議與抗議活動",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "塞爾維亞戰犯爭議",
+      "charter": "塞爾維亞境內姆拉迪奇等戰犯相關輿論與紀念爭議",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "英國反移民示威",
+      "charter": "英國政府擬將尋求庇護者移入東蘇塞克斯郡克羅堡一處前軍事訓練營收容，當地居民團體「",
+      "aliases": [],
+      "big": "社會",
       "tc": {
         "T": [],
         "C": []
