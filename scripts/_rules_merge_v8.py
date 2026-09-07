@@ -69,6 +69,36 @@ body_a = block(
     sl(FH, 37, 94),      # V7-1 掃描順序與輪次（ABC，五站終版，含 --- 收尾）
     sl(FC, 63, 433),     # §1 詳情頁擷取 ... §1a ... §4 守門（13c 原本body其餘全部）
 )
+
+# ── team-lead 2026-09-07 15:15 前補丁 ①：把 13d §8 的具體 NS body 填回
+#    13c(上) 原本的佔位註解，消除已知殘留缺口（0814 實錯：agent 自拼 body 打出
+#    400，白燒 6-8 分）。取代對照表表二 B 項一併更新為「已補完」。
+_NS_BODY_PLACEHOLDER = "  const body = { /* request body */ };"
+_NS_BODY_CONCRETE = (
+    "  // 2026-09-07 V8 自 13d §8 合入；配方以此為準，⛔ 禁翻 investigation-logs\n"
+    "  const body = {\n"
+    "    bundlesOnly: false, date: new Date().toISOString(),\n"
+    "    facets: {contentType:[], videoTypes:[], categories:[], digitalCategories:[], videoFormats:[]},\n"
+    "    filters: {contentType:{}, videoTypes:{}, categories:{}, digitalCategories:{}, videoFormats:{}},\n"
+    "    from: 0, language: ['en','es'], scriptOnly: false, size: 30,\n"
+    "    sort: {order: 'ascending', type: 'relevancyDate'}, term: null\n"
+    "  };"
+)
+assert _NS_BODY_PLACEHOLDER in body_a, "NS body 佔位註解找不到，13c 原文結構可能變了"
+body_a = body_a.replace(_NS_BODY_PLACEHOLDER, _NS_BODY_CONCRETE)
+
+# ── 補丁 ②：等量把 AP 範本前的純說明／歷史脈絡段落搬去歸檔，抵消補丁①加的
+#    字元，讓估計載入量回到 < 28,000。這兩段只解釋「為什麼要改範本」，不影響
+#    「照抄即用範本」本身的可執行性——搬走不影響執行正確性。
+#    （第一次只搬清單範本那段，估計載入量 27,906，離 28,000 只剩 94、margin
+#    太薄，追加搬第二段「AP 詳情查詢」前的同性質說明，拉開安全margin。）
+_AP_HISTORY_PARA = sl(FC, 208, 213)
+_AP_HISTORY_PARA2 = sl(FC, 262, 266)
+assert _AP_HISTORY_PARA in body_a, "AP 歷史說明段落找不到，13c 原文結構可能變了"
+assert _AP_HISTORY_PARA2 in body_a, "AP 詳情歷史說明段落找不到，13c 原文結構可能變了"
+body_a = body_a.replace(_AP_HISTORY_PARA + "\n", "")
+body_a = body_a.replace(_AP_HISTORY_PARA2 + "\n", "")
+
 write(
     "13c-S2-執行版-上-入口與三站擷取.md",
     "13c　S2 定時掃帶 V8（執行版）— 上：入口與三站擷取",
@@ -175,8 +205,21 @@ f13f_table_v8 = f13f_table_v8.replace(
     "> 原規劃放 `13c2` §6，2026-09-07 自 `13f` 尾遷入本檔（V8 五層合一）。",
 )
 
+body_e_raw = sl(FC2, 277, 459)   # §3/§3b/§3a/§4/§4c/§4b/§5/§5c/§5a
+
+# ── team-lead 2026-09-07 補丁 ③：§5 第 11 條內嵌的「規則載入」示例仍寫舊 8
+#    個代號（13d/13g/13h），這只是說明性例句，加一句訂正即可，不動原例句本身。
+_STALE_EXAMPLE_ANCHOR = "**少任何一個就不要開始掃帶**，先補讀完。"
+_STALE_EXAMPLE_NOTE = (
+    "**少任何一個就不要開始掃帶**，先補讀完。\n"
+    "    （2026-09-07 訂正：上面例句仍是 V8 之前的 8 個舊代號，現為 13／13e／13f／"
+    "13c／13c1／13c1b／13c2／13c3——例句本身不改，示範格式不變，代號依上表為準）"
+)
+assert _STALE_EXAMPLE_ANCHOR in body_e_raw, "§5 第 11 條示例錨點找不到，13c2 原文結構可能變了"
+body_e_raw = body_e_raw.replace(_STALE_EXAMPLE_ANCHOR, _STALE_EXAMPLE_NOTE)
+
 body_e = block(
-    sl(FC2, 277, 459),   # §3/§3b/§3a/§4/§4c/§4b/§5/§5c/§5a
+    body_e_raw,
     sl(FD, 331, 344),    # 13d §10 工具層防護（與 §5 防卡設計同主題，字元預算從 13c2 移來）
     sl(FD, 345, 483),    # 13d §11 hook 補洞（同上）
     f13f_table_v8,
@@ -234,6 +277,20 @@ archive_parts.append(sl(FH, 1, 12))
 archive_parts.append(divider("13c", "0（三站掃描順序小節）", "被 13g V5-1／13h V7-1 取代，V8 併入 13c（上）"))
 archive_parts.append(sl(FC, 53, 61))
 
+archive_parts.append(divider(
+    "13c", "1a-2（AP 清單範本前的 2026-08-21 訂正歷史說明段落）",
+    "team-lead 2026-09-07 15:15 前補丁②：純解釋「為什麼要改範本」的歷史脈絡，"
+    "不影響下方「照抄即用範本」的可執行性，等量搬離抵消補丁①（NS body 填空）"
+    "加的字元，讓 13c（上）估計載入量回到 28,000 以下",
+))
+archive_parts.append(_AP_HISTORY_PARA)
+
+archive_parts.append(divider(
+    "13c", "1a-2（AP 詳情範本前的 2026-08-21 訂正歷史說明段落）",
+    "同上，第一段搬完 margin 仍太薄（27,906／28,000），追加搬這段拉開安全margin",
+))
+archive_parts.append(_AP_HISTORY_PARA2)
+
 archive_parts.append(divider("13g", "V5-0", "取代宣告本身已執行完畢（13c §0 三站句已於 2026-09-07 訂正刪除線），本段存查"))
 archive_parts.append(sl(FG, 14, 37))
 
@@ -250,12 +307,18 @@ archive_parts.append(sl(FD, 233, 270))
 archive_parts.append(divider(
     "13d", "8（開工只精讀13c＋本檔；NS body配方）",
     "上半「開工只精讀13c＋本檔」已隨 T13／V8 的必讀清單改版而失效（現行 prompt 讀 8→9 份，"
-    "非「只讀13c」）；下半 NS body 具體範例與 13c 現行「⛔ token不離開頁面JS」小節的佔位"
-    "註解 `{ /* request body */ }` 功能重疊——**已知殘留缺口**：13c 正文的 body 仍是佔位"
-    "註解，真正的具體 body 就在本段，本次基於安全（不做行內編輯）與 deadline 沒有把兩者"
-    "合併，留待下次整併時把本段的具體 body 補進 13c 該處佔位",
+    "非「只讀13c」），整段存查。下半 NS body 具體範例：team-lead 2026-09-07 15:15 前"
+    "補丁①已把這段具體 body（`bundlesOnly`…`term: null` 那 7 行）逐字填回 13c（上）"
+    "原本的佔位處，缺口已補；本段仍整段存查供對照，13c（上）正文為現行準版",
 ))
 archive_parts.append(sl(FD, 271, 315))
+
+archive_parts.append(divider(
+    "13c", "3（NS）（原始佔位註解，補丁①填空前的舊文）",
+    "team-lead 2026-09-07 15:15 前補丁①：`{ /* request body */ }` 這行佔位註解已被"
+    "上面 13d §8 的具體 body 取代，原句逐字存查於此，滿足守恆缺 0",
+))
+archive_parts.append(_NS_BODY_PLACEHOLDER)
 
 archive_parts.append(divider("13g", "V5-6（上線前檢查表）", "給執行切換的人看，非掃帶 agent 必讀，本段存查"))
 archive_parts.append(sl(FG, 431, 451))
