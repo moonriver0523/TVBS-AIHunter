@@ -103,8 +103,8 @@ function Show-Status {
     }
     Write-Host ''
     Write-Host "V7 掃描順序：NS → AP → RT → ENEX → ABC（13h V7-1）"
-    Write-Host "ENEX 輪次（13g V5-1）：04:30／07:00／17:00／22:00"
-    Write-Host "ABC  輪次（13h V7-1）：04:30／07:00／09:00／17:00／22:00（2026-09-05 使用者裁示）"
+    Write-Host "ENEX 輪次（13g V5-1）：01:00／04:30／07:00／17:00／22:00"
+    Write-Host "ABC  輪次（13h V7-1）：同 ENEX 五輪（2026-09-05 使用者裁示，09:00 已刪）"
     if ($ver -eq 'V7') {
         Write-Host "⛔ V7 生效中：不要跑 s2_v5_switch.ps1（它會把 V7 誤判成 V4 並蓋掉）。" -ForegroundColor Yellow
     }
@@ -156,7 +156,7 @@ if ($On) {
     Write-Host "   備份：$bak（-Off 會用它還原）"
     Write-Host "   ⛔ 從現在起不要跑 s2_v5_switch.ps1（會把 V7 誤判成 V4 並蓋掉）。"
     Write-Host "   ⚠️ 上線後才做的收尾（13h V7-6）：18 §0 ABC 段拆掉、13g V5-0 改指向 13h、"
-    Write-Host "      s2_rules_check 加 13g＋13h、s2_token_metrics 加 enex／abc 桶、A9 帳本回寫。"
+    Write-Host "      s2_token_metrics 加 enex／abc 桶、A9 帳本回寫。（s2_rules_check 加 13g＋13h 已完成，2026-09-07）"
     exit 0
 }
 
