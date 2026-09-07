@@ -2932,6 +2932,342 @@
       "first_seen": "2026-09-05",
       "last_seen": "2026-09-06",
       "resident": false
+    },
+    {
+      "name": "厄瓜多雅莫節",
+      "charter": "厄瓜多歐塔瓦洛第73屆雅莫節遊行開幕，105支隊伍、1500名舞者參與，秘魯、墨",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "歐洲毒品查緝",
+      "charter": "義大利財政警察與海關人員在利佛諾港從水果貨櫃夾層查獲53公斤高純度古柯鹼，市值約",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "西班牙旅遊反彈",
+      "charter": "瓦倫西亞馬爾瓦羅薩海灘居民延續數十年傳統辦露天聚餐，今年更演變為抗議行動，反對過",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "川普愛爾蘭行前部署",
+      "charter": "4架美軍CH-47支努幹直升機進駐都柏林，為川普總統週末訪愛爾蘭行程先行部署，川",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "日本颱風豪雨",
+      "charter": "颱風殘餘水氣自週日起在日本多地引發嚴重淹水，福島縣一名婦人受困車內溺斃，多市一度",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "格陵蘭爭議",
+      "charter": "歐盟執委會主席馮德萊恩在格陵蘭努克記者會宣布，歐盟將提供2億歐元夥伴關係資金，聚",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "歐洲產業趣聞",
+      "charter": "斯洛維尼亞年輕釀酒師多門·亞烏尼克騎機車穿梭陡坡葡萄園運送葡萄，結合興趣與工作，",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "歐洲燃油補貼",
+      "charter": "斯洛維尼亞基礎建設部擬立法補貼農民與貨運業者因油價飆漲、乾旱歉收增加的燃料成本，",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "歐冠",
+      "charter": "皇家馬德里於瓦爾德貝巴斯基地備戰週二主場歐冠揭幕戰迎戰國際米蘭，盼一掃週五對貝提",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "歐洲民間急救",
+      "charter": "斯洛維尼亞普拉尼察舉辦模擬車禍大型演習，全國約1萬名志願「第一線救援員」受訓後可",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "印尼火山活動",
+      "charter": "印尼巽他海峽喀拉喀托之子火山週五深夜噴發，噴出大量火山灰，當局籲民眾與遊客勿靠近",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "歐洲軍事招募",
+      "charter": "中歐防務合作倡議六國參謀總長齊聚斯洛維尼亞維帕瓦，交流吸引年輕人從軍經驗，斯國參",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "歐洲夏季高溫紀錄",
+      "charter": "斯洛維尼亞今夏創下自1970年以來最熱紀錄，柯佩爾市連續34天熱浪、盧比安納連續",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "荷蘭捐精爭議",
+      "charter": "荷蘭捐精者西蒙自稱已有199名親生子女，「捐贈者子女基金會」憂實際數字恐更高，多",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "英國移民爭議",
+      "charter": "英國漢普夏郡警政與犯罪首長唐娜·瓊斯受訪指出，政府在移民管理標準上存在「系統性失",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "英國車廠裁員",
+      "charter": "英國豪華車廠捷豹路虎宣布未來兩年將裁減4000個職位，盼節省17億英鎊成本，稱汽",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "AI衝擊影視產業",
+      "charter": "法國南部舉行影視高峰會，迪士尼、Netflix、派拉蒙、Google、TikTo",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "邁阿密機場貨機意外",
+      "charter": "邁阿密國際機場亞馬遜貨機衝出跑道釀5死意外持續調查，機身以128英里時速偏出跑道",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美國小姐選美",
+      "charter": "德州小姐芮根·哈索爾奪得第99屆美國小姐后冠，接受GMA專訪分享奪冠當下心情與「",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "911事件25週年",
+      "charter": "值此911事件25週年前夕，FBI副局長警告本土激進化恐怖威脅未曾消退，反而因社",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美國醫療暖新聞",
+      "charter": "美國俄亥俄州2歲女童米莉透過嬰兒監視器夜視功能異常反光，被媽媽發現罹患罕見視網膜",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美國產後精神疾病命案",
+      "charter": "麻州母親琳賽·克蘭西涉勒斃3名親生子女案，陪審團因是否採信「產後精神病」抗辯僵持",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "期中選舉前哨",
+      "charter": "目擊者還原俄亥俄州民主黨州長候選人艾克頓遭持械男子帕特里克·哈瓦斯衝撞經過，嫌犯",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美國槍枝安全",
+      "charter": "田納西州納許維爾一顆流彈貫穿好市多鄰牆，擊中店內一名55歲員工頭部致其死亡，警方",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": false,
+      "auto": true
     }
   ]
 }
