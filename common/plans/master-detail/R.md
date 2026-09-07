@@ -194,3 +194,15 @@ R17 的立案前提「`s2_topic_review.py`／`s2_audit.py` 0 輪執行」**是�
 
 ### R28 `s2_audit.py` 殘留 `13b` 指向＋快照檔頭算進窗外（2026-09-07）
 見 MASTER 列。Ⓐ 印出「窗外 10 則：# 來源：rt_list_2000c.json／# 殼型：…」即為證據；`_audit_rt_2000.txt` 前 5 行是 `#` 註解。
+
+
+### 0907-2200 三輪觀察收尾（監督者記錄）
+V8 五層合一＋瘦身 prompt 三輪（1700／2000／2200）全過：規則載入 8 碼齊、end_turn、無 traceback、T/C 覆蓋 100%、對帳零漏收。T13／A26／A32 標 ✅。
+
+22:00 輪非阻斷雜訊（都自行恢復）：NS 一次 evaluate「document does not match」；RT 分頁 fetch 被 datadog agent 擋（`Failed to fetch`）；ENEX 候選檔 validate 抓 11 項「▎BITE： 缺 (BITE)」agent 修完才 merge；ABC map 檔殼鍵不認（agent 改用標準子指令）；D9 hook 攔臨時 python 兩次；RT0804 API 補查回 HTML（稿仍未到，維持 pending）；收工續期 ABC 時 `browser_wait_for('SearchMedia')` 5 秒逾時，之後仍正常 close。
+
+⚠️ 檢查點時本機有 8 個 `.playwright-daily-profile` 的 chrome 程序（20:52 起），**不是 S2**（S2 用 v4 profile），未動；S2 profile 零殘留。
+
+**R25 桶鍵問題（新觀察，併入 R25 修法）**：`tc_rejected`／`tc_calls` 的鍵取自狀態檔 `checkpoint`，而 R23 定案 set-top 在收工才下，於是整輪的退回與 set-tc 次數都記在上一輪鍵下（22:00 輪 78 則退回記在 `0907-2000`、set-tc 記到 `0907-2000` 6/8）。修 R25 時順手：`s2_scan.ps1` 帶 `-Checkpoint` 時把本輪鍵寫進環境變數或狀態檔 `round`，桶鍵改讀它；或在 13c3 收工清單把「set-top」提到 add-batch 前（會與 R23 裁決相抵，需使用者裁）。
+
+**P1b 自動登記品質（供 P1d 判例庫）**：24 題全部 `auto:true`，命名有「歐洲產業趣聞」「歐洲民間急救」「美國醫療暖新聞」這類收容式名稱，charter 是首則摘要 40 字截斷，不是主題定義。P1b-2 上線後三站主線也會走這條，建議 P1d 先訂「收容式名稱禁用詞」再放行。
