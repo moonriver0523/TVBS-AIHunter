@@ -8,6 +8,7 @@ agent 一律透過本腳本讀寫狀態，不直接開 JSON。
 （可用 --file 覆蓋；找不到時自動建立空狀態。）
 """
 import argparse
+import collections
 import json
 import os
 import re
@@ -516,6 +517,51 @@ def report_fmt(fmt):
     print("\n".join("  " + x for x in fmt))
 
 
+def _bucket_key(top, entries=None):
+    """`tc_rejected`／`tc_calls` 的桶鍵（R25 附帶，2026-09-07）。
+
+    原本只讀頂層 `checkpoint`，但 R23 定案 `set-top checkpoint` 是收工才下，
+    整輪的退回與 set-tc 次數全記到**上一輪**的桶（0907-2200 的 78 則退回記在
+    `0907-2000`、set-tc 也先撞上一輪的牆）。優先序：
+      ① 環境變數 `S2_CHECKPOINT`（launcher 每輪帶進來，人工補跑可自己 export）
+      ② batch 每則自帶的 `checkpoint`（add-batch 專用，全批同一輪）
+      ③ 頂層 `checkpoint`（舊行為，人工零散呼叫時仍成立）
+    """
+    env = (os.environ.get("S2_CHECKPOINT") or "").strip()
+    if env:
+        return env
+    if entries:
+        cps = [str(e.get("checkpoint") or "") for e in entries if isinstance(e, dict)]
+        cps = [c for c in cps if CHECKPOINT_RE.match(c)]
+        if cps:
+            return collections.Counter(cps).most_common(1)[0][0]
+    return top.get("checkpoint") or ""
+
+
+def _cat_as_str(cat):
+    """batch 的 `category` 兩種形狀都收（R25，2026-09-07）：
+    字串「大/中[/小]」原樣；物件 `{"大分類","中主題"[,"小分題"]}`（狀態檔 schema，
+    13c2 §2 教的就是這個形狀，agent 照抄很合理）→ 轉成字串再進 `_set_one_category`。
+    物件缺大分類或中主題 → 回空字串，下游照「cat 需為…」退回。
+    """
+    if isinstance(cat, dict):
+        parts = [str(cat.get(k) or "").strip() for k in ("大分類", "中主題", "小分題")]
+        if not (parts[0] and parts[1]):
+            return ""
+        return "/".join(p for p in parts if p)
+    return str(cat)
+
+
+def _tc_as_str(tc):
+    """batch 的 `tc` 同理：字串「T1,T2/C1」原樣；物件 `{"T":[…],"C":[…]}` → 字串。"""
+    if isinstance(tc, dict):
+        t, c = tc.get("T") or [], tc.get("C") or []
+        t = [t] if isinstance(t, str) else list(t)
+        c = [c] if isinstance(c, str) else list(c)
+        return ",".join(str(x) for x in t) + "/" + ",".join(str(x) for x in c)
+    return str(tc)
+
+
 def cmd_add_batch(state, args):
     """整批新增。撞已存在 id 或格式錯的單筆一律跳過並回報，不中斷；只在結尾 save 一次。"""
     try:
@@ -539,6 +585,7 @@ def cmd_add_batch(state, args):
         print("ERROR: --entries 需為 JSON 陣列（或含 entries 陣列的物件）")
         sys.exit(2)
     added, skipped, notes, flagged, fmt = [], [], [], [], []
+    refilled = []  # P1b-2：已在庫但沒分類、這批帶了分類 → 只補分類（閘門救援路徑）
     no_src = []   # R11 防呆（2026-08-13）：漏帶 src_text 要當場喊，不能等稽核翻舊帳
     hints = []    # A31：機械 T/C 建議、涉臺提醒——純提示，不影響入庫、不必回報
     # T12（2026-09-07）：batch 每則可帶 `category`／`tc`，一次入庫＋分類＋標 T/C，
@@ -602,7 +649,24 @@ def cmd_add_batch(state, args):
             continue
         i = norm_id(str(e["id"]))
         if i in state["items"]:
-            skipped.append(f"{i}: 已存在（要更新請用 update-entry）")
+            # P1b-2 救援路徑（2026-09-07）：閘門把 category 留空的那批，agent 照 🆕
+            # 提示補上 new_topics 重送時素材已在庫——若只回「已存在」，🆕 教的做法
+            # 永遠做不到，agent 會在這裡打轉。已在庫且**沒有分類**、這筆又帶了
+            # category → 只補分類／T-C（同樣過閘門），其餘欄位一律不動。
+            _cur = state["items"][i] or {}
+            _cur_tc = _cur.get("tc") or {}
+            if e.get("category") and not _cur.get("category"):
+                err = _set_one_category(state, i, _cat_as_str(e["category"]), strict=False,
+                                        quiet=True, registry=reg, topic_mode=topic_mode,
+                                        gated=gated, auto_registered=auto_registered)
+                if err is not GATED:
+                    (tc_bad if err else cat_done).append(err or i)
+                if e.get("tc") and not (_cur_tc.get("T") or _cur_tc.get("C")):
+                    err = _set_one_tc(state, i, _tc_as_str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
+                    (tc_bad if err else tc_done).append(err or i)
+                refilled.append(i)
+            else:
+                skipped.append(f"{i}: 已存在（要更新請用 update-entry）")
             continue
         # 🎯 BITE 機械兜底：**照收，把疑慮寫進 needs_review**（2026-08-05 訂正，
         # 原本是 continue 拒收——那會靜默丟掉素材，理由見 bite_doubt()）。
@@ -644,7 +708,7 @@ def cmd_add_batch(state, args):
         # A10 P1b：新題閘門擋下（`GATED`）**不是**格式錯誤，不進 tc_bad
         # 那個「退回」桶——素材已入庫，只是分類欄暫時不寫，見 `gated` 彙整。
         if e.get("category"):
-            err = _set_one_category(state, i, str(e["category"]), strict=False, quiet=True,
+            err = _set_one_category(state, i, _cat_as_str(e["category"]), strict=False, quiet=True,
                                     registry=reg, topic_mode=topic_mode,
                                     gated=gated, auto_registered=auto_registered)
             if err is GATED:
@@ -652,7 +716,7 @@ def cmd_add_batch(state, args):
             else:
                 (tc_bad if err else cat_done).append(err or i)
         if e.get("tc"):
-            err = _set_one_tc(state, i, str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
+            err = _set_one_tc(state, i, _tc_as_str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
             (tc_bad if err else tc_done).append(err or i)
         # A31：缺 tc 的印機械建議；涉臺詞表命中且沒有 🔴/🟡 的提醒至少標 🟡（13e）。
         # 純提示、不影響入庫，讀到 e["suggest"]（build 算好的）就直接用，沒有
@@ -679,13 +743,16 @@ def cmd_add_batch(state, args):
         # ⚠️ 這裡刻意**不計進 tc_calls**：那個上限是擋逐則呼叫，batch 內建的
         # 一次性標記不算「呼叫」（見 Architecture／Global Constraints）。
         top = state.setdefault("_top", {})
-        cp = top.get("checkpoint") or ""
+        cp = _bucket_key(top, data)
         rej = dict(top.get("tc_rejected") or {})
         rej[cp] = (rej.get(cp) or []) + tc_bad
         top["tc_rejected"] = rej
-    if added:
+    if added or refilled:
         save(state, args.file, allow_create=True)
     print(f"OK 新增 {len(added)} 則" + (f"：{','.join(added)}" if added else ""))
+    if refilled:
+        print(f"OK 已在庫只補分類 {len(refilled)} 則（P1b-2 救援路徑，其餘欄位未動）："
+              f"{','.join(refilled[:12])}{'…' if len(refilled) > 12 else ''}")
     if no_src:
         print(f"⚠️ {len(no_src)} 則沒帶 src_text（站方原文＝事後離線查證的唯一依據，13b §543）："
               f"{','.join(no_src[:8])}{'…' if len(no_src) > 8 else ''}")
@@ -1780,7 +1847,7 @@ def cmd_set_tc(state, args):
     # 🔴 頂層鍵一律走 `state["_top"]`——`save()` 寫的是 `dict(state["_top"])`，
     #    直接掛在 `state` 上的鍵**會被靜默丟棄**（2026-08-24 離線試跑實測到）。
     top = state.setdefault("_top", {})
-    cp = top.get("checkpoint") or ""
+    cp = _bucket_key(top)   # R25 附帶：launcher 帶 S2_CHECKPOINT 就記本輪，不再落到上一輪
     calls = dict(top.get("tc_calls") or {})
     used = int(calls.get(cp) or 0)
     if used >= TC_CALLS_PER_CHECKPOINT:
@@ -1792,9 +1859,12 @@ def cmd_set_tc(state, args):
         #    後果：本輪的額度沒用到，卻先撞上一輪的牆，131 則裡只標到 29 則，
         #    其餘留到下一輪才補——正是「大量未分類」的來源之一。
         #    上限的用意是擋逐則呼叫，不是擋跨輪誤記，所以這裡要把自救路徑講出來。
-        print(f"⚠️ 若 checkpoint 還停在上一輪（目前狀態檔寫的是 {cp!r}），"
-              f"**本輪的額度其實還沒用**。先下 "
-              f"`set-top checkpoint {{MMDD}}-{{HHMM}}` 更新成本輪，再重下這批。")
+        if os.environ.get("S2_CHECKPOINT"):
+            print(f"ℹ️ 桶鍵取自環境變數 S2_CHECKPOINT={cp!r}（本輪），這是真的達上限：整批一次下。")
+        else:
+            print(f"⚠️ 若 checkpoint 還停在上一輪（目前狀態檔寫的是 {cp!r}），"
+                  f"**本輪的額度其實還沒用**。先下 "
+                  f"`set-top checkpoint {{MMDD}}-{{HHMM}}` 更新成本輪，再重下這批。")
         sys.exit(3)
 
     if not args.pairs:
