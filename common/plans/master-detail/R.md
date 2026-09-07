@@ -157,3 +157,6 @@ R17 的立案前提「`s2_topic_review.py`／`s2_audit.py` 0 輪執行」**是�
 
 ### R22 RT detail 檔 `id_of` 讀錯鍵（2026-09-07，09-A24 試跑發現）
 `SITE_SPEC['rt']['id_of']` 用 `it.get('code','')`，RT **list** 快照有 `code`，但 **detail** 快照的編號在 `edit`；`inspect` 走的 `_id_of_any` 早有 fallback 與註解，`from-raw`／`build`／`dump` 走 `SITE_SPEC` 沒吃到。0906 `rt_detail_0700.json` 8 則 → id 全空 → `dedup_by_id` 塌成 1 則。修 `65e84c5`：`_rt_code_or_edit()`，`code` 優先、無則取含數字的 `edit`；list 行為不變。**殘留**：該檔 2 則 `edit` 是裸 `RT`（上游退化值，同 `_id_of_any` 註解那批髒值），仍撞空 id；救法要在空 id 時退 `#index` 或 head 當去重鍵，未做、待裁決。
+
+### R23 `set-top checkpoint` 時機：13f 與 prompt 矛盾（2026-09-07，04-T13 發現）
+`13f` 時序陷阱②（2026-08-25 `3f8a4ad`）寫「set-top 要開工就下，不要留到收工」，理由是 0825-0430 set-tc 配額分桶記錯；`scripts/s2_scan_prompt.md`（2026-09-03 `ddc71b9`）寫「⛔ 開局絕對不要跑 set-top，固定在掃完所有站後、set-tc／render 之前」，理由是體檢發現開局 set-top 在 NS 斷線時會讓整段窗永久漏收。9/3 改了 prompt 沒回頭改 13f。裁決留 9/3 版（見 MASTER 列）；`5c61019` 已在 13f 加訂正、收工總表第 5.5 列寫定。**驗收**：接下來 3 正式輪 transcript 中 set-top 都在掃完所有站之後、render 之前。
