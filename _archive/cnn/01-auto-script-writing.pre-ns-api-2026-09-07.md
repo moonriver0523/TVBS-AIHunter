@@ -4,9 +4,9 @@
 
 **開始前必讀**：[`common/00-寫稿通則.md`](../common/00-寫稿通則.md)（版權、單位換算、**數字寫法**、**寫稿前事實分層**、**SB 五行格式**）與 [`common/08-execution-efficiency.md`](../common/08-execution-efficiency.md)（瀏覽器操作、額度禁令、下載重試）。**寫稿階段另讀** [`common/10-寫稿風格指南.md`](../common/10-寫稿風格指南.md)（人味層：稿頭四型、敘事節奏、比喻開關、情緒紀律、收尾簽名句；屬風格參照，與格式規則衝突時以格式規則為準）。⚠️ **該檔 600 行以上，不要從頭讀到尾**——依其開頭的「分層讀法」表：起稿前讀**第 0–13 節**、交付前讀**第 15 節題材禁忌**，第 14 節稀有招式庫（佔全檔一半）預設不預讀、按需查。**交付前是兩道關卡**：`validate_sot.py --mode ctv` 管格式，第 12 節生成檢核表管風格，兩道都過才叫完成稿。本文件另規定 CTV 特有的「只為 SB 定位 TC、不把官方稿／ASR 全文灌進對話」省 Token 流程。
 
-**Rollback：** 省 Token 改寫前的完整舊版保存在 [`_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md`](../_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md)。 步驟 1 改走 NS API（2026-09-07）前的版本在 [`_archive/cnn/01-auto-script-writing.pre-ns-api-2026-09-07.md`](../_archive/cnn/01-auto-script-writing.pre-ns-api-2026-09-07.md)。
+**Rollback：** 省 Token 改寫前的完整舊版保存在 [`_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md`](../_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md)。
 
-**工具與落點（2026-09-07 補，與 [`reuters/05`](../reuters/05-batch-download.md) 對齊）**：步驟 1a 取稿走 NS API，**必須**用 Playwright 工具組（`mcp__browser__*`，`.playwright-daily-profile`）——`localStorage.newsourceSession` 在 claude-in-chrome 讀不到。步驟 2 下載與 1b 退路是 UI 操作，照現行工具跑。落點有兩個：NS 的影片是**站方背景下載程式（Signiant）**搬的，進 **`D:\Downloads`**（⚠️ 這段在 Playwright 下尚未驗過，`09-known-issues` 的 NS 症狀都是現行工具的紀錄）；其他任何由瀏覽器本身觸發的下載（AP／RT／ABC）進 `D:\Downloads\PlaywrightMCP`。本流程只看前者。
+**工具與落點（2026-09-07 補，與 [`reuters/05`](../reuters/05-batch-download.md) 對齊）**：下方步驟 1–4 的 UI 流程照現行工具跑，本段不改它。**只有走 NS API 取稿時**必須用 Playwright 工具組（`mcp__browser__*`，`.playwright-daily-profile`）——`localStorage.newsourceSession` 在 claude-in-chrome 讀不到。落點有兩個：NS 的影片是**站方背景下載程式（Signiant）**搬的，進 **`D:\Downloads`**（⚠️ 這段在 Playwright 下尚未驗過，見 `09-known-issues` 的 NS 症狀都是現行工具的紀錄）；其他任何由瀏覽器本身觸發的下載（AP／RT／ABC）進 `D:\Downloads\PlaywrightMCP`。本流程只看前者。步驟 1／3 的官方稿另有 API 取法（`POST …/api/v3/stories` 帶 `term: "{ID}"` 直接回該則 `script` 全文，0907 實測），是否改走見 [`common/plans/2026-09-07-S6-S8下載寫稿API體檢.md`](../common/plans/2026-09-07-S6-S8下載寫稿API體檢.md)，未裁定前仍照下方 UI 步驟。
 
 ## 檔名命名規則（2026-07-20 訂定）
 
@@ -17,7 +17,7 @@
 
 ## 省 Token 核心流程（優先遵守）
 
-1. **官方稿只抓一次、立刻落地**：步驟 1a 的 API 回應用 `filename` 直接落檔、`ns_story_to_txt.py` 轉成 `"<ID> 原始文稿.txt"`（退路 1b 才是 ≡Q Preview 抓全文）。後續只讀這個檔，不要重打 API、不要重開 Preview、不要把 SUPER／LEAD IN／全稿貼進對話。
+1. **官方稿只抓一次、立刻落地**：≡Q Preview 全文抓到後，直接寫 `"<ID> 原始文稿.txt"`。後續只讀這個檔，不要重開 Preview、不要把 SUPER／LEAD IN／全稿貼進對話。
 2. **對話只回摘要，不回全文**：步驟過程只回報 ID、Title、Source、Embargo／限制、TRT、Reporter、受訪者人數與必要警示。**不要**在對話重貼原始文稿、ASR 全文或逐步截圖 walkthrough。
 3. **下載確認用檔案系統**：輪詢 `D:\Downloads` 的檔名／暫存檔大小；不要截圖確認下載進度。卡住時依 [`common/08-execution-efficiency.md`](../common/08-execution-efficiency.md) 的**統一重試階梯**處理（CTV 屬「單支任務」，確認失敗後直接回報使用者，不無限重試）。
 4. **TC 只服務 SB，不服務 OS**：完成文稿只有 SB 需要 `MMSS-MMSS`；OS 旁白不對 TC、不取樣畫面。
@@ -33,60 +33,7 @@
 10. **完成版先交付，不預設啟動第二審（2026-07-21 訂定）**：寫稿階段本身完成事實分層、SB／TC 對照與**步驟 6.5 的 `--mode ctv` 驗證關卡**後，直接把這一版視為「完成版」交付；**不要預設另派 agent 重讀官方稿、ASR、完成稿與整份規則做深度審稿**。只有使用者明確下令「檢查／複核／校稿／嚴格審稿」時，才啟動第二輪語意審查。若寫稿前真的存在會改變事實的姓名、金額、歸因或畫面判讀矛盾，應在寫稿階段先釐清或標註，不可把問題留給事後複查。
 
 ## 步驟 1 — 找到該則並取得**完整官方稿件**（關鍵，不可省略）
-
-### 1a. 首選：NS API 直查（2026-09-07 訂定，取代搜尋欄→≡Q 的 UI 路徑）
-
-**證據**：0907 用 2 則當週素材比對，API `content.bitcentral.script` 與 ≡Q「Preview w/Script」彈窗逐字一致（0.9995／0.9993，差異只有粗體標籤與行尾空白）；Preview 的 8 個 metadata 欄位全部有 API 對應。細節見 [`common/plans/2026-09-07-S6-S8下載寫稿API體檢.md`](../common/plans/2026-09-07-S6-S8下載寫稿API體檢.md) §3。
-
-**工具**：Playwright 工具組（`mcp__browser__*`，`.playwright-daily-profile`）。⛔ claude-in-chrome 讀不到 `localStorage.newsourceSession`。開工前照 [`reuters/05`](../reuters/05-batch-download.md) 的「開工前檢查 profile 殘留」。
-
-1. `browser_navigate` 到 `https://newsource.ns.cnn.com/landing`（讓 token 續期；未登入時停下來請使用者登入，⛔ 不准輸入帳密）。
-2. **一個 `browser_evaluate`**（帶 `filename: "<ID>_ns.json"`，結果直接落檔、不進對話），照抄、只改 `ID`：
-
-   ```js
-   async () => {
-     const ID = 'WE-018FR';
-     const ss = localStorage.getItem('newsourceSession');
-     const tok = ss && JSON.parse(ss).token;
-     if (!tok) return {err: 'token null'};
-     const body = { bundlesOnly:false, date:new Date().toISOString(),
-       facets:{contentType:[],videoTypes:[],categories:[],digitalCategories:[],videoFormats:[]},
-       filters:{contentType:{},videoTypes:{},categories:{},digitalCategories:{},videoFormats:{}},
-       from:0, language:['en','es'], scriptOnly:false, size:10,
-       sort:{order:'ascending',type:'relevancyDate'}, term: ID };
-     const r = await fetch('https://newsource-content-api-530.ns.cnn.com/api/v3/stories',
-       {method:'POST', headers:{'Content-Type':'application/json', authorization:'Bearer '+tok}, body:JSON.stringify(body)});
-     const t = await r.text();
-     const line = t.split('\n').find(l => l.includes('"stories"'));   // NDJSON，不能 r.json()
-     if (!line) return {err: 'no stories line', status: r.status};
-     // ⚠️ 回傳只准白名單欄位；token／Bearer／JWT 永遠不准出現在回傳值
-     return JSON.parse(line).stories.content.map(it => ({
-       id: it.alternateIds && it.alternateIds.bitcentralId, title: it.title, description: it.description,
-       owner: it.owner, embargo: it.embargo, footageType: it.footageType, duration: it.duration,
-       reporter: it.reporter, createdDate: it.createdDate,
-       script: (it.content && it.content.bitcentral && it.content.bitcentral.script) || ''
-     }));
-   }
-   ```
-
-   `filename` 落在 MCP 伺服器的工作目錄（0907 實測是 `C:\Users\User\<ID>_ns.json`，**不是** `D:\Downloads\PlaywrightMCP`）。
-3. 轉成原始文稿（同時就是步驟 3 的產物）：
-
-   ```bash
-   python -X utf8 scripts/ns_story_to_txt.py --json "C:/Users/User/<ID>_ns.json" --id <ID> --out "<ID> 原始文稿.txt"
-   ```
-
-   腳本會：只留 `id` 完全相同的項、**取 `createdDate` 最新的一則**（🔴 story ID 每週重用，`term` 可能回多則——0907 `PY-01MO` 就回了 2026 與 2024 各一則）、HTML 轉純文字、寫出與舊格式完全相同的 8 行檔頭＋稿件，並印一段摘要。**對話只回這段摘要**（ID／Title／Source／Embargo／TRT／Reporter／引言句估計），不貼全文。
-4. 守門（任一觸發＝退 1b 的 UI 舊做法，不要硬試）：
-   - `{err:'token null'}`：重新 `browser_navigate /landing` 再打一次；**連兩次 null＝真登出**，停下來請使用者登入。
-   - 腳本 exit code 2（API 沒有這個 ID）：**API 只保證當週素材**，7～8 月的舊 ID 0907 實測全部查不到——退 1b。
-   - 腳本印「⚠️ 同一 ID 另有 N 則」：把它列出的標題貼給使用者確認是哪一則，不要自己猜。
-   - 腳本印「⚠️ 距今 N 天」：同上，標題核對後才繼續。
-   - 腳本印「⚠️ script 為空」：官方稿尚未上架，依步驟 5 鐵則不可交完成版。
-
-### 1b. 退路：UI 舊做法（API 兩次失敗、查無此 ID、或使用者指定時才用）
-
-在 CNN Newsource（`newsource.ns.cnn.com`）**用網站上方的搜尋欄輸入**該 ID（⛔ **不是拼一個 `/search?q=` 網址**，那會回 Page Not Found——見下方警告），開啟該則展開的詳細框（Story Number、Title、Description、Source、Embargo、Footage Type、TRT、Reporter、Script）。⚠️ 搜尋結果可能有**兩張同 ID 的卡**（ID 重用），看日期與標題挑對的那張。
+在 CNN Newsource（`newsource.ns.cnn.com`）**用網站上方的搜尋欄輸入**該 ID（⛔ **不是拼一個 `/search?q=` 網址**，那會回 Page Not Found——見下方警告），開啟該則展開的詳細框（Story Number、Title、Description、Source、Embargo、Footage Type、TRT、Reporter、Script）。
 
 ⚠️ **CNN Newsource 不支援用網址直接搜尋**（2026-07-21 使用者確認；**2026-08-04 已同步寫進 [`common/13b`](../common/13b-S2-定時掃帶-v2省token.md) §0**——原本只記在這份自動寫稿規則裡，掃帶 agent 讀不到，0804 就有 agent 打了 `/search`、看到 Page Not Found 後轉去查「NS 卡點」繞一大圈）。`https://newsource.ns.cnn.com/search?q={ID}` 會回 **Page Not Found**，只能在網站上方搜尋欄輸入。這點與 Reuters／AP 相反，不要套用它們的網址查詢做法。送出後若整頁凍結，見 [`../common/09-known-issues.md`](../common/09-known-issues.md#cnn-newsource)。
 
@@ -97,7 +44,7 @@
 搜尋 → 開詳情 → 點 ≡Q → 捲完取文：連續動作能 batch 就 batch；全文取得後立刻進入步驟 3 存檔，不要在對話貼全文。
 
 ## 步驟 2 — 下載影片
-先回報步驟 1 找到的禁運/限制事項（一句話摘要即可），再點下載圖示，選擇格式 **H264 HD NTSC**（網站會記住上次選擇）與位置 **D:/Downloads**（同樣會記住）。走 1a 取稿的話，這裡仍要用網站上方搜尋欄找到該則卡片（同 1b 第一句的做法，⛔ 不是 `/search?q=` 網址）才點得到 Download；卡片上的日期與標題要跟 1a 摘要一致（ID 重用時會有兩張卡）。
+先回報步驟 1 找到的禁運/限制事項（一句話摘要即可），再點下載圖示，選擇格式 **H264 HD NTSC**（網站會記住上次選擇）與位置 **D:/Downloads**（同樣會記住）。
 
 ⚠️ **CNN Newsource 的下載不會出現在 Chrome 的下載清單（2026-07-21 訂定）**：它是交給**背景下載程式**處理，完成後檔案直接出現在 `D:\Downloads`，Chrome 從頭到尾不會跳任何下載提示或進度條。
 
@@ -108,7 +55,7 @@
 下載為伺服器端排隊處理，需輪詢 `D:\Downloads` 中的暫存/工作檔（`#chkpt_file#...`、`#work_file#...`）確認檔案大小是否持續增長；若卡住（多次輪詢檔案大小不變），回報給使用者，不要無限重試。
 
 ## 步驟 3 — 將完整官方稿件存為「原始文稿」
-走步驟 1a 時這一步**已由 `ns_story_to_txt.py` 完成**，不必再做。只有走 1b 時才手動做：把 Preview 彈窗取得的完整稿件文字（SUPER 8 名單、LEAD IN、完整記者包裝旁白+BITE、END、KEYWORD TAGS）存成 `"<ID> 原始文稿.txt"`，前面加上 Story Number/Title/Description/Source/Embargo/Footage Type/TRT/Reporter 等 metadata（8 行、順序同 1a 產物，`validate_sot.py --source-script` 兩種來源都吃）。此為使用者內部參考副本，非對外散布。
+把步驟 1 從 Preview 彈窗取得的完整稿件文字（SUPER 8 名單、LEAD IN、完整記者包裝旁白+BITE、END、KEYWORD TAGS）存成 `"<ID> 原始文稿.txt"`，前面加上 Story Number/Title/Description/Source/Embargo/Footage Type/TRT/Reporter 等 metadata。此為使用者內部參考副本，非對外散布。
 
 存檔後，後續步驟**只讀這個檔**；不要重抓 Preview，也不要在對話重貼全文。
 
