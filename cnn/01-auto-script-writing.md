@@ -6,7 +6,7 @@
 
 **Rollback：** 省 Token 改寫前的完整舊版保存在 [`_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md`](../_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md)。 步驟 1 改走 NS API（2026-09-07）前的版本在 [`_archive/cnn/01-auto-script-writing.pre-ns-api-2026-09-07.md`](../_archive/cnn/01-auto-script-writing.pre-ns-api-2026-09-07.md)。
 
-**工具與落點（2026-09-07 補，與 [`reuters/05`](../reuters/05-batch-download.md) 對齊）**：步驟 1a 取稿走 NS API，**必須**用 Playwright 工具組（`mcp__browser__*`，`.playwright-daily-profile`）——`localStorage.newsourceSession` 在 claude-in-chrome 讀不到。步驟 2 下載與 1b 退路是 UI 操作，照現行工具跑。落點有兩個：NS 的影片是**站方背景下載程式（Signiant）**搬的，進 **`D:\Downloads`**（⚠️ 這段在 Playwright 下尚未驗過，`09-known-issues` 的 NS 症狀都是現行工具的紀錄）；其他任何由瀏覽器本身觸發的下載（AP／RT／ABC）進 `D:\Downloads\PlaywrightMCP`。本流程只看前者。
+**工具與落點（2026-09-07 補，與 [`reuters/05`](../reuters/05-batch-download.md) 對齊）**：步驟 1a 取稿走 NS API，**必須**用 Playwright 工具組（`mcp__browser__*`，`.playwright-daily-profile`）——`localStorage.newsourceSession` 在 claude-in-chrome 讀不到。步驟 2 下載與 1b 退路是 UI 操作，照現行工具跑。落點有兩個：NS 的影片是**站方背景下載程式（Signiant）**搬的，進 **`D:\Downloads`**（2026-09-07 在 Playwright daily profile 下實測 UI 點 Download 可正常落地，SE-008SU 22MB）；其他任何由瀏覽器本身觸發的下載（AP／RT／ABC）進 `D:\Downloads\PlaywrightMCP`。本流程只看前者。
 
 ## 檔名命名規則（2026-07-20 訂定）
 
@@ -97,6 +97,9 @@
 搜尋 → 開詳情 → 點 ≡Q → 捲完取文：連續動作能 batch 就 batch；全文取得後立刻進入步驟 3 存檔，不要在對話貼全文。
 
 ## 步驟 2 — 下載影片
+
+⚠️ **2026-09-07 探測結論：影片下載不可 API 觸發，不要再試。** `POST /api/v2/download`（body `{downloadFormats:["H264 HD NTSC"], fileGroupId, videoId}`，兩個 ID 皆已在步驟 1a 的 `/api/v3/stories` 回應裡）純 fetch 重放能拿到跟點按鈕一樣的 200／`downloadIds`／Signiant `config`（`server`／`apiKey`／`trustCertificate`／`sig://` 路徑），但實測 4 分 40 秒輪詢 `D:\Downloads` 全程沒有任何檔案或暫存檔落地：真正啟動 Signiant 傳輸的是網站前端呼叫傳輸客戶端建立的一條 pub/sub 頻道訂閱（`messaging-config-service.services.cloud.signiant.com/channel?...`），這一步只在 UI 互動裡發生，REST 重放拿不到。細節見 [`common/plans/2026-09-07-S6-S8下載寫稿API體檢.md`](../common/plans/2026-09-07-S6-S8下載寫稿API體檢.md) §3「NS 下載 API 探測」。**下方 UI 流程維持現行做法。**
+
 先回報步驟 1 找到的禁運/限制事項（一句話摘要即可），再點下載圖示，選擇格式 **H264 HD NTSC**（網站會記住上次選擇）與位置 **D:/Downloads**（同樣會記住）。走 1a 取稿的話，這裡仍要用網站上方搜尋欄找到該則卡片（同 1b 第一句的做法，⛔ 不是 `/search?q=` 網址）才點得到 Download；卡片上的日期與標題要跟 1a 摘要一致（ID 重用時會有兩張卡）。
 
 ⚠️ **CNN Newsource 的下載不會出現在 Chrome 的下載清單（2026-07-21 訂定）**：它是交給**背景下載程式**處理，完成後檔案直接出現在 `D:\Downloads`，Chrome 從頭到尾不會跳任何下載提示或進度條。
