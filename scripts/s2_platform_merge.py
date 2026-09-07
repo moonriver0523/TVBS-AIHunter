@@ -264,6 +264,9 @@ def main():
                          "因為那把鎖就是本輪自己握著的。⛔ 人工流程不要帶")
     ap.add_argument("--allow-missing-src-text", action="store_true",
                     help="轉給 lint：缺 src_text 降回 ⚠️（只給 0818 規則生效前的舊檔）")
+    ap.add_argument("--registry",
+                    help="A10 P1b：測試用覆蓋中主題登記簿路徑（不給就用 s2_state.py 預設"
+                         "的 scripts/s2_topic_registry.json，正式整併不必帶）")
     args = ap.parse_args()
 
     data = read_candidate(args.candidate)
@@ -302,8 +305,16 @@ def main():
     report(data, misc, entries_path, pairs_path, pairs)
 
     state_file = args.file
-    add_args = ["add-batch", "--entries", entries_path]
-    cat_args = ["set-category", "--pairs", pairs] if pairs else None
+    # ⚠️ `--registry` 是 `s2_state.py` **主 parser** 的參數，要排在子指令
+    # 名字（`add-batch`／`set-category`）**之前**——排在後面會被子 parser
+    # 當成不認得的參數炸掉（argparse 的 subparsers 是這樣分派的）。
+    reg_args = ["--registry", args.registry] if args.registry else []
+    add_args = reg_args + ["add-batch", "--entries", entries_path]
+    # A10 P1b：ENEX／ABC 這條交件端沒有 `new_topics` 可用（候選檔就是站方
+    # 原始格式，不是 agent 手組的 batch.json），⛔ 不能讓新中主題就這樣悄悄
+    # 不寫分類——一律 `--auto-register`，charter 事後用 topic-register 覆寫。
+    cat_args = (reg_args + ["set-category", "--pairs", pairs, "--auto-register"]
+               if pairs else None)
     if not args.apply:
         # ⚠️ 這裡刻意印 `python scripts/s2_state.py` 而不是 sys.executable 的絕對路徑——
         # 直譯器路徑因機器而異（本機就有 hermes venv 的 python 會被抓到），
@@ -314,7 +325,7 @@ def main():
               f'add-batch --entries "{entries_path}"')
         if cat_args:
             print(f'  python scripts/s2_state.py --file "{sf}" set-category '
-                  f'--pairs "{{貼上 {os.path.basename(pairs_path)} 的內容}}"')
+                  f'--pairs "{{貼上 {os.path.basename(pairs_path)} 的內容}}" --auto-register')
             print(f"    PowerShell 可直接展開："
                   f'--pairs "$(Get-Content -Raw "{pairs_path}")"')
         print("\n▶ 整併完**要跑** `python scripts/s2_topic_dedupe.py --file {狀態檔}`"

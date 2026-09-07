@@ -12,7 +12,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # 待整併偵測（2026-08-26）。⛔ 反過來 import 會炸：s2_state 在 module level
 #    跑 default_file()，那支在 16:00 後可能 raise SystemExit。s2_pending 保持零副作用。
@@ -32,6 +32,19 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 STATE_DIR = r"G:\我的雲端硬碟\Claude共用\自動掃帶系統"
+# 封存資料夾（`_registry_seed_20260907.py` 已經在用的既有慣例，這裡不重寫
+# 第二套猜法）：`Archive/{YYYYMMDD}/{MMDD}-s2-state.json`。
+ARCHIVE_DIR = os.path.join(STATE_DIR, "Archive")
+
+
+def _yesterday_state_path(archive_dir=None):
+    """前一日封存狀態檔路徑（A10 P1b `list-topics --yesterday` 用）。
+
+    `archive_dir` 只給測試覆蓋——正式呼叫端不必帶，預設就是 `ARCHIVE_DIR`。
+    """
+    yday = datetime.now() - timedelta(days=1)
+    d = os.path.join(archive_dir or ARCHIVE_DIR, yday.strftime("%Y%m%d"))
+    return os.path.join(d, f"{yday.strftime('%m%d')}-s2-state.json")
 
 
 def default_file():
@@ -511,7 +524,16 @@ def cmd_add_batch(state, args):
     except (json.JSONDecodeError, OSError) as e:
         print(f"ERROR: --entries 檔讀取失敗（{e}）")
         sys.exit(2)
-    if isinstance(data, dict):
+    # A10 P1b：`{"entries":[…], "new_topics":{…}}` 是**新格式**，只有這個形狀
+    # 才會走新題閘門（`topic_mode="gate"`）；舊格式（純陣列）行為完全不變
+    # （`topic_mode="off"`，同 P1a 之前）——13-A10P1 計畫的 T12 迴歸
+    # （`test_s2_add_batch_tc.py`）就是拿純陣列＋沒登記過的中主題測，
+    # 兩者不可能同時成立，這條分界線是刻意的，⛔ 不要改成「一律 gate」。
+    new_topics = {}
+    is_new_format = isinstance(data, dict)
+    if is_new_format:
+        nt = data.get("new_topics")
+        new_topics = nt if isinstance(nt, dict) else {}
         data = data.get("entries")
     if not isinstance(data, list):
         print("ERROR: --entries 需為 JSON 陣列（或含 entries 陣列的物件）")
@@ -532,6 +554,30 @@ def cmd_add_batch(state, args):
         _sp_active, _sp_all = load_special_t()
         ok_t = list(ok_t) + _sp_active
         _sp_names = {x.get("name") for x in _sp_all if x.get("name")}
+    # A10 P1b：新題閘門——`--auto-register` 一律用 auto 模式（連舊格式也適用，
+    # 呼叫端自己要求的就照做）；否則新格式預設 gate、舊格式維持 off。
+    topic_mode = ("auto" if getattr(args, "auto_register", False)
+                 else ("gate" if is_new_format else "off"))
+    reg = load_registry(getattr(args, "registry", None)) if (
+        topic_mode != "off" or new_topics) else None
+    reg_dirty = False
+    gated, auto_registered = [], []
+    if new_topics:
+        if reg is None:
+            reg = load_registry(getattr(args, "registry", None))
+        for name, spec in new_topics.items():
+            if not isinstance(spec, dict):
+                continue
+            aliases = spec.get("aliases")
+            if isinstance(aliases, str):
+                aliases = [x.strip() for x in re.split(r"[,，;；]", aliases) if x.strip()]
+            elif not isinstance(aliases, list):
+                aliases = None
+            _register_topic(reg, name, charter=str(spec.get("charter") or ""),
+                            big=str(spec.get("big") or ""), aliases=aliases)
+            reg_dirty = True
+        print(f"OK 由 batch new_topics 登記 {len(new_topics)} 個中主題："
+              f"{'、'.join(new_topics)}")
     for n, e in enumerate(data, 1):
         if not isinstance(e, dict):
             skipped.append(f"第{n}筆: 不是物件")
@@ -595,9 +641,16 @@ def cmd_add_batch(state, args):
         added.append(i)
         # T12：category／tc 緊跟在 new_item() 之後——錯誤不擋入庫，素材已經
         # 進了 state["items"][i]，這裡只補分類與標籤，退件走既有 tc_bad 桶。
+        # A10 P1b：新題閘門擋下（`GATED`）**不是**格式錯誤，不進 tc_bad
+        # 那個「退回」桶——素材已入庫，只是分類欄暫時不寫，見 `gated` 彙整。
         if e.get("category"):
-            err = _set_one_category(state, i, str(e["category"]), strict=False, quiet=True)
-            (tc_bad if err else cat_done).append(err or i)
+            err = _set_one_category(state, i, str(e["category"]), strict=False, quiet=True,
+                                    registry=reg, topic_mode=topic_mode,
+                                    gated=gated, auto_registered=auto_registered)
+            if err is GATED:
+                pass
+            else:
+                (tc_bad if err else cat_done).append(err or i)
         if e.get("tc"):
             err = _set_one_tc(state, i, str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
             (tc_bad if err else tc_done).append(err or i)
@@ -664,6 +717,24 @@ def cmd_add_batch(state, args):
         print(f"💡 機械提示 {len(hints)} 項（純建議／提醒，不影響入庫，"
               f"判斷不同時以你為準，不必回報，見 A31）：")
         print("\n".join("  " + h for h in hints))
+    # A10 P1b：新題閘門彙整——`gated` 每筆是 (id, mid)，同一個未登記中主題
+    # 一批可能撞好幾則，只印一次、把 id 併進去（避免洗版）。
+    if gated:
+        by_mid = {}
+        for _i, _mid in gated:
+            by_mid.setdefault(_mid, []).append(_i)
+        print(f"🆕 未登記中主題 {len(by_mid)} 個，共 {len(gated)} 則入庫但 category 未寫"
+              f"（不擋入庫，擋的是沒 charter 就開名）：")
+        for _mid, _ids in by_mid.items():
+            print(f"🆕 未登記中主題：{_mid}——請在 batch 頂層 `new_topics` 附 charter "
+                  f"或改掛既有格（`list-topics --compact` 看現有名單）"
+                  f"（{len(_ids)} 則：{'、'.join(_ids[:6])}{'…' if len(_ids) > 6 else ''}）")
+    if auto_registered:
+        uniq = sorted(set(auto_registered))
+        print(f"🆕 本輪自動登記 {len(uniq)} 個中主題待補 charter：{'、'.join(uniq)}"
+              f"（auto:true，charter 取自摘要前 40 字，事後用 topic-register 覆寫）")
+    if reg_dirty or auto_registered:
+        save_registry(reg, getattr(args, "registry", None))
     # 收尾提醒同 set-category：這批入完之後，本檔還有哪些則沒 T/C——
     # 觸發點要在還「在分類脈絡裡」的當下，不要等 render 覆蓋率閘門才講（T10）。
     _remind_missing_tc(state)
@@ -1094,7 +1165,34 @@ def cmd_list_topics(state, args):
     所以先給視野、再談命名規則。
 
     成本近乎零：只讀狀態檔，零瀏覽器呼叫、零 API。
+
+    `--yesterday`（A10 P1b 加）：改讀**前一日封存檔**，列 ≥3 則的中主題＋
+    charter，給建檔輪當「今天命名參考」——跟上面主流程是兩件事（一個看
+    「今天已經開了什麼」，一個看「昨天收得夠多、值得沿用名字」），
+    互斥、不合併輸出。
     """
+    if getattr(args, "yesterday", False):
+        p = _yesterday_state_path(getattr(args, "archive_dir", None))
+        y_state = load(p)
+        counts = {}
+        for v in y_state["items"].values():
+            mid = (v.get("category") or {}).get("中主題")
+            if mid:
+                counts[mid] = counts.get(mid, 0) + 1
+        reg = load_registry(getattr(args, "registry", None))
+        charter_map = {t.get("name"): t.get("charter") for t in reg.get("topics", [])
+                       if t.get("name")}
+        kept = sorted(((m, n) for m, n in counts.items() if n >= 3), key=lambda x: -x[1])
+        label = os.path.basename(p)
+        if not kept:
+            hint = "無 ≥3 則的中主題" if os.path.exists(p) else "找不到這份封存檔"
+            print(f"(前一日 {label}：{hint})")
+            return
+        print(f"── 前一日（{label}）≥3 則的中主題，當今天命名參考 ──")
+        for m, n in kept:
+            ch = charter_map.get(m)
+            print(f"{m}｜{n}" + (f"｜{ch}" if ch else ""))
+        return
     rows = {}
     for v in state["items"].values():
         c = v.get("category") or {}
@@ -1494,6 +1592,67 @@ def canonical_of(name, registry=None, path=None):
     return name, None
 
 
+# ── A10 P1b：新題閘門共用小工具 ───────────────────────────────────────────
+#
+# 🔴 三種寫入端行為不一樣（見計畫「三條產線過閘」），統一用 `topic_mode`
+#    這一個參數表達，⛔ 不要各自散寫 if/else：
+#      "off"  —— 完全不查登記簿（P1a 之前、以及舊格式 batch 的行為，
+#                 一律照寫，只做 alias 改寫）。set-category 預設走這條——
+#                 人工／既有呼叫端天天用陌生中主題名，擋下去就是大量迴歸。
+#      "gate" —— 命中不到 canonical 就**不寫 category**、印訊息，
+#                 但**不擋入庫**（add-batch 新格式 `{"entries":…}` 預設）。
+#      "auto" —— 命中不到 canonical 就自動 `_register_topic(auto=True)`
+#                 再照寫（ENEX/ABC、17、側錄三條交件端沒有 new_topics
+#                 可用，只能靠這個維持登記簿是單一真相源）。
+GATED = object()  # `_set_one_category` 用的哨兵：跟「格式錯誤」的字串錯誤區分，
+                   # 不能算進 tc_bad／退回桶——那桶是給真正的格式錯，
+                   # 這裡是「已入庫、只是分類欄暫時不寫」。
+
+
+def _auto_charter(state, raw_id, fallback=""):
+    """自動登記的 charter 草稿：優先取該則 `fields.summary` 前 40 字；
+    `parse_ok=False`（代碼認不得、YouTube 兩行式等）時 `fields` 不存在，
+    退回呼叫端給的 `fallback`，都沒有才退回 `raw_entry` 本文——寧可草稿
+    醜一點，也不要登記簿多一筆空 charter（那比沒登記更難發現）。仍是
+    「草稿」——`auto:true` 留痕，事後用 `topic-register` 覆寫即可，
+    見計畫 P1b Task 2。
+    """
+    it = (state.get("items") or {}).get(norm_id(raw_id)) or {}
+    summ = ((it.get("fields") or {}).get("summary") or "").strip()
+    if not summ:
+        summ = (fallback or it.get("raw_entry") or "").strip()
+    return summ[:40]
+
+
+def _register_topic(reg, name, charter="", big="", aliases=None, auto=False):
+    """登記簿寫入的共用邏輯：找不到就新增一筆（`auto=True` 才標記
+    `auto:true`），找到就補 charter／big／aliases——語意同 `cmd_topic_register`
+    （給了就覆寫，不判斷「原本是不是空的」；aliases 只追加不取代）。
+    呼叫端自己負責 `save_registry()`，這裡只改記憶體裡的 dict，
+    好讓 batch／side 一次處理完多筆才落地一次。
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    t = find_topic(reg, name)
+    if t is None:
+        t = {"name": name, "charter": "", "aliases": [], "big": "",
+             "tc": {"T": [], "C": []}, "first_seen": today, "last_seen": today,
+             "resident": False}
+        if auto:
+            t["auto"] = True
+        reg.setdefault("topics", []).append(t)
+    if charter:
+        t["charter"] = charter
+    if big:
+        t["big"] = big
+    existing = set(t.setdefault("aliases", []))
+    for a in (aliases or []):
+        if a != t["name"] and a not in existing:
+            t["aliases"].append(a)
+            existing.add(a)
+    t["last_seen"] = today
+    return t
+
+
 def cmd_topic_register(state, args):
     """登記／更新中主題的 charter（同名再 register 只更新 charter，不重複——
     「只併不改名」鐵律：canonical 名寫下就不會被這支改掉）。
@@ -1730,12 +1889,23 @@ def cmd_set_category(state, args):
         sys.exit(2)
     # 一次載入登記簿、批次共用——避免逐筆重讀檔（見 `_set_one_category` 說明）。
     reg = load_registry(getattr(args, "registry", None))
+    # A10 P1b：set-category 預設「off」（跟 P1a 之前行為一致，⛔ 不要改成
+    # 預設 gate——這支天天被人工／舊呼叫端拿陌生中主題名呼叫，擋下去是
+    # 大量迴歸）。只有明講 `--auto-register`（ENEX/ABC 整併端用）才會在
+    # 遇到未登記名時自動 register，見 `_set_one_category` 的 topic_mode 說明。
+    topic_mode = "auto" if getattr(args, "auto_register", False) else "off"
+    auto_registered = []
     if not args.pairs:
         if not (args.id and args.cat):
             print("ERROR: 單筆需 --id 與 --cat；批次用 --pairs \"id=大分類/中主題;...\"")
             sys.exit(2)
-        _set_one_category(state, args.id, args.cat, strict=True, registry=reg)
+        _set_one_category(state, args.id, args.cat, strict=True, registry=reg,
+                          topic_mode=topic_mode, auto_registered=auto_registered)
         save(state, args.file)
+        if auto_registered:
+            save_registry(reg, getattr(args, "registry", None))
+            print(f"🆕 自動登記中主題「{auto_registered[0]}」待補 charter"
+                  f"（auto:true，charter 取自摘要前 40 字，事後用 topic-register 覆寫）")
         return
     # 批次：分隔符優先用「;」；沒有分號才退回逗號（中主題含逗號時務必用分號）
     sep = ";" if ";" in args.pairs else ","
@@ -1747,11 +1917,18 @@ def cmd_set_category(state, args):
             skipped.append(f"「{tok}」: 缺 =（格式 id=大分類/中主題）")
             continue
         i, cat = tok.split("=", 1)
-        err = _set_one_category(state, i, cat, strict=False, registry=reg)
+        err = _set_one_category(state, i, cat, strict=False, registry=reg,
+                                topic_mode=topic_mode, auto_registered=auto_registered)
         (skipped if err else done).append(err or norm_id(i))
     if done:
         save(state, args.file)
+    if auto_registered:
+        save_registry(reg, getattr(args, "registry", None))
     print(f"OK 設定 {len(done)} 則" + (f"：{','.join(done)}" if done else ""))
+    if auto_registered:
+        uniq = sorted(set(auto_registered))
+        print(f"🆕 本輪自動登記 {len(uniq)} 個中主題待補 charter：{'、'.join(uniq)}"
+              f"（auto:true，charter 取自摘要前 40 字，事後用 topic-register 覆寫）")
     # 機動 T 的觸發點之一：set-category 跑在 set-tc **之前**，這裡講才來得及。
     _sp = load_special_t()[0]
     if _sp:
@@ -1766,8 +1943,10 @@ def cmd_set_category(state, args):
         print("\n".join("  " + s for s in skipped))
 
 
-def _set_one_category(state, raw_id, cat, strict, quiet=False, registry=None):
-    """設定單筆 category。strict=True 出錯直接 exit；否則回傳錯誤訊息字串。
+def _set_one_category(state, raw_id, cat, strict, quiet=False, registry=None,
+                      topic_mode="off", gated=None, auto_registered=None):
+    """設定單筆 category。strict=True 出錯直接 exit；否則回傳錯誤訊息字串
+    （格式錯誤／id 不存在）、`GATED`（P1b 新題閘門擋下，見下）或 `None`（成功）。
 
     cat 格式：`大分類/中主題` 或 `大分類/中主題/小分題`（小分題選填）。
     小分題是 WP1 加的第三層——render 全生三層結構（裸行標題＋`+` 分隔），
@@ -1781,6 +1960,21 @@ def _set_one_category(state, raw_id, cat, strict, quiet=False, registry=None):
     「只併不改名」鐵律，這裡只做 alias→canonical 這一個方向。⚠️ 改寫說明
     不受 quiet 控制：quiet 只管「OK … category=…」那行洗版與否，alias 被
     悄悄改掉是重要事實，批次也要印。
+
+    topic_mode（A10 P1b 加，見 `GATED` 上方註解）：
+      "off"  —— 只做 alias 改寫，不管 canonical 名有沒有登記過（預設，
+                 `set-category` 沒帶 `--auto-register` 走這條，跟 P1a
+                 之前行為一致，⛔ 不要改，會迴歸大量既有呼叫）。
+      "gate" —— canonical 名不在登記簿 → **不寫 category**、回傳 `GATED`，
+                 呼叫端自己決定怎麼彙整印訊息（不要在這裡逐則印，一批
+                 幾十則若剛好撞同一個未登記名會洗版）。
+      "auto" —— canonical 名不在登記簿 → 呼叫 `_register_topic(auto=True)`
+                 補一筆（charter 取 `_auto_charter`），再照寫 category；
+                 `auto_registered`（list）收新登記的 canonical 名，供呼叫端
+                 收工彙整「本輪自動登記 N 個中主題待補 charter」。
+
+    `gated`／`auto_registered` 都是呼叫端傳進來的 list，這裡只 append，
+    不在這支印訊息——彙整與去重是呼叫端的事。
     """
     i = norm_id(raw_id)
     if i not in state["items"]:
@@ -1794,6 +1988,16 @@ def _set_one_category(state, raw_id, cat, strict, quiet=False, registry=None):
         mid, note = canonical_of(mid, registry=registry)
         if note:
             print(note)
+        if topic_mode != "off" and registry is not None and find_topic(registry, mid) is None:
+            if topic_mode == "auto":
+                charter = _auto_charter(state, i)
+                _register_topic(registry, mid, charter=charter, big=big, auto=True)
+                if auto_registered is not None:
+                    auto_registered.append(mid)
+            else:  # "gate"
+                if gated is not None:
+                    gated.append((i, mid))
+                return GATED
         c = {"大分類": big, "中主題": mid}
         if sub:
             c["小分題"] = sub
@@ -2083,6 +2287,14 @@ def cmd_add_side(state, args):
     _sp_active, _sp_all = load_special_t()
     ok_t = list(ok_t) + _sp_active
     _sp_names = {x.get("name") for x in _sp_all if x.get("name")}
+    # A10 P1b：三條「沒有 new_topics 可用」的交件端之一（另兩條是 ENEX/ABC
+    # 整併端的 set-category、與 17-網址素材走的也是這支）。TXT 沒有結構化
+    # 欄位能附 charter，⛔ 不能像 add-batch 新格式那樣預設 gate——沒人會記得
+    # 帶旗標，擋下去就是每輪側錄悄悄漏分類。改成**預設 auto**（自動登記＋
+    # 照寫），`--no-auto-register` 才退回「不查登記簿、照寫」的舊行為
+    # （同 off，⛔ 不是 gate——那樣還是會憑空弄丟分類，不會比較好）。
+    reg = load_registry(getattr(args, "registry", None))
+    auto_registered = []
     added, updated, bad, tc_set, tc_filled, uncat_tc, tc_bad = [], [], [], [], [], [], []
     for i, src, cat, entry, tc in parsed:
         if not cat.get("大分類"):
@@ -2121,6 +2333,24 @@ def cmd_add_side(state, args):
         it = state["items"].get(i) or new_item(src, args.checkpoint, "has_script", entry)
         it["source"] = src
         it["raw_entry"] = entry
+        # A10 P1b：alias 改寫＋新題閘門（見 cmd_add_batch 同名邏輯的說明；
+        # add-side 沒有 `_set_one_category` 那套 quiet/topic_mode 機制可重用，
+        # 因為它是直接整包指定 `cat`，不是 `大分類/中主題` 字串，這裡另外
+        # 做一次同精神的檢查）。
+        mid = cat.get("中主題")
+        if mid:
+            mid, note = canonical_of(mid, registry=reg)
+            if note:
+                print(note)
+            cat = dict(cat, 中主題=mid)
+            if (getattr(args, "auto_register", True) and not args.dry_run
+                    and find_topic(reg, mid) is None):
+                charter = _auto_charter(state, i, fallback=entry)
+                _register_topic(reg, mid, charter=charter,
+                                big=cat.get("大分類") or "", auto=True)
+                auto_registered.append(mid)
+            # `--no-auto-register`：不查登記簿有沒有這格、也不新增，照舊行為直接寫
+            # （見上方註解——⛔ 不是 gate，那樣還是會弄丟分類）。
         it["category"] = cat
         it["entry_updated"] = args.checkpoint
         it["entry_updated_ts"] = now_ts()
@@ -2150,6 +2380,22 @@ def cmd_add_side(state, args):
                                             else (f"：{','.join(added)}" if added else "")))
         if updated:
             print(f"已在庫略過 {len(updated)} 段（要覆蓋加 --overwrite）")
+        # A10 P1b：登記簿有異動才落地（`--no-auto-register` 完全不碰 reg，
+        # 這裡就不會多寫一次空白 diff）。
+        if auto_registered:
+            _reg_path = getattr(args, "registry", None)
+            if not _reg_path:
+                # 🔴 add-side 預設就是 auto——沒帶 `--registry` 時會寫進正式的
+                # `scripts/s2_topic_registry.json`（0907 實測：`test_s2_side_tc.py`
+                # 直接呼叫 `cmd_add_side` 沒有 argparse 預設可用，就這樣寫了
+                # 測試資料進正式檔）。印出來讓任何一次沒帶 --registry 的呼叫
+                # 都在 stdout 留痕，不要只能靠事後 `git status` 才發現。
+                print(f"ℹ️ 寫入預設登記簿 {REGISTRY_PATH}（沒帶 --registry）")
+            save_registry(reg, _reg_path)
+            uniq = sorted(set(auto_registered))
+            print(f"🆕 本輪自動登記 {len(uniq)} 個中主題待補 charter：{'、'.join(uniq)}"
+                  f"（auto:true，charter 取自摘要前 40 字或內容首句，"
+                  f"事後用 topic-register 覆寫）")
     # ── T／C 回報（2026-08-25，A10 v2 收尾）─────────────────────────────
     # 過渡期要看得出「新格式幾段／舊格式幾段」，才知道交件端跟上了沒有（計畫 2.7）。
     n_new = len(parsed) - len(uncat_tc)
@@ -2546,6 +2792,10 @@ def main():
     lt.add_argument("--subs", action="store_true", help="連小分題一起列出")
     lt.add_argument("--compact", action="store_true",
                      help="精簡輸出：每主題一行（大分類｜中主題｜則數），不列小分題明細")
+    lt.add_argument("--yesterday", action="store_true",
+                    help="A10 P1b：改列前一日封存檔裡 ≥3 則的中主題＋charter，"
+                         "建檔輪當今天命名參考（跟上面主流程互斥）")
+    lt.add_argument("--archive-dir", help="測試用覆蓋 Archive 資料夾（預設 STATE_DIR/Archive）")
     sc = sub.add_parser("scratch-dir", help="印出並建立今晚班次的暫存檔資料夾（{YYYYMMDD}/）")
     sc.add_argument("--mmdd", required=True, help="晚班起始日 MMDD（不是實際掃帶當下的日曆日）")
     d = sub.add_parser("diff")
@@ -2563,7 +2813,14 @@ def main():
     a.add_argument("--src-text", help="瘦身後的站方原文（離線查證用，同 add-batch）")
     ab = sub.add_parser("add-batch")
     ab.add_argument("--entries", required=True,
-                    help="JSON 陣列檔，每筆含 id/source/checkpoint/status/entry")
+                    help="JSON 陣列檔（舊格式，含 id/source/checkpoint/status/entry），"
+                         "或 {\"entries\":[…], \"new_topics\":{名:{\"charter\":…,\"big\":…}}} "
+                         "新格式——帶 new_topics 才會走 A10 P1b 新題閘門")
+    ab.add_argument("--auto-register", action="store_true",
+                    help="A10 P1b：category 中主題不在登記簿時自動 register"
+                         "（charter 取該則摘要前 40 字，標 auto:true），"
+                         "而不是留空等 new_topics。⛔ 舊格式（純陣列）預設本來就不擋，"
+                         "這個旗標讓它額外把新名字也記進登記簿")
     u = sub.add_parser("update-entry")
     # ⚠️ `--id` 不再 required：批次走 `--batch`，兩者擇一（函式裡檢查）。
     u.add_argument("--id")
@@ -2614,6 +2871,12 @@ def main():
                     help='用 TC 指定歸位："大分類/中主題[/小分題]=TC,TC;…"（檔內沒寫擬歸位時用）')
     sd.add_argument("--overwrite", action="store_true", help="已在庫的段落也覆寫")
     sd.add_argument("--dry-run", action="store_true", help="只解析不寫檔")
+    sd.add_argument("--no-auto-register", dest="auto_register", action="store_false",
+                    default=True,
+                    help="A10 P1b：預設遇登記簿沒有的中主題會自動 register"
+                         "（charter 取該段摘要前 40 字或內容首句，標 auto:true）——"
+                         "TXT 沒有 new_topics 可用，⛔ 不會擋分類。這個旗標退回"
+                         "「不查登記簿、照寫」的舊行為（不是擋，只是不順便登記）")
     sm = sub.add_parser("set-mark", help="寫死時段標記（補掃輪等 checkpoint 判不準時）")
     sm.add_argument("--ids", required=True)
     # `■`（2026-08-04–2026-09-04）與 `●`（更早）是晨班的舊符號，現行是 `◇`。
@@ -2651,6 +2914,11 @@ def main():
     c.add_argument("--id")
     c.add_argument("--cat", help="大分類/中主題[/小分題]")
     c.add_argument("--pairs", help='批次："id=大分類/中主題[/小分題];id2=..."（分隔符優先認分號）')
+    c.add_argument("--auto-register", action="store_true",
+                   help="A10 P1b：遇登記簿沒有的中主題自動 register（charter 取"
+                        "該則摘要前 40 字，標 auto:true）而不是照舊直接寫。"
+                        "給沒有 new_topics 可用的交件端（ENEX/ABC 整併等）用；"
+                        "⛔ 不帶就是舊行為，照寫不查登記簿")
     tr = sub.add_parser("topic-register",
                         help="登記／更新中主題的 charter＋別名（同名再登記只更新 charter，"
                              "不重複——⛔ agent 不直接編 s2_topic_registry.json）")
