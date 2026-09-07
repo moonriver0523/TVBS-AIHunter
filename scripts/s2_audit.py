@@ -157,6 +157,8 @@ def parse_list_file(path):
                 continue
             if re.match(r"^total\s*[:=]\s*\d+$", line, re.IGNORECASE):
                 continue                      # tab 格式的表頭行，不是素材
+            if line.startswith("#"):
+                continue                      # R28：`s2_batch_prep snapshot` 的 `#` 檔頭註解
             sep = "|" if "|" in line else "\t"
             parts = [x.strip() for x in line.split(sep)]
             if not parts[0]:
@@ -402,7 +404,7 @@ def _reconcile_section(st, mmdd, args, state_path=None, scratch=None):
         yel("沒給 --rt-list／--ap-list／--ns-list，**這一項沒做**——"
             "它是價值最高的檢查，別跳過")
         print("        做法：稽核時剛好是掃帶剛結束、Playwright 空著的時候。")
-        print("        ① agent 撈各站清單（RT 見 13b §1b 第 3 條的容器捲動寫法）")
+        print("        ① agent 撈各站清單（RT 見 13c2 §1b 第 3 條的容器捲動寫法）")
         print("        ② 存成每行 `CODE|MM/DD/YYYY HH:MM` 的純文字或 JSON 陣列")
         print("        ③ 重跑本模組並帶上 --rt-list <檔案>")
         print("        ⚠️ 開瀏覽器前先確認下一輪掃帶還沒開始，否則 Playwright 互鎖。")
@@ -482,6 +484,8 @@ def audit(mmdd, state_path, txt_path, scratch):
         except Exception:
             continue
         f_total = f_src = 0
+        if isinstance(data, dict):            # P1b-2：build 新格式 {"entries":[…],"new_topics":{…}}
+            data = data.get("entries") or []
         for e in data if isinstance(data, list) else []:
             was = e.get("entry", "")
             ent = cur_entry.get(e.get("id"), was)   # 狀態檔優先；已刪除的才退回 batch
@@ -541,7 +545,7 @@ def audit(mmdd, state_path, txt_path, scratch):
             yel(f"{len(polluted)} 筆的 src_text 混入 agent 的中文說明："
                 f"{'／'.join(str(x) for x in _pol[:8])}"
                 f"{more_note(len(_pol), 8, unit='筆')}"
-                f"——src_text 只放站方原文（13b §543），它是事後離線查證的唯一依據；"
+                f"——src_text 只放站方原文（13c2 §5），它是事後離線查證的唯一依據；"
                 f"判斷寫進 needs-review，不要寫進原文（RT4131 曾害假 BITE 判準誤判連四輪）")
         if fake:
             still_fk, logged_fk = split_logged(items, fake)
