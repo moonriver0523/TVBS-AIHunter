@@ -330,7 +330,11 @@ try {
     #    兩次都是靜默失敗——所以這件事不該再靠任何人記得，改由這裡做掉。
     # ⚠️ 用**前綴**比對，不要錨到結尾：16:00 整輪失敗要補跑時傳的是
     #    `0811-1600-補漏`，錨結尾就永遠不會建檔——而那正是最需要它的場合。
-    if ($Checkpoint -match '^\d{4}-1700') { New-ShiftState }
+    # R24（2026-09-07）：DryRun 不准建檔／歸檔——0907 DryRun 留下 0 則殼檔，
+    #    害 17:00 正式輪 NEWDAY SKIP、agent 也跳過建檔輪七項。
+    if ($Checkpoint -match '^\d{4}-1700') {
+        if ($DryRun) { Write-Host "DryRun：略過 New-ShiftState（不建檔、不歸檔，R24）" } else { New-ShiftState }
+    }
 
     if (-not (Test-Path $PromptFile)) { throw "找不到 prompt 範本：$PromptFile" }
     $prompt = (Get-Content $PromptFile -Raw -Encoding UTF8) -replace '\{CHECKPOINT\}', $Checkpoint
@@ -449,6 +453,9 @@ try {
         Write-Run "UTF-8 輸出編碼設定失敗，不影響本輪（log 可能又變亂碼）：$($_.Exception.Message)"
     }
     try {
+        # R25 附帶（2026-09-07）：s2_state.py 的 tc_rejected／tc_calls 桶鍵優先讀這個，
+        #    不再因 set-top 收工才下而記到上一輪。
+        $env:S2_CHECKPOINT = $Checkpoint
         $t0 = Get-Date
         claude @claudeArgs *> $runLog
         $code = $LASTEXITCODE
