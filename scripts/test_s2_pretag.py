@@ -12,6 +12,10 @@
   (e) footage「受訪畫面、記者連線」＋ entry 有 🔖 → lint 報 🔖（R19）
   (f) 機動 T「颱風」active、文本有「颱風」、tc.T 沒有 → lint 報 🌀 漏掛（mock load_special_t）
 附帶：bite_suggest() 三態（True／False／None）。
+
+D18（2026-09-07 已裁決）英文別名層七案例（(g)～(m)）：站方原文（AP／RT／NS
+head＋first150）多為英文，中文詞表打不中，這裡驗證英文別名能命中，且獨佔
+規則（英國不掛歐洲、以色列／伊朗不掛中東）在英文輸入下依然成立。
 """
 import os
 import sys
@@ -100,6 +104,56 @@ try:
 finally:
     s2_state.load_special_t = _orig_load_special_t
 check("(f 反例) tc.T 已掛「颱風」不再報 🌀", not any(m.startswith("🌀") for m in msgs_f2), str(msgs_f2))
+
+
+# ── (g) 英文別名：Ukraine/Zelensky/Kyiv → T 烏俄、C 烏克蘭 ──────────
+TEXT_G = "Ukraine's Zelensky meets NATO leaders in Kyiv to discuss new aid package"
+sug_g = pretag.suggest_tc(TEXT_G, source="AP")
+check("(g) 英文別名：T 建議含「烏俄」", "烏俄" in sug_g["T"], str(sug_g))
+check("(g) 英文別名：C 建議含「烏克蘭」", "烏克蘭" in sug_g["C"], str(sug_g))
+
+
+# ── (h) 英文別名：Israeli/Gaza/Hamas → C 以色列，不掛中東 ───────────
+TEXT_H = "Israeli military says Gaza operation against Hamas will continue"
+sug_h = pretag.suggest_tc(TEXT_H, source="RT")
+check("(h) 英文別名：C 建議含「以色列」", "以色列" in sug_h["C"], str(sug_h))
+check("(h) 英文別名：C 建議不含「中東」（以色列專項獨佔）", "中東" not in sug_h["C"], str(sug_h))
+
+
+# ── (i) 英文別名：UK/Britain/London → C 英國，不掛歐洲 ─────────────
+TEXT_I = "British Prime Minister meets EU leaders in London to discuss trade"
+sug_i = pretag.suggest_tc(TEXT_I, source="AP")
+check("(i) 英文別名：C 建議含「英國」", "英國" in sug_i["C"], str(sug_i))
+check("(i) 英文別名：C 建議不含「歐洲」（英國專項獨佔，D15）", "歐洲" not in sug_i["C"], str(sug_i))
+
+
+# ── (j) 英文別名：Iran 相關不該被誤標成「美國」───────────────────
+TEXT_J = "Iran nuclear talks stall in Tehran as IRGC commander warns of retaliation"
+sug_j = pretag.suggest_tc(TEXT_J, source="AP")
+check("(j) 英文別名：C 建議含「伊朗」", "伊朗" in sug_j["C"], str(sug_j))
+check("(j) 英文別名：C 建議不含「美國」（Iran 不該誤標成美國）", "美國" not in sug_j["C"], str(sug_j))
+
+
+# ── (k) 英文別名：軍事國防（military drill）＋涉臺（Taiwan Strait）──
+TEXT_K = "Taiwan Strait tensions rise as China holds new military drill near Taipei"
+sug_k = pretag.suggest_tc(TEXT_K, source="AP")
+check("(k) 英文別名：T 建議含「軍事國防」", "軍事國防" in sug_k["T"], str(sug_k))
+check("(k) 英文別名：C 建議含「臺灣」", "臺灣" in sug_k["C"], str(sug_k))
+check("(k) 英文別名：taiwan_hit 命中「Taiwan Strait」",
+      bool(pretag.taiwan_hit(TEXT_K)), str(pretag.taiwan_hit(TEXT_K)))
+
+
+# ── (l) 英文別名：天災天氣（typhoon/earthquake）──────────────────
+TEXT_L = "Powerful typhoon triggers flood warnings across Southeast Asia"
+sug_l = pretag.suggest_tc(TEXT_L, source="RT")
+check("(l) 英文別名：T 建議含「天災天氣」", "天災天氣" in sug_l["T"], str(sug_l))
+
+
+# ── (m) 英文別名不覆蓋既有中文命中，只補建議（不重複）──────────────
+TEXT_M = "漢光演習 Taiwan military drill tests response to invasion scenario"
+sug_m = pretag.suggest_tc(TEXT_M)
+check("(m) 中英夾雜不重複掛「軍事國防」",
+      sug_m["T"].count("軍事國防") == 1, str(sug_m))
 
 
 # ── 附帶：bite_suggest() 三態 ──────────────────────────────────
