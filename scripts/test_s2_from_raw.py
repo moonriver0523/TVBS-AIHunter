@@ -157,6 +157,8 @@ batch = []
 if os.path.exists(batch_out):
     with open(batch_out, encoding='utf-8') as f:
         batch = json.load(f)
+if isinstance(batch, dict):          # P1b-2（2026-09-07）：build --skeleton 改出 {entries,new_topics} 新格式
+    batch = batch.get('entries') or []
 
 batch_by_id = {r.get('id'): r for r in batch}
 check('batch 只有 AP1001／AP1003（AP1004 缺 entry 不進 batch，AP1002 本來就不在骨架）',

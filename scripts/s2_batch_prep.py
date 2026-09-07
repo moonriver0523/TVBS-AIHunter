@@ -327,6 +327,17 @@ def cmd_build(args):
     if getattr(args, 'skeleton', None):
         rows = load_json(args.skeleton)
         batch, missing = [], []
+        # P1b-2（2026-09-07）：entries.json 頂層保留鍵 `_new_topics`＝
+        # {名: {"charter": …, "big": …[, "aliases": […]]}}，原樣搬到 batch 頂層
+        # `new_topics`；輸出改成 {"entries": […], "new_topics": {…}} 新格式，
+        # add-batch 讀到這個形狀才會走 A10 P1b 新題閘門（純陣列＝不閘）。
+        # 軟上線（0907 e2e：22:00 真實 RT 批 23 則有 20 則、15 個中主題未登記）：
+        # entries.json **有** `_new_topics` 鍵（沒新題就 `{}`）才出新格式／過閘；
+        # 沒這個鍵＝agent 不知道閘門機制，維持純陣列舊行為，免得一輪 20 則沒分類
+        # 又不知道怎麼救。規則（13c2 §2）要求一律放這個鍵。
+        use_new = isinstance(entries, dict) and '_new_topics' in entries
+        new_topics = entries.get('_new_topics') if use_new else None
+        new_topics = new_topics if isinstance(new_topics, dict) else {}
         for row in rows:
             item_id = row.get('id')
             raw_entry = entries.get(item_id)
@@ -368,11 +379,16 @@ def cmd_build(args):
                 pass
             batch.append(new_row)
 
-        out = json.dumps(batch, ensure_ascii=False, indent=2)
+        if use_new:
+            out = json.dumps({'entries': batch, 'new_topics': new_topics}, ensure_ascii=False, indent=2)
+            note = f'（{len(batch)} 則，新格式、過閘；new_topics {len(new_topics)} 題）'
+        else:
+            out = json.dumps(batch, ensure_ascii=False, indent=2)
+            note = f'（{len(batch)} 則，純陣列；entries.json 頂層沒有 _new_topics，不過閘）'
         if args.out:
             with open(args.out, 'w', encoding='utf-8') as f:
                 f.write(out)
-            print(f'已寫入 {args.out}（{len(batch)} 則）', file=sys.stderr)
+            print(f'已寫入 {args.out}{note}', file=sys.stderr)
         else:
             print(out)
         if missing:
@@ -1158,6 +1174,9 @@ def cmd_fill_src_text(args):
     except OSError as e:
         print(f'✗ batch 讀不到：{e}', file=sys.stderr)
         sys.exit(1)
+    shell = None   # P1b-2 新格式 {"entries":[…],"new_topics":{…}}：就地改 entries、殼原樣寫回
+    if isinstance(batch, dict) and isinstance(batch.get('entries'), list):
+        shell, batch = batch, batch['entries']
     if not isinstance(batch, list):
         print(f'✗ {args.batch} 頂層不是陣列，不像 add-batch 用的 batch.json', file=sys.stderr)
         sys.exit(1)
@@ -1201,7 +1220,7 @@ def cmd_fill_src_text(args):
     with open(out, 'w', encoding='utf-8') as f:
         # indent=2 對齊 build 的輸出格式（2026-08-31 review 修正：原本 indent=1，
         # 就地覆寫時會把整份 batch.json 的排版跟 build 的產物不一致）。
-        json.dump(batch, f, ensure_ascii=False, indent=2)
+        json.dump(shell if shell is not None else batch, f, ensure_ascii=False, indent=2)
 
     print(f'已寫入 {out}（raw：{raw_shell}）', file=sys.stderr)
     print(f'填入 {len(filled)} 則：{", ".join(filled) if filled else "（無）"}')
@@ -1229,12 +1248,17 @@ def cmd_collate_category(args):
         except OSError as e:
             print(f'✗ 讀不到 {path}：{e}', file=sys.stderr)
             sys.exit(1)
+        if isinstance(items, dict) and isinstance(items.get('entries'), list):
+            items = items['entries']   # P1b-2 新格式殼
         if not isinstance(items, list):
             print(f'✗ {path} 頂層不是陣列，不像 batch.json', file=sys.stderr)
             sys.exit(1)
         for item in items:
             iid = item.get('id')
             cat = item.get('category') or {}
+            if isinstance(cat, str):   # R25：batch 的 category 也可能是字串「大/中/小」
+                _p = [x.strip() for x in cat.split('/', 2)] + ['', '', '']
+                cat = {'大分類': _p[0], '中主題': _p[1], '小分題': _p[2]}
             big, mid, sub = cat.get('大分類'), cat.get('中主題'), cat.get('小分題')
             if not (big and mid):
                 skipped.append(iid or f'({path} 裡無 id 的一筆)')

@@ -91,6 +91,8 @@ b_out, b_code = run_fn(bp.cmd_build, Args(
 check("build --skeleton 正常結束", b_code == 0, f"code={b_code}\n{b_out}")
 with open(batch_out, encoding="utf-8") as f:
     batch = json.load(f)
+if isinstance(batch, dict):          # P1b-2（2026-09-07）：build --skeleton 新格式殼
+    batch = batch.get("entries") or []
 row = next((r for r in batch if r.get("id") == "AP2001"), {})
 check("build row 帶 suggest 鍵", "suggest" in row, str(row))
 check("build row 帶 suggest.taiwan/bite", isinstance(row.get("suggest"), dict)
