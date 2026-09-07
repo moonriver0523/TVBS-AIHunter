@@ -33,6 +33,7 @@ TAIWAN_KW = [
     "臺灣", "台灣", "臺海", "國軍", "漢光", "兩岸", "我國", "臺北", "高雄",
     "台積電", "海峽中線", "陸委會", "國台辦",
     "Taiwan", "Taipei", "TSMC", "Han Kuang", "cross-strait", "Cross-Strait",
+    "Taiwan Strait", "Taiwanese",  # D18（2026-09-07）：只加不改
 ]
 
 # D15：T 新增「軍事國防」。只加不改；字典本身這次不動，改字典見 D15。
@@ -43,10 +44,95 @@ MILITARY_T_KW = [
 ]
 
 # D15：C 歐洲拆出「英國」。只加不改；字典本身這次不動，改字典見 D15。
+# D18（2026-09-07）：拿掉裸字 "UK"——這裡是純子字串比對（`kw in s`），"UK"
+# 會誤中 "UKRAINIAN"（實測 AP4682773 烏克蘭快訊被誤掛英國才抓到）。真的
+# "UK" 詞邊界比對交給 `EN_C_ALIASES["英國"]`（見下）就夠，這裡不用裸字版。
 UK_C_KW = [
     "英國", "倫敦", "唐寧街", "英相", "白金漢宮",
-    "UK", "Britain", "London", "Downing Street",
+    "Britain", "London", "Downing Street",
 ]
+
+# ── D18（2026-09-07 已裁決）英文別名層：只加不改，改字典見 D15 ─────────
+# AP／RT／NS 站方原文（head＋first150）以英文為主，TC-字典.md 的中文關鍵詞
+# 在英文稿上幾乎打不中。這裡替現行 12 個 T、22 個 C 類別（`s2_state._load_tc_dict()`
+# 讀回的名單）各補一組英文別名，讓 `suggest_tc()` 對英文原文也能命中；
+# 完全不新增／更動類別名稱本身，也不碰 TC-字典.md（同 D15 的分工）。
+#
+# 專項獨佔規則（英國不掛歐洲、以色列／伊朗不掛中東）跟
+# `build_tc_matrix_0821.py::tag_tc()` 一致：作法是讓中東的別名跟以色列／
+# 伊朗的別名彼此不重疊（兩邊詞表本來就沒有交集），英國／歐洲則額外在
+# `suggest_tc()` 最後補一次 `discard`，跟 `tag_tc()` 329 行同款寫法。
+#
+# 比對規則：大小寫不敏感、詞邊界（`\b`），避免「us」這種英文常用詞在縮寫
+# 情境下（如 "US"）誤觸——採詞邊界後風險已大幅降低，仍請人工抽查誤標。
+EN_T_ALIASES = {
+    "烏俄": ["Ukraine", "Ukrainian", "Kyiv", "Zelensky", "Zelenskyy"],
+    "美伊": ["Iran nuclear", "Iran sanctions", "Tehran strike", "IRGC"],
+    "地緣衝突": ["Gaza strike", "Hamas", "Hezbollah", "West Bank"],
+    "軍事國防": ["military drill", "military parade", "arms sale", "defense budget"],
+    "天災天氣": ["typhoon", "earthquake", "flood", "wildfire", "mudslide", "landslide"],
+    "政治": ["election", "parliament", "summit", "prime minister",
+             "gubernatorial", "cabinet secretary", "energy secretary"],
+    "社會": ["shooting", "stabbing", "manhunt", "homicide", "building collapse"],
+    "財經": ["tariff", "inflation", "interest rate", "trade deal"],
+    "科技醫藥": ["AI chip", "vaccine", "clinical trial", "space launch", "outbreak", "Ebola"],
+    "娛樂藝文": ["box office", "Hollywood", "film festival", "Grammy", "actor"],
+    "體育": ["World Cup", "Olympics", "championship", "Grand Slam"],
+    "話題": ["viral video", "internet sensation", "record holder", "rare sighting"],
+}
+
+EN_C_ALIASES = {
+    "臺灣": ["Taiwan", "Taiwanese", "Taipei", "Taiwan Strait", "TSMC"],
+    "中國大陸": ["China", "Chinese", "Beijing", "Hong Kong", "Jiangxi", "Tibet", "Xizang"],
+    "美國": ["United States", "US", "American", "Washington", "White House",
+             # 對齊 build_tc_matrix_0821.py::tag_tc() 既有中文美國關鍵詞的英文版
+             # （德州/夏威夷/紐約/西雅圖/奧馬哈），不是另開新範圍。
+             "Texas", "Dallas", "Hawaii", "New York", "Seattle", "Omaha"],
+    "加拿大": ["Canada", "Canadian", "Ottawa", "Toronto"],
+    "日本": ["Japan", "Japanese", "Tokyo", "Osaka"],
+    "南韓": ["South Korea", "South Korean", "Seoul", "Yoon"],
+    "北韓": ["North Korea", "North Korean", "Pyongyang", "Kim Jong Un"],
+    "泰國": ["Thailand", "Thai", "Bangkok", "baht"],
+    "新加坡": ["Singapore", "Singaporean", "Changi", "Marina Bay"],
+    "東南亞": ["Southeast Asia", "ASEAN", "Vietnam", "Philippines"],
+    "南亞": ["South Asia", "India", "Indian", "Pakistan", "Bangladesh", "Nepal"],
+    "以色列": ["Israel", "Israeli", "IDF", "Gaza", "Hamas"],
+    "伊朗": ["Iran", "Iranian", "Tehran", "IRGC"],
+    "中東": ["Middle East", "Lebanon", "Yemen", "Syria", "Hormuz"],
+    "烏克蘭": ["Ukraine", "Ukrainian", "Kyiv", "Zelensky", "Zelenskyy"],
+    "俄羅斯": ["Russia", "Russian", "Moscow", "Putin"],
+    "英國": ["UK", "United Kingdom", "Britain", "British", "London", "Starmer"],
+    "歐洲": ["Europe", "European Union", "EU", "Brussels", "NATO", "Germany", "France"],
+    "非洲": ["Africa", "African", "Nigeria", "Kenya", "Congo"],
+    "中南美": ["Latin America", "Mexico", "Mexican", "Colombia"],
+    "紐澳": ["Australia", "Australian", "New Zealand", "Sydney"],
+    "國際": ["United Nations", "WHO", "global summit", "APEC"],
+}
+
+
+def _compile_alias_map(alias_map):
+    """把 `{類別: [英文別名,...]}` 編成 `{類別: 已編譯 regex}`（大小寫不敏感、詞邊界）。
+
+    每個別名尾巴補一個可選的 `s?`（複數／單複數變化），這樣「flood」也會命中
+    「floods」——0907 實測 RT0675（Nepal floods）就是卡在這裡沒補上 `s`。
+    """
+    compiled = {}
+    for name, words in alias_map.items():
+        pattern = "|".join(re.escape(w) for w in words)
+        compiled[name] = re.compile(r"\b(?:" + pattern + r")s?\b", re.IGNORECASE)
+    return compiled
+
+
+_EN_T_PATTERNS = _compile_alias_map(EN_T_ALIASES)
+_EN_C_PATTERNS = _compile_alias_map(EN_C_ALIASES)
+
+
+def _en_alias_hits(patterns, text):
+    """命中的類別名 list（可能是空的）。`text` 為空字串一律不命中。"""
+    if not text:
+        return []
+    return [name for name, pat in patterns.items() if pat.search(text)]
+
 
 # 來源預設 C（13f 已訂，2026-08-25 使用者裁）：只在**內容判不出東西時墊底**，
 # 內容判出來的一律疊加、不取代——韓聯社報「川普關稅衝擊南韓車廠」要掛
@@ -124,6 +210,18 @@ def suggest_tc(text, source=None):
         C.append("英國")
     if taiwan_hit(s) and "臺灣" not in C:
         C.append("臺灣")
+
+    # D18：英文別名層——AP／RT／NS 英文原文靠這裡補建議，只加不重複。
+    for name in _en_alias_hits(_EN_T_PATTERNS, s):
+        if name not in T:
+            T.append(name)
+    for name in _en_alias_hits(_EN_C_PATTERNS, s):
+        if name not in C:
+            C.append(name)
+    # 英國專項獨佔，跟 tag_tc() 329 行同款：掛了英國就不留歐洲。
+    if "英國" in C and "歐洲" in C:
+        C.remove("歐洲")
+
     if source in SOURCE_DEFAULT_C:
         for c in SOURCE_DEFAULT_C[source]:
             if c not in C:
