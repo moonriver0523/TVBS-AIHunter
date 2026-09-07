@@ -177,6 +177,70 @@ check('AP1004 缺 entry 列入「未填」警告', 'AP1004' in b_out and ('未�
       b_out)
 
 
+# ── R22：RT detail 檔編號在 `edit` 鍵，不是 `code`（0907 A24 真實快照試跑實測）──
+# `SITE_SPEC['rt']['id_of']` 原本只認 `code`，detail 檔全部 id_of 回空字串，
+# 8 則被 dedup_by_id 當同一個 id 去重成 1 則。修法：`code` 有值優先用，
+# 沒有才退 `edit`（且 `edit` 要含數字才採信——上游有純字母的退化值）。
+
+check('_rt_code_or_edit：code 優先於 edit',
+      bp._rt_code_or_edit({'code': 'RT9001', 'edit': 'RT9999'}) == 'RT9001')
+check('_rt_code_or_edit：沒有 code 才退 edit',
+      bp._rt_code_or_edit({'edit': 'RT9002'}) == 'RT9002')
+check('_rt_code_or_edit：edit 沒有數字（退化值）視同沒有',
+      bp._rt_code_or_edit({'edit': 'RT'}) == '')
+check('_rt_code_or_edit：edit 帶雙前綴但有數字仍採信（上游髒值，非本次要修的範圍）',
+      bp._rt_code_or_edit({'edit': 'RTRT7400'}) == 'RTRT7400')
+check('_rt_code_or_edit：code／edit 都沒有回空字串',
+      bp._rt_code_or_edit({}) == '')
+
+RT_DETAIL_EDIT_ONLY = write_json('rt_detail_edit_only.json', [
+    {'edit': 'RT7001', 'head': 'Tennis final highlights', 'story': 'SHOTLIST: match highlights',
+     'sb_count': 1, 'dur': '00:02:05', 'src': 'RT'},
+    {'edit': 'RT7002', 'head': 'Flood aftermath', 'story': 'SHOTLIST: flood aftermath scenes',
+     'sb_count': 0, 'dur': '00:01:30', 'src': 'RT'},
+    {'edit': 'RT7003', 'head': 'Market close report', 'story': 'SHOTLIST: trading floor',
+     'sb_count': 2, 'dur': '00:00:58', 'src': 'RT'},
+])
+
+rt_skel_out = os.path.join(TMP, 'rt_skeleton_1200.json')
+rt_out, rt_code = run(bp.cmd_from_raw, Args(
+    site='rt', raw=RT_DETAIL_EDIT_ONLY, checkpoint='0907-1200', state=None,
+    out=rt_skel_out, page=None,
+))
+check('from-raw（RT detail，只有 edit 鍵）正常結束（exit 0）', rt_code == 0, f'code={rt_code}\n{rt_out}')
+
+rt_skeleton = []
+if os.path.exists(rt_skel_out):
+    with open(rt_skel_out, encoding='utf-8') as f:
+        rt_skeleton = json.load(f)
+rt_ids = sorted(r.get('id') for r in rt_skeleton)
+check('RT detail（只有 edit 鍵）骨架 3 則、id 正確（沒有被去重成 1 則）',
+      rt_ids == ['RT7001', 'RT7002', 'RT7003'], f'實際：{rt_ids}')
+
+RT_LIST_CODE = write_json('rt_list_code.json', [
+    {'code': 'RT8001', 'head': 'List format story one', 'story': 'SHOTLIST: one', 'sb_count': 1,
+     'dur': '00:01:00', 'src': 'RT'},
+    {'code': 'RT8002', 'head': 'List format story two', 'story': 'SHOTLIST: two', 'sb_count': 0,
+     'dur': '00:01:10', 'src': 'RT'},
+])
+
+rt_list_skel_out = os.path.join(TMP, 'rt_list_skeleton_1200.json')
+rt_list_out, rt_list_code = run(bp.cmd_from_raw, Args(
+    site='rt', raw=RT_LIST_CODE, checkpoint='0907-1200', state=None,
+    out=rt_list_skel_out, page=None,
+))
+check('from-raw（RT list，code 鍵）正常結束（exit 0）', rt_list_code == 0,
+      f'code={rt_list_code}\n{rt_list_out}')
+
+rt_list_skeleton = []
+if os.path.exists(rt_list_skel_out):
+    with open(rt_list_skel_out, encoding='utf-8') as f:
+        rt_list_skeleton = json.load(f)
+rt_list_ids = sorted(r.get('id') for r in rt_list_skeleton)
+check('RT list（code 鍵）骨架 2 則、id 正確（既有行為不變）',
+      rt_list_ids == ['RT8001', 'RT8002'], f'實際：{rt_list_ids}')
+
+
 shutil.rmtree(TMP, ignore_errors=True)
 
 print(f'\n共 {len(results)} 項，通過 {sum(results)}，失敗 {len(results) - sum(results)}')

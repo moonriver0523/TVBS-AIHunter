@@ -210,6 +210,29 @@ def load_json(path):
 # extra_of：站別專屬欄位（NS: footage_type；AP: sb_count/has_sot；RT: sb_count）
 # src_text_of：機械組「瘦身後的站方原文」，跟現行 batch.json 既有格式對齊
 
+
+def _rt_code_or_edit(it):
+    """RT 的編號：**清單**檔在 `code`，**detail** 檔在 `edit`——同一個坑
+    `_id_of_any`（下面 raw 檢查工具層那條猜測路徑）在 T9（2026-08-25）就記過，
+    但 `SITE_SPEC` 這條走的是明確欄位、沒吃到那個 fallback，於是 `dump`／
+    `build`／`from-raw` 對 RT **detail** 檔的 `id_of` 一路回空字串——
+    0907 A24 R22 用真實快照重跑 `from-raw` 才實測到：8 則全部因為 id 撞成
+    同一個空字串，被 `dedup_by_id` 去重成 1 則。
+
+    做法對齊 `_id_of_any`：`code` 有值就用 `code`；沒有才退 `edit`，
+    且 `edit` 要求**含數字**才採信——上游這個欄位有退化值（`_id_of_any`
+    旁的註解記過：純 `'RT'` 裸前綴、`'RTRT7400'` 雙前綴這類髒值），
+    純字母、沒有數字的一律當沒有，不能比沒有 id 更糟（撞名比缺值危險）。
+    清單檔（`code` 有值）行為完全不變。"""
+    code = str(it.get('code') or '').strip()
+    if code:
+        return code
+    edit = str(it.get('edit') or '').strip()
+    if edit and re.search(r'\d', edit):
+        return edit
+    return ''
+
+
 SITE_SPEC = {
     'ns': {
         'source': 'NS',
@@ -238,7 +261,7 @@ SITE_SPEC = {
     },
     'rt': {
         'source': 'RT',
-        'id_of': lambda it: it.get('code', ''),
+        'id_of': _rt_code_or_edit,
         'skip_of': lambda it: '',
         'status_of': lambda it: 'pending' if it.get('early') else 'has_script',
         'extra_of': lambda it: {'sb_count': it.get('sb_count', 0)},
