@@ -54,6 +54,8 @@ for _s in (sys.stdout, sys.stderr):
 REGISTRY_PATH = os.path.join(HERE, "s2_topic_registry.json")
 
 MIN_SRC_LEN_FOR_TOP = 8  # 則數 ≥8 才加分（Task 2 判準）
+ITEM_CAP = 12  # A33 v2：單題素材行上限——🔴🟡🔖 全列，其餘依原序取前 ITEM_CAP 則
+BITE_PREVIEW_LEN = 80  # A33 v2：items[].bite 給文字時只取前 N 字，供 agent 免查 get --id
 
 
 def _load_registry(path=None):
@@ -188,16 +190,43 @@ def missing_of(items):
 
 
 def _item_row(it):
+    """單則素材的精簡欄位——A33 v2：加 `summary`／`notes`／`bite` 改給文字，讓
+    agent 原則上不需要 `get --id` 就能寫素材行（見 `s2_rundown_prompt.md`）。"""
     red, orange, hilite, _aired = cc._marks(it.get("raw_entry"))
     fields = it.get("fields") or {}
+    bite_list = fields.get("bite") or []
+    bite_val = "、".join(bite_list)[:BITE_PREVIEW_LEN] if bite_list else False
+    notes = fields.get("notes") or []
     return {
         "id": it.get("id") or "",
         "alert": "🔴" if red else ("🟡" if orange else ""),
         "hilite": bool(hilite),
-        "bite": bool(fields.get("bite")),
+        "bite": bite_val,
         "dur": fields.get("duration") or "",
         "src": it.get("source") or "",
+        "summary": fields.get("summary") or "",
+        "notes": "、".join(notes),
     }
+
+
+def _select_items(items):
+    """A33 v2 單題素材行上限：🔴／🟡／🔖 標記的則全列，其餘（無任何標記）
+    依「原序」取前 `ITEM_CAP` 則。回傳 `(保留的原始 item 物件 list, 未列則數)`，
+    保留清單維持 `items` 原本的相對順序（標記與未標記可交錯）。
+    ⚠️ 只影響輸出給 agent 的 `items[]`——`score()`／`missing_of()` 仍用完整
+    `items`（截斷是「省 agent 查詢成本」，不是「這則不算數」）。"""
+    unmarked_kept_n = 0
+    kept_ids = set()
+    for it in items:
+        red, orange, hilite, _aired = cc._marks(it.get("raw_entry"))
+        if red or orange or hilite:
+            kept_ids.add(id(it))
+        elif unmarked_kept_n < ITEM_CAP:
+            kept_ids.add(id(it))
+            unmarked_kept_n += 1
+    selected = [it for it in items if id(it) in kept_ids]
+    omitted = len(items) - len(selected)
+    return selected, omitted
 
 
 def _load_ctv_ids(file_path, mmdd, out_dir):
@@ -221,7 +250,11 @@ def _txt_row(c):
     n_items = len(c["items"])
     n_sources = len({it["src"] for it in c["items"] if it["src"]})
     missing_str = "、".join(c["missing"]) if c["missing"] else "—"
-    return f"{c['score']}｜{c['topic']}｜{n_items}｜{n_sources}｜{missing_str}"
+    row = f"{c['score']}｜{c['topic']}｜{n_items}｜{n_sources}｜{missing_str}"
+    omitted = c.get("items_omitted") or 0
+    if omitted:
+        row += f"｜另 {omitted} 則未列"
+    return row
 
 
 def run(file_path, out_dir=None, top=12, registry_path=None):
@@ -245,14 +278,16 @@ def run(file_path, out_dir=None, top=12, registry_path=None):
             continue
         if ctv_ids_all is None:
             ctv_ids_all = _load_ctv_ids(file_path, mmdd, out_dir)
-        s, reasons = score(its)
+        s, reasons = score(its)  # 用完整 its 算分，不受 ITEM_CAP 截斷影響
         item_ids = {it.get("id") for it in its}
+        selected, omitted = _select_items(its)
         candidates.append({
             "topic": canonical,
             "canonical": canonical,
             "score": s,
             "reasons": reasons,
-            "items": [_item_row(it) for it in its],
+            "items": [_item_row(it) for it in selected],
+            "items_omitted": omitted,
             "ctv_ids": sorted(item_ids & ctv_ids_all),
             "missing": missing_of(its),
             "bigs": sorted(g["bigs"]),

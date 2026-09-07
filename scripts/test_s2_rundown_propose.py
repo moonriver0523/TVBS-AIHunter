@@ -173,11 +173,22 @@ with tempfile.TemporaryDirectory() as td:
     report("A 素材含 4 則（3+E1）", len(a_cand["items"]) == 4, a_ids)
 
     for c in cands:
-        for key in ("topic", "canonical", "score", "reasons", "items", "ctv_ids", "missing"):
+        for key in ("topic", "canonical", "score", "reasons", "items", "ctv_ids", "missing",
+                     "items_omitted"):
             report(f"{c['topic']} 含欄位 {key}", key in c, c.keys())
         for it in c["items"]:
-            for key in ("id", "alert", "hilite", "bite", "dur", "src"):
+            for key in ("id", "alert", "hilite", "bite", "dur", "src", "summary", "notes"):
                 report(f"{c['topic']}/{it.get('id')} item 含欄位 {key}", key in it, it.keys())
+
+    # A33 v2：items[] 加 summary／notes／bite文字／items_omitted——agent 不需 get --id
+    a1_row = next(it for it in a_cand["items"] if it["id"] == "A1")
+    report("A1 summary 沿用 fields.summary 全文", a1_row["summary"] == "摘要內容。", a1_row)
+    report("A1 notes 沿用 fields.notes（括號內備註）", a1_row["notes"] == "A1題目", a1_row)
+    report("A1 bite 給文字（非純 bool）", a1_row["bite"] == "某人「第一句」", a1_row)
+    a2_row = next(it for it in a_cand["items"] if it["id"] == "A2")
+    report("A2 無 BITE → bite 給 False", a2_row["bite"] is False, a2_row)
+    report("A 未超過 ITEM_CAP → items_omitted == 0", a_cand["items_omitted"] == 0,
+           a_cand["items_omitted"])
 
     # ctv_ids：沒有既存 CTV候選.json → 退回跑 A34 的函式（記憶體內，不寫檔）
     # a1 本身符合 A34 判準（NS／has_script／src_text≥500／有BITE／01:30／無限制字）
@@ -225,6 +236,59 @@ with tempfile.TemporaryDirectory() as td:
                       registry_path=os.path.join(td, "no_such_registry.json"))
     report("--top 12 截斷（15 題只留 12）", len(result3["candidates"]) == 12,
            len(result3["candidates"]))
+
+# ── ITEM_CAP：🔴🟡🔖 全列，其餘依原序取前 12，多的計入 items_omitted ─────
+report("ITEM_CAP 常數為 12", rp.ITEM_CAP == 12, rp.ITEM_CAP)
+
+cap_marked = [make_item(f"CAPR{i}", "話題", "CAP", source="NS", mark="red")
+              for i in range(3)]
+cap_unmarked = [make_item(f"CAPU{i}", "話題", "CAP", source="AP")
+                for i in range(20)]
+CAP_ITEMS = cap_marked + cap_unmarked
+
+with tempfile.TemporaryDirectory() as td:
+    state_path = os.path.join(td, "0913-s2-state.json")
+    with open(state_path, "w", encoding="utf-8") as f:
+        json.dump({"checkpoint": "0913-2200", "items": CAP_ITEMS}, f, ensure_ascii=False)
+    out_dir = os.path.join(td, "_稿單提案")
+
+    result4 = rp.run(state_path, out_dir=out_dir, top=12,
+                      registry_path=os.path.join(td, "no_such_registry.json"))
+    cap_cand = result4["candidates"][0]
+    kept_ids = [it["id"] for it in cap_cand["items"]]
+
+    report("🔴 標記則全列（3 則）",
+           all(f"CAPR{i}" in kept_ids for i in range(3)), kept_ids)
+    report("未標記則依原序取前 12（CAPU0..CAPU11）",
+           all(f"CAPU{i}" in kept_ids for i in range(12)), kept_ids)
+    report("未標記超過 12 的部分不列（CAPU12 不在內）",
+           "CAPU12" not in kept_ids, kept_ids)
+    report("items 總數＝15（3 標記＋12 未標記）", len(kept_ids) == 15, kept_ids)
+    report("items_omitted＝8（20 則未標記 - 12）", cap_cand["items_omitted"] == 8,
+           cap_cand["items_omitted"])
+    # score()／missing_of() 用完整 its（未截斷）算，不受 ITEM_CAP 影響
+    report("分數仍以完整 23 則計算（不受截斷影響）",
+           cap_cand["score"] == rp.score(CAP_ITEMS)[0], cap_cand["score"])
+
+    with open(os.path.join(out_dir, "0913-稿單候選.txt"), encoding="utf-8") as f:
+        cap_lines = [l.rstrip("\n") for l in f if l.strip()]
+    report("txt 該題尾加「另 8 則未列」",
+           any("另 8 則未列" in l for l in cap_lines), cap_lines)
+
+# 未截斷的題目：txt 不應出現「另 N 則未列」字樣（沿用最上面 0910 那組，皆 <12 則）
+with tempfile.TemporaryDirectory() as td:
+    state_path = os.path.join(td, "0914-s2-state.json")
+    with open(state_path, "w", encoding="utf-8") as f:
+        json.dump({"checkpoint": "0914-2200", "items": ITEMS}, f, ensure_ascii=False)
+    registry_path = os.path.join(td, "registry.json")
+    with open(registry_path, "w", encoding="utf-8") as f:
+        json.dump(REGISTRY, f, ensure_ascii=False)
+    out_dir = os.path.join(td, "_稿單提案")
+    rp.run(state_path, out_dir=out_dir, top=12, registry_path=registry_path)
+    with open(os.path.join(out_dir, "0914-稿單候選.txt"), encoding="utf-8") as f:
+        no_cap_lines = [l.rstrip("\n") for l in f if l.strip()]
+    report("未截斷題目 txt 不出現「另…則未列」",
+           not any("另" in l and "則未列" in l for l in no_cap_lines), no_cap_lines)
 
 print("\n" + ("全部通過" if ok else "有項目失敗"))
 sys.exit(0 if ok else 1)
