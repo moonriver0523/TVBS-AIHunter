@@ -188,7 +188,7 @@ R17 的立案前提「`s2_topic_review.py`／`s2_audit.py` 0 輪執行」**是�
 2. 片段沒有等待，navigate 後 8 秒就撈；撈到的 40 則像是篩選／排序套用前的列表。agent 第三次自己改成 `await 1500ms`＋不錨定 regex 就撈對了（`rt_list_2000c.json`）。
 17:00 輪一模一樣：`rt_list_1700.json` 13 則 `at` 全空 → `rt_list_1700c.json` 51 則才對。**這是 V8 上線後兩輪都出現的固定模式，不是偶發**。兩輪都靠 `s2_audit` Ⓐ 對帳補回，沒有漏收，但每輪多一趟重抓與一份 batch。
 
-**修法（明日空窗）**：13c2 §1b 片段 ①regex 去 `^`；②開頭 `await new Promise(r=>setTimeout(r,1500))`；③撈完加守門——`at` 全空或少於 3 則就等 3 秒重撈，仍空就 `needs-review add` 並⛔禁止用沒 `at` 的清單做窗內判斷。改完跑 `s2_rules_check.py`；13c2 餘裕小，塞不下就把片段搬 13c3 並在 13c2 留指路。
+**修法（2026-09-07 20:50 已上線，使用者裁決不等明日空窗；22:00 輪為首驗）**：13c2 §1b 片段 ①regex 去 `^`；②開頭 `await new Promise(r=>setTimeout(r,1500))`；③撈完加守門——`at` 全空或少於 3 則就等 3 秒重撈，仍空就 `needs-review add` 並⛔禁止用沒 `at` 的清單做窗內判斷。改完跑 `s2_rules_check.py`；13c2 餘裕小，塞不下就把片段搬 13c3 並在 13c2 留指路。
 
 **同輪其他觀察（都不是問題）**：AP 站一次 `evaluate` 拋 `undefined.map`（20:06）agent 自行重試成功；NS 用內容 API 補查 pending 時在 RT 分頁下呼叫 `localStorage` 得 null，換回 NS 分頁即成功；D9 hook 攔下一次臨時 python（照設計）；`set-tc` 前兩次記在 0907-1700 桶（7/8、8/8——監督者 18:40 修 R26 用掉第 6 次），第三次 `set-top` 後才進 0907-2000 桶，沒撞上限但只差一次，R23 的「set-top 只在 render 前」設計讓整輪 set-tc 都記在前一桶，值得在 R23 追蹤下再看一輪。
 
