@@ -20,6 +20,7 @@ import s2_pending
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import s2_parse as sp  # noqa: E402  raw_entry → 結構化欄位（寫入時自動推導）
+import s2_pretag as pretag  # noqa: E402  機械 T/C 建議＋涉臺提醒＋lint，見 A31
 
 # ⚠️ 用 reconfigure 不用 TextIOWrapper：包第二層時（例如 s2_state 匯入 s2_validate）
 # 舊寫法會讓其中一個 wrapper 被回收時關掉底層 buffer，整支腳本以 "I/O operation on
@@ -517,6 +518,7 @@ def cmd_add_batch(state, args):
         sys.exit(2)
     added, skipped, notes, flagged, fmt = [], [], [], [], []
     no_src = []   # R11 防呆（2026-08-13）：漏帶 src_text 要當場喊，不能等稽核翻舊帳
+    hints = []    # A31：機械 T/C 建議、涉臺提醒——純提示，不影響入庫、不必回報
     # T12（2026-09-07）：batch 每則可帶 `category`／`tc`，一次入庫＋分類＋標 T/C，
     # 免得 agent 為同一批素材再多下 set-category／set-tc 兩次呼叫。只在真的
     # 用到時才載入 TC 字典／機動 T——舊格式 batch（沒有這兩鍵）完全不碰這段，
@@ -582,6 +584,14 @@ def cmd_add_batch(state, args):
             flagged.append(f"{i}: {doubt}")
         for reason in fmt_issues(e["entry"]):
             fmt.append(f"{i}: {reason}")
+        # A31：lint 併進同一段「格式待修」輸出（13c2 §2「寫入當下就會跑」）。
+        # 檢查本身壞掉絕不能擋住入庫，同 fmt_issues 的既有原則。
+        try:
+            for reason in pretag.lint(e["entry"], sb_count=sb, footage_type=ft,
+                                       tc=e.get("tc")):
+                fmt.append(f"{i}: {reason}")
+        except Exception:
+            pass
         added.append(i)
         # T12：category／tc 緊跟在 new_item() 之後——錯誤不擋入庫，素材已經
         # 進了 state["items"][i]，這裡只補分類與標籤，退件走既有 tc_bad 桶。
@@ -591,6 +601,26 @@ def cmd_add_batch(state, args):
         if e.get("tc"):
             err = _set_one_tc(state, i, str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
             (tc_bad if err else tc_done).append(err or i)
+        # A31：缺 tc 的印機械建議；涉臺詞表命中且沒有 🔴/🟡 的提醒至少標 🟡（13e）。
+        # 純提示、不影響入庫，讀到 e["suggest"]（build 算好的）就直接用，沒有
+        # 才現算——兩條路徑都要顧，因為 add-batch 也常被直接呼叫、跳過 build。
+        try:
+            _sug = e.get("suggest") if isinstance(e.get("suggest"), dict) else None
+            if not e.get("tc"):
+                _sug_t = (_sug or {}).get("T")
+                _sug_c = (_sug or {}).get("C")
+                if _sug_t is None and _sug_c is None:
+                    _fresh = pretag.suggest_tc(e["entry"], source=e.get("source"))
+                    _sug_t, _sug_c = _fresh["T"], _fresh["C"]
+                if _sug_t or _sug_c:
+                    hints.append(f'💡 {i} 建議 tc="{",".join(_sug_t or [])}/{",".join(_sug_c or [])}"')
+            _taiwan = (_sug or {}).get("taiwan")
+            if _taiwan is None:
+                _taiwan = bool(pretag.taiwan_hit(e["entry"]))
+            if _taiwan and "🔴" not in e["entry"] and "🟡" not in e["entry"]:
+                hints.append(f"🇹🇼 {i} 涉臺，規則要求至少 🟡（13e）")
+        except Exception:
+            pass
     if tc_bad:
         # 退件要留得下痕跡，同 cmd_set_tc 的做法——落進 tc_rejected，不逐則擋。
         # ⚠️ 這裡刻意**不計進 tc_calls**：那個上限是擋逐則呼叫，batch 內建的
@@ -630,6 +660,10 @@ def cmd_add_batch(state, args):
     if skipped:
         print(f"跳過 {len(skipped)} 則：")
         print("\n".join("  " + s for s in skipped))
+    if hints:
+        print(f"💡 機械提示 {len(hints)} 項（純建議／提醒，不影響入庫，"
+              f"判斷不同時以你為準，不必回報，見 A31）：")
+        print("\n".join("  " + h for h in hints))
     # 收尾提醒同 set-category：這批入完之後，本檔還有哪些則沒 T/C——
     # 觸發點要在還「在分類脈絡裡」的當下，不要等 render 覆蓋率閘門才講（T10）。
     _remind_missing_tc(state)

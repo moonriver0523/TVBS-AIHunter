@@ -115,6 +115,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import s2_state  # noqa: E402  from-raw 讀狀態檔（唯讀，D12 已在庫標記）
+import s2_pretag as pretag  # noqa: E402  機械 T/C 建議＋(BITE)建議，見 A31
 
 # Windows 主控台常是 cp950，print() 中文欄位（entry／script 原文）會直接炸掉。
 # 這不影響 --out 落檔（那條路本來就明寫 UTF-8），只補救不帶 --out 直接印到終端機的情境。
@@ -352,6 +353,19 @@ def cmd_build(args):
                 new_row['category'] = category
             if tc is not None:
                 new_row['tc'] = tc
+            # A31：機械 T/C／涉臺／(BITE) 建議，掛在 row["suggest"]——
+            # add-batch 讀到只印，不存進狀態檔（見 s2_pretag.py 開頭）。
+            # 壞掉不擋 build：這是建議，不是必要欄位。
+            try:
+                _sug = pretag.suggest_tc(entry_text, source=new_row.get('source'))
+                new_row['suggest'] = {
+                    'T': _sug['T'], 'C': _sug['C'],
+                    'taiwan': bool(pretag.taiwan_hit(entry_text)),
+                    'bite': pretag.bite_suggest(new_row.get('sb_count'),
+                                                 new_row.get('has_sot'), entry_text),
+                }
+            except Exception:
+                pass
             batch.append(new_row)
 
         out = json.dumps(batch, ensure_ascii=False, indent=2)
@@ -409,6 +423,16 @@ def cmd_build(args):
         if tc is not None:
             row['tc'] = tc
         row.update(spec['extra_of'](it))
+        # A31：機械 T/C／涉臺／(BITE) 建議，同 --skeleton 分支（見上）。
+        try:
+            _sug = pretag.suggest_tc(entry_text, source=row.get('source'))
+            row['suggest'] = {
+                'T': _sug['T'], 'C': _sug['C'],
+                'taiwan': bool(pretag.taiwan_hit(entry_text)),
+                'bite': pretag.bite_suggest(row.get('sb_count'), row.get('has_sot'), entry_text),
+            }
+        except Exception:
+            pass
         batch.append(row)
 
     out = json.dumps(batch, ensure_ascii=False, indent=2)
@@ -501,13 +525,24 @@ def cmd_from_raw(args):
     with open(out, 'w', encoding='utf-8') as f:
         json.dump(skeleton, f, ensure_ascii=False, indent=2)
 
-    # 提示表：#序｜id｜dur｜sb｜head｜first150。累計字元逼近 28,000（跟
-    # inspect 全文預算同一個數字，見 INSPECT_TEXT_BUDGET）就分頁，不靜默截斷。
-    all_lines = [
-        f"#{idx}｜{row['id']}｜{row['hint']['dur']}｜{row['hint']['sb_count']}｜"
-        f"{row['hint']['head']}｜{row['hint']['first150']}"
-        for idx, row in enumerate(skeleton, 1)
-    ]
+    # 提示表：#序｜id｜dur｜sb｜head｜first150｜T?｜C?｜🇹🇼（A31，2026-09-07）。
+    # T?/C? 是機械建議、只是起點，照內容判；🇹🇼 只在涉臺詞表命中時才印一欄。
+    # ⚠️ 這裡吃的是站方原文（head/first150，AP/RT/NS 多為英文），中文關鍵詞表
+    # 在英文稿上命中率偏低是預期中的已知限制，不是這支腳本的 bug。
+    # 壞掉不擋提示表本體：這欄是建議，不是必要輸出。
+    all_lines = []
+    for idx, row in enumerate(skeleton, 1):
+        line = (f"#{idx}｜{row['id']}｜{row['hint']['dur']}｜{row['hint']['sb_count']}｜"
+                f"{row['hint']['head']}｜{row['hint']['first150']}")
+        try:
+            _text = f"{row['hint']['head']} {row['hint']['first150']}"
+            _sug = pretag.suggest_tc(_text, source=row.get('source'))
+            line += f"｜T?={','.join(_sug['T'])}｜C?={','.join(_sug['C'])}"
+            if pretag.taiwan_hit(_text):
+                line += "｜🇹🇼"
+        except Exception:
+            pass
+        all_lines.append(line)
     pages, cur, cur_len = [], [], 0
     for ln in all_lines:
         ln_len = len(ln) + 1
