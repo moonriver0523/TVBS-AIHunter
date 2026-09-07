@@ -160,3 +160,6 @@ R17 的立案前提「`s2_topic_review.py`／`s2_audit.py` 0 輪執行」**是�
 
 ### R23 `set-top checkpoint` 時機：13f 與 prompt 矛盾（2026-09-07，04-T13 發現）
 `13f` 時序陷阱②（2026-08-25 `3f8a4ad`）寫「set-top 要開工就下，不要留到收工」，理由是 0825-0430 set-tc 配額分桶記錯；`scripts/s2_scan_prompt.md`（2026-09-03 `ddc71b9`）寫「⛔ 開局絕對不要跑 set-top，固定在掃完所有站後、set-tc／render 之前」，理由是體檢發現開局 set-top 在 NS 斷線時會讓整段窗永久漏收。9/3 改了 prompt 沒回頭改 13f。裁決留 9/3 版（見 MASTER 列）；`5c61019` 已在 13f 加訂正、收工總表第 5.5 列寫定。**驗收**：接下來 3 正式輪 transcript 中 set-top 都在掃完所有站之後、render 之前。
+
+### R25 `add-batch` 不收物件形 `category`（2026-09-07，17:00 首輪發現）
+狀態檔 schema（`13c2` §2 L62）明寫 `category` 是 `{"大分類":…,"中主題":…,"小分題":…}` 物件，T12（L68）只說 batch「可帶 `category`／`tc`」沒說形狀；agent 自然照 schema 給物件。`cmd_add_batch` L647 `str(e["category"])` 得到 `{'大分類': …}` 字串、沒有 `/`，`_set_one_category` 回「cat 需為「大分類/中主題[/小分題]」」，五站 141 則全退回、`tc` 也連帶沒寫。agent 事後 `set-category` ×7＋`set-tc` ×5 補齊（最終 140/141 有分類與 T/C），但 `set-category` 走 `topic_mode="off"`，P1b 閘門整輪沒觸發：68 個中主題 55 個未登記、`s2_topic_registry.json` 零 diff。**修法**：`cmd_add_batch` 遇 dict → `"/".join(filter(None,[大,中,小]))`；`13c2` §2 補「batch 的 `category` 收字串或物件」；`build --skeleton` 統一產字串。**風險**：修好後 P1b 閘門會生效，`new_topics` 規則句（P1b-2）要同批進 13c2／13f，否則 agent 面對 GATED 沒有依據。**驗收**：修後首輪 `add-batch` 印「分類 N／T/C N／退回 0」、`set-category`／`set-tc` 呼叫數 0–1、登記簿有 diff。
