@@ -57,16 +57,17 @@ RULE_FILES = {
     '13': os.path.join('common', '13-S2-定時掃帶.md'),
     # 2026-08-24（R15）：Read 結果約 30,000 字元會靜默截斷，13（53,676 字元）與
     # 13c（42,998 字元）實測每輪都只載入約一半。已切成 13＋13e＋13f 與 13c＋13c2，
-    # 逐字保留（附 SHA-256 守恆證明）。五份都是必讀，指紋都要記。
+    # 逐字保留（附 SHA-256 守恆證明）。
     '13e': os.path.join('common', '13e-S2-素材行與分類規則.md'),
     '13f': os.path.join('common', '13f-S2-大分類與各站規則.md'),
-    '13c2': os.path.join('common', '13c2-S2-定時掃帶-v3省token-下.md'),
-    # '13b' 2026-08-24 退役，prompt 明文禁讀，不再量測。
-    '13c': os.path.join('common', '13c-S2-定時掃帶-v3省token.md'),
-    '13d': os.path.join('common', '13d-S2-定時掃帶-v4.md'),
-    # A26 五層合一上線後改成新檔名（見 05-A26 計畫 Task 6）。
-    '13g': os.path.join('common', '13g-S2-定時掃帶-v5-四站.md'),
-    '13h': os.path.join('common', '13h-S2-定時掃帶-v7-五站.md'),
+    # 2026-09-07 A26 五層合一（V8）：13c＋13c2＋13d＋13g＋13h 五份「疊層」執行版
+    # 合一成單層四檔（13c1 因超字元預算再拆 ENEX／ABC 兩檔＝實際五檔）。
+    # 13d／13g／13h 退役，內容併入下列或存查於 13c-V8-已取代條文.md（不量測，非必讀）。
+    '13c': os.path.join('common', '13c-S2-執行版-上-入口與三站擷取.md'),
+    '13c1': os.path.join('common', '13c1-S2-執行版-中-ENEX.md'),
+    '13c1b': os.path.join('common', '13c1b-S2-執行版-中-ABC.md'),
+    '13c2': os.path.join('common', '13c2-S2-執行版-下-狀態檔與指令.md'),
+    '13c3': os.path.join('common', '13c3-S2-執行版-下-收工與防卡.md'),
 }
 
 
