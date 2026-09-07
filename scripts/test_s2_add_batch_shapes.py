@@ -143,6 +143,11 @@ st = load(sp)
 report("③ 新格式：已登記名照寫", (st["items"].get("RT0011") or {}).get("category", {}).get("中主題") == "尼泊爾洪災")
 report("③ 新格式：未登記名擋下、素材已入庫、印 🆕", "RT0012" in st["items"] and not st["items"]["RT0012"].get("category")
        and "未登記中主題：全新主題" in out, out[-400:])
+# 重送同一批但**沒帶** new_topics → 仍被擋：不准報「只補分類」、category 仍空、🆕 照印
+code, out = run(sp, rp, "add-batch", "--entries", b)
+st = load(sp)
+report("③ 重送沒帶 new_topics → 不報補分類、仍 🆕", "只補分類" not in out and "未登記中主題：全新主題" in out
+       and not (st["items"].get("RT0012") or {}).get("category"), out[-400:])
 # 重送同一批＋new_topics → 只補分類，不再「已存在」跳過
 b = write_batch(d, "b3.json", {"entries": [
     entry("RT0011", {"大分類": "社會", "中主題": "尼泊爾洪災", "小分題": "搜救進度"}),

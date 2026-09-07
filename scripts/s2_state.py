@@ -659,12 +659,16 @@ def cmd_add_batch(state, args):
                 err = _set_one_category(state, i, _cat_as_str(e["category"]), strict=False,
                                         quiet=True, registry=reg, topic_mode=topic_mode,
                                         gated=gated, auto_registered=auto_registered)
-                if err is not GATED:
-                    (tc_bad if err else cat_done).append(err or i)
-                if e.get("tc") and not (_cur_tc.get("T") or _cur_tc.get("C")):
-                    err = _set_one_tc(state, i, _tc_as_str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
-                    (tc_bad if err else tc_done).append(err or i)
-                refilled.append(i)
+                if err is GATED:
+                    pass                      # 仍未登記：留給下方 🆕 彙整，⛔ 不算「補分類」
+                elif err:
+                    tc_bad.append(err)
+                else:
+                    cat_done.append(i)
+                    refilled.append(i)        # 只有真的寫進 category 才算補到
+                    if e.get("tc") and not (_cur_tc.get("T") or _cur_tc.get("C")):
+                        err = _set_one_tc(state, i, _tc_as_str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
+                        (tc_bad if err else tc_done).append(err or i)
             else:
                 skipped.append(f"{i}: 已存在（要更新請用 update-entry）")
             continue
