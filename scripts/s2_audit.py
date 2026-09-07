@@ -252,8 +252,14 @@ def reconcile(st, mmdd, path, label):
                 f"Edit No 撞號時可能靜默漏收；清單改存 `CODE|MM/DD/YYYY HH:MM` 才驗得出來")
 
     # 窗：window_start → 目前 checkpoint（都取 HH:MM，跨夜用 +24h 折算）
+    # 🔴 R29（2026-09-08）：窗尾**不可以**直接讀頂層 `checkpoint`。`set-top` 依
+    # 13c3 是收工才下，稽核跑在它之前，所以頂層停在**上一輪**——0908-0100 那輪
+    # 窗尾被算成 22:00，窗變成 13:00–22:00，22:00 之後才上站的素材若真的漏收，
+    # 會被歸進「窗外 N 則屬下一輪，不算漏」而**靜默放過**（那輪剛好 40 則全收，
+    # 沒爆出來）。`S._bucket_key` 優先讀 launcher 每輪 export 的 `S2_CHECKPOINT`，
+    # 與 R25 的 `tc_rejected`／`tc_calls` 同一套桶鍵，⛔ 不要在這裡另寫一份。
     ws = _hhmm(st["_top"].get("window_start") or "")
-    _d, end = R.checkpoint_time(st["_top"].get("checkpoint"), mmdd)
+    _d, end = R.checkpoint_time(S._bucket_key(st["_top"]), mmdd)
     we = (end // 100 * 60 + end % 100) if end is not None else None
     if we is not None and ws is not None and we < ws:
         we += 1440
@@ -382,7 +388,10 @@ def _reconcile_section(st, mmdd, args, state_path=None, scratch=None):
                 if r:
                     done[label] = dict(r, ts=ts)
     if done and state_path:
-        _log_reconcile(state_path, st["_top"].get("checkpoint"), done)
+        # 🔴 R29：同上——用頂層 checkpoint 會把本輪對帳寫進**上一輪的格子**並蓋掉
+        # 它（0908-0100 那輪蓋掉 0907-2200 的原始留痕），render 收工查本輪又查不到，
+        # 誤報「三站全缺」。誤報的下場是這道防線被當雜訊，見 s2_render L520 註解。
+        _log_reconcile(state_path, S._bucket_key(st["_top"]), done)
     if any_ and len(done) < 3:
         missing = [s for s in ("RT", "AP", "NS") if s not in done]
         yel("三站只對了 " + ("／".join(sorted(done)) or "0 站") +

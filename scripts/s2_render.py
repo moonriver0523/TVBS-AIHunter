@@ -544,15 +544,24 @@ def warn_unreconciled(state):
 
     log = top.get("reconcile_log")
     log = log if isinstance(log, dict) else {}   # 手改過的狀態檔什麼型別都可能
-    done = log.get(cp)
+    # 🔴 R29：查核用的桶鍵跟 s2_audit 寫入時同一套（`S2_CHECKPOINT` 優先），
+    # 否則 render 若在 `set-top` 之前跑，就會拿上一輪的鍵去查本輪的紀錄。
+    # ⚠️ 上面那道「忘了 set-top」的檢查**仍然用頂層 `cp`**，不可一起改掉。
+    # ⛔ 這裡刻意不 import s2_state（L33 註解：render 不拉 s2_state），
+    # 桶鍵規則短到可以就地寫一份：環境變數合格才用，否則退回頂層 cp。
+    _env = (os.environ.get("S2_CHECKPOINT") or "").strip()
+    _key = _env if re.match(r"^\d{4}-\d{4}$", _env) else cp
+    # ⛔ 不准 fallback 到 `log.get(cp)`：那等於「查不到本輪就拿上一輪的成績頂替」，
+    # 正是這整條鏈要抓的 0806 失效形狀（test_s2_reconcile_gate 有專案釘死）。
+    done = log.get(_key)
     done = done if isinstance(done, dict) else {}
     miss = [s for s in ("RT", "AP", "NS") if s not in done]
     if not miss:
-        print(f"OK 清單對帳三站齊全（{cp}）")
+        print(f"OK 清單對帳三站齊全（{_key}）")
         return
     bar = "!" * 60
     tail = "：" + "／".join(miss) + " 缺" if done else "（三站全缺）"
-    print(f"\n{bar}\n⚠️  這一輪（{cp}）沒有做清單對帳{tail}")
+    print(f"\n{bar}\n⚠️  這一輪（{_key}）沒有做清單對帳{tail}")
     print("    對帳是唯一能機械驗證「窗內真的全撈到」的步驟。0806 沒做的那幾輪，")
     print("    事後補到 RT 2 則、NS 19 則——當輪全都回報「正常完成」。")
     print("    補做：撈清單存檔後跑")
