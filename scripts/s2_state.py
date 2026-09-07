@@ -517,6 +517,19 @@ def cmd_add_batch(state, args):
         sys.exit(2)
     added, skipped, notes, flagged, fmt = [], [], [], [], []
     no_src = []   # R11 防呆（2026-08-13）：漏帶 src_text 要當場喊，不能等稽核翻舊帳
+    # T12（2026-09-07）：batch 每則可帶 `category`／`tc`，一次入庫＋分類＋標 T/C，
+    # 免得 agent 為同一批素材再多下 set-category／set-tc 兩次呼叫。只在真的
+    # 用到時才載入 TC 字典／機動 T——舊格式 batch（沒有這兩鍵）完全不碰這段，
+    # 字典檔萬一壞掉也不會拖累原本能跑的批次（見 Global Constraints）。
+    cat_done, tc_done, tc_bad, rewrites = [], [], [], []
+    _need_tc = any(isinstance(x, dict) and (x.get("category") or x.get("tc")) for x in data)
+    ok_t = ok_c = None
+    _sp_names = set()
+    if _need_tc:
+        ok_t, ok_c = _load_tc_dict()
+        _sp_active, _sp_all = load_special_t()
+        ok_t = list(ok_t) + _sp_active
+        _sp_names = {x.get("name") for x in _sp_all if x.get("name")}
     for n, e in enumerate(data, 1):
         if not isinstance(e, dict):
             skipped.append(f"第{n}筆: 不是物件")
@@ -570,6 +583,23 @@ def cmd_add_batch(state, args):
         for reason in fmt_issues(e["entry"]):
             fmt.append(f"{i}: {reason}")
         added.append(i)
+        # T12：category／tc 緊跟在 new_item() 之後——錯誤不擋入庫，素材已經
+        # 進了 state["items"][i]，這裡只補分類與標籤，退件走既有 tc_bad 桶。
+        if e.get("category"):
+            err = _set_one_category(state, i, str(e["category"]), strict=False, quiet=True)
+            (tc_bad if err else cat_done).append(err or i)
+        if e.get("tc"):
+            err = _set_one_tc(state, i, str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
+            (tc_bad if err else tc_done).append(err or i)
+    if tc_bad:
+        # 退件要留得下痕跡，同 cmd_set_tc 的做法——落進 tc_rejected，不逐則擋。
+        # ⚠️ 這裡刻意**不計進 tc_calls**：那個上限是擋逐則呼叫，batch 內建的
+        # 一次性標記不算「呼叫」（見 Architecture／Global Constraints）。
+        top = state.setdefault("_top", {})
+        cp = top.get("checkpoint") or ""
+        rej = dict(top.get("tc_rejected") or {})
+        rej[cp] = (rej.get(cp) or []) + tc_bad
+        top["tc_rejected"] = rej
     if added:
         save(state, args.file, allow_create=True)
     print(f"OK 新增 {len(added)} 則" + (f"：{','.join(added)}" if added else ""))
@@ -587,9 +617,22 @@ def cmd_add_batch(state, args):
     if notes:
         print(f"提醒 {len(notes)} 則（已入庫，請自行確認）：")
         print("\n".join("  " + n for n in notes))
+    if cat_done or tc_done or tc_bad:
+        print(f"分類 {len(cat_done)}／T/C {len(tc_done)}／退回 {len(tc_bad)}")
+        if tc_bad:
+            print(f"⚠️ 退回 {len(tc_bad)} 則（已記進 tc_rejected，不必逐則重試，"
+                  f"整批改好再下一次）：")
+            print("\n".join("  " + s for s in tc_bad))
+    if rewrites:
+        print(f"ℹ️ T／C 依字典改寫 {len(rewrites)} 則（併入桶／改名／專項帶區域）：")
+        for _x in rewrites:
+            print("  " + _x)
     if skipped:
         print(f"跳過 {len(skipped)} 則：")
         print("\n".join("  " + s for s in skipped))
+    # 收尾提醒同 set-category：這批入完之後，本檔還有哪些則沒 T/C——
+    # 觸發點要在還「在分類脈絡裡」的當下，不要等 render 覆蓋率閘門才講（T10）。
+    _remind_missing_tc(state)
 
 
 def apply_update(state, i, entry, sb_count=None, status=None, checkpoint=None,
@@ -1503,25 +1546,21 @@ def cmd_set_category(state, args):
     # 🔴 T/C 的觸發點要落在 render **之前**（T10）。set-category 是最後一個
     #    「還在分類脈絡裡」的位置，這裡提醒最便宜；等 render 的覆蓋率閘門才講，
     #    補標就會發生在 render 之後、頁面停在舊的。
-    _no_tc = [i for i, it in (state.get("items") or {}).items()
-              if (it or {}).get("script_status") != "note"
-              and not (((it or {}).get("tc") or {}).get("T")
-                       or ((it or {}).get("tc") or {}).get("C"))]
-    if _no_tc:
-        print(f"🔴 本檔還有 {len(_no_tc)} 則沒有 T／C，**趁現在跟這批一起下**："
-              f"{'、'.join(_no_tc[:8])}{'…' if len(_no_tc) > 8 else ''}")
-        print('   set-tc --pairs "id=T1,T2/C1,C2;…"（名單見 13f「議題 T」／「地緣 C」）')
+    _remind_missing_tc(state)
     if skipped:
         print(f"跳過 {len(skipped)} 則：")
         print("\n".join("  " + s for s in skipped))
 
 
-def _set_one_category(state, raw_id, cat, strict):
+def _set_one_category(state, raw_id, cat, strict, quiet=False):
     """設定單筆 category。strict=True 出錯直接 exit；否則回傳錯誤訊息字串。
 
     cat 格式：`大分類/中主題` 或 `大分類/中主題/小分題`（小分題選填）。
     小分題是 WP1 加的第三層——render 全生三層結構（裸行標題＋`+` 分隔），
     舊資料沒這欄位時該層省略，屬正常（見 13「三層骨架」）。
+
+    quiet=True（T12 加，`add-batch` 內建分類用）：批次時不逐則印
+    「OK … category=…」，否則一批幾十則會洗版。
     """
     i = norm_id(raw_id)
     if i not in state["items"]:
@@ -1536,12 +1575,28 @@ def _set_one_category(state, raw_id, cat, strict):
         if sub:
             c["小分題"] = sub
         state["items"][i]["category"] = c
-        print(f"OK {i} category={big}／{mid}" + (f"／{sub}" if sub else ""))
+        if not quiet:
+            print(f"OK {i} category={big}／{mid}" + (f"／{sub}" if sub else ""))
         return None
     if strict:
         print("ERROR: " + msg)
         sys.exit(2)
     return msg
+
+
+def _remind_missing_tc(state):
+    """收尾提醒：本檔還有哪些則沒有 T/C。`set-category`／`add-batch` 共用
+    （T12 抽出來，原本只在 `set-category` 印，`add-batch` 一次入庫＋分類
+    之後同樣該提醒，不要等到 render 的覆蓋率閘門才講）。
+    """
+    _no_tc = [i for i, it in (state.get("items") or {}).items()
+              if (it or {}).get("script_status") != "note"
+              and not (((it or {}).get("tc") or {}).get("T")
+                       or ((it or {}).get("tc") or {}).get("C"))]
+    if _no_tc:
+        print(f"🔴 本檔還有 {len(_no_tc)} 則沒有 T／C，**趁現在跟這批一起下**："
+              f"{'、'.join(_no_tc[:8])}{'…' if len(_no_tc) > 8 else ''}")
+        print('   set-tc --pairs "id=T1,T2/C1,C2;…"（名單見 13f「議題 T」／「地緣 C」）')
 
 
 def load_validate():

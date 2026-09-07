@@ -29,7 +29,10 @@ add-batch 吃得下的格式」，正是原本 15 次臨時 python 裡唯一真�
 
 entries.json 格式：`{"AP4677906": "◆ AP4677906 (…) …"}`；
 值也可以是 `{"entry": "…", "status": "pending"}` 這種物件，
-用來覆蓋機械推導出的 status（例如初稿還沒補正式稿）。
+用來覆蓋機械推導出的 status（例如初稿還沒補正式稿）。物件還可以帶
+`category`（`"大分類/中主題[/小分題]"`）／`tc`（`"T1,T2/C1,C2"`）兩鍵，
+`build` 會原樣帶進 batch row，交給 `add-batch` 一次入庫＋分類＋標 T/C
+（2026-09-07 T12）。
 
 三站欄位不統一，per-site adapter 寫死在 SITE_SPEC 裡；raw.json 的欄位名
 以 13c 規則檔為準（NS: id/ft/dur_ms/desc/script/skip；
@@ -306,9 +309,13 @@ def cmd_build(args):
         if isinstance(raw_entry, dict):
             entry_text = raw_entry.get('entry', '')
             status_override = raw_entry.get('status')
+            category = raw_entry.get('category')
+            tc = raw_entry.get('tc')
         else:
             entry_text = raw_entry
             status_override = None
+            category = None
+            tc = None
 
         row = {
             'id': item_id,
@@ -318,6 +325,13 @@ def cmd_build(args):
             'entry': entry_text,
             'src_text': spec['src_text_of'](it),
         }
+        # T12（2026-09-07）：entries.json 的值若是物件，category／tc 兩鍵
+        # 原樣帶進 batch row，交給 add-batch 一次入庫＋分類＋標 T/C。
+        # 純字串 entries（舊格式）沒有這兩鍵可帶，行為完全不變。
+        if category is not None:
+            row['category'] = category
+        if tc is not None:
+            row['tc'] = tc
         row.update(spec['extra_of'](it))
         batch.append(row)
 

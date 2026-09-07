@@ -551,6 +551,31 @@ check('concat --site abc 缺欄位時退回通用猜測，不炸',
 check('abc／enex 沒混進 SITE_SPEC（dump／build 仍只認三站）',
       set(bp.SITE_SPEC) == {'ns', 'ap', 'rt'})
 
+# ── build：entries.json 值為物件時 category／tc 原樣帶進 batch row（T12，2026-09-07）
+# 🔴 cmd_build 讀 raw 用 load_json()（純陣列），不是 cmd_snapshot／cmd_compare
+#    那套會自動卸殼的 _load_raw_any——不能沿用上面包了 items 殼的 RAW。
+BUILD_RAW = write_json('build_raw.json', [
+    {'code': 'RT1001', 'head': 'Story one', 'story': 'text one', 'sb_count': 2},
+    {'code': 'RT1002', 'head': 'Story two', 'story': 'text two', 'sb_count': 0},
+])
+BUILD_ENTRIES = write_json('build_entries.json', {
+    'RT1001': {'entry': '◆ 摘要一', 'category': '社會/測試案', 'tc': '社會/美國'},
+    'RT1002': '◆ 摘要二（純字串 entries，沒有 category／tc 可帶）',
+})
+BUILD_OUT = os.path.join(TMP, 'build_batch.json')
+outB, codeB = run(bp.cmd_build, Args(site='rt', raw=BUILD_RAW, entries=BUILD_ENTRIES,
+                                     checkpoint='0817-1600', out=BUILD_OUT))
+check('build 執行成功', codeB == 0, outB.strip()[:80])
+rowsB = {r['id']: r for r in json.load(open(BUILD_OUT, encoding='utf-8'))}
+check('build：entries 為物件時 category 原樣帶進 row',
+      rowsB.get('RT1001', {}).get('category') == '社會/測試案', str(rowsB.get('RT1001')))
+check('build：entries 為物件時 tc 原樣帶進 row',
+      rowsB.get('RT1001', {}).get('tc') == '社會/美國', str(rowsB.get('RT1001')))
+check('build：純字串 entries 不含 category 鍵（舊格式不變）',
+      'category' not in rowsB.get('RT1002', {}), str(rowsB.get('RT1002')))
+check('build：純字串 entries 不含 tc 鍵（舊格式不變）',
+      'tc' not in rowsB.get('RT1002', {}), str(rowsB.get('RT1002')))
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)
