@@ -205,7 +205,7 @@ UI 清單裡」。**證據**：`S2-NS保活` 早就是 `Hidden=true`，21:20 那
       **真正還沒碰的是這兩項**：
       - [x] ~~AP 照片仍是純 UI~~ **已過期**：`ap/02` 自 2026-08-10 起走 search→preview→`check`→`tick` API 全流程（2026-09-07 體檢時發現此條沒同步）。
       - [x] **`ENEX`／`ABC` 影片下載流程 2026-09-07 已補進 `reuters/05`**：ENEX `/download/{id}` 302→S3 SigV4 直鏈（10 分鐘、剝 `check_logged_in=1`、curl）；ABC 是交付模型 `ApproveNews`→`Ready For Download`→`/Delivery/Download/{guid}` 302→S3 SigV2 直鏈（約 2 天、導航下載）。全檔實際落地與 ABC 核准等待時間待首次真跑補記。
-      - [ ] 🟡 **CTV `cnn/01` 步驟 1＋3 改走 NS API**（`term:"{ID}"` 直查，0907 實測可行）——待使用者裁決，見體檢檔 F1。
+      - [ ] 🟡 **CTV `cnn/01` 步驟 1＋3 改走 NS API**（`term:"{ID}"` 直查；0907 用 2 則當週素材驗過 API script＝≡Q Preview 逐字一致、metadata 全有對應欄位；⚠️ ID 會重用要取 `createdDate` 最新、舊 ID 查不到要退 UI）——待使用者裁決做不做，見體檢檔 F1／§3。
 
 - [x] ✅ **已補（2026-08-09 轉正式時）：RT 清單首頁撈不完時要按 Load More**
       **測試模式有「每站上限 5 則」擋著，這個缺口一直被掩蓋**——正式模式要求窗內零漏收，
