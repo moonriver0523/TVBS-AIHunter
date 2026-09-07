@@ -1449,9 +1449,10 @@ def load_registry(path=None):
     """
     p = path or REGISTRY_PATH
     if not os.path.exists(p):
-        reg = _registry_seed_from_resident()
-        save_registry(reg, p)
-        return reg
+        # 缺檔只在記憶體生成種子、**不落地**（2026-09-07 訂正：原本會 save，
+        # 導致任何呼叫 set-category 的測試都在 repo 留下 s2_topic_registry.json；
+        # 正式檔由 topic-register／topic-alias 第一次寫入時才建立）。
+        return _registry_seed_from_resident()
     try:
         with open(p, encoding="utf-8-sig") as f:
             reg = json.load(f) or {}
