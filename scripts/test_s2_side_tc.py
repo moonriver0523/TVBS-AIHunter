@@ -163,6 +163,15 @@ class _Args:
         self.overwrite = kw.get("overwrite", False)
         self.dry_run = kw.get("dry_run", False)
         self.file = kw["file"]
+        # A10 P1b：`cmd_add_side` 現在會查／寫中主題登記簿（新題自動
+        # register）。這支測試在驗證 T/C 字典邏輯，跟登記簿無關——
+        # ⛔ 不能讓它落到真正的 `scripts/s2_topic_registry.json`
+        # （0907 實錯：直接呼叫 `cmd_add_side` 沒有 argparse 的 `--registry`
+        # 預設可用，`getattr` 退回 `REGISTRY_PATH` 就是正式檔，測試資料
+        # 就這樣寫了進去）。固定指到隔離的空登記簿，且關掉自動登記
+        # （這支不測這塊，關掉最單純、也最貼近「舊行為」）。
+        self.registry = kw.get("registry", os.path.join(tempfile.mkdtemp(), "registry.json"))
+        self.auto_register = kw.get("auto_register", False)
 
 
 def _write(tmp, name, text):
