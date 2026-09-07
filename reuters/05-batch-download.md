@@ -30,8 +30,8 @@
 | `RT`（`RTV` 正規化為 `RT`） | Reuters Connect | [`搜尋外電素材(RT)`](01-search-workflow.md) | `RT` |
 | `AP` | AP Newsroom | [`搜尋外電素材(AP)`](../ap/01-search-workflow.md)／[`找AP照片`](../ap/02-photo-search.md) | `AP` |
 | `{2 字母}-{數字}{星期兩碼}` 組合碼<br>（`IN-07SU`／`PO-35TU`／`WE-018FR`…前綴不固定） | CNN Newsource | [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md) | `CNN`（NEWSOURCE＝CNN Newsource） |
-| `ENEX` | 尚無教學說明 | 遇到先問使用者要去哪裡找 | `ENEX` |
-| `ABC` | 尚無教學說明 | 遇到先問使用者要去哪裡找 | `ABC` |
+| `ENEX`（`ENEX{6 碼}`） | ENEX 會員站 `members.enex.news` | 見下方「ENEX」細節（2026-09-07 訂定：文稿走 ES API、影片走 `/download/{id}` 簽章直鏈） | `ENEX` |
+| `ABC`（`ABC{9 碼 Story Number}`） | ABC NewsOne（Extreme Reach AdBridge）`abcnews.extremereach.com` | 見下方「ABC」細節（2026-09-07 訂定：文稿走 Detail 頁、影片要先 Approve 再 Download） | `ABC` |
 | DVIDS URL（`dvidshub.net`） | DVIDS（美國國防部影像庫） | 見下方「DVIDS」細節 | `DVIDS` |
 | YouTube URL | YouTube | `yt-dlp` 下載到 `D:\Downloads` | `YT` |
 | X 影片貼文（一般 `#XX`） | X | `yt-dlp` 下載到 `D:\Downloads` | `X` |
@@ -45,7 +45,7 @@
 **共同前提**
 - **一律用 Playwright 工具組**（`mcp__browser__*`），不是 claude-in-chrome（NS 的 localStorage 在 claude-in-chrome 會被 extension 隱私防護擋死）。
 - **開工前檢查 profile 殘留**（多 agent 並行會互鎖；0803 曾害 RT 三輪誤判「全站 0 素材」）：
-  `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ? { $_.CommandLine -like "*playwright-mcp-profile*" }`，閒置就 `Stop-Process -Force`；**自己收工也要關**。
+  `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ? { $_.CommandLine -like "*playwright*profile*" }`，閒置就 `Stop-Process -Force`；**自己收工也要關**。（2026-09-07 訂正：本流程用的是 `~/.claude.json` 裡 `browser` MCP 的 `.playwright-daily-profile`，舊字串 `*playwright-mcp-profile*` 比對不到任何實際 profile；S2 掃帶用的 `.playwright-s2-profile-v4` 不共用登入態，⛔ 不要拿它來做批次下載。）
 - ⚠️ **下載落點是 `D:\Downloads\PlaywrightMCP\`，不是 `D:\Downloads\`**（2026-08-03 實測）。改名時從這裡取檔；Playwright 會把檔名裡的 `_`／空格換成 `-`，**別假設檔名原樣保留**。
 - **費用：不必事前把關、不必為此停下來**（2026-08-03 使用者訂正）——**使用者提交清單時已人工確認過都是免費素材**，本流程照單全收即可，不要因為費用欄位而卡住或反覆確認。
   - 但**看到就順手回報**：費用欄位本來就在你已經取回的回應裡（RT 的 `points`／`free` 就在文稿那份 item 回應；AP 的 `Term` 在 `downloadnr/check`，而 check 本來就是拿 `ContentId` 的必要步驟），**零額外呼叫**。若發現某筆不是免費（RT `points` 非 0，或 AP `AppliedPrice` 非 0／`IsAlaCarte: true`），**照樣下載**，但在回報裡列出該筆與數值，當人工核對的備援。
@@ -109,7 +109,34 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
 
 **CNN Newsource（`{2 字母}-{數字}{星期兩碼}` 組合碼）：** 依 [`自動寫稿(CTV)`](../cnn/01-auto-script-writing.md)，用「≡Q」預覽圖示取得官方 script 全文存成文稿 txt，下載影片，比對 TC。
 
-**ENEX／ABC：** 沒有教學對應網站/流程，遇到時停下來問使用者，不要自行猜測去哪裡下載。
+**ENEX（`ENEX{6 碼}`，2026-09-07 訂定，daily profile 實測）：** 文稿與影片都不必開任何頁面點按鈕。兩步都寫在 `members.enex.news` 頁面的同一個 `browser_evaluate` 裡（同源 cookie，不需 token）。
+
+1. **登入態＋文稿**：`POST https://members.enex.news/elasticsearch/news/_search`，body `{"size":1,"query":{"ids":{"values":["{6 碼}"]}},"_source":[…白名單]}`（0907 實測 `ids` 與 `term:{_id}` 兩種寫法都回 `total: 1`）；`hits.hits[0]._source` 的 `description` 就是完整 dopesheet（STORYLINE／SHOTLIST／SOUNDBITE／限制語），加 `title`／`partner`／`location`／`sortDate`／`filename` 一起存成 `{SLUG} #XX ENEX (外電文稿).txt`。⛔ `description` 逐字保留。欄位白名單與 CCTV 授權樣板剝除照 [`common/13c1`](../common/13c1-S2-執行版-中-ENEX.md) V5-2 的 `slimEnex()`，不要自己發明。回 `hits.total` 為 0 或 fetch 被導到登入頁＝未登入，停下來請使用者登入。
+2. **影片直鏈**：`https://members.enex.news/download/{6 碼}` 會 **302 到 `enexfeed.s3.eu-west-1.amazonaws.com` 的 SigV4 簽章直鏈**（`X-Amz-Expires=600`，**10 分鐘**到期），就是全解析度 mp4（實測 929921 → 522MB `video/mp4`）。
+   - 🔴 **不能用頁內 `fetch('/download/…')` 取**：轉址跨到 S3、S3 沒開 CORS，會直接拋 `Failed to fetch`（0907 實測）。要用 **`browser_navigate` 開這個網址**——導航不受 CORS 限制，分頁會停在 S3 網址上（畫面是 403 XML，這是正常的，見下一點），然後 `browser_evaluate` 回 `location.href` 就是簽章直鏈；或用 `browser_network_requests`（filter `amazonaws`）抄。
+   - 🔴 **落地前一定要把尾巴的 `&check_logged_in=1` 拿掉**（Drupal 轉址時附加的，不在簽章範圍內，帶著打就是那個 `403 SignatureDoesNotMatch`）：`url.replace(/[?&]check_logged_in=1$/, '')`。拿掉後同一條網址 0907 實測 `206 bytes 0-0/522565697`。
+   - 直鏈是純簽章 S3，**不需 cookie、不吃真人手勢**，用 `curl -L -o "D:\Downloads\{SLUG} #XX ENEX.mp4" "{url}"` 從本機下載即可，不要在頁面裡 `a.click()`。**10 分鐘內要開始下載**，過期就重開一次 `/download/{id}` 換新鏈。⚠️ 簽章只綁 `GET`，`HEAD` 會 403，探測用 `Range: bytes=0-0` 的 GET。
+   - ⛔ ES 回應裡的 `videoLowResCdn` 是低解析度預覽（量時長用），**不是**要交件的檔案。
+3. **落點在 `D:\Downloads`**（curl 系，同 yt-dlp），不是 `PlaywrightMCP`。照下方「下載驗證」查大小（ENEX 全解析度多為數百 MB）。
+4. **費用**：會員交換平台，站上沒有計價欄位；`/download/` 是站方正規下載入口。首批仍照「看到就回報」原則在彙整表註明「ENEX 無計價資訊」。
+
+**ABC（`ABC{9 碼}`＝ABC NewsOne 的 Story Number，2026-09-07 訂定，daily profile 實測）：** 站台是 Extreme Reach AdBridge，模型是「**交付**」不是「下載」——每則素材對 TVBS 都是一筆 delivery，狀態從 `Awaiting Approval` → `Ready For Download`，**沒核准之前沒有任何下載鏈**。全部寫在 `abcnews.extremereach.com/cmspage/50162/abcnewsone` 頁面的 `browser_evaluate` 裡，每個 fetch 都帶 `credentials:'include'` 與 header `__RequestVerificationToken`（值取自頁面 `input[name=__RequestVerificationToken]`；[`common/18`](../common/18-交換平台素材整併.md) §1 安全條款：讀 token→fetch→parse 不出同一個 evaluate）。
+
+1. **登入態**：頁面沒有 `input[name=__RequestVerificationToken]`、或有 `input[type=password]`、或 fetch 直接拋 `Failed to fetch`＝未登入（`ss-tok` 約 1 小時到期，見 [`common/13c1b`](../common/13c1b-S2-執行版-中-ABC.md) V7-2）。停下來請使用者登入，⛔ 不准輸入帳密。
+2. **Story Number → detailId**：`GET /Delivery/NewsSearch?deliveryDateStart={M/D/YYYY}&deliveryDateEnd={M/D/YYYY}&pageSize=1000&page=1`（**不加** `getCSV`）回 HTML，每列 `tr` 裡 `a[href*="/Delivery/Detail/"]` 的 `Detail/(\d+)` 是 detailId、`span.smallText` 是 Story Number；日期窗給素材上架日前後各一天。對映寫法照 `13c1b` V7-2 那段，⛔ 不要用「附近第一串 9 位數」近似抓。
+3. **文稿**：`GET /adbridge/news/Delivery/Detail/{detailId}?includeCategories=True`（HTML 約 35KB），取 `Script` 欄（🔴 換行是 `&#10;`，要解 HTML 實體全套），連同 Slug／Story Number／Length／Synopsis／`ADVISORIES/RESTRICTIONS/EMBARGOES` 段存成 `{SLUG} #XX ABC (外電文稿).txt`。同一份 HTML 裡有 `a[href^="/Delivery/ApproveNews/"]`（`title="Approve this news story for download"`），把 href 記下來給第 4 步。
+4. **核准（真實副作用，只對清單上的素材做）**：`GET /Delivery/ApproveNews/{MediaGuid}?g=…&d=…&returnUrl=…`（href 照抄，`&amp;` 要還原成 `&`）。這一步會把該筆 delivery 狀態改成核准、ABC 端看得到，**是不可逆動作**：⛔ 只對使用者清單上明列的 `ABC` 編號做，⛔ 不准為了「先看看」核准清單外的素材；依 [`common/08`](../common/08-execution-efficiency.md) 額度鐵則，也不准拿它做測試。做之前先確認該筆狀態確實是 `Awaiting Approval`（已經 `Ready For Download` 的就跳過這步）。
+5. **等 `Ready For Download`**：`GET /Delivery/NewsDeliveries?pageSize=200` 回 HTML 表格（欄位 Date／News Story／Slug／Length／Destination／Status／Delivery Date／Actions）；找 Story Number 那列，Status 變成 `Ready For Download` 時，Actions 裡會多出 `a[title="Download local delivery"]`，href 形如 `/Delivery/Download/{GUID}?c=…&mpid=…&did={detailId}&d=…`。核准後多久會轉態尚未計時（0907 觀察：上午 10:29 上架、人工核准的一則在下午已是 Ready）；輪詢間隔 1–2 分鐘、上限依重試階梯，超時先跳過做下一筆。
+6. **下載**：`/Delivery/Download/…` 會 **302 到 `s3.amazonaws.com/fs2.extremereach.com/media/…/{StoryNumber}.mp4` 的簽章直鏈**（SigV2 `Expires`，實測效期約 **2 天**；`response-content-disposition=attachment;fileName={StoryNumber}.mp4`）。**跨網域，頁內 `fetch` 會被 CORS 擋（`Failed to fetch`），不要在 evaluate 裡抓它。** 做法二選一：
+   - **A（首選）**：`browser_navigate` 直接開 `https://abcnews.extremereach.com{Download href}`，瀏覽器跟著 302 落地成下載，檔案進 **`D:\Downloads\PlaywrightMCP\`**，檔名 `{StoryNumber}.mp4`。
+   - **B**：開完 A 之後用 `browser_network_requests`（filter `s3.amazonaws.com`）把最終 S3 網址抄下來，之後同一筆要重下就 `curl -L -o … "{url}"`，不必再過站台。
+   - ⛔ 頁面上的 `View Low-Res Proxy`（`app.extremereach.com/Media/Stream/…`）是串流預覽，不是交件檔。
+7. **`Acknowledge media delivery`**（`/Delivery/Acknowledge/{GUID}`）是回報「已收到」的登錄動作，**本流程不點**；要不要按由使用者決定（0907 尚未裁定）。
+8. 照下方「下載驗證」查大小（ABC PKG 多為百 MB 級）。
+
+> 兩站共同：**本流程只做「已編號清單上的素材」**。掃帶輪（S2）擷取 ENEX／ABC 只讀清單與文稿、從不核准也不下載，那套規則在 `13c1`／`13c1b`；這裡是 S6 下載，兩邊不要互抄。
+
+**ENEX／ABC 尚未實測的部分（2026-09-07 記錄，首次真跑時補）**：ENEX 直鏈的 curl 全檔落地（只驗到 `206 bytes 0-0/522565697`）、ABC 核准→Ready 的等待時間、ABC 導航下載在 Playwright 的落地檔名。首次跑到時把結果回寫本節並刪掉這一段。
 
 **YouTube：** 用 `yt-dlp` 下載影片到 `D:\Downloads`（選合理可用的最高畫質 mp4）。沒有教「文稿」的抓取方式，若使用者要文稿，先問。**清單裡有多支彼此獨立的 YouTube 影片時，可以平行/背景執行多個 `yt-dlp` 下載，不用一支一支排隊等**，這是效率最好的一種下載方式。若同時下載官方/自動字幕，通常只需保留 `-orig`（原始語言）那一份即可，不必把翻譯版字幕也一起留著。
 
@@ -138,7 +165,7 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
 ## 下載確認與卡住處理
 
 用 PowerShell 輪詢下載夾（`Get-ChildItem -File | Where-Object {LastWriteTime -gt (Get-Date).AddMinutes(-2)}`），確認檔案（.crdownload 或臨時檔）已完成、大小穩定。
-⚠️ **兩個落點不一樣**：`yt-dlp` 系（YouTube／X／FB／DVIDS）落在 **`D:\Downloads`**；**瀏覽器下載（AP／RT／NS，含 API 直取）落在 `D:\Downloads\PlaywrightMCP`**（2026-08-03 實測）。找不到檔案時先確認自己在看哪一個資料夾。
+⚠️ **兩個落點不一樣**：`yt-dlp`／`curl` 系（YouTube／X／FB／DVIDS／**ENEX 直鏈**）落在 **`D:\Downloads`**；**瀏覽器下載（AP／RT／NS，含 API 直取；**ABC** 導航下載）落在 `D:\Downloads\PlaywrightMCP`**（2026-08-03 實測，ENEX／ABC 2026-09-07 補）。找不到檔案時先確認自己在看哪一個資料夾。
 
 RT 詳情頁點連結後畫面還停在列表摘要、或 Download 點了 `D:\Downloads` 沒有新檔案等症狀，先查 [`common/09-known-issues.md`](../common/09-known-issues.md#瀏覽器自動化) 有沒有對應解法（通常是「再點一次」或「頁面要維持在最上方再點 Download」），再進入下方重試階梯。
 

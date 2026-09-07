@@ -6,6 +6,8 @@
 
 **Rollback：** 省 Token 改寫前的完整舊版保存在 [`_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md`](../_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md)。
 
+**工具與落點（2026-09-07 補，與 [`reuters/05`](../reuters/05-batch-download.md) 對齊）**：瀏覽器一律用 Playwright 工具組（`mcp__browser__*`，`.playwright-daily-profile`），不用 claude-in-chrome——NS 的 `localStorage.newsourceSession` 在 claude-in-chrome 讀不到。落點有兩個：NS 的影片是**站方背景下載程式（Signiant）**搬的，進 **`D:\Downloads`**；其他任何由瀏覽器本身觸發的下載（AP／RT／ABC）進 `D:\Downloads\PlaywrightMCP`。本流程只看前者。步驟 1／3 的官方稿另有 API 取法（`POST …/api/v3/stories` 帶 `term: "{ID}"` 直接回該則 `script` 全文，0907 實測），是否改走見 [`common/plans/2026-09-07-S6-S8下載寫稿API體檢.md`](../common/plans/2026-09-07-S6-S8下載寫稿API體檢.md)，未裁定前仍照下方 UI 步驟。
+
 ## 檔名命名規則（2026-07-20 訂定）
 
 下文所有 `<ID>` 皆代表輸出檔案的檔名前綴，依使用者下指令時是否提供 SLUG 決定：
