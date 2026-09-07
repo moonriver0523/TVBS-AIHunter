@@ -20,8 +20,9 @@
 | **2** | AP Newsroom | `https://newsroom.ap.org/topic?id=116e9ab7aa044476925398d731289267&mediaType=video&navsource=latest&parentlnk=false` | 0820 訂正：這才是完整清單頁（All Latest topic），舊版 `/home` 首頁只是小工具、清單不完整，別再用 |
 | **3** | Reuters Connect（RT） | `https://www.reutersconnect.com/all?media-types=vid` | 大列表，My Subscription／Newest First |
 
-⛔ **固定輪就是這三站，不多不少。** ENEX／ABC NewsOne 已打通但**人工下令才跑、不進固定排程**
-（規則見 [`18`](18-交換平台素材整併.md)）；那兩站的素材由人工輪次寫進 `_待整併/`，本輪照 §4b 整併即可。
+⛔ ~~**固定輪就是這三站，不多不少。** ENEX／ABC NewsOne 已打通但**人工下令才跑、不進固定排程**
+（規則見 [`18`](18-交換平台素材整併.md)）；那兩站的素材由人工輪次寫進 `_待整併/`，本輪照 §4b 整併即可。~~
+（2026-09-07 訂正：ENEX 自 V5、ABC 自 V7 皆進固定輪，見 `13g` V5-1／`13h` V7-1；不再是人工下令才跑）
 
 ✅ **NS 白名單：掃帶全程只用這兩個網址，其餘一律不對**（黑名單列不完，改白名單）：
 
