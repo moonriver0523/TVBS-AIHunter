@@ -131,13 +131,20 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
    - **A（首選）**：`browser_navigate` 直接開 `https://abcnews.extremereach.com{Download href}`，瀏覽器跟著 302 落地成下載，檔案進 **`D:\Downloads\PlaywrightMCP\`**，檔名 `{StoryNumber}.mp4`。
    - **B**：開完 A 之後用 `browser_network_requests`（filter `s3.amazonaws.com`）把最終 S3 網址抄下來，之後同一筆要重下就 `curl -L -o … "{url}"`，不必再過站台。
    - ⛔ 頁面上的 `View Low-Res Proxy`（`app.extremereach.com/Media/Stream/…`）是串流預覽，不是交件檔。
-7. **`Acknowledge media delivery`**（`/Delivery/Acknowledge/{GUID}`）是回報「已收到」的登錄動作，**本流程不點**；要不要按由使用者決定（0907 尚未裁定）。
+   - 🔴 **`/Delivery/Download/{guid}` 這個端點只要被打到就會登記 `Complete`，不管檔案有沒有真的落地**（2026-09-07 實測：監督者頁內 `fetch('/Delivery/Download/{guid}')` 因 CORS 被擋、檔案完全沒抓到，但 ER 端仍把同一 GUID 底下所有 delivery 一次全部標成 `Complete`，`Delivery Date` 蓋成打的那個時間點；S3 簽章網址的 `Expires` 也對得上「打的時間 + 2 天」）。**這代表 Download 只准打一次**——打了就視同「站方已認定完成」，⛔ 不要因為懷疑沒下載成功就對同一 GUID 重打 `/Delivery/Download/…`（不會有第二次機會，站方不會因此重新產生檔案）。每次打之前務必先照下方「下載驗證」查真的落地的檔案大小；懷疑沒下載成功時改用 Actions 裡的 `Requeue` 連結（`/Delivery/RequeuePendingDelivery/{id}?...`）走站方的補送流程，不要重打 Download 端點。
+   - 🔴 **同一 GUID 常對應多筆 delivery 記錄**（同一支影片被重複派送/redeliver 過），Download／Acknowledge 這類「登記」動作看起來是**以 GUID（`mediaObjectId`）為單位一次套用到所有相關 delivery**，不是只改你點的那一列（2026-09-07 實測兩案都是如此，見下方 Acknowledge 段）。
+7. **`Acknowledge media delivery`**（`/Delivery/Acknowledge/{GUID}`，2026-09-07 已實測，使用者當次授權對指定素材按下）：
+   - **會做的事**：把該 GUID 底下所有 delivery 的 Status 從 `Ready For Download` 改成 **`Acknowledged`**（獨立於 `Complete` 的另一個狀態值，兩者互不相依），`Delivery Date` 蓋上按下的時間；`Actions` 裡的 `Acknowledge media delivery` 連結消失，但 **`Download local delivery` 連結仍在、可以照常下載**——按過 Acknowledge 不影響下載能力，也不會自動觸發下載。
+   - 沒有跳出任何確認對話框（不是 `confirm()`，導航後直接落地到 `returnUrl`），頁面上也沒有另外的成功提示文字，只能靠重新查列表確認狀態已變。
+   - 效力同樣是**以 GUID 為單位**：同一支影片的多筆 delivery 記錄（例如同一 Story Number 被重新派送過）會一起變成 `Acknowledged`，不是只改被點的那一筆。
+   - 站上這批「Ready For Download 但從未 Acknowledge／Download」的積壓量很大（2026-09-07 一次查到 218 筆，回溯到 8/26），可見不按 Acknowledge、不下載也不會自動轉態——**Complete 與 Acknowledged 都要靠明確打對應端點才會發生，不會單純等久了自動變**。
+   - **流程建議**：Acknowledge 對後續能不能下載沒有影響，本流程仍以「先下載並驗過大小」為準；要不要在下載後補打 Acknowledge 目前沒有站方文件說明用途（像是登記「TVBS 已收到」的人工留痕），**是否納入標準流程仍由使用者決定**，本節只記錄「按下去實際發生什麼」。
 8. 照下方「下載驗證」查大小（ABC PKG 多為百 MB 級）。
 9. **費用**：站上沒有計價欄位；若有計量點就是第 4 步的核准。首批照「看到就回報」在彙整表註明「ABC 無計價資訊、已核准 N 則」。
 
 > 兩站共同：**本流程只做「已編號清單上的素材」**。掃帶輪（S2）擷取 ENEX／ABC 只讀清單與文稿、從不核准也不下載，那套規則在 `13c1`／`13c1b`；這裡是 S6 下載，兩邊不要互抄。
 
-**ENEX／ABC 尚未實測的部分（2026-09-07 記錄，首次真跑時補）**：ENEX 直鏈的 curl 全檔落地（只驗到 `206 bytes 0-0/522565697`）；ABC 第 4 步用頁內 `fetch` 打 `ApproveNews` 是否真的把該列轉成 `Ready For Download`（0907 只看了連結、沒按）、核准→Ready 的等待時間、導航下載在 Playwright 的落地檔名。首次跑到時把結果回寫本節並刪掉這一段。
+**ENEX／ABC 尚未實測的部分（2026-09-07 記錄，首次真跑時補）**：ENEX 直鏈的 curl 全檔落地（只驗到 `206 bytes 0-0/522565697`）；ABC 第 4 步用頁內 `fetch` 打 `ApproveNews` 是否真的把該列轉成 `Ready For Download`（0907 只看了連結、沒按）、核准→Ready 的等待時間、導航下載在 Playwright 的落地檔名。（Acknowledge 已於 2026-09-07 實測並寫入第 7 步，從本清單移除。）首次跑到時把結果回寫本節並刪掉這一段。
 
 **YouTube：** 用 `yt-dlp` 下載影片到 `D:\Downloads`（選合理可用的最高畫質 mp4）。沒有教「文稿」的抓取方式，若使用者要文稿，先問。**清單裡有多支彼此獨立的 YouTube 影片時，可以平行/背景執行多個 `yt-dlp` 下載，不用一支一支排隊等**，這是效率最好的一種下載方式。若同時下載官方/自動字幕，通常只需保留 `-orig`（原始語言）那一份即可，不必把翻譯版字幕也一起留著。
 
