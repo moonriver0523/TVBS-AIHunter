@@ -113,6 +113,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import s2_state  # noqa: E402  from-raw 讀狀態檔（唯讀，D12 已在庫標記）
+
 # Windows 主控台常是 cp950，print() 中文欄位（entry／script 原文）會直接炸掉。
 # 這不影響 --out 落檔（那條路本來就明寫 UTF-8），只補救不帶 --out 直接印到終端機的情境。
 #
@@ -207,6 +210,29 @@ def load_json(path):
 # extra_of：站別專屬欄位（NS: footage_type；AP: sb_count/has_sot；RT: sb_count）
 # src_text_of：機械組「瘦身後的站方原文」，跟現行 batch.json 既有格式對齊
 
+
+def _rt_code_or_edit(it):
+    """RT 的編號：**清單**檔在 `code`，**detail** 檔在 `edit`——同一個坑
+    `_id_of_any`（下面 raw 檢查工具層那條猜測路徑）在 T9（2026-08-25）就記過，
+    但 `SITE_SPEC` 這條走的是明確欄位、沒吃到那個 fallback，於是 `dump`／
+    `build`／`from-raw` 對 RT **detail** 檔的 `id_of` 一路回空字串——
+    0907 A24 R22 用真實快照重跑 `from-raw` 才實測到：8 則全部因為 id 撞成
+    同一個空字串，被 `dedup_by_id` 去重成 1 則。
+
+    做法對齊 `_id_of_any`：`code` 有值就用 `code`；沒有才退 `edit`，
+    且 `edit` 要求**含數字**才採信——上游這個欄位有退化值（`_id_of_any`
+    旁的註解記過：純 `'RT'` 裸前綴、`'RTRT7400'` 雙前綴這類髒值），
+    純字母、沒有數字的一律當沒有，不能比沒有 id 更糟（撞名比缺值危險）。
+    清單檔（`code` 有值）行為完全不變。"""
+    code = str(it.get('code') or '').strip()
+    if code:
+        return code
+    edit = str(it.get('edit') or '').strip()
+    if edit and re.search(r'\d', edit):
+        return edit
+    return ''
+
+
 SITE_SPEC = {
     'ns': {
         'source': 'NS',
@@ -235,7 +261,7 @@ SITE_SPEC = {
     },
     'rt': {
         'source': 'RT',
-        'id_of': lambda it: it.get('code', ''),
+        'id_of': _rt_code_or_edit,
         'skip_of': lambda it: '',
         'status_of': lambda it: 'pending' if it.get('early') else 'has_script',
         'extra_of': lambda it: {'sb_count': it.get('sb_count', 0)},
@@ -290,9 +316,59 @@ def cmd_dump(args):
 
 
 def cmd_build(args):
+    entries = load_json(args.entries)
+
+    # A24（2026-09-07）：`from-raw` 產的骨架已經把機械欄位（id/source/checkpoint/
+    # status/src_text/站別專屬欄位）全填好，agent 只需要寫極小的
+    # `{id: {entry, category, tc}}`。這條路徑直接以骨架為底，不重讀 raw——
+    # 骨架本身就是「dedup＋機械排除＋D12 已在庫標記」跑完之後的結果，
+    # 沒有理由再對 raw 重跑一次同樣的判斷。
+    if getattr(args, 'skeleton', None):
+        rows = load_json(args.skeleton)
+        batch, missing = [], []
+        for row in rows:
+            item_id = row.get('id')
+            raw_entry = entries.get(item_id)
+            if isinstance(raw_entry, dict):
+                entry_text = raw_entry.get('entry', '')
+                category = raw_entry.get('category')
+                tc = raw_entry.get('tc')
+                status_override = raw_entry.get('status')
+            elif isinstance(raw_entry, str):
+                entry_text, category, tc, status_override = raw_entry, None, None, None
+            else:
+                entry_text, category, tc, status_override = '', None, None, None
+            if not entry_text:
+                missing.append(item_id)
+                continue
+            # 骨架的 entry/category/tc 是留空的佔位鍵，hint／prev_status 是
+            # 骨架內部給 agent 看的提示，三者都不該原樣流進 batch.json。
+            new_row = {k: v for k, v in row.items()
+                       if k not in ('entry', 'category', 'tc', 'hint', 'prev_status')}
+            new_row['entry'] = entry_text
+            if status_override is not None:
+                new_row['status'] = status_override
+            if category is not None:
+                new_row['category'] = category
+            if tc is not None:
+                new_row['tc'] = tc
+            batch.append(new_row)
+
+        out = json.dumps(batch, ensure_ascii=False, indent=2)
+        if args.out:
+            with open(args.out, 'w', encoding='utf-8') as f:
+                f.write(out)
+            print(f'已寫入 {args.out}（{len(batch)} 則）', file=sys.stderr)
+        else:
+            print(out)
+        if missing:
+            print(f'⚠️ 骨架裡有、entries.json 沒填 entry 的 id（未填，不算錯，'
+                  f'但確認是不是漏判，不進 batch）：{", ".join(str(m) for m in missing)}',
+                  file=sys.stderr)
+        return
+
     spec = SITE_SPEC[args.site]
     items = dedup_by_id(spec, load_json(args.raw))
-    entries = load_json(args.entries)
 
     batch = []
     missing = []
@@ -348,6 +424,119 @@ def cmd_build(args):
               f'但確認是不是漏判）：{", ".join(missing)}', file=sys.stderr)
     if excluded:
         print(f'機械排除 {excluded} 則（見 dump 輸出的排除原因）', file=sys.stderr)
+
+
+def cmd_from_raw(args):
+    """站方 detail raw ＋ 狀態檔 → 一次產出提示表＋骨架 JSON＋已在庫標記（A24，2026-09-07）。
+
+    砍呼叫主線第二刀：`inspect` 逐則翻頁改成先看這支印出的提示表；agent
+    只需要 Write 一份極小的 `{id: {entry, category, tc}}`（`build --skeleton`
+    合併成 batch，見上）。
+
+    **D12（跨批已查標記）**：`--state` 給了才排除——只排除狀態檔裡已經是
+    `has_script` 的 id，`pending`／其他任何狀態一律保留（並標 `prev_status`），
+    因為 prelim／early access 稿隨時可能補正式稿，機械排除等於永久漏收。
+    """
+    spec = SITE_SPEC[args.site]
+    items = dedup_by_id(spec, load_json(args.raw))
+
+    have = {}
+    if args.state:
+        state = s2_state.load(args.state)
+        have = {i: (v.get('script_status') or '') for i, v in state['items'].items()}
+
+    skeleton = []
+    machine_excluded = 0
+    already_have = []
+    pending_kept = []
+    for it in items:
+        item_id = spec['id_of'](it)
+        if spec['skip_of'](it):
+            machine_excluded += 1
+            continue
+
+        prev_status = have.get(item_id) if item_id in have else None
+        if prev_status == 'has_script':
+            already_have.append(item_id)
+            continue
+
+        src_text = spec['src_text_of'](it)
+        row = {
+            'id': item_id,
+            'source': spec['source'],
+            'checkpoint': args.checkpoint,
+            'status': spec['status_of'](it),
+            'src_text': src_text,
+        }
+        row.update(spec['extra_of'](it))
+        # entry／category／tc 是 agent 判斷欄位，骨架只留空位——
+        # 這支腳本不生成、不翻譯、不判斷 BITE（同 build 開頭的說明）。
+        row['entry'] = ''
+        row['category'] = ''
+        row['tc'] = ''
+        if prev_status is not None:
+            row['prev_status'] = prev_status
+            if prev_status == 'pending':
+                pending_kept.append(item_id)
+
+        dur = it.get('dur')
+        if dur is None:
+            dur = it.get('dur_ms', '')
+        sb_count = spec['extra_of'](it).get('sb_count', 0)
+        # first150：src_text 正文前 150 字、去換行（提示表用，不是稽核落檔欄位）。
+        first150 = re.sub(r'\s+', ' ', src_text).strip()[:150]
+        row['hint'] = {
+            'head': _title_of_any(it),
+            'dur': dur,
+            'sb_count': sb_count,
+            'first150': first150,
+        }
+        skeleton.append(row)
+
+    out = args.out
+    if not out:
+        hhmm = args.checkpoint.split('-')[-1]
+        base = os.path.dirname(os.path.abspath(args.raw))
+        out = os.path.join(base, f'{args.site}_skeleton_{hhmm}.json')
+    with open(out, 'w', encoding='utf-8') as f:
+        json.dump(skeleton, f, ensure_ascii=False, indent=2)
+
+    # 提示表：#序｜id｜dur｜sb｜head｜first150。累計字元逼近 28,000（跟
+    # inspect 全文預算同一個數字，見 INSPECT_TEXT_BUDGET）就分頁，不靜默截斷。
+    all_lines = [
+        f"#{idx}｜{row['id']}｜{row['hint']['dur']}｜{row['hint']['sb_count']}｜"
+        f"{row['hint']['head']}｜{row['hint']['first150']}"
+        for idx, row in enumerate(skeleton, 1)
+    ]
+    pages, cur, cur_len = [], [], 0
+    for ln in all_lines:
+        ln_len = len(ln) + 1
+        if cur and cur_len + ln_len > INSPECT_TEXT_BUDGET:
+            pages.append(cur)
+            cur, cur_len = [], 0
+        cur.append(ln)
+        cur_len += ln_len
+    pages.append(cur)  # 0 則時也留一頁空的，--page 1 才有東西可選
+
+    page_no = args.page or 1
+    if page_no < 1 or page_no > len(pages):
+        print(f'✗ --page {page_no} 超出範圍（共 {len(pages)} 頁）', file=sys.stderr)
+        sys.exit(1)
+
+    print('\n'.join(pages[page_no - 1]))
+    if len(pages) > 1:
+        if page_no < len(pages):
+            print(f'— 第 {page_no}/{len(pages)} 頁，--page {page_no + 1} 看下一頁 —')
+        else:
+            print(f'— 第 {page_no}/{len(pages)} 頁（最後一頁）—')
+
+    if already_have:
+        print(f'已在庫略過 {len(already_have)} 則：{", ".join(already_have)}', file=sys.stderr)
+    if pending_kept:
+        print(f'pending 保留 {len(pending_kept)} 則：{", ".join(pending_kept)}', file=sys.stderr)
+    if machine_excluded:
+        print(f'機械排除 {machine_excluded} 則（見 dump 輸出的排除原因）', file=sys.stderr)
+    print(f'骨架已寫 {out}（{len(skeleton)} 則）', file=sys.stderr)
 
 
 # ── raw 檢查工具層：卸殼／inspect／search ──────────────────────
@@ -1335,7 +1524,19 @@ def main():
     p_build.add_argument('--entries', required=True)
     p_build.add_argument('--checkpoint', required=True)
     p_build.add_argument('--out')
+    p_build.add_argument('--skeleton', help='from-raw 產的骨架 json；給了就以它為底，'
+                          '--entries 只需 {id:{entry,category,tc}} 覆蓋（A24）')
     p_build.set_defaults(func=cmd_build)
+
+    p_fr = sub.add_parser('from-raw', help='raw ＋ 狀態檔一次產出提示表＋骨架 JSON＋已在庫標記（D12，A24）')
+    p_fr.add_argument('--site', required=True, choices=['ns', 'ap', 'rt'])
+    p_fr.add_argument('--raw', required=True)
+    p_fr.add_argument('--checkpoint', required=True)
+    p_fr.add_argument('--state', help='狀態檔路徑；給了才排除已 has_script 的 id'
+                       '（D12：pending／其他狀態一律保留並標 prev_status）')
+    p_fr.add_argument('--out', help='骨架 json 路徑；不給就用 raw 所在目錄組 {site}_skeleton_{HHMM}.json')
+    p_fr.add_argument('--page', type=int, help='提示表分頁（每頁 ≤28,000 字元），預設第 1 頁')
+    p_fr.set_defaults(func=cmd_from_raw)
 
     p_unwrap = sub.add_parser('unwrap', help='自動偵測外殼並卸成規範化裸陣列')
     p_unwrap.add_argument('raw')
