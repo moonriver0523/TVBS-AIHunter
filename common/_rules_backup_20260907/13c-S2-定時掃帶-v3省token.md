@@ -1,0 +1,436 @@
+# 13c　S2 定時掃帶 V3（省 token 執行版）— 上：三站入口與擷取
+
+> 🔴 **2026-08-24 切成上下兩部（R15）**：原檔 42,998 字元，而 Read 工具結果約
+> 30,000 字元就**靜默截斷**，本檔尾端的 §2～§5a（狀態檔、稽核、品質掃、防卡、
+> 建檔輪）**從沒被完整載入過**。**內容逐字保留、未改寫**（附逐字節守恆證明）。
+>
+> - **本檔（上）**：§0 三站入口／§1 詳情頁擷取階梯／**§1a 三站 API 直查（掃帶首選路徑）**
+> - **[`13c2`](13c2-S2-定時掃帶-v3省token-下.md)（下，同樣必讀）**：§2 狀態檔代管／
+>   §2a-2 每輪稽核／§3 品質掃與渲染／§3b 中小分題檢視／§4 SNTV／§4c YT／§5 防卡／§5a 建檔輪
+>
+> ⛔ **只讀上半不算讀完 13c。**
+
+---
+<!--BODY-->
+## 0. 三站入口網址（開工前先核對，不要憑記憶打）
+
+| 順序 | 站 | 入口網址 | 備註 |
+|---|---|---|---|
+| **1** | CNN Newsource（NS） | `https://newsource.ns.cnn.com` | **中間有 `.ns.`**，少了會導向錯誤頁；不支援網址搜尋 |
+| **2** | AP Newsroom | `https://newsroom.ap.org/topic?id=116e9ab7aa044476925398d731289267&mediaType=video&navsource=latest&parentlnk=false` | 0820 訂正：這才是完整清單頁（All Latest topic），舊版 `/home` 首頁只是小工具、清單不完整，別再用 |
+| **3** | Reuters Connect（RT） | `https://www.reutersconnect.com/all?media-types=vid` | 大列表，My Subscription／Newest First |
+
+⛔ ~~**固定輪就是這三站，不多不少。** ENEX／ABC NewsOne 已打通但**人工下令才跑、不進固定排程**
+（規則見 [`18`](18-交換平台素材整併.md)）；那兩站的素材由人工輪次寫進 `_待整併/`，本輪照 §4b 整併即可。~~
+（2026-09-07 訂正：ENEX 自 V5、ABC 自 V7 皆進固定輪，見 `13g` V5-1／`13h` V7-1；不再是人工下令才跑）
+
+✅ **NS 白名單：掃帶全程只用這兩個網址，其餘一律不對**（黑名單列不完，改白名單）：
+
+| 用途 | 網址 |
+|---|---|
+| 保活／取 token | `https://newsource.ns.cnn.com/landing` |
+| 清單＋全文 | `POST https://newsource-content-api-530.ns.cnn.com/api/v3/stories` |
+
+- ⛔ `/search?q=…` → Page Not Found（NS 不支援網址搜尋；要查特定素材就用 API 撈回來比對 id）。
+- ⛔ `newsource.cnn.com`（缺 `.ns.`）→ 錯誤頁，`get_page_text`／截圖都讀不到。
+- 🔍 **頁面不對時的懷疑順序（先自己再站方）**：①網址不在白名單②profile 被鎖（§1a-0）③登入態過期。
+  核對網址一秒，開「站方卡點」調查要花大半輪（0804 兩次都是自己網址打錯）。
+
+### 🔐 三站登入態總表（憑證／效期）
+
+三站憑證效期差很多，**過期就進不去，agent 不准自己輸入帳密**（§5 半夜禁問）：
+
+| 站 | 憑證 | 效期 |
+|---|---|---|
+| NS | localStorage JWT | **1 小時** |
+| RT | `mexlogin` cookie | **23 小時** |
+| AP | `session_user` cookie | 7 天 |
+| ENEX | Drupal session cookie | **實測閒置 19 小時仍在**（滑動或長效，未定案） |
+| ABC | `ss-tok` cookie（HttpOnly） | **約 1 小時**，滑動續期（`13h` V7-1） |
+
+（2026-09-07 自 prompt 搬入，T13）
+
+### ⏱️ 掃描順序固定 **NS → AP → RT**（不可調換）
+
+NS 登入態是 1 小時滑動時效，NS 排第一站＝「上次接觸 NS」等於整點開工時刻，保活時點才算得準。
+這是**順序**規則不是「只掃 NS」；某站失敗照 §1a-4 退階梯，不影響其餘兩站順序。
+
+> 📌 **今天第一輪（狀態檔不存在）→ 先看 §5a 建檔輪**。
+> 📌 **使用者一句話要改今天庫存 → 直接看 §2a 口令表**，不必讀整份。
+
+---
+
+## 1. 詳情頁擷取：fallback 階梯＋硬上限
+
+**階梯（固定順序，不准跳步、不准重試同一步）**：
+1. `find`／選擇器抓 script 正文與 Details 欄位（Edit No.／Duration／Restrictions／SOURCE）。
+2. **失敗一次 → 立刻改整頁 `get_page_text`**，禁止重試選擇器第二次。
+3. RT 必須截圖時只截 Details 欄＋script 區。
+
+**讀多少**：script 正文取前 4,000 字元；shotlist 全文。S2 只寫三段式，逐字與精確 TC 是下游 S7 的事。
+
+## 1a. 三站 API 直查（**掃帶首選路徑**）
+
+清單與文稿**全部走 API，完全不開詳情頁**（每站 2–3 次工具呼叫）。
+**任一步失敗兩次 → 該站當輪退 §1b；§1b 再失敗才退 §5 舊流程。**
+
+> 📄 完整配方（可直接抄的 JS、body、欄位表）：[`investigation-logs/2026-08-03-三站API破解總表.txt`](investigation-logs/2026-08-03-三站API破解總表.txt)＋NS 專篇 [`2026-08-03-NS掃帶卡點報告-回覆.txt`](investigation-logs/2026-08-03-NS掃帶卡點報告-回覆.txt)。
+
+⚠️ **`scripts/s2_batch_prep.py` 存在，但 2026-08-12 實測「規定要用」反而更貴，已撤回強制**：
+
+原本 14:38 在這裡立了一條 🔴 規則，要求走 `raw.json → dump → entries.json → build`
+三步流程取代手打 `python -c`。0812-1600／1800 兩輪實測結果相反——
+臨時 python 從 **6 次 → 30 次 → 54 次**，總呼叫 90 → 177 → 203，成本 24.0M → 56.9M。
+根因：`dump`／`build` 要吃固定 schema 的 `raw.json`，而把 `browser_evaluate` 的輸出
+轉成那個 schema，本身就得寫臨時 python；流程多一層中介契約，省下的少於逼出來的。
+
+- **現行做法回到 1200 那輪**：`browser_evaluate` 抽完直接邊看邊累積 `batch.json`，
+  看完一次 `add-batch`（見下方 §1a／批次規則）。這是實測最省的路徑（90 次／24.0M）。
+- `s2_batch_prep.py` 的 **`dump`／`build`（組批次流程）** 保留為**選用工具**，只在 raw
+  本來就已經是它吃得下的格式時才划算，不要為了用它而先寫 python 轉檔。
+- ⚠️ **這條「選用」只涵蓋 `dump`／`build`，不含 `inspect`／`unwrap`／`search`**——後三個是
+  另一回事（檢查暫存 raw 檔用），**一律必用，見 13d §4**，不要讀到這段就連 inspect 也跳過。
+- ⛔ 不管走哪條路，`entry`（中文摘要、BITE 判斷、分類措辭）永遠是你自己寫。
+
+### 0-1) ⭐ 抽取白名單：`page.evaluate()` 裡先瘦身，只回傳需要的欄位
+
+原始 API 回應 6–9 成是雜訊（媒體變體、計價規則、向量嵌入），**同一個 `browser_evaluate` 裡抽完再回傳**（實測省 79–96%）。
+
+- ⛔ **不准砍**：稿件全文（AP `script.nitf`／RT `story`）、SHOTLIST 段、SOUNDBITE 段與講者、限制語、來源、形式、時長、素材代碼。**內容本體一個字都不能動**（同側錄逐字規則）。
+- ✅ **改抽取邏輯後必重驗兩項**：①正規化純文字逐字元比對（基準先扣 HTML 實體）②殘留掃描——`/&[a-zA-Z#0-9]{2,8};/` 與 `/<[^>]+>/` 必須 0 命中。⚠️ 別拿「raw 裡有沒有 SHOTLIST 字樣」當基準（RT 的 `video-shotlist-url` 等欄位名會假陽性），要比欄位內容本身。
+
+**共用的去 tag ＋ 實體解碼函式**（AP `script.nitf` 與 RT `story` 都是 HTML）：
+
+```js
+const ENT = {nbsp:' ',amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',
+  rsquo:'’',lsquo:'‘',ldquo:'“',rdquo:'”',ndash:'–',mdash:'—',hellip:'…',bull:'•',
+  eacute:'é',egrave:'è',agrave:'à',ccedil:'ç',uuml:'ü',ouml:'ö',auml:'ä',szlig:'ß',
+  ntilde:'ñ',deg:'°',euro:'€',pound:'£',copy:'©',reg:'®'};
+const decodeEnt = (s) => String(s||'')
+  .replace(/&#x([0-9a-fA-F]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16)))   // 十六進位
+  .replace(/&#(\d+);/g,(_,d)=>String.fromCodePoint(+d))                          // 十進位
+  .replace(/&([a-zA-Z]+);/g,(m,n)=>(n.toLowerCase() in ENT)?ENT[n.toLowerCase()]:m);
+const clean = (h) => decodeEnt(
+    String(h||'').replace(/<\/p>\s*<p>/gi,'\n').replace(/<br\s*\/?>/gi,'\n').replace(/<[^>]+>/g,'')
+  ).replace(/\n{3,}/g,'\n\n').trim();
+```
+
+- 🔴 **實體一定要全解**（只列 `nbsp/amp/quot` 不夠——`&rsquo;` 等會原樣進素材行；數字實體也要）。
+- ⚠️ **不要改用 `DOMParser`／`textarea.innerHTML`**：RT 的 CSP／Trusted Types 會讓它**靜默回空字串**。
+- ⚠️ **RT 多一層 unescape**：`.replace(/\\"/g,'"').replace(/\\n/g,'\n')`，否則標題殘留 `\"`。
+- ⚠️ **超長整理包**（RT TIMELINE／WRAP，單則可達 5.5 萬字元）：只取前 3,000 字元＋標 `(整理包 內容過長已截斷)`。
+
+### 0-2) 🔴 回傳太大被「卸載成檔案」時怎麼辦（2026-08-11 立規，這是實測最貴的一次繞路）
+
+瘦身過的結果**仍可能大到被工具層自動卸載**：不直接回內容，改回一個檔案路徑
+（實測 0811-1600 一次 68.1KB 就觸發）。**這不是錯誤、不用重試**，照下面三步走完即可。
+
+⚠️ **會這麼貴是因為「不知道要這樣做」**：0811-1600 那輪光是自己摸索收拾就吃掉
+**30 分鐘裡的 17 分鐘**——跑了 5 次 `find` 找檔案、把整包沒瘦身的原始檔讀進 context
+（等於白瘦身一次）、還現寫了一支 `_merge_src_tmp.py` 手動接回流程又改了兩次。
+**三步都是機械動作，不需要任何判斷。**
+
+1. **路徑就在訊息裡，⛔ 不要 `find`**：卸載訊息本身寫著存到哪
+   （`Full output saved to: …` 或 `[Evaluation result](./檔名.json)`）。
+   後者那種相對路徑的落點是 **repo 根目錄 `E:\GitHub\TVBS-AIHunter\`**，
+   不是本輪 `scratch-dir`——**知道就直接開，不要每輪重找一次**。
+2. **只讀要用的欄位，⛔ 不要整包 `Read` 進 context**：卸載檔是**沒瘦身的原始回應**，
+   整包讀進來等於把 §0-1 省下的 6–9 成又賠回去。用 python 讀檔＋套 §0-1 同一份
+   抽取白名單，**只把瘦身後的結果落成 `batch.json`**。
+3. **⛔ 不要另外寫合併腳本**：抽完直接照 §2「批次規則」的 `batch.json` 格式寫檔，
+   `add-batch` 照常吃。**臨時腳本是這條路上最貴的一段**，而且每輪重寫一次、
+   每次都可能寫錯（0811 那支就改了兩次）。
+
+📌 **卸載檔算本輪中間檔**：照 §5 第 1 條**搬進 `scratch-dir` 印出的路徑**，
+不要留在 repo 根目錄（0811 就留了 `rt_details_1600.json`／`ns_src_text.json`
+兩個在那裡）。⚠️ 它是**沒瘦身**的原始回應，**不可以拿它充當 `src_text`**
+——`src_text` 要存的是瘦身後那份（§2）。
+
+### 0) 開工前：Playwright 環境衛生（**每次都要做**）
+
+- **一律用 Playwright 工具組（`mcp__browser__*`），不是 claude-in-chrome**——NS 的 localStorage 在 claude-in-chrome 被擋死，AP／RT 跨網域 fetch 也被纏住。
+- **自己收工要 `browser_close` 關瀏覽器**，不要留給下一輪。關不掉就 `needs-review add` 記錄，⛔ **不殺進程**（見 §5 第 4 條）。
+- ⚠️ **`navigate` 失敗或清單回 0 筆時，第一懷疑 profile 被鎖，不是「站方無素材」或「帳號失效」**（0803 實錯：RT 三輪誤判「全站 0 items」、空窗 8 小時，真因是殘留鎖）。
+- profile 被佔（`Browser is already in use`）→ `needs-review` 記下、跳過該站、往下跑。⛔ **不准 `taskkill`／`Stop-Process`／刪 `Singleton*` 鎖檔**——互斥由呼叫端 `s2_scan.ps1` 的鎖負責，不在 agent 端硬搶。
+
+### 1) RT
+
+- **清單**：用 §1b 的 DOM 直撈拿 Edit No／href（API 清單是 transit 壓縮格式，**不要用 regex 解**，只會抓到第一則；API 當備援）。
+- **文稿**：`GET /api/item/{guid}?live=false`（同源 fetch）；新素材 guid 一次 `Promise.all` 打 N 則。**回應是純 JSON**：
+
+  ```js
+  // ✅ 現行做法：直接 JSON.parse，欄位是標準 JSON key
+  const strip = h => (h||'').replace(/<[^>]+>/g,'\n').replace(/&nbsp;/g,' ')
+    .replace(/&amp;/g,'&').replace(/&quot;/g,'"').replace(/&#39;/g,"'")
+    .replace(/&ldquo;|&rdquo;/g,'"').replace(/&rsquo;/g,"'").replace(/&ndash;/g,'-')
+    .replace(/\n{2,}/g,'\n').trim();
+
+  const r  = await fetch('/api/item/' + encodeURIComponent(guid) + '?live=false',
+                         { headers:{ accept:'application/json' } });
+  const it = (await r.json()).item || {};        // ⚠️ 內容包在 `item` 底下
+  const story = strip(it.story);                 // `story` 是 HTML，要去 tag
+  const slim = {
+    edit:  'RT' + ((guid.match(/RW(\d{4})/)||[])[1] || ''),  // Edit No 由 guid 推
+    head:  it.headline,
+    slug:  it.slug,
+    dur:   it.duration,          // ⚠️ 字串 "00:02:34" 不是數字
+    src:   it.source,            // CCTV／CNS／第三方判定用
+    restr: it.restrictions,      // ⚠️ 純字串不是陣列
+    story,
+    // 🎯 BITE 機械計數。⚠️ **不可加 `i` 旗標**：版權樣板小寫 "soundbites" 幾乎每則
+    // SNTV 體育都有，帶 `i` 會數進去、害 agent 硬湊不存在的 BITE（AP5467117 實錯）
+    sb_count: (story.match(/SOUNDBITE/g) || []).length
+  };
+  ```
+
+- ⚠️ **欄位全空時第一懷疑「回應格式又變了」**（HTTP 200、不報錯、每欄空字串是最陰險的失效形狀）：先 dump 一則原始回應前 700 字元，看是 `"headline":"…"`（純 JSON）還是 `"~:headline","…"`（transit），不要假設站方故障。
+- `early-access-script` 出現＝稿未到，對應 `script_status: pending`（判準見 `13`「有稿判準」）。
+- 🎯 **BITE 判定＝看 `sb_count`，不是 agent 讀稿判斷**：`sb_count > 0` **禁止標「無BITE」**——機器已數出 N 段，agent 只負責翻成 `▎BITE：{講者}「{內容}」`。
+  ⛔ **「引言被消化進摘要」≠ 可以不寫 BITE 段**（實測誤判 6 成都是這個形狀）：摘要回答「這件事是什麼」，BITE 段回答「**哪一段話可以直接剪出來上鏡、講者是誰**」，前者不能取代後者。
+- ⛔ **CCTV／CNS 素材不做 BITE 事後查證**（不在 `my-feed`、查證成本最高、官媒畫面包有引言機率最低）：掃到照當下判斷寫，不回頭查。
+- ⚠️ **查證必比對 headline**：Edit No 會跨日重複使用，光靠 Edit No 會抓到完全不同的另一則。
+- 🔁 **舊稿重上（refile）照收**，第一個 `()` 備註標 `{MMDD}舊稿`：guid `newsml_RW{4碼}{DDMMYYYY}RP1:{版次}` 中間 8 碼＝原始建立日期，早於今天就是舊稿重上（RT 常態）。內容照三段式正常寫；標記是讓編輯一眼看出事件時間點。例：`RT2286 (0731舊稿 烏克蘭Fire Point飛彈防禦…) (BITE) ▎…`
+
+### 2) AP
+
+- 🔴🔴 **2026-08-20 重大訂正：舊 recipe 掃錯頁面，以下整段作廢，改用新範本**——`browser_navigate` 目標
+  一律要開 **`https://newsroom.ap.org/topic?id=116e9ab7aa044476925398d731289267&mediaType=video&navsource=latest&parentlnk=false`**
+  （AP 官方「All Latest」topic 頁），**不是 `/home` 首頁**！舊版一路沿用 `/home` 首頁的 Latest 小工具，
+  它的清單範圍/排序邏輯跟真正的完整清單不一樣，過去「每輪只收 16-17 則」的根因（Page1 只給 16／50
+  則、超出的沒被真正翻頁補到）確認出在這裡，過去漏抓的實例（如 `AP4679409`）用真正的 topic 頁
+  可以正確查到、位置吻合。**但「`PageNumber≥2` 是不是真的能拿來翻頁補完整」這件事同一天再驗證，
+  發現沒有一開始想的乾淨**（不論 `PageSize` 多少，`PageNumber:2` 都固定回 100 則、對齊伺服器內部
+  固定 offset，會有空窗或重疊兩種風險，不是簡單的「站方 bug／沒 bug」二分）——**用完整 topic 頁**
+  這件事本身是確定的修正，**但 Page2+ 的翻頁可靠度仍待保守處理**，正確用法見下方與 `13d` §7。
+- **清單**：`POST https://api.newsroom.ap.org/v1/nrsearch/search/topic`——**照抄 topic 頁實際發出的
+  request body**（比舊 recipe 多了 `Date`／`digitizationType`／`MyPlanSearch`／`IsSavedSearch` 等欄位，
+  少了任何一個都可能退化回舊的不完整行為），自己拼的排序會偏 relevance 抓舊素材。
+- 🔴 **2026-08-21 訂正：舊版範本回傳未瘦身原始 JSON，是 A18 兩次真實復發（0821-0430／
+  0821-1200，`ap_list_*.json` 850~930KB／50 則、比正常大近 40 倍）的根因**——舊範本
+  `return await r.json()` 直接回整包 ES 回應，跟 §0-1「`page.evaluate()` 裡先瘦身」的規則
+  自相矛盾，agent 照抄舊範本就等於沒做瘦身。**Playwright 實測確認 AP 官方前端自己發出的
+  request/response 每次都是同一種 ES 整包格式（`Items[]._source`），站方完全穩定、不是
+  站方問題**——問題出在範本本身沒示範「fetch 完在同一個 `evaluate` 裡瘦身再回傳」，下方
+  範本已改為 fetch＋瘦身一次做完，⛔ 不要再用未瘦身版本：
+- ⭐ **AP 清單查詢：照抄即用範本（0821 新版，fetch＋瘦身一次做完，取代舊版）**（`browser_evaluate` 一次呼叫；
+  **不要分好幾次呼叫、不要自己刪減欄位、⛔ 不要回傳 `r.json()` 原始整包**）：
+    ```js
+    async () => {
+      const clean = (h) => (h || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const body = {
+        SearchType: null, Date: 'Anytime', IsSavedSearch: false, IsSharedSearch: false,
+        PageNumber: 1, PageSize: 50, persons: [], Sort: ['arrivaldatetime:desc'],
+        ShareToken: '', digitizationType: 'Digitized_NonDigitized', language: '',
+        isSemanticItemIdSearch: false, Semantic: null, MyPlanSearch: true,
+        TopicId: '116e9ab7aa044476925398d731289267', MediaTypes: ['video'],
+        isTopicSearch: true, Query: null, SavedSearchId: null, SavedSearchName: '',
+        photoOrientTypes: [], ProductGroup: '', GraphicsType: [],
+      };
+      const r = await fetch('https://api.newsroom.ap.org/v1/nrsearch/search/topic', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify(body),
+      });
+      const j = await r.json();
+      // ⭐ 瘦身：只回傳白名單欄位（slimList，見下方§「抽取白名單」定版）
+      return (j.Items || []).map((it) => {
+        const s = it._source || {};
+        return {
+          id: 'AP' + s.editorialid, itemid: s.itemid,
+          title: s.title, head: s.headline,
+          cap:  clean(s.caption && s.caption.nitf),
+          role: s.editorialrole,
+          src:  (s.sources || []).map((x) => x.name).join('/'),
+          sig:  (s.signals || []).filter((x) => /Ready|SNTV/i.test(x)).join(','),
+          line: s.dateline, ts: s.firstcreated, comp: s.compositiontype,
+        };
+      });
+    }
+    ```
+    - `PageSize` 用 `50`（不是舊版的 `16`）——0820 實測 topic 頁的完整 body 配 `PageSize:50`
+      正確、無靜默換排序。
+    - 落檔前自我檢查：瘦身後的 `ap_list_{HHMM}.json` 50 則正常應落在 20~30KB 區間
+      （約 0.5KB/則）；若單一檔案 >100KB，代表瘦身沒套到，當場改用本範本重抓，不要沿用。
+    - 🔴 **Page1（50 則）當唯一可信主要來源，照舊全部收錄。需要超過 50 則時可以多打
+      `PageNumber:2`，但 0820 當天再驗證發現它不是無條件可信**：不論 Page1 用的
+      `PageSize` 是多少，`PageNumber:2` 一律固定回 100 則、對齊伺服器內部固定
+      offset（不是接續 Page1），視 `PageSize` 不同會出現「Page1/Page2 之間有
+      20~31 分鐘空窗漏抓」或「兩頁重疊 50 則被算兩次」其中一種風險，細節與正確
+      用法見 `13d` §7（**Page2 只能當候選補充池，去重＋逐一核實或 needs-review，
+      不能直接當確定則寫入**）。
+    - `browser_navigate` 開 topic 頁只需要開工時做**一次**，同一輪內清單查詢不必每次重新導覽。
+- **文稿**：`POST /v1/nrsearch/search/item/details`，body `{"ItemIds":"{itemid}","mediaType":"video","IsNonSalable":false}`。逗號串多則不支援（回空），一則一次；同一個 `browser_evaluate` 裡 `Promise.all` 打 N 則仍算 1 次呼叫。**批次一律用 `Promise.all`，不要為了「保險」逐則單獨呼叫**——單則呼叫沒有比較安全，純粹多花呼叫次數。
+- 🔴 **2026-08-21 訂正：回應形狀跟清單一樣是 ES 整包（`{Items:[{_source:{...}}], ...}`），
+  不是扁平的 `{cap,script,...}`**——Playwright 實測直接截 AP 官方頁面自己發出的 `item/details`
+  真實 request/response 確認，站方每次都回同一種整包格式，完全穩定。0820-2200／0821-0430／
+  0821-1200 三次「AP 詳情擷取又壞掉」（`APundefined`、欄位全空、甚至查詢殼原樣落檔）的根因
+  是**沒有現成的 fetch＋解包＋瘦身一次做完的範本**，agent 每輪臨場手寫解析邏輯，時好時壞。
+  下方補上完整範本，⛔ 不要再臨場手寫：
+- ⭐ **AP 詳情查詢：照抄即用範本（0821 新版，fetch＋解包＋瘦身一次做完）**（`browser_evaluate`
+  一次呼叫，`Promise.all` 打 N 則）：
+    ```js
+    async (itemids) => {  // itemids：清單瘦身結果裡的 s.itemid（32 碼 GUID），不是 AP 編號
+      const clean = (h) => (h || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const one = async (itemid) => {
+        const r = await fetch('https://api.newsroom.ap.org/v1/nrsearch/search/item/details', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ ItemIds: itemid, mediaType: 'video', IsNonSalable: false }),
+        });
+        const j = await r.json();
+        const s = (j.Items && j.Items[0] && j.Items[0]._source) || {};  // ⚠️ 一定要解包 Items[0]._source
+        const script = clean(s.script && s.script.nitf);
+        return {
+          id: 'AP' + s.editorialid, title: s.title, head: s.headline,
+          cap: clean(s.caption && s.caption.nitf), script,
+          role: s.editorialrole, src: (s.sources || []).map((x) => x.name).join('/'),
+          rights: s.rightsline, line: s.dateline || s.locationline,
+          dur: (s.shots && s.shots[0] && s.shots[0].end) || '',
+          comp: s.compositiontype,
+          sb_count: (script.match(/SOUNDBITE/g) || []).length,
+          has_sot: /SOT/i.test(s.editorialrole || ''),
+          prelim: /^\s*\+\+\s*PRELIMINARY SCRIPT/i.test(script),
+        };
+      };
+      return Promise.all(itemids.map(one));
+    }
+    ```
+    - 落檔前自我檢查：任何一則 `id` 含雙重前綴（如 `APAP...`）、`script` 為空字串、或整包
+      看得到 `Query`/`FirstRow`/`HasRelated` 這種殼欄位，都代表解包漏做或沒套本範本，
+      當場用本範本重抓，不要把壞資料寫進 `ap_detail_{HHMM}.json` 或事後再修。
+- `TopicId` 跨 session 穩定，仍建議每輪從頁面請求照抄。
+- ⭐ **抽取白名單（實測定版，上方兩支範本已內嵌同一套邏輯，此處保留供查閱對照）**：
+
+  ```js
+  // 清單：diff 與初判用（不必開詳情就能判斷收不收、是不是 SNTV）
+  const slimList = (s) => ({
+    id: 'AP' + s.editorialid, itemid: s.itemid,   // ⚠️ 一定要加 AP 前綴，見下方「id 前綴」踩雷
+    title: s.title, head: s.headline,
+    cap:  clean(s.caption && s.caption.nitf),  // ⭐ 清單就有一句話摘要
+    role: s.editorialrole,                        // ⭐ 形式：VO／VOSOT／SOT／Package
+    src:  (s.sources||[]).map(x=>x.name).join('/'),  // ⭐ SNTV 判定（本則的 sources，不是列表黏標）
+    sig:  (s.signals||[]).filter(x=>/Ready|SNTV/i.test(x)).join(','),  // NewsroomReady＝稿齊
+    line: s.dateline, ts: s.firstcreated, comp: s.compositiontype
+  });
+  // 詳情：寫三段式用
+  const slimDetail = (s) => {
+    const script = clean(s.script && s.script.nitf);  // ⚠️ 稿全文在 `script.nitf`（HTML）
+    return {
+      id: 'AP' + s.editorialid, title: s.title, head: s.headline,
+      cap:    clean(s.caption && s.caption.nitf),
+      script,
+      role: s.editorialrole, src: (s.sources||[]).map(x=>x.name).join('/'),
+      rights: s.rightsline, line: s.dateline || s.locationline,
+      dur:  (s.shots && s.shots[0] && s.shots[0].end) || '',  // ⚠️ 沒有 duration 欄位，時長由 shots[0].end 推
+      comp: s.compositiontype,
+      // 🎯 BITE 機械計數。⚠️ 不可加 `i` 旗標（理由同 RT）
+      sb_count: (script.match(/SOUNDBITE/g) || []).length,
+      has_sot: /SOT/i.test(s.editorialrole || ''),            // 🎯 VOSOT／SOT 形式＝含現場聲
+      prelim: /^\s*\+\+\s*PRELIMINARY SCRIPT/i.test(script)   // 🎯 初稿：只認開頭，內文提到不算
+    };
+  };
+  ```
+
+- 🎯 **`prelim` 為 true ＝ 照收、標 `pending`、備註加 `(初稿)`**，下一輪補正式稿覆寫並拿掉 `(初稿)`。這是真素材（跟 NS 的 GRAPHIC 佔位公告不同，那種整則排除）；有 BITE 照寫，不因初稿留白。
+- 🎯 **BITE 判定（最終版）**：
+  - **`sb_count > 0` → 禁止標「無BITE」**。引言逐字稿在 **SHOTLIST 段**（`SOUNDBITE (語言) 講者, SAYING:` 之後），**不在 STORYLINE 段**——只讀 STORYLINE 會誤判整篇無引言。
+  - 🔴 **`has_sot` 是必要條件不是充分條件：`sb_count == 0` 就標「無BITE。」，即使 `has_sot` 為 true，⛔ 不准硬湊**（0805 實錯 7 則假 BITE「現場原音『逐字稿未附』」——編輯調帶只有環境音，比標無BITE 更糟）。真的有現場聲沒逐字稿 → 寫進第一括號備註（`(直播原始帶)`／`(AP Live 未編審)`）讓編輯自己判斷。
+  - ⚠️ **AP Live Choice 機械識別**：`src_text` 含 `AP Live Choice` ＝直播原始錄影、未編審無逐字稿，一律不標 `(BITE)`。
+  - 「引言被消化進摘要 ≠ 不寫 BITE 段」同 RT 那條，兩站形狀完全一樣。
+  - 兜底行為：`add`／`add-batch`／`update-entry` 偵測「標 `(BITE)` 但 `sb_count==0`」→ **照收、寫進 `needs_review`**（不擋）。
+- ⚠️ **id 前綴**：`s.editorialid` 是裸數字，狀態檔代碼一律 `AP` 前綴——上面兩函式已補；漏補則 diff 永遠比不出「已收過」，每輪把舊素材當新素材。
+- ⚠️ **欄位名三個坑**：稿全文是 `script.nitf`（不是 `storyline`／`shotlist`，抓錯拿到空字串）；**沒有 `duration`**，用 `shots[0].end`（`00:02:16.720`）換算 `MM:SS`；`caption`／`script` 是物件，內容在 `.nitf`。
+- ⭐ **SNTV 判定優先序**：`signals` 含 `sntv` ＞ `sources[].name` 為 `SNTV` ＞ 代碼 `AP5` 開頭（三者都是本則自己的欄位，不會踩列表黏標的坑）。
+
+### 3) NS（CNN Newsource）——收益最大的一站
+
+- **清單即文稿**：`POST …/api/v3/stories` 一次回 `alternateIds.bitcentralId`（NS 編號）＋`footageType`＋`duration`＋`description`（現成一句摘要）＋`content.bitcentral.script`（全文）＋`embargo`。**不必開詳情頁或 Preview modal。**
+- **登入態**：Bearer token 在 `localStorage.newsourceSession.token`，**1 小時滑動時效**——沒過期時每次載入頁面就自動續 1 小時；一旦過期**沒有任何後備憑證**（NS 連一顆認證 cookie 都沒有），只能人工重登。
+- 🎫 **保活由獨立排程做（`S2-NS保活`，每 30 分鐘跑 `scripts/s2_keepalive.ps1` 載入 `/landing` 續期），agent 不必自管**：
+  - **鎖優先序：掃帶 > 保活**，共用 `.s2-scan.lock`，撞到時**保活直接放棄不排隊**（寧可漏一次保活，不可卡一輪掃帶）。因此**長輪次收工前要照 `s2_scan_prompt.md` 第 7 步最後摸一次 NS**。
+  - NS 登出時寫進 `G:\我的雲端硬碟\Claude共用\自動掃帶系統\S2掃帶log\_NS保活.log` 標記需人工重登。
+  - 腳本必須用 MCP 同一個 `--user-data-dir` 與同一個 chromium 版本，否則讀不到登入態。
+  - （手動掃帶、無排程時才由 agent 自管：等待期距上次接觸 NS 接近 **58 分鐘**就 navigate `/landing` 續一次；基準點＝本輪開工時刻（NS 是第一站）。⛔ 不可另開獨立 agent 去做，profile 會互鎖。）
+- ⚠️ **回應是 NDJSON**，不能 `r.json()`——取含 `"stories"` 的那一行再 parse。
+- `scriptOnly: true` ＝ UI 的 Has Script 篩選；`from`／`size` 分頁，`size` 上限 100。
+- ⚠️ **不要 `size` 開大配全稿一次回傳**（實測 198k 字元爆 context）：先用小欄位（不含 `script`）篩出真的要收的，再只對那些打一次全文查詢。
+- ✅ **NS 地方小品（DONUT／小市場 VO／人情趣味）一律收錄**，agent 不得憑「新聞價值」自行降階排除。真正可不收的只有三種：①標題與 `script` **逐字完全相同**的清單重複②`footageType` 機械排除（見 SKIP）③空白樣板或純數字跑馬燈。
+- 🔴 **同一事件的多段／多版素材一律各自收錄，不准併**：
+
+  | 情形 | 處置 |
+  |---|---|
+  | 多段專訪 PT1／PT2／第 1–4 段 | **每段都收**，備註標 `(PT2)` 等 |
+  | `BUTTED SOTS` 乾淨訪問剪輯版 vs 主稿 | **都收**（那本來就是給編輯挑 BITE 的獨立素材） |
+  | 同事件 VO／SIL 版 vs PKG 完整版；不同 SOT 剪輯 | **都收** |
+  | 標題＋`script` 逐字完全相同 | 只收 1 支（**唯一保留的重複情形**） |
+
+  判準是機械的：`bitcentralId` 不同就是不同素材，**只有逐字相同才准跳過**，不准用「同一事件／內容近似」語意判斷。**不確定就收**——少收是真漏收，多收只是多一行。（跨站真重複屬整併階段判斷，不適用本條。）
+- ⛔ **兩類直接排除，用 `footageType` 機械判斷**（抽取階段就濾掉，不進 `batch.json`；判準理由見 `13`）：
+
+  ```js
+  const SKIP = (it) => {
+    const ft = it.footageType || '';
+    const sc = (it.content && it.content.bitcentral && it.content.bitcentral.script) || '';
+    if (ft === 'AUDIO TRACK') return 'audio';              // 純音軌，無畫面
+    if (ft === 'GRAPHIC' && /THIS IS NOT THE FINAL SCRIPT/i.test(sc)) return 'prelim';  // 初稿佔位公告
+    return '';
+  };
+  // 初稿公告會點名最終版 ID，撈出來寫進回報（那則才是要收的）
+  const finalId = (sc) => (sc.match(/WILL BE IN ITEM\s*<?[^>]*>?\s*([A-Z]{2}-\d{2,3}[A-Z]{2})/i)||[])[1] || '';
+  ```
+
+- 🎯 **BITE 判定＝看 `footageType`**（NS 稿件**不用 `SOUNDBITE` 這個詞**，引言段標記是 `--SOT--`，不要拿 AP／RT 關鍵字掃 NS）：
+
+  | 類別 | `footageType` | 處置 |
+  |---|---|---|
+  | 🔴 必有 BITE | `SOT`／`BUTTED SOTS`／`SOT RAW`／`ISO`／`DONUT`／`INTERVIEW`／`RAW` | **禁止標「無BITE」**（實測 43/43） |
+  | ⚠️ 灰區 | `PKG` | 不硬擋，只印提醒；1 分鐘以上的記者包裝多半有訪問，標無BITE 前回頭看稿 |
+  | ✅ 多半無聲 | `VO/NAT`／`VO/STILL`／`VO/SIL`／`VO/RAW`／`LOOK LIVE`／`CLIP`／`NAT PKG` | 標「無BITE」合理（實測 52/52） |
+  | ⛔ 不採納 | `AUDIO TRACK`／`GRAPHIC`＋初稿字樣 | 列表階段排除 |
+
+  🎯 `batch.json` 的 NS 項目**必帶 `footage_type`**（RT／AP 帶 `sb_count`，同一機制）。
+  🔴 **兜底只判「BITE 標記對不對」，不判「該不該收錄」**——一律照收、疑慮寫進 `needs_review`（`resume` 會列出；補上 BITE 後 `update-entry` 自動結案）。⛔ 不要改回拒收：統計上的零例外不是邏輯必然（0805 實錯 `SE-005WE`：`RAW` 但真的無引言——主播打瞌睡花絮只有自然音），且拒收的失敗模式無聲。`add`／`update-entry` 與 `add-batch` 行為一致（單筆不檢查＝側門）。
+- ⚠️ `hideScript` 與初稿無關（純顯示設定，不可拿來判稿件狀態）。
+- ⚠️ token 過期時第一次呼叫拿到 `null` → 重整頁面等登入完成再打；**連兩次拿不到＝真登出**，`needs-review add` 記錄並跳過 NS（agent 不得自行輸入帳密）。
+
+#### ⛔ token 不離開頁面 JS（讀 token＋跨網域打 API 的安全形態）
+
+「`evaluate` 讀出 token → agent 層自己組請求送出」的形狀與憑證竊取程式相同，會被 classifier 攔——**這不是誤判，不要想辦法繞**。正確寫法：**整個「讀 token → fetch → parse」寫在同一個 `page.evaluate()` 裡**，token 從頭到尾只活在瀏覽器內：
+
+```js
+() => {
+  const tok = JSON.parse(localStorage.getItem('newsourceSession')).token;
+  const body = { /* request body */ };
+  return fetch('https://newsource-content-api-530.ns.cnn.com/api/v3/stories',
+    { method:'POST', headers:{'Content-Type':'application/json', authorization:'Bearer '+tok}, body:JSON.stringify(body) })
+    .then(r => r.text())
+    .then(t => {
+      const d = JSON.parse(t.split('\n').find(l => l.includes('"stories"')));
+      // ⚠️ 回傳值只准白名單欄位，不准把整段 API 回應原樣丟出來
+      return d.stories.content.map(it => ({
+        id: it.alternateIds && it.alternateIds.bitcentralId,
+        ft: it.footageType, dur_ms: it.duration, created: it.createdDate,
+        has_script: !!(it.content && it.content.bitcentral && it.content.bitcentral.script),
+        desc: (it.description || '').slice(0, 200),
+        script: (it.content && it.content.bitcentral && it.content.bitcentral.script) || ''
+      }));
+    });
+}
+```
+
+- **回傳值黑名單**：`token`／`Bearer`／`Authorization`／完整 JWT／cookie——永遠不准出現在回傳值、transcript、log、entries 檔、狀態檔。`script` 全文、`description`、編號是正常業務資料，照樣回傳。
+- `page.context().request.*` 不要用來打帶 token 的跨網域請求（同源／不帶敏感 header 不受限）。
+- 仍被攔就回報使用者、退 §5 舊流程，⛔ 不混淆程式碼、不拆呼叫去繞。
+
+### 4) 守門（任一觸發＝該站當輪退 §1b，並 `needs-review add` 記錄）
+
+- API 回 401／403／空清單，重試一次仍失敗。
+- 回應欄位對不上（缺 `script`／`itemid`／`editnumber`），連 2 則皆然。
+- **同站累計失敗 2 次即退**，不死磕。§1b 再失敗才退 §5。
+- 🔴 **AP `PageSize` 偏離 `16` ── 本身就算一次失敗，不是「換個參數再試試」**
+  （2026-08-12 立規，理由見 §2 AP）：查詢結果看起來不對（筆數對不上、內容像舊素材）
+  時，**正確反應是照抄範本重打一次一模一樣的請求**，不是把 `PageSize` 調大調小去猜。
+  調了就已經觸發這條守門，算失敗一次計入上面「同站累計失敗 2 次即退」。
+
+<!--ENDBODY-->
+
+<!-- RULES-EOF 13c 2026-08-24 — 讀到這一行才算讀完本檔；沒讀到＝被截斷，必須用 offset 補讀。 -->
