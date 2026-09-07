@@ -1113,6 +1113,14 @@ def cmd_list_topics(state, args):
         def order_topics(x):
             return x
     total = 0
+    # A10 P1a：compact 每行帶 charter——沒登記過的中主題不硬印這欄，維持舊格式
+    # （避免每行多一個空的「｜」，判斷「有沒有 charter」要看有沒有這一段，
+    # 不是看欄位是不是空字串）。
+    charter_map = {}
+    if args.compact:
+        reg = load_registry(getattr(args, "registry", None))
+        charter_map = {t.get("name"): t.get("charter") for t in reg.get("topics", [])
+                       if t.get("name") and t.get("charter")}
     for big in sorted(rows, key=lambda b: -sum(len(v) for v in rows[b].values())):
         mids = rows[big]
         n = sum(len(v) for v in mids.values())
@@ -1121,7 +1129,8 @@ def cmd_list_topics(state, args):
             # 0812 T6：每主題一行、不列小分題明細——agent 一輪只需要「有哪些中主題」
             # 這個事實，小分題細節等真的要合併時再用 topic_review 看。
             for m in order_topics(list(mids)):
-                print(f"{big}｜{m}｜{len(mids[m])}")
+                ch = charter_map.get(m)
+                print(f"{big}｜{m}｜{len(mids[m])}" + (f"｜{ch}" if ch else ""))
             continue
         print(f"■ {big}（{n} 則 / {len(mids)} 個中主題）")
         for m in order_topics(list(mids)):
@@ -1376,6 +1385,174 @@ def _special_t_sweep(state):
     return out
 
 
+# ── 中主題登記簿（charter／aliases，A10 P1a，2026-09-07 上線） ──────────────
+# 解的是「同一條新聞不同輪各開中主題、跨天異名」：跨天登記簿讓 agent 看得到
+# 「這格收什麼」與別名，避免每輪各自命名分裂成兩個中主題（0805 實例：
+# 【俄襲烏克蘭】／【基輔空襲】同一件事開兩格，見 `cmd_list_topics` 說明）。
+#
+# 🔴 「只併不改名」鐵律：canonical 名一旦寫進 `name`，這支模組永遠不會替它
+#    改名——只把 alias 命中改寫成 canonical，反方向（canonical→別的字）
+#    不存在。要改名字，先想清楚：那其實是「開新 canonical＋把舊的降成 alias」，
+#    是使用者判斷，不是機械正規化能做的事。
+#
+# ⛔ agent 不直接編 `s2_topic_registry.json`——一律走 `topic-register`／
+#    `topic-alias` 子指令（同精神見 D9：登記簿改動只走子指令）。
+#
+# 單一真相源、跨天生效，比照 `s2_special_t.json`／`s2_resident_topics.json`
+# 既有模式（見 `SPECIAL_T_PATH` 註解）：不要另外在狀態檔存一份鏡像。
+REGISTRY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "s2_topic_registry.json")
+RESIDENT_TOPICS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     "s2_resident_topics.json")
+
+# 常駐題（烏打俄／俄打烏）的 charter：13f 權威命名表原文
+# （`common/13f-S2-大分類與各站規則.md` 「【烏打俄】／【俄打烏】」兩列），
+# ⛔ 只在這裡抄一份——別再另開第三份拷貝（17 檔點名「雙真相源」是具名失效模式）。
+_RESIDENT_CHARTERS = {
+    "烏打俄": "烏克蘭（含其盟友如英美武器援助）主動發起的攻擊、反攻、突襲行動",
+    "俄打烏": "俄羅斯主動發起的攻擊、飛彈／無人機空襲、地面進攻",
+}
+
+
+def _registry_seed_from_resident():
+    """`s2_topic_registry.json` 不存在時的初始內容：從 `s2_resident_topics.json`
+    生成，常駐題標 `resident:true`、charter 取 13f 權威文字。
+
+    ⚠️ 壞檔／檔案不存在都不硬失敗（比照 `load_special_t`）：常駐題種子只是
+    「起手式」，讓它擋掉整輪掃帶不划算——退回空登記簿一樣能跑，只是還沒有
+    charter 視野。
+    """
+    try:
+        with open(RESIDENT_TOPICS_PATH, encoding="utf-8-sig") as f:
+            resident = json.load(f) or {}
+    except (OSError, json.JSONDecodeError):
+        resident = {}
+    if not isinstance(resident, dict):
+        resident = {}
+    today = datetime.now().strftime("%Y-%m-%d")
+    topics = []
+    for big, mids in resident.items():
+        if not isinstance(mids, list):
+            continue
+        for m in mids:
+            topics.append({
+                "name": m, "charter": _RESIDENT_CHARTERS.get(m, ""),
+                "aliases": [], "big": big, "tc": {"T": [], "C": []},
+                "first_seen": today, "last_seen": today, "resident": True,
+            })
+    return {"topics": topics}
+
+
+def load_registry(path=None):
+    """載入中主題登記簿。檔案不存在就從常駐題生成初始檔並落地（往後就是
+    單一真相源，不會每次呼叫都重生一次）。壞檔回空登記簿、不硬失敗。
+    """
+    p = path or REGISTRY_PATH
+    if not os.path.exists(p):
+        reg = _registry_seed_from_resident()
+        save_registry(reg, p)
+        return reg
+    try:
+        with open(p, encoding="utf-8-sig") as f:
+            reg = json.load(f) or {}
+    except (OSError, json.JSONDecodeError):
+        return {"topics": []}
+    if not isinstance(reg, dict) or not isinstance(reg.get("topics"), list):
+        return {"topics": []}
+    return reg
+
+
+def save_registry(reg, path=None):
+    p = path or REGISTRY_PATH
+    with open(p, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(reg, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+def find_topic(reg, name):
+    """依 canonical 名找登記簿裡的那一筆，找不到回 None。"""
+    for t in (reg or {}).get("topics", []):
+        if t.get("name") == name:
+            return t
+    return None
+
+
+def canonical_of(name, registry=None, path=None):
+    """回傳 (canonical 名, 改寫說明或 None)。
+
+    命中既有 canonical → 原樣回傳、無說明。命中某筆的 alias → 回傳該筆
+    canonical，並附一句可直接印給 agent 看的改寫說明。都沒命中 → 原樣回傳
+    （多半是還沒登記的新中主題，P1a 不擋，開新題閘門是 P1b 的事）。
+    """
+    reg = registry if registry is not None else load_registry(path)
+    for t in reg.get("topics", []):
+        if name == t.get("name"):
+            return name, None
+        if name in (t.get("aliases") or []):
+            return t["name"], f"{name}→{t['name']}（alias）"
+    return name, None
+
+
+def cmd_topic_register(state, args):
+    """登記／更新中主題的 charter（同名再 register 只更新 charter，不重複——
+    「只併不改名」鐵律：canonical 名寫下就不會被這支改掉）。
+
+    例：`topic-register --name 美網 --charter "…" --big 體育
+         --aliases "美網戰報,美網賽事,網球"`
+    """
+    reg = load_registry(args.registry)
+    today = datetime.now().strftime("%Y-%m-%d")
+    aliases = [x.strip() for x in re.split(r"[,，;；]", args.aliases or "") if x.strip()]
+    t = find_topic(reg, args.name)
+    if t is None:
+        t = {"name": args.name, "charter": "", "aliases": [], "big": "",
+             "tc": {"T": [], "C": []}, "first_seen": today, "last_seen": today,
+             "resident": False}
+        reg.setdefault("topics", []).append(t)
+        verb = "新增登記"
+    else:
+        verb = "更新登記"
+    if args.charter:
+        t["charter"] = args.charter
+    if args.big:
+        t["big"] = args.big
+    existing = set(t.setdefault("aliases", []))
+    for a in aliases:
+        if a != t["name"] and a not in existing:
+            t["aliases"].append(a)
+            existing.add(a)
+    t["last_seen"] = today
+    save_registry(reg, args.registry)
+    print(f"OK {verb}：{t['name']}" + (f"｜{t['charter']}" if t.get("charter") else "")
+          + (f"（{t['big']}）" if t.get("big") else ""))
+
+
+def cmd_topic_alias(state, args):
+    """替既有中主題追加別名（不改 canonical，只併不改名）。
+
+    對登記簿沒有的中主題明確失敗——⛔ 不靜默造出一筆空 charter 的格，
+    那樣「有登記但沒 charter」比「沒登記」更容易被誤以為已經處理過。
+    """
+    reg = load_registry(args.registry)
+    t = find_topic(reg, args.name)
+    if t is None:
+        print(f"ERROR 登記簿沒有「{args.name}」，先 topic-register 開這一格"
+              f"（帶 --charter）再追加別名", file=sys.stderr)
+        sys.exit(2)
+    aliases = [x.strip() for x in re.split(r"[,，;；]", args.alias or "") if x.strip()]
+    if not aliases:
+        print("ERROR 需要 --alias（可用逗號／分號分隔多個）", file=sys.stderr)
+        sys.exit(2)
+    existing = set(t.setdefault("aliases", []))
+    added = [a for a in aliases if a != t["name"] and a not in existing]
+    t["aliases"].extend(added)
+    save_registry(reg, args.registry)
+    if added:
+        print(f"OK 「{t['name']}」新增別名：{'、'.join(added)}")
+    else:
+        print(f"（沒有新別名——「{'、'.join(aliases)}」已經是 canonical 或既有別名）")
+
+
 # ── T 的數量上限（2026-08-25 使用者定：上限 3，預設 1，有需要才多掛）──────
 # 🔴 **機動 T 不佔這 3 格。** 颱風素材是「颱風＋天災天氣」兩個；機動 T 若也計數，
 #    `_special_t_sweep` 點名「加掛颱風、原本的 T 要留著」時，就會把已滿格的素材
@@ -1550,11 +1727,13 @@ def cmd_set_category(state, args):
     if args.pairs and (args.id or args.cat):
         print("ERROR: --pairs 與 --id/--cat 擇一，不可混用")
         sys.exit(2)
+    # 一次載入登記簿、批次共用——避免逐筆重讀檔（見 `_set_one_category` 說明）。
+    reg = load_registry(getattr(args, "registry", None))
     if not args.pairs:
         if not (args.id and args.cat):
             print("ERROR: 單筆需 --id 與 --cat；批次用 --pairs \"id=大分類/中主題;...\"")
             sys.exit(2)
-        _set_one_category(state, args.id, args.cat, strict=True)
+        _set_one_category(state, args.id, args.cat, strict=True, registry=reg)
         save(state, args.file)
         return
     # 批次：分隔符優先用「;」；沒有分號才退回逗號（中主題含逗號時務必用分號）
@@ -1567,7 +1746,7 @@ def cmd_set_category(state, args):
             skipped.append(f"「{tok}」: 缺 =（格式 id=大分類/中主題）")
             continue
         i, cat = tok.split("=", 1)
-        err = _set_one_category(state, i, cat, strict=False)
+        err = _set_one_category(state, i, cat, strict=False, registry=reg)
         (skipped if err else done).append(err or norm_id(i))
     if done:
         save(state, args.file)
@@ -1586,7 +1765,7 @@ def cmd_set_category(state, args):
         print("\n".join("  " + s for s in skipped))
 
 
-def _set_one_category(state, raw_id, cat, strict, quiet=False):
+def _set_one_category(state, raw_id, cat, strict, quiet=False, registry=None):
     """設定單筆 category。strict=True 出錯直接 exit；否則回傳錯誤訊息字串。
 
     cat 格式：`大分類/中主題` 或 `大分類/中主題/小分題`（小分題選填）。
@@ -1595,6 +1774,12 @@ def _set_one_category(state, raw_id, cat, strict, quiet=False):
 
     quiet=True（T12 加，`add-batch` 內建分類用）：批次時不逐則印
     「OK … category=…」，否則一批幾十則會洗版。
+
+    registry（A10 P1a 加）：登記簿字典（已載入的，caller 一次載入、批次共用，
+    不必逐筆重讀檔）。中主題命中某筆的 alias 就改寫成 canonical 並印說明——
+    「只併不改名」鐵律，這裡只做 alias→canonical 這一個方向。⚠️ 改寫說明
+    不受 quiet 控制：quiet 只管「OK … category=…」那行洗版與否，alias 被
+    悄悄改掉是重要事實，批次也要印。
     """
     i = norm_id(raw_id)
     if i not in state["items"]:
@@ -1605,6 +1790,9 @@ def _set_one_category(state, raw_id, cat, strict, quiet=False):
         parts = [p.strip() for p in cat.split("/", 2)]
         big, mid = parts[0], parts[1]
         sub = parts[2] if len(parts) > 2 else ""
+        mid, note = canonical_of(mid, registry=registry)
+        if note:
+            print(note)
         c = {"大分類": big, "中主題": mid}
         if sub:
             c["小分題"] = sub
@@ -2347,6 +2535,9 @@ def cmd_needs_review(state, args):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--file", default=DEFAULT_FILE)
+    p.add_argument("--registry", default=REGISTRY_PATH,
+                   help="中主題登記簿路徑（測試用覆蓋；預設 scripts/s2_topic_registry.json，"
+                        "單一真相源、跨天生效）")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("resume")
@@ -2459,6 +2650,18 @@ def main():
     c.add_argument("--id")
     c.add_argument("--cat", help="大分類/中主題[/小分題]")
     c.add_argument("--pairs", help='批次："id=大分類/中主題[/小分題];id2=..."（分隔符優先認分號）')
+    tr = sub.add_parser("topic-register",
+                        help="登記／更新中主題的 charter＋別名（同名再登記只更新 charter，"
+                             "不重複——⛔ agent 不直接編 s2_topic_registry.json）")
+    tr.add_argument("--name", required=True, help="canonical 名（「只併不改名」：寫下就不改）")
+    tr.add_argument("--charter", help="這格收什麼，一句話")
+    tr.add_argument("--big", help="大分類")
+    tr.add_argument("--aliases", help="別名清單，逗號／分號分隔")
+    ta = sub.add_parser("topic-alias",
+                        help="替既有中主題追加別名（不改 canonical，只併不改名；"
+                             "對象要先 topic-register 過，否則明確失敗）")
+    ta.add_argument("--name", required=True, help="canonical 名（要已登記）")
+    ta.add_argument("--alias", required=True, help="要追加的別名，逗號／分號分隔可多個")
     tc = sub.add_parser("set-tc", help="寫 T（議題）／C（地緣）標籤；名單只認 TC-字典.md")
     tc.add_argument("--id")
     tc.add_argument("--tc", help="T1,T2/C1,C2（單側可留空，例：/臺灣）")
@@ -2503,6 +2706,7 @@ def main():
         "set-mark": cmd_set_mark, "set-aired": cmd_set_aired,
         "fix-first-seen": cmd_fix_first_seen,
         "set-category": cmd_set_category, "set-tc": cmd_set_tc,
+        "topic-register": cmd_topic_register, "topic-alias": cmd_topic_alias,
         "get": cmd_get, "show": cmd_show,
         "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,

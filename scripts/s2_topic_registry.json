@@ -1,0 +1,2935 @@
+{
+  "topics": [
+    {
+      "name": "烏打俄",
+      "charter": "烏克蘭（含其盟友如英美武器援助）主動發起的攻擊、反攻、突襲行動",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": true
+    },
+    {
+      "name": "俄打烏",
+      "charter": "俄羅斯主動發起的攻擊、飛彈／無人機空襲、地面進攻",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-07",
+      "last_seen": "2026-09-07",
+      "resident": true
+    },
+    {
+      "name": "哥倫比亞治安",
+      "charter": "哥倫比亞北桑坦德省Los Patios一處警局週一深夜遭裝載80公斤ANFO炸藥",
+      "aliases": [],
+      "big": "中南美",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "敘利亞局勢",
+      "charter": "土耳其學者受訪表示",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "黎巴嫩情勢",
+      "charter": "聯合國駐黎巴嫩維和部隊發言人指出",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "加薩人道危機",
+      "charter": "加薩多處臨時帳篷區飽受鼠患蠍害威脅",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "以巴衝突",
+      "charter": "以色列在約旦河西岸傑寧發動空襲",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "加薩西岸情勢",
+      "charter": "聯合國世界糧食計畫署宣布因資金短缺",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "以黎衝突",
+      "charter": "黎巴嫩南部濱地中海城鎮曼蘇里週二發生大爆炸",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "加薩戰事",
+      "charter": "以色列國防部長卡茨稱以軍在加薩市突襲行動中逮捕一名哈瑪斯高層安全官員",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "敘利亞化武銷毀",
+      "charter": "聯合國裁軍事務代表證實敘利亞已展開銷毀阿薩德時期化學武器行動",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "黎南以軍安全區",
+      "charter": "黎巴嫩軍方在美方框架協議下於南部「試點區」拆解真主黨等民兵武器並排除未爆彈",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "中尼邊境洪災",
+      "charter": "同一波豪雨在中國（西藏吉隆口岸等）境內造成的洪災泥石流衝擊與搶修，跟尼泊爾洪災分開放——是同一氣候系統但不同國家災情",
+      "aliases": [
+        "中尼邊境泥石流",
+        "尼泊爾洪災：中國西藏境內衝擊"
+      ],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "中國科技產業",
+      "charter": "北京世界機器人大會展示疊衣、分揀、百米賽跑等人形機器人應用",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-31",
+      "resident": false
+    },
+    {
+      "name": "習近平出訪",
+      "charter": "中國國家主席習近平週日啟程赴上合組織峰會",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "習近平訪吉爾吉斯",
+      "charter": "中國國家主席習近平赴吉爾吉斯進行國是訪問",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-08-31",
+      "resident": false
+    },
+    {
+      "name": "外交部例行記者會",
+      "charter": "中國外交部例行記者會",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "習近平出訪埃及",
+      "charter": "習近平出訪埃及前夕",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "上合峰會中國戰略",
+      "charter": "上海合作組織領導人於比什凱克通過「比什凱克宣言」",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "陸部委記者會",
+      "charter": "中國外交部在北京舉行例行記者會直播。",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "中國智造轉型",
+      "charter": "中國智造轉型相關報導",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-05",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "熱帶風暴愛德華",
+      "charter": "熱帶風暴愛德華侵襲德州、路易斯安那州的路徑與水患",
+      "aliases": [
+        "德州熱帶風暴愛德華水患"
+      ],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "日本秋雨豪雨",
+      "charter": "日本秋雨鋒面豪雨造成的災情",
+      "aliases": [
+        "日本秋雨鋒面豪雨"
+      ],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "印尼火山",
+      "charter": "印尼火山活動與噴發災情",
+      "aliases": [
+        "印尼火山噴發"
+      ],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "歐洲野火",
+      "charter": "西班牙軍事緊急應變部隊週四晚間投入瓦倫西亞省野火撲救",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "日本福井豪雨",
+      "charter": "日本福井縣豪雨成災",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "西班牙熱浪",
+      "charter": "西班牙傳統摺扇因熱浪回溫成搶手配件",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "第24號颱風北上",
+      "charter": "南韓今年颱風生成數量偏多",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "北陸豪雨災後復原",
+      "charter": "北陸豪雨災後復原相關報導",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "防災日演練",
+      "charter": "防災日演練相關報導",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "南韓氣象",
+      "charter": "南韓南部地區持續出現秋老虎高溫",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "格陵蘭冰川融化研究",
+      "charter": "格陵蘭冰川融化研究相關報導",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "氣候現象",
+      "charter": "氣候科學家解析聖嬰現象成因與強度預測",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "西太平洋颱風動態",
+      "charter": "第24號颱風柯羅萬進入48小時警戒圈",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "東南亞跨國霾害",
+      "charter": "馬來西亞環保團體赴印尼駐吉隆坡使館前抗議",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "颶風羅威爾",
+      "charter": "美國國家海洋暨大氣總署飛機穿越颶風羅威爾拍下空拍畫面",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-05",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "威尼斯影展",
+      "charter": "威尼斯影展（含頒獎、影人動態、參展作品）",
+      "aliases": [
+        "影展"
+      ],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "院線新片",
+      "charter": "新片「尋找艾蜜莉」8月28日美國上映",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "名人動態",
+      "charter": "美劇「王后區之王」女星蕾雅雷米妮確定加盟實境秀「比佛利嬌妻」第16季",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "巨星殞落",
+      "charter": "鄉村音樂天后桃莉巴頓病逝享壽80歲",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "好萊塢一分鐘",
+      "charter": "好萊塢話題介紹三款「整理收納」模擬遊戲：《骰子歸位》清理滿地骰子、《橡皮鴨排排站",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "演藝圈動態",
+      "charter": "英國搖滾天團Oasis諾爾與連恩·蓋勒格兄弟將攜新紀錄片「不要憤怒地回望」9月登",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-08-29",
+      "resident": false
+    },
+    {
+      "name": "好萊塢星光大道",
+      "charter": "鄉村歌后桃莉巴頓在好萊塢星光大道上的星章遭人惡意刻痕破壞",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "新片訪談",
+      "charter": "新片《By Any Means》改編自1960年代民權領袖沃隆·達莫謀殺案",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "電影票房",
+      "charter": "克里斯多福·諾蘭執導《奧德賽》延長IMAX 70毫米版放映至9月底",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "好萊塢動態",
+      "charter": "小席．厄夏親自為拉斯維加斯杜莎夫人蠟像館蠟像揭幕",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "上合峰會",
+      "charter": "上海合作組織峰會（含比什凱克場次）議程、宣言與相關外交",
+      "aliases": [
+        "上合組織峰會",
+        "上合組織峰會（比什凱克）"
+      ],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "冰島入歐公投",
+      "charter": "冰島是否重啟歐盟入會談判的公投",
+      "aliases": [
+        "冰島歐盟公投"
+      ],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "挪威國王駕崩",
+      "charter": "挪威國王哈拉爾五世駕崩相關報導",
+      "aliases": [
+        "挪威國王去世"
+      ],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "福克蘭群島爭議",
+      "charter": "阿根廷與英國的福克蘭（馬爾維納斯）群島主權爭議",
+      "aliases": [
+        "阿根廷福克蘭爭議"
+      ],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "歐洲政情",
+      "charter": "摩爾多瓦總統桑杜與到訪的羅馬尼亞總統丹在紀念碑獻花",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "挪威國王哈孔繼位",
+      "charter": "挪威阿斯克教堂舉行故王哈拉爾五世追思禮拜",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "義大利大使專訪",
+      "charter": "義大利大使專訪相關報導",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "State of the Union週日政論",
+      "charter": "聯邦眾議員何康納(Ro Khanna)接受CNN專訪",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "太平洋島國論壇",
+      "charter": "太平洋島國論壇於帛琉開幕",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "德國極右崛起",
+      "charter": "德東薩克森-安哈特9月6日州選舉前",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "德國薩克森安哈特選舉",
+      "charter": "德國薩克森安哈特木工教師海克爾因被指違反課堂中立原則遭校方警告",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "密西根參院選戰",
+      "charter": "密西根州民主黨週一在底特律召開記者會",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-08-31",
+      "resident": false
+    },
+    {
+      "name": "英國政壇",
+      "charter": "英國首相安迪·柏克翰在國會暑期休會結束後",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "麻州參議員初選",
+      "charter": "麻州州務卿加爾文表示本屆初選提前投票與郵寄票數異常踴躍",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "墨西哥國情報告",
+      "charter": "墨西哥國情報告相關報導",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "川普晤旅遊業者",
+      "charter": "川普總統在白宮晤旅遊業高層後回答提問。",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "義大利梅洛尼執政紀錄",
+      "charter": "義大利總理梅洛尼執政天數超越貝魯斯柯尼創戰後最長紀錄",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "德國地方選舉",
+      "charter": "德國左翼新政黨BSW（薩拉．華根克內希特聯盟）創辦人華根克內希特在薩克森安哈特邦",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "金承元人事爭議",
+      "charter": "金承元人事爭議相關報導",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "核廢選址調查",
+      "charter": "核廢選址調查相關報導",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "G20邀俄羅斯財長爭議",
+      "charter": "G20邀俄羅斯財長爭議相關報導",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "國際外交",
+      "charter": "川普週一在白宮橢圓形辦公室醫療政策活動受訪",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "俄方表態",
+      "charter": "俄羅斯總統普欽在吉爾吉斯上合組織峰會後記者會表示",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "德俄緊張",
+      "charter": "德國指控俄羅斯須為上月萊比錫機場無人機攻擊負責",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "俄羅斯外交",
+      "charter": "普欽週四在海參崴東方經濟論壇全會演說",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "烏俄外交與和談",
+      "charter": "克里姆林宮發言人佩斯科夫未證實美國特使庫許納與威特科夫將訪莫斯科的報導",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "美俄斡旋停火",
+      "charter": "美國總統特使維特科夫與女婿庫許納抵莫斯科",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-05",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "尼泊爾洪災",
+      "charter": "尼泊爾（含中國西藏境外段）豪雨土石流：死傷失蹤統計、搜救行動、國際人道援助、生還者與家屬故事",
+      "aliases": [
+        "尼泊爾水電廠隧道搜救",
+        "尼泊爾洪災：生還者與家屬故事",
+        "尼泊爾洪災：搜救行動",
+        "尼泊爾洪災搜救生還者",
+        "尼泊爾洪災：國際人道馳援",
+        "尼泊爾洪災死傷與搜救現況",
+        "尼泊爾隧道受困工人搜救",
+        "尼泊爾洪災：罹難失蹤統計",
+        "尼泊爾國際與陸方援助行動",
+        "尼泊爾洪災救援專訪",
+        "尼泊爾洪災：外籍旅客與健行團失蹤",
+        "尼泊爾洪災搜救",
+        "尼泊爾洪災死傷統計",
+        "尼泊爾洪災：肇因與後續風險",
+        "尼泊爾家屬尋親與心聲",
+        "尼泊爾洪災衝擊",
+        "尼泊爾聯合國援助協調",
+        "尼泊爾隧道搜救官方說明",
+        "尼泊爾國際馳援"
+      ],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "休達移民",
+      "charter": "西班牙屬地休達的移民（含闖關、營地拆除）相關新聞",
+      "aliases": [
+        "休達移民危機"
+      ],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "賽普勒斯船難",
+      "charter": "賽普勒斯附近渡輪翻覆船難的搜救與生還者報導",
+      "aliases": [
+        "賽普勒斯渡輪翻覆"
+      ],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "海外治安案件",
+      "charter": "英格蘭北部一名男子多次嘗試將價值約1.6萬美元毒品與手機丟進監獄",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "海外重大事故",
+      "charter": "巴基斯坦伊斯蘭馬巴德一間政府醫院新生兒室週三發生火警",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "泰特兄弟保釋聽證",
+      "charter": "社群網紅泰特兄弟在邁阿密面臨引渡英國受審性侵與人口販運指控",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "監控攝影機爭議",
+      "charter": "威州謝博根市著手覆蓋全市15支Flock車牌辨識攝影機",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "瑞士銳舞槍擊",
+      "charter": "瑞士阿爾高州阿勞市一場銳舞派對散場後發生槍擊",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "肯亞機場罷工",
+      "charter": "肯亞奈洛比國際機場航空業者恢復罷工行動",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-08-31",
+      "resident": false
+    },
+    {
+      "name": "剛果伊波拉疫情",
+      "charter": "剛果民主共和國貝尼週日再有5名伊波拉康復者出院",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "紐約時代廣場刺傷案",
+      "charter": "紐約時代廣場刺傷案發生後",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "柯克案追蹤",
+      "charter": "猶他州法官週二將裁定泰勒·羅賓森是否因涉嫌槍殺查理·柯克而正式受審",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "義大利遊客洪水死裡逃生",
+      "charter": "義大利遊客洪水死裡逃生相關報導",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "生活道路速限下修",
+      "charter": "生活道路速限下修相關報導",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "福島熊出沒緊急重量事件",
+      "charter": "福島熊出沒緊急重量事件相關報導",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "英國刑案",
+      "charter": "英國曼徹斯特一名丈夫被控迷姦妻子並夥同12名共犯性侵長達20年",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "釜山拖船翻覆",
+      "charter": "南韓釜山五六島東南方約9公里海域2日下午發生286噸級拖船翻覆意外",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "首爾煙火節維安",
+      "charter": "首爾煙火節維安相關報導",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "廣西破獲傳銷案",
+      "charter": "廣西破獲傳銷案相關報導",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "偏鄉燃料維持",
+      "charter": "偏鄉燃料維持相關報導",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "日本流感疫情",
+      "charter": "日本流感疫情相關報導",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "玻利維亞軍營爆炸",
+      "charter": "玻利維亞維亞查一處軍用彈藥庫週五發生大爆炸",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "印度建物倒塌",
+      "charter": "新德里一棟40至50年老舊建物周日倒塌",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-06",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "太空探索",
+      "charter": "NASA南希·格瑞斯·羅曼太空望遠鏡發射與後續任務進展",
+      "aliases": [
+        "羅曼太空望遠鏡發射"
+      ],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "月偏食奇景",
+      "charter": "近全食月偏食於本週五登場",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-08-28",
+      "resident": false
+    },
+    {
+      "name": "太空",
+      "charter": "川普在NASA詹森太空中心致電國際太空站",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-08-28",
+      "resident": false
+    },
+    {
+      "name": "低空經濟",
+      "charter": "電動垂直起降飛行器（eVTOL）週五在香港完成首次試飛",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "日本軍工科技",
+      "charter": "日本政府擴大扶持軍民兩用（Dual-use）技術以強化國家安全",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "AI資安風險",
+      "charter": "OpenAI表示其新AI能規劃並執行自動化網路攻擊。",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "自駕計程車",
+      "charter": "Uber週四在倫敦推出首批自駕計程車服務",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "柏林IFA消費電子展",
+      "charter": "聯想在柏林IFA消費電子展發表概念可捲式螢幕筆電「Project Swan」與極",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "美軍空襲拉拉克島",
+      "charter": "美軍空襲伊朗拉拉克島相關軍事行動",
+      "aliases": [
+        "美軍攻伊朗拉拉克島"
+      ],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "荷姆茲海峽情勢",
+      "charter": "荷姆茲海峽美伊軍事對峙與情勢評估",
+      "aliases": [
+        "荷姆茲海峽軍事對峙"
+      ],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "美伊衝突評估",
+      "charter": "美國與伊朗軍事衝突情勢的評估與升級動態",
+      "aliases": [
+        "美伊衝突升級"
+      ],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "戰事半年回顧",
+      "charter": "美伊戰爭近6個月之際",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "伊朗開戰半年",
+      "charter": "美以2月28日對伊朗開戰滿半年",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-08-28",
+      "resident": false
+    },
+    {
+      "name": "美伊緊張",
+      "charter": "美國總統川普誓言對伊朗發動報復",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "戰事升溫",
+      "charter": "眾議院議長強森被CNN國會記者拉朱問及伊朗戰事延長",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "軍事動態",
+      "charter": "伊朗週二宣稱已朝約旦方向發射飛彈並公布畫面",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "伊朗婚禮空襲",
+      "charter": "伊朗希里克縣長雷札·夏希迪安指控美軍空襲擊中婚禮聚會",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "美軍再襲伊朗",
+      "charter": "美軍週二再度空襲伊朗革命衛隊多處目標",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "美伊戰事衝擊能源",
+      "charter": "伊朗庫德族城市賈萬魯德市集因里亞爾貶值急遽蕭條",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "白宮簡報問答",
+      "charter": "美國副總統萬斯在白宮簡報會被問及對伊衝突是否會拖到期中選舉",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "克蘭西殺子案",
+      "charter": "麻州普利茅斯琳賽・克蘭西殺害3名子女案的審判進度",
+      "aliases": [
+        "琳賽克蘭西殺子案",
+        "麻州殺子案審判",
+        "克蘭西殺子案審判"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "期中選舉",
+      "charter": "美國期中選舉選情、選戰與政治獻金動態",
+      "aliases": [
+        "期中選戰",
+        "期中選舉金源",
+        "美國期中選舉"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "911週年",
+      "charter": "911事件週年紀念活動與相關回顧報導",
+      "aliases": [
+        "911事發資料",
+        "911事件週年",
+        "911周年紀念"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "移民執法",
+      "charter": "美國本土移民執法行動（ICE等）與相關爭議",
+      "aliases": [
+        "移民執法爭議",
+        "ICE執法爭議"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "治安",
+      "charter": "美國本土治安事件動態",
+      "aliases": [
+        "治安動態"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "意外",
+      "charter": "當日雜項意外事故通用桶（車禍、墜機、氣爆等單一意外事件）",
+      "aliases": [
+        "意外事故"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-28",
+      "resident": false
+    },
+    {
+      "name": "美委石油協議",
+      "charter": "美國與委內瑞拉石油儲量／股權協議",
+      "aliases": [
+        "委內瑞拉石油協議"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "川普動態",
+      "charter": "美國總統川普的例行公開行程與直播畫面",
+      "aliases": [
+        "川普動向"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "大峽谷洪災",
+      "charter": "美國大峽谷國家公園暴雨洪水災情與遊客撤離",
+      "aliases": [
+        "大峽谷洪水撤離"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "圖帕克命案",
+      "charter": "饒舌歌手圖帕克·夏庫爾命案相關法律程序與宣判",
+      "aliases": [
+        "圖帕克夏庫爾案宣判"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-31",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "國會",
+      "charter": "美國國會議事動態",
+      "aliases": [
+        "國會動態"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "明尼阿波利斯槍擊案",
+      "charter": "明尼亞波利斯市中心公寓大樓槍擊案（含警員傷亡）後續",
+      "aliases": [
+        "明尼亞波利斯槍擊"
+      ],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "大選前哨",
+      "charter": "美國緬因州參議員選戰",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "川普改湖名",
+      "charter": "川普簽署行政令將安大略湖改名「美國湖」",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "甘迺迪中心整修",
+      "charter": "美國商務部長盧特尼克警告",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "加州野火",
+      "charter": "加州大蘇爾沿岸普拉斯凱特野火延燒",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "川普政策",
+      "charter": "川普簽署行政命令",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "德州野火",
+      "charter": "美國德州范贊特郡「Corky野火」延燒逾400英畝、64號公路封閉疏散",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "49人隊老闆遭逮捕",
+      "charter": "警方公布舊金山49人隊老闆傑德約克在俄亥俄州東巴勒斯坦涉入性交易遭逮捕的影片。",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "消費食安",
+      "charter": "美國農業部公告上海雲吞公司召回近2.5萬磅冷凍水牛城雞肉產品",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-08-29",
+      "resident": false
+    },
+    {
+      "name": "資料中心用水爭議",
+      "charter": "奧克拉荷馬州埃爾雷諾一處AI資料中心因水管損壞浪費逾300萬加侖水",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "美國治安",
+      "charter": "南卡哥倫比亞市警員克里斯．德隆處理家暴通報時遭嫌犯亞當．道迪槍殺殉職",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "中非遣返移民調查",
+      "charter": "中非遣返移民調查相關報導",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "國防部風波",
+      "charter": "美國陸軍部長德里斯科爾8月31日確認請辭",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "人情趣味",
+      "charter": "馬里蘭州兩名越戰退伍軍人兄弟退役後在當地高球場擔任開球員",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "選務爭議",
+      "charter": "內華達州州務卿阿吉拉爾受訪回應川普政府新一波選舉舞弊調查",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "監控隱私爭議",
+      "charter": "佛州交通部宣布不再允許在該州公共道路沿線設置自動車牌辨識器",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "野火動態",
+      "charter": "加州馬里波薩郡「科羅拉多野火」週二延燒",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "校園安全",
+      "charter": "北卡吉爾福德郡13歲中學生凱登·索雷爾週五足球練習後心臟驟停身亡",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "美國司法案件",
+      "charter": "美國喬治亞州男子丹尼爾·史密斯因24年前遭控搖晃致死2月大兒子被判謀殺",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "美國天氣",
+      "charter": "熱帶低氣壓愛德華週二下午在路易斯安那州強森灣附近登陸",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "警民衝突與司法",
+      "charter": "賓州58歲資深警員因槍殺酒醉敲錯門的22歲無武裝大學生",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "治安案件",
+      "charter": "康乃狄克州州議會大廈警方周三上午電擊制伏一名持刀攻擊警員、企圖搶警車的婦人",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "白宮動態",
+      "charter": "白宮上週致函史密森尼理事會",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "選務誠信",
+      "charter": "內布拉斯加州長皮倫與州務卿艾夫南就近期選票連署造假案表態",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "軟性人情",
+      "charter": "美軍士官費里斯與曾在中東救他一命的流浪犬「莎蒂」在康乃狄克州團圓",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "密蘇里選區爭議",
+      "charter": "密蘇里州最高法院一致裁定強制就爭議選區重劃圖進行全州公投合法",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "倒影池維護合約",
+      "charter": "前美國奧運划船選手赫恩就反射池破壞案開庭後",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "東岸風暴災損",
+      "charter": "華府雷根機場飛機因暴雨停機抖動、市區豪雨樹木壓屋",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "五級颶風威脅",
+      "charter": "美國國家海洋暨大氣總署(NOAA)偵察機「小豬」飛入颶風羅威爾風眼執行觀測任務",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-05",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "美國軟性新聞",
+      "charter": "美國亞特蘭大911紀念樓梯攀爬活動",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-06",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "邁阿密貨機事故",
+      "charter": "邁阿密國際機場周日一架亞馬遜貨機降落時衝出跑道並撞上多輛車",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-06",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "趣聞快訊",
+      "charter": "各地趣聞、暖新聞等輕鬆話題快訊",
+      "aliases": [
+        "趣聞快報"
+      ],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "歐洲王室",
+      "charter": "挪威89歲國王哈拉爾五世住院病情惡化",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "生活服務",
+      "charter": "上海浦東機場二航廈啟用逾110平方米親子友善空間",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "戰犯身故",
+      "charter": "有「波士尼亞屠夫」之稱的波士尼亞塞族將領姆拉迪奇病逝",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "桃莉巴頓身後追思",
+      "charter": "鄉村音樂巨星桃莉巴頓辭世",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "在地生活",
+      "charter": "奈及利亞北部保守州索科托近年夜店文化興起",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-08-28",
+      "resident": false
+    },
+    {
+      "name": "歷史上的今天",
+      "charter": "8月28日歷史上的今天：1898年百事可樂正式命名",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "國際趣聞",
+      "charter": "日本弘前城以千人拔河式人力搬遷約90公分復位",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "暖心故事",
+      "charter": "愛達荷州伊達荷瀑布市一名自閉症成年男子與家人6年來每週五固定光顧同一家餐廳",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "國際要聞",
+      "charter": "波士尼亞塞族地區數百人為戰犯姆拉迪奇（波士尼亞戰爭「塞拉耶佛屠夫」",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "氣候變遷",
+      "charter": "近200國代表在蒙古烏蘭巴托召開聯合國防治沙漠化會議",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "地方人情故事",
+      "charter": "明尼亞波利地區FBI青少年學院舉辦兩天活動",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-08-29",
+      "resident": false
+    },
+    {
+      "name": "動物趣聞",
+      "charter": "澳洲坎培拉一名豎琴治療師五年來持續為國家動物園犀牛、狐猴等動物演奏豎琴",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-08-30",
+      "resident": false
+    },
+    {
+      "name": "諾丁丘嘉年華",
+      "charter": "倫敦諾丁丘嘉年華60週年慶",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-08-31",
+      "resident": false
+    },
+    {
+      "name": "趣聞奇觀",
+      "charter": "男性保養品牌Duke Cannon與激浪汽水推出聯名限量香皂與沐浴乳系列",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "網路熱門話題",
+      "charter": "源自巴西社群平台的「氣場農場」(Aura farming)風潮席捲拉丁美洲",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "趣聞軼事",
+      "charter": "美國華盛頓州柯克蘭一名住戶通報疑似遭闖空門",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "國際軟性趣聞",
+      "charter": "斯洛伐克日利納夜間捕蝠活動吸引民眾與孩童手持手電筒體驗",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "世界地圖變革",
+      "charter": "聯合國大會投票通過採用「等面積投影」新版世界地圖",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-05",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "美股",
+      "charter": "美國股市每日開盤／收盤等短訊動態",
+      "aliases": [
+        "美股動態"
+      ],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "科技巨頭合規",
+      "charter": "Meta前員工、吹哨人阿圖羅・貝哈接受CNN專訪",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "產業動態",
+      "charter": "加拿大總理卡尼力推國防自主戰略、五年增列600億美元國防預算",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "美國經濟",
+      "charter": "美國7月通膨率維持在3.7%",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "貿易爭端",
+      "charter": "美墨貿易談判卡在起司命名爭議",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "G20財長會議",
+      "charter": "美國財長貝森特與聯準會主席華許(Kevin Warsh)抵北卡州艾許維爾",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "日本物價上漲",
+      "charter": "日本物價上漲相關報導",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "日本長期利率攀升",
+      "charter": "日本長期利率攀升相關報導",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "日本米價",
+      "charter": "日本米價相關報導",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "美國油價",
+      "charter": "美伊緊張推升油價",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-04",
+      "resident": false
+    },
+    {
+      "name": "企業併購",
+      "charter": "Yum Brands完成27億美元出售Pizza Hut交易最後一步",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "日本公債殖利率",
+      "charter": "日本10年期公債殖利率週三飆至3.015%",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "南韓通膨物價",
+      "charter": "南韓8月消費者物價指數（CPI）年增率重回3.1%",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "全美油價攀升",
+      "charter": "加州斯托克頓一帶勞動節加油站油價來到每加侖5.78美元",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "南韓金融罷工",
+      "charter": "南韓金融罷工相關報導",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "美國就業數據",
+      "charter": "美國8月非農就業報告週五美東時間上午8:30公布",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "全美就業報告",
+      "charter": "美國8月新增就業16.2萬人優於預期",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "美加貿易戰",
+      "charter": "美加貿易戰白熱化",
+      "aliases": [],
+      "big": "關稅",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "美網",
+      "charter": "美國網球公開賽賽事戰報、選手動態與賽前賽後訪問",
+      "aliases": [
+        "美網戰報",
+        "美網賽事",
+        "美網公開賽",
+        "美網賽前記者會"
+      ],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "足球",
+      "charter": "各項足球賽事戰報與球隊動態",
+      "aliases": [
+        "足球賽事",
+        "足球戰報"
+      ],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "英超",
+      "charter": "英格蘭足球超級聯賽賽事、轉會與球隊動態",
+      "aliases": [
+        "英超足球",
+        "英超轉會"
+      ],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "網球",
+      "charter": "網球賽事戰報（美網以外的一般網球新聞）",
+      "aliases": [
+        "網球賽事"
+      ],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-03",
+      "resident": false
+    },
+    {
+      "name": "高爾夫",
+      "charter": "高爾夫球賽事戰報",
+      "aliases": [
+        "高爾夫賽事"
+      ],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "MLB",
+      "charter": "美國職棒大聯盟賽事戰報與球員動態",
+      "aliases": [
+        "MLB看點"
+      ],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-09-01",
+      "resident": false
+    },
+    {
+      "name": "環西賽",
+      "charter": "環西班牙自行車賽各分站戰報",
+      "aliases": [
+        "環西自行車賽"
+      ],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "自由車",
+      "charter": "自由車（公路自行車）賽事戰報，如環英自由車賽",
+      "aliases": [
+        "英倫自由車賽"
+      ],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-03",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "賽車",
+      "charter": "賽車相關賽事戰報",
+      "aliases": [
+        "賽車賽事"
+      ],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-30",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "國際體壇",
+      "charter": "丹麥選手陶森爆冷擊敗頭號種子亞歷山德羅娃",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "resident": false
+    },
+    {
+      "name": "美國職棒",
+      "charter": "洋基強打艾倫・賈吉在肋骨壓力性骨折復原將滿三個月之際",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "歐洲足壇轉會",
+      "charter": "馬德里競技總教練席蒙尼盼繼續留用哈利安·阿爾瓦雷茲。",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "MotoGP亞拉岡站",
+      "charter": "貝澤基週五練習賽以1分45秒455寫下新單圈紀錄",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-08-29",
+      "resident": false
+    },
+    {
+      "name": "美式足球",
+      "charter": "警方公布舊金山49人隊老闆約克在俄亥俄州東巴勒斯坦因涉嫌參與娼妓活動遭逮捕的畫面",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-28",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "南美足球",
+      "charter": "博卡青年阿甲例行賽第7輪主場1比0氣走拉努斯",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-08-31",
+      "resident": false
+    },
+    {
+      "name": "日職聯",
+      "charter": "日職聯大阪飛腳一度遭紅牌罰下僅剩10人應戰",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "美國女足NWSL",
+      "charter": "美國女子職業足球聯賽NWSL",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-08-29",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "西甲",
+      "charter": "巴塞隆納主帥弗利克證實簽下前鋒加布里埃爾·赫蘇斯",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-01",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "老虎伍茲官司",
+      "charter": "高球名將老虎伍茲週三將出庭進行變更答辯聆訊",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "resident": false
+    },
+    {
+      "name": "國際足壇",
+      "charter": "U20女足世界盃賽場邊",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-04",
+      "last_seen": "2026-09-05",
+      "resident": false
+    },
+    {
+      "name": "U20女足世界盃",
+      "charter": "FIFA主席因凡提諾週六出席U20女足世界盃波蘭站開幕賽",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-05",
+      "last_seen": "2026-09-06",
+      "resident": false
+    },
+    {
+      "name": "美職足MLS",
+      "charter": "奧蘭多城前鋒格里茲曼上半場破門",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-05",
+      "last_seen": "2026-09-06",
+      "resident": false
+    }
+  ]
+}
