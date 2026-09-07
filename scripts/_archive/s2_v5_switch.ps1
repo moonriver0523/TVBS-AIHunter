@@ -1,4 +1,5 @@
-﻿#Requires -Version 7
+﻿# ⛔ 2026-09-07 起停用（A26 V8 五層合一，13d/13g/13h 退役，無版本切換制）。回滾用 scripts/s2_rules_rollback_v8.ps1。
+#Requires -Version 7
 <#
 .SYNOPSIS
   S2 掃帶 V4（三站）⇄ V5（四站，含 ENEX）一鍵切換。預設唯讀，只印狀態。

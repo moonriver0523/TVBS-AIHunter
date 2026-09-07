@@ -4,7 +4,7 @@
 **規則全部在這裡，先讀完再動手，不要憑記憶：**
 
 ```
-E:\GitHub\TVBS-AIHunter\common\13c2-S2-定時掃帶-v3省token-下.md  ← §2a「分類收斂」規則（你的職責邊界）
+E:\GitHub\TVBS-AIHunter\common\13c2-S2-執行版-下-狀態檔與指令.md  ← §2a「分類收斂」規則（你的職責邊界；2026-09-07 V8 五層合一改新檔名）
 E:\GitHub\TVBS-AIHunter\common\13e-S2-素材行與分類規則.md        ← 三層骨架、庫存檔格式、小分題寫法
 E:\GitHub\TVBS-AIHunter\common\13f-S2-大分類與各站規則.md        ← 大分類清單、歸位通則、中主題命名候選判準、T/C
 ```

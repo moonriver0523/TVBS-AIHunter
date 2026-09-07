@@ -6,9 +6,13 @@
 大分類清單、素材行寫法、時區換算、RT 連讀鐵律從沒進過 context，連續三天沒人發現。
 
 檢查三件事：
-  1. 六份必讀檔都在，且尺寸都低於安全預算（估計載入量 < 28,000）
+  1. 八份必讀檔都在，且尺寸都低於安全預算（估計載入量 < 28,000）
   2. 每份檔尾都有 RULES-EOF 標記（agent 讀完要能對照）
   3. 高風險規則字串仍存在於某一份必讀檔裡（＝規則沒有在分檔時掉字）
+
+2026-09-07 V8 五層合一：13d／13g／13h 三份增量檔退役（內容已合一進 13c/13c1/
+13c1b/13c2/13c3，舊文逐字存查於 `13c-V8-已取代條文.md`），不再有版本切換制，
+移除 VERSIONED 機制。
 
 離開碼：0＝全過；1＝有問題（⛔ 不要開始掃帶，先回報使用者）
 
@@ -35,34 +39,15 @@ C = os.path.join(REPO, "common")
 SAFE_BUDGET = 28000      # 實測截斷點落在 30,4xx~31,0xx，留約 10% 安全邊際
 
 REQUIRED = [
-    ("13",    "13-S2-定時掃帶.md",                  "一部：六項決策／流程／狀態／輸出"),
-    ("13e",   "13e-S2-素材行與分類規則.md",          "二部：檔頭／庫存檔格式／素材行寫法"),
-    ("13f",   "13f-S2-大分類與各站規則.md",          "三部：大分類／各站／時區／RT 連讀"),
-    ("13c",   "13c-S2-定時掃帶-v3省token.md",        "執行版上：三站入口／§1a API 直查"),
-    ("13c2",  "13c2-S2-定時掃帶-v3省token-下.md",    "執行版下：狀態檔／稽核／品質掃／防卡"),
-    ("13d",   "13d-S2-定時掃帶-v4.md",              "V4 增量"),
+    ("13",     "13-S2-定時掃帶.md",                        "一部：六項決策／流程／狀態／輸出"),
+    ("13e",    "13e-S2-素材行與分類規則.md",                "二部：檔頭／庫存檔格式／素材行寫法"),
+    ("13f",    "13f-S2-大分類與各站規則.md",                "三部：大分類／各站／時區／RT 連讀"),
+    ("13c",    "13c-S2-執行版-上-入口與三站擷取.md",         "執行版上：三站入口／§1a API 直查／掃描順序（五站）"),
+    ("13c1",   "13c1-S2-執行版-中-ENEX.md",                "執行版中：ENEX API 直查／整併／對帳"),
+    ("13c1b",  "13c1b-S2-執行版-中-ABC.md",                "執行版中：ABC 清單直查／整併／對帳"),
+    ("13c2",   "13c2-S2-執行版-下-狀態檔與指令.md",          "執行版下：狀態檔代管／稽核／指令用法"),
+    ("13c3",   "13c3-S2-執行版-下-收工與防卡.md",            "執行版下：品質掃／防卡／建檔輪／收工清單總表"),
 ]
-
-# 版本增量檔：只有在對應版本生效時才是必讀（2026-09-05，V7 上線後補）。
-# ⛔ 不要無條件塞進 REQUIRED——`s2_v5_switch.ps1 -Off` 退回 V4 時，
-# 要求讀 13g／13h 會讓這支檢查假性失敗，而它的離開碼是「不要開始掃帶」。
-VERSIONED = [
-    ("13g", "13g-S2-定時掃帶-v5-四站.md", "V5 增量：ENEX 進固定輪", ("V5", "V7")),
-    ("13h", "13h-S2-定時掃帶-v7-五站.md", "V7 增量：ABC 進固定輪", ("V7",)),
-]
-
-
-def live_version():
-    """生效中的 scan prompt 是哪一版——比對檔頭宣告，認不出就當 V4。"""
-    p = os.path.join(HERE, "s2_scan_prompt.md")
-    try:
-        head = open(p, encoding="utf-8").read(4000)
-    except OSError:
-        return "V4"
-    for v in ("V7", "V5"):
-        if f"這是 {v}" in head:
-            return v
-    return "V4"
 
 # 高風險規則：掉了不會有錯誤訊息，只會某天某站靜靜地做錯
 # （沿用「省Token計畫 Task 4 Step 3 完整性對照測試」的要求）
@@ -97,15 +82,11 @@ def main():
     quiet = "--quiet" in sys.argv
     bad = []
     blob = ""
-    live = live_version()
-    required = list(REQUIRED) + [
-        (tag, fname, f"{desc}（{live} 生效中）")
-        for tag, fname, desc, vers in VERSIONED if live in vers
-    ]
+    required = REQUIRED
 
     if not quiet:
-        print("=== 必讀規則檔（估計載入量須 < %s）===  生效版本：%s"
-              % (f"{SAFE_BUDGET:,}", live))
+        print("=== 必讀規則檔（估計載入量須 < %s）=== V8 五層合一，無版本切換制"
+              % f"{SAFE_BUDGET:,}")
     for tag, fname, desc in required:
         path = os.path.join(C, fname)
         if not os.path.isfile(path):
