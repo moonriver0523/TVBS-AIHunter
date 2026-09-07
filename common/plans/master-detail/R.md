@@ -155,3 +155,5 @@ R17 的立案前提「`s2_topic_review.py`／`s2_audit.py` 0 輪執行」**是�
 ### R21 `s2_reclass_prompt.md` 仍指向 `13b`
 收斂 agent 的 prompt 開頭寫「規則全部在 `13b`（找分類收斂那節）＋`13`」。`13b` 自 2026-08-24 分檔後已退為歷史檔案，掃帶 prompt 明文「不要讀 13b」。修法：改指 `13`＋`13e`＋`13f`（分類收斂相關段落若只在 13b，先搬到 13f 再改指路）。這是 A10 P2 §5a 收斂輪排程化的前置。
 
+### R22 RT detail 檔 `id_of` 讀錯鍵（2026-09-07，09-A24 試跑發現）
+`SITE_SPEC['rt']['id_of']` 用 `it.get('code','')`，RT **list** 快照有 `code`，但 **detail** 快照的編號在 `edit`；`inspect` 走的 `_id_of_any` 早有 fallback 與註解，`from-raw`／`build`／`dump` 走 `SITE_SPEC` 沒吃到。0906 `rt_detail_0700.json` 8 則 → id 全空 → `dedup_by_id` 塌成 1 則。修 `65e84c5`：`_rt_code_or_edit()`，`code` 優先、無則取含數字的 `edit`；list 行為不變。**殘留**：該檔 2 則 `edit` 是裸 `RT`（上游退化值，同 `_id_of_any` 註解那批髒值），仍撞空 id；救法要在空 id 時退 `#index` 或 head 當去重鍵，未做、待裁決。
