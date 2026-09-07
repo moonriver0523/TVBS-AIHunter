@@ -566,7 +566,12 @@ BUILD_OUT = os.path.join(TMP, 'build_batch.json')
 outB, codeB = run(bp.cmd_build, Args(site='rt', raw=BUILD_RAW, entries=BUILD_ENTRIES,
                                      checkpoint='0817-1600', out=BUILD_OUT))
 check('build 執行成功', codeB == 0, outB.strip()[:80])
-rowsB = {r['id']: r for r in json.load(open(BUILD_OUT, encoding='utf-8'))}
+# P1b-2 硬上線（2026-09-08）：build 一律出 {"entries":[…],"new_topics":{…}} 外殼
+_bo = json.load(open(BUILD_OUT, encoding='utf-8'))
+check('build 一律出新格式外殼（三站純陣列已被 add-batch 拒收）',
+      isinstance(_bo, dict) and isinstance(_bo.get('entries'), list)
+      and isinstance(_bo.get('new_topics'), dict), str(type(_bo)))
+rowsB = {r['id']: r for r in _bo['entries']}
 check('build：entries 為物件時 category 原樣帶進 row',
       rowsB.get('RT1001', {}).get('category') == '社會/測試案', str(rowsB.get('RT1001')))
 check('build：entries 為物件時 tc 原樣帶進 row',

@@ -118,6 +118,10 @@ def run_cli(state_path, *args):
 
 
 def add_batch_cli(state_path, entries):
+    # P1b-2（2026-09-08 硬上線）：三站的 batch 一律要帶新格式外殼，
+    # 純陣列會被 add-batch 當場退回。測試照生產契約走。
+    if isinstance(entries, list):
+        entries = {"entries": entries, "new_topics": {}}
     d = os.path.dirname(state_path)
     bp_path = os.path.join(d, "b.json")
     with open(bp_path, "w", encoding="utf-8") as f:

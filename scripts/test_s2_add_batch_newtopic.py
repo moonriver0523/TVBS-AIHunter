@@ -7,7 +7,7 @@
   ① **新格式** `{"entries":[…], "new_topics":{…}}` 才會走新題閘門——
      命中不到登記簿的中主題就**不寫 category**（不擋入庫），除非 batch
      頂層 `new_topics` 附了 charter，或那個名字已經在登記簿裡。
-  ② **舊格式**（純陣列，`s2_batch_prep.py`／T12 迴歸 `test_s2_add_batch_tc.py`
+  ② **舊格式**（純陣列；P1b-2 硬上線後只剩平台線 ENEX／ABC 合法
      用的就是這個形狀）行為**完全不變**——照寫，不查登記簿。這條分界線
      是刻意的：主力三站（AP/RT/CNN）走 `s2_batch_prep.py` 出的就是純陣列，
      沒有 new_topics 這回事，改成一律 gate 會擋掉現行production 產線。
@@ -77,8 +77,8 @@ def by_name(topics, name):
     return next((t for t in topics if t.get("name") == name), None)
 
 
-def item(id_, extra=None):
-    e = {"id": id_, "source": "RT", "checkpoint": "0999-1700",
+def item(id_, extra=None, source="RT"):
+    e = {"id": id_, "source": source, "checkpoint": "0999-1700",
          "status": "has_script", "entry": f"{id_} (測試) ▎摘要。▎畫面：測試。▎無BITE。"}
     if extra:
         e.update(extra)
@@ -94,11 +94,15 @@ def add_batch(state_path, registry_path, payload, extra_args=()):
 
 
 # ── ① 舊格式（純陣列）：未登記中主題照寫，行為完全不變（同 T12 迴歸）─────
+# ⚠️ P1b-2 硬上線（2026-09-08）後，純陣列只剩**平台線**（ENEX／ABC）合法，
+# 三站（RT／NS／AP）送純陣列會被 `_reject_bare_array` 當場退回（見案 ⑧）。
+# 這一案改用 ENEX，驗的還是同一件事：off 模式不查登記簿、照寫。
 sp1, rp1 = new_dirs()
 new_state(sp1)
-out1 = add_batch(sp1, rp1, [item("OLD1", {"category": "體育/舊格式沒登記過"})])
+out1 = add_batch(sp1, rp1, [item("OLD1", {"category": "體育/舊格式沒登記過"},
+                                 source="ENEX")])
 v1 = get(sp1, rp1, "OLD1")
-report("① 舊格式：未登記中主題照樣寫入 category",
+report("① 舊格式（平台線純陣列）：未登記中主題照樣寫入 category",
        v1.get("category") == {"大分類": "體育", "中主題": "舊格式沒登記過"},
        f"實得 {v1.get('category')!r}")
 report("① 舊格式：不印新題閘門訊息（走 off，不查登記簿）",

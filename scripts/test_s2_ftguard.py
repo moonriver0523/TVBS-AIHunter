@@ -37,6 +37,10 @@ def report(name, passed, detail=""):
 
 
 def run_batch(entries):
+    # P1b-2（2026-09-08 硬上線）：三站的 batch 一律要帶新格式外殼，
+    # 純陣列會被 add-batch 當場退回。測試照生產契約走。
+    if isinstance(entries, list):
+        entries = {"entries": entries, "new_topics": {}}
     d = tempfile.mkdtemp()
     sp_, bp = os.path.join(d, "s.json"), os.path.join(d, "b.json")
     with open(sp_, "w", encoding="utf-8") as f:

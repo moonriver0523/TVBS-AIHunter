@@ -89,17 +89,21 @@ def entry(i, cat, tc=None, cp="0999-2000"):
     return e
 
 
-def write_batch(d, name, obj):
+def write_batch(d, name, obj, wrap=True):
+    # P1b-2（2026-09-08 硬上線）：三站的 batch 純陣列會被退回，測試預設包殼；
+    # `wrap=False` 留給專門驗退回行為的那幾案。
+    if wrap and isinstance(obj, list):
+        obj = {"entries": obj, "new_topics": {}}
     p = os.path.join(d, name)
     with open(p, "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False)
     return p
 
 
-# ① 舊格式（純陣列）＋物件形 category／tc → 照寫，行為等同字串
+# ① 物件形 category／tc → 照寫，行為等同字串（P1b-2 後外殼由 write_batch 補）
 sp, rp, d = new_dirs()
 new_state(sp)
-new_registry(rp)
+new_registry(rp, ("尼泊爾洪災",))   # 過閘用：這一案驗的是形狀，不是閘門
 b = write_batch(d, "b1.json", [
     entry("RT0001", {"大分類": "社會", "中主題": "尼泊爾洪災", "小分題": "搜救進度"},
           {"T": ["天災天氣"], "C": ["南亞"]}),
@@ -162,6 +166,60 @@ report("③ 已有分類的已在庫不動、仍報已存在", "RT0011: 已存�
 reg = load(rp)
 report("③ new_topics 已登記", any(t.get("name") == "全新主題" for t in reg.get("topics", [])))
 report("③ raw_entry 未被重送覆寫", it.get("raw_entry", "").startswith("RT0012"))
+
+# ④ P1b-2 硬上線（2026-09-08 使用者裁決）：三站的純陣列一律退回
+# 0908-0100 實測：agent 三站全部用 Write 手寫純陣列、`build --skeleton` 一次都沒
+# 被呼叫，軟上線的閘門（要有 `_new_topics` 鍵才過閘）等於從來沒啟動過，48 個中
+# 主題 43 個未登記。所以改成在入口擋，並且錯誤訊息要能直接照抄修好。
+sp, rp, d = new_dirs()
+new_state(sp)
+new_registry(rp, ("尼泊爾洪災",))
+b = write_batch(d, "b_bare.json", [entry("RT0021", "社會/尼泊爾洪災/搜救")], wrap=False)
+code, out = run(sp, rp, "add-batch", "--entries", b)
+report("④ RT 純陣列 → 退回（exit 2）", code == 2, f"實得 {code}；{out.strip()[:120]}")
+report("④ 退回訊息含可直接照抄的外殼寫法",
+       '{"entries": [ …原本的陣列… ], "new_topics": {}}' in out, out.strip()[:200])
+report("④ 退回訊息說明救援路徑（補 charter 重送、只補分類）",
+       "charter" in out and "只補分類" in out, out.strip()[:200])
+report("④ 退回時一則都沒進庫", not (load(sp).get("items") or {}))
+
+for _src in ("NS", "AP"):
+    sp2, rp2, d2 = new_dirs()
+    new_state(sp2)
+    new_registry(rp2, ("尼泊爾洪災",))
+    _e = entry(f"{_src}0001", "社會/尼泊爾洪災/搜救")
+    _e["source"] = _src
+    b2 = write_batch(d2, "b.json", [_e], wrap=False)
+    code2, _o = run(sp2, rp2, "add-batch", "--entries", b2)
+    report(f"④ {_src} 純陣列同樣退回", code2 == 2, f"實得 {code2}")
+
+# 平台線（ENEX／ABC）與側錄線的純陣列**仍然合法**，不可誤傷
+sp3, rp3, d3 = new_dirs()
+new_state(sp3)
+new_registry(rp3, ("尼泊爾洪災",))
+e3 = entry("ENEX0001", "社會/尼泊爾洪災/搜救")
+e3["source"] = "ENEX"
+b3 = write_batch(d3, "b.json", [e3], wrap=False)
+code3, out3 = run(sp3, rp3, "add-batch", "--entries", b3)
+report("④ ENEX 純陣列照收（平台線不受影響）", code3 == 0 and "OK 新增 1 則" in out3,
+       f"實得 {code3}；{out3.strip()[:120]}")
+
+# `--auto-register` 是平台線自己的旗標：帶了就照收，不是三站的逃生門
+sp4, rp4, d4 = new_dirs()
+new_state(sp4)
+new_registry(rp4)
+b4 = write_batch(d4, "b.json", [entry("RT0031", "社會/自動登記格/子題")], wrap=False)
+code4, out4 = run(sp4, rp4, "add-batch", "--entries", b4, "--auto-register")
+report("④ --auto-register 的純陣列不被退回", code4 == 0 and "OK 新增 1 則" in out4,
+       f"實得 {code4}；{out4.strip()[:120]}")
+
+# 混批：只要有一則是三站就退回（不可以放行整批）
+sp5, rp5, d5 = new_dirs()
+new_state(sp5)
+new_registry(rp5, ("尼泊爾洪災",))
+b5 = write_batch(d5, "b.json", [e3, entry("RT0041", "社會/尼泊爾洪災/搜救")], wrap=False)
+code5, out5 = run(sp5, rp5, "add-batch", "--entries", b5)
+report("④ 混批含三站 → 整批退回", code5 == 2 and "RT" in out5, f"實得 {code5}")
 
 print("\nALL PASS" if ok else "\nSOME FAILED")
 sys.exit(0 if ok else 1)

@@ -63,7 +63,10 @@ def raw(sp):
 
 
 def item(id_, extra=None):
-    e = {"id": id_, "source": "RT", "checkpoint": "0999-1700",
+    # P1b-2（2026-09-08 硬上線）：三站（RT／NS／AP）的純陣列會被 add-batch 退回，
+    # 這支測的是 T12「一次帶 category／tc」，跟閘門無關，所以用平台線的 ENEX——
+    # 純陣列在平台線仍然合法，off 模式的行為才驗得到。
+    e = {"id": id_, "source": "ENEX", "checkpoint": "0999-1700",
          "status": "has_script",
          "entry": f"{id_} (測試) ▎摘要。▎畫面：測試。▎無BITE。"}
     if extra:

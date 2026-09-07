@@ -335,8 +335,11 @@ def cmd_build(args):
         # entries.json **有** `_new_topics` 鍵（沒新題就 `{}`）才出新格式／過閘；
         # 沒這個鍵＝agent 不知道閘門機制，維持純陣列舊行為，免得一輪 20 則沒分類
         # 又不知道怎麼救。規則（13c2 §2）要求一律放這個鍵。
-        use_new = isinstance(entries, dict) and '_new_topics' in entries
-        new_topics = entries.get('_new_topics') if use_new else None
+        # 🔴 2026-09-08 硬上線：`build --site` 只吃 ns／ap／rt，而這三站的 batch
+        # 已經不准是純陣列（`add-batch` 會當場退回），所以這裡**一律**出殼——
+        # 軟上線那版（有 `_new_topics` 鍵才出殼）會讓沒寫那個鍵的 agent 拿到一份
+        # 註定被退回的產物，等於把坑往下游搬。
+        new_topics = entries.get('_new_topics') if isinstance(entries, dict) else None
         new_topics = new_topics if isinstance(new_topics, dict) else {}
         for row in rows:
             item_id = row.get('id')
@@ -379,12 +382,9 @@ def cmd_build(args):
                 pass
             batch.append(new_row)
 
-        if use_new:
-            out = json.dumps({'entries': batch, 'new_topics': new_topics}, ensure_ascii=False, indent=2)
-            note = f'（{len(batch)} 則，新格式、過閘；new_topics {len(new_topics)} 題）'
-        else:
-            out = json.dumps(batch, ensure_ascii=False, indent=2)
-            note = f'（{len(batch)} 則，純陣列；entries.json 頂層沒有 _new_topics，不過閘）'
+        out = json.dumps({'entries': batch, 'new_topics': new_topics},
+                         ensure_ascii=False, indent=2)
+        note = f'（{len(batch)} 則，新格式、過閘；new_topics {len(new_topics)} 題）'
         if args.out:
             with open(args.out, 'w', encoding='utf-8') as f:
                 f.write(out)
@@ -451,11 +451,14 @@ def cmd_build(args):
             pass
         batch.append(row)
 
-    out = json.dumps(batch, ensure_ascii=False, indent=2)
+    # 🔴 2026-09-08 硬上線：跟 --skeleton 分支同一個理由，三站一律出新格式外殼。
+    # 這條分支沒有 entries.json 可以帶 `_new_topics`，所以 new_topics 固定空的；
+    # 要開新中主題就照退回訊息在 batch 頂層自己補。
+    out = json.dumps({'entries': batch, 'new_topics': {}}, ensure_ascii=False, indent=2)
     if args.out:
         with open(args.out, 'w', encoding='utf-8') as f:
             f.write(out)
-        print(f'已寫入 {args.out}（{len(batch)} 則）', file=sys.stderr)
+        print(f'已寫入 {args.out}（{len(batch)} 則，新格式、過閘）', file=sys.stderr)
     else:
         print(out)
 
@@ -1290,12 +1293,25 @@ def cmd_concat(args):
     純合併、保留全部（例如合併 batch.json 這種本來就不該去重的用途）。"""
     all_items = []
     shells = []
+    # P1b-2 硬上線（2026-09-08）：合併三站的 batch 時**不能把外殼弄丟**，
+    # 否則合併結果變成純陣列、下游 add-batch 直接退回。任一來源是
+    # `{"entries":[…],"new_topics":{…}}` 就把結果包回同一個殼，new_topics 取聯集。
+    keep_shell, merged_topics = False, {}
     for path in args.files:
         try:
             items, shell_desc = _load_raw_any(path)
         except ValueError as e:
             print(f'✗ 讀取失敗 {path}：{e}', file=sys.stderr)
             sys.exit(1)
+        try:
+            with open(path, encoding='utf-8') as f:
+                _raw = json.load(f)
+        except (OSError, ValueError):
+            _raw = None
+        if isinstance(_raw, dict) and isinstance(_raw.get('entries'), list):
+            keep_shell = True
+            if isinstance(_raw.get('new_topics'), dict):
+                merged_topics.update(_raw['new_topics'])
         shells.append(f'{os.path.basename(path)}（{shell_desc}）')
         all_items.extend(items)
 
@@ -1313,14 +1329,18 @@ def cmd_concat(args):
             kept.append(it)
         all_items = kept
 
+    payload = ({'entries': all_items, 'new_topics': merged_topics}
+               if keep_shell else all_items)
+    _note = '，新格式外殼保留' if keep_shell else ''
     out = args.out
     if out:
         with open(out, 'w', encoding='utf-8') as f:
-            json.dump(all_items, f, ensure_ascii=False, indent=2)
-        print(f'已寫入 {out}（{len(all_items)} 筆，來源：{"、".join(shells)}）', file=sys.stderr)
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        print(f'已寫入 {out}（{len(all_items)} 筆{_note}，來源：{"、".join(shells)}）',
+              file=sys.stderr)
     else:
-        print(json.dumps(all_items, ensure_ascii=False, indent=2))
-        print(f'共 {len(all_items)} 筆（來源：{"、".join(shells)}）', file=sys.stderr)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        print(f'共 {len(all_items)} 筆{_note}（來源：{"、".join(shells)}）', file=sys.stderr)
     if dup_ids:
         print(f'⚠️ 給了 --site，去重時丟掉 {len(dup_ids)} 個重複 id（保留第一次出現的）：'
               f'{", ".join(dup_ids)}', file=sys.stderr)

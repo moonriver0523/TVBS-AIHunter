@@ -72,14 +72,17 @@ report("new_topics 原樣搬到頂層", isinstance(b, dict) and b.get("new_topic
 report("entries 不含 _new_topics／hint", isinstance(b, dict) and all("hint" not in e for e in b["entries"])
        and all(e.get("id") != "_new_topics" for e in b["entries"]))
 
-# 沒有 _new_topics 鍵 → 純陣列舊行為（軟上線）
+# 沒有 _new_topics 鍵 → 仍然出外殼（2026-09-08 硬上線；軟上線那版會退回純陣列，
+# 而純陣列已被 add-batch 拒收，等於把坑往下游搬）
 ent_old = jdump(os.path.join(d, "rt_entries_old.json"), {
     "RT0001": {"entry": "RT0001 (測試 標題) (BITE) ▎摘要一。", "category": "體育/全新主題/x"},
 })
 out_old = os.path.join(d, "rt_batch_old.json")
 code, log = run(PREP, "build", "--site", "rt", "--skeleton", skel, "--entries", ent_old, "--raw", skel, "--checkpoint", "0999-2000", "--out", out_old)
 bo = jload(out_old) if os.path.exists(out_old) else None
-report("沒 _new_topics 鍵 → 純陣列（不過閘）", isinstance(bo, list) and len(bo) == 1 and "不過閘" in log, log[-200:])
+report("沒 _new_topics 鍵 → 照樣出外殼、new_topics 空（硬上線）",
+       isinstance(bo, dict) and len(bo.get("entries") or []) == 1
+       and bo.get("new_topics") == {} and "新格式、過閘" in log, log[-200:])
 
 # fill-src-text 認新殼、殼原樣寫回
 raw = jdump(os.path.join(d, "rt_detail_2000.json"), [

@@ -562,6 +562,35 @@ def _tc_as_str(tc):
     return str(tc)
 
 
+GATED_SOURCES = ("RT", "NS", "AP")
+
+
+def _reject_bare_array(data, is_new_format, auto_register):
+    """P1b-2 硬上線：三站的 batch 一律要帶新格式外殼，純陣列當場退回。
+
+    ⚠️ 這個錯誤訊息是 04:30 那種無人看的輪次唯一的救生索，所以寫成**可以直接照抄
+    的做法**，不是「請參閱 13c2」。最小修法是把陣列包一層殼，不必回頭跑 `build`。
+    """
+    if is_new_format or auto_register:
+        return
+    hit = sorted({str(e.get("source") or "").upper() for e in data
+                  if isinstance(e, dict)} & set(GATED_SOURCES))
+    if not hit:
+        return
+    print("ERROR: " + "／".join(hit) + " 的 batch 不接受純陣列（P1b-2，2026-09-08）。")
+    print("  原因：純陣列不過 A10 P1b 新題閘門，開了沒登記的中主題不會被擋，")
+    print("        登記簿跟實際用的名稱會脫鉤（0908-0100 輪 48 題有 43 題未登記）。")
+    print("  改法：把整個陣列包成下面這個形狀重送，其餘欄位一個字都不用動——")
+    print('        {"entries": [ …原本的陣列… ], "new_topics": {}}')
+    print("  有要開新中主題就寫進 new_topics（沒有就留 {}）：")
+    print('        "new_topics": {"題名": {"charter": "這一題收什麼、不收什麼",')
+    print('                                "big": "大分類", "aliases": ["別名"]}}')
+    print("  送出後被閘門擋下的會印 🆕 清單：原檔補上那幾題的 charter 重送即可，")
+    print("  已經入庫的不會重複新增，只補分類（救援路徑）。命名三判準見 13f。")
+    print("  ⛔ 三站送 add-batch 的**任何**檔都要帶殼，補稿／改稿的小批次也一樣。")
+    sys.exit(2)
+
+
 def cmd_add_batch(state, args):
     """整批新增。撞已存在 id 或格式錯的單筆一律跳過並回報，不中斷；只在結尾 save 一次。"""
     try:
@@ -571,10 +600,15 @@ def cmd_add_batch(state, args):
         print(f"ERROR: --entries 檔讀取失敗（{e}）")
         sys.exit(2)
     # A10 P1b：`{"entries":[…], "new_topics":{…}}` 是**新格式**，只有這個形狀
-    # 才會走新題閘門（`topic_mode="gate"`）；舊格式（純陣列）行為完全不變
-    # （`topic_mode="off"`，同 P1a 之前）——13-A10P1 計畫的 T12 迴歸
-    # （`test_s2_add_batch_tc.py`）就是拿純陣列＋沒登記過的中主題測，
-    # 兩者不可能同時成立，這條分界線是刻意的，⛔ 不要改成「一律 gate」。
+    # 才會走新題閘門（`topic_mode="gate"`）；純陣列不過閘（`topic_mode="off"`）。
+    #
+    # 🔴 P1b-2 硬上線（2026-09-08 使用者裁決）：**RT／NS／AP 三站的 batch 不准是
+    # 純陣列**，見下方 `_reject_bare_array`。軟上線那版把閘門掛在「agent 有寫
+    # `_new_topics`」這個前提上，而 0908-0100 輪實測：agent 三站全部用 Write 手寫
+    # 純陣列、`build --skeleton` 一次都沒被呼叫，閘門一次都沒啟動，48 個中主題
+    # 43 個未登記（含「國際奇聞」「暖新聞」「名人趣聞」等 13f 三判準禁的收容式
+    # 名稱）。前提不成立的閘門等於沒有閘門，所以改成在入口直接退回。
+    # 純陣列仍合法的情境：ENEX／ABC 等平台線（走 `--auto-register`）、側錄線。
     new_topics = {}
     is_new_format = isinstance(data, dict)
     if is_new_format:
@@ -584,6 +618,7 @@ def cmd_add_batch(state, args):
     if not isinstance(data, list):
         print("ERROR: --entries 需為 JSON 陣列（或含 entries 陣列的物件）")
         sys.exit(2)
+    _reject_bare_array(data, is_new_format, getattr(args, "auto_register", False))
     added, skipped, notes, flagged, fmt = [], [], [], [], []
     refilled = []  # P1b-2：已在庫但沒分類、這批帶了分類 → 只補分類（閘門救援路徑）
     no_src = []   # R11 防呆（2026-08-13）：漏帶 src_text 要當場喊，不能等稽核翻舊帳
