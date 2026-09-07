@@ -73,6 +73,8 @@
 python scripts/s2_state.py --file "…/{MMDD}-s2-state.json" resume   # 開工必跑：時段、已收、pending、待整併
 python scripts/s2_state.py diff --checkpoint 16:00 --ids RT2333,AP4675135,IN-02TU
 python scripts/s2_state.py add-batch --entries batch.json  # ⭐ 批次新增（預設路徑）
+                                # （2026-09-07 T12）batch 每則可帶 `category`／`tc`，一次入庫＋
+                                #    分類＋T/C；`set-category`／`set-tc` 只用於事後修補。
 python scripts/s2_state.py add --id RT2333 --source RT --checkpoint 16:00 --status pending --entry "…"
 python scripts/s2_state.py update-entry --id RT2333 --status has_script --entry "改寫後內容"
                                 # ⚠️ 標 pending 前先讀 13「有稿判準」；ISO長帶/裸SOT/音軌等
@@ -154,6 +156,7 @@ python scripts/s2_state.py needs-review done --ids RT2333   # 處理完就結案
     ⛔ 不准發現一則就補一次。
   - **成本**：0812-1000 那七次單筆補正 ≈ 1.75M ≈ 單輪的 5%。
 - 📌 **`needs-review` 是「待辦」不是「日誌」**：`add` 對不存在的 id 會建 `script_status="note"` 備註殼（不算素材、不進 render）；**`done --ids` 是唯一結案出口**（備註殼→刪掉；真素材→只脫旗標）；批次全有全無（任一 id 不對就整批報錯）。不結案的話 `resume` 每輪重印舊項目，清單失去警示作用。
+- （2026-09-07 A24）batch 由 `s2_batch_prep.py build --skeleton <骨架> --entries <entries.json>` 產，agent 只寫 `{id:{entry,category,tc}}`。
 - **批次擷取流程**＝收本輪列表 ID → `diff` → 只對新的取文稿（§1a）→ **邊看邊累積 `batch.json`，看完一次 `add-batch`**。⛔ 不要一則一次 `add`（呼叫次數是變慢主因：25 則從 52 次降到 4 次）。
 - **批次規則**：`batch.json` 是 JSON 陣列，每筆 `{"id","source","checkpoint","status","entry"}`。撞 id 或格式錯的單筆自動跳過並回報（已存在→改 `update-entry`；格式錯→修後單筆補）。`--pairs` 分隔符用分號 `;`。
 - 🎯 **RT／AP 每筆必帶 `sb_count`（AP 另帶 `has_sot`），NS 必帶 `footage_type`**——兜底機制靠它。SNTV 列表級沒全文可不帶，**但開了詳情的那格必帶**（既然開了就有這個數字）。pending 重查時 `update-entry --sb-count N` 帶入。
