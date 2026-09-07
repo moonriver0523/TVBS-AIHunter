@@ -3268,6 +3268,244 @@
       "last_seen": "2026-09-07",
       "resident": false,
       "auto": true
+    },
+    {
+      "name": "移民執法衝擊",
+      "charter": "美國紐澤西州帕塞伊克市逾30年歷史的墨西哥獨立遊行因ICE移民執法逮捕激增，主辦",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "法國社會爭議",
+      "charter": "巴黎艾菲爾鐵塔因員工不滿週六接待一個印度教宗教訪團時，女性員工被要求離開崗位讓男",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "以色列政情",
+      "charter": "前參謀總長艾森科特領導的「正義」黨向中央選舉委員會提交第26屆國會候選人名單，並",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "巴爾幹爭議",
+      "charter": "波士尼亞塞族戰犯姆拉迪奇在貝爾格勒托普奇德爾墓園下葬，塞爾維亞總統之子達尼洛·武",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "捷克趣聞",
+      "charter": "捷克布拉格打造長40.2公尺的破紀錄溜滑梯，耗資近400萬克朗，成人也能玩（限重",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "歐洲外交",
+      "charter": "歐盟執委會主席馮德萊恩與格陵蘭總理尼爾森共同簽署「歐盟－格陵蘭關係聯合聲明」。",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "歐盟東翼防務",
+      "charter": "立陶宛總統瑙塞達與歐盟外交事務高級代表卡拉斯會談，聚焦立陶宛2027年歐盟輪值主",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "義大利野火",
+      "charter": "義大利巴西利卡塔大區發生森林大火，蔓延至鄰近埃皮斯科皮亞地區，4架Canadai",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "西班牙移民危機",
+      "charter": "西班牙中央政府與休達地方政府就移民登記地點爆發政治角力，中央政府週末逕行下令使用",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "斯洛伐克民俗",
+      "charter": "斯洛伐克尼特拉舉行傳統魚湯烹飪大賽，參賽者用鯉魚、鯰魚等多種淡水魚熬煮各式湯品，",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "加州海上獲救",
+      "charter": "加州長灘一名男子租用水上摩托車時落海，在冰冷海域漂流16小時後獲海巡直升機救起，",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "斯洛伐克教育",
+      "charter": "斯洛伐克茲沃倫一所中學開設全國首創「智慧交通系統」科系，學生透過真實道路閘門系統",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "斯洛伐克趣聞",
+      "charter": "斯洛伐克魯若姆貝羅克一所由四校合併而成的中學，校名長達130個字母，成為全歐最長",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "西班牙王室",
+      "charter": "西班牙王儲萊昂諾爾公主於馬德里卡洛斯三世大學赫塔費校區展開政治學系大學生活，未見",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "邁阿密空難",
+      "charter": "一架亞馬遜Prime Air波音767貨機週日在邁阿密國際機場降落時衝出跑道，撞",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "期中選舉暴力",
+      "charter": "俄亥俄州民主黨州長候選人艾克頓週日在坎菲爾德市集造勢時，一名持雙槍與電擊指虎的3",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "國際影視",
+      "charter": "法國南部舉行影視高峰會，迪士尼、Netflix、派拉蒙、Google、TikTo",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false,
+      "auto": true
     }
   ]
 }
