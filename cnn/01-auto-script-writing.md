@@ -6,7 +6,7 @@
 
 **Rollback：** 省 Token 改寫前的完整舊版保存在 [`_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md`](../_archive/cnn/01-auto-script-writing.pre-token-saving-2026-07-20.md)。
 
-**工具與落點（2026-09-07 補，與 [`reuters/05`](../reuters/05-batch-download.md) 對齊）**：瀏覽器一律用 Playwright 工具組（`mcp__browser__*`，`.playwright-daily-profile`），不用 claude-in-chrome——NS 的 `localStorage.newsourceSession` 在 claude-in-chrome 讀不到。落點有兩個：NS 的影片是**站方背景下載程式（Signiant）**搬的，進 **`D:\Downloads`**；其他任何由瀏覽器本身觸發的下載（AP／RT／ABC）進 `D:\Downloads\PlaywrightMCP`。本流程只看前者。步驟 1／3 的官方稿另有 API 取法（`POST …/api/v3/stories` 帶 `term: "{ID}"` 直接回該則 `script` 全文，0907 實測），是否改走見 [`common/plans/2026-09-07-S6-S8下載寫稿API體檢.md`](../common/plans/2026-09-07-S6-S8下載寫稿API體檢.md)，未裁定前仍照下方 UI 步驟。
+**工具與落點（2026-09-07 補，與 [`reuters/05`](../reuters/05-batch-download.md) 對齊）**：下方步驟 1–4 的 UI 流程照現行工具跑，本段不改它。**只有走 NS API 取稿時**必須用 Playwright 工具組（`mcp__browser__*`，`.playwright-daily-profile`）——`localStorage.newsourceSession` 在 claude-in-chrome 讀不到。落點有兩個：NS 的影片是**站方背景下載程式（Signiant）**搬的，進 **`D:\Downloads`**（⚠️ 這段在 Playwright 下尚未驗過，見 `09-known-issues` 的 NS 症狀都是現行工具的紀錄）；其他任何由瀏覽器本身觸發的下載（AP／RT／ABC）進 `D:\Downloads\PlaywrightMCP`。本流程只看前者。步驟 1／3 的官方稿另有 API 取法（`POST …/api/v3/stories` 帶 `term: "{ID}"` 直接回該則 `script` 全文，0907 實測），是否改走見 [`common/plans/2026-09-07-S6-S8下載寫稿API體檢.md`](../common/plans/2026-09-07-S6-S8下載寫稿API體檢.md)，未裁定前仍照下方 UI 步驟。
 
 ## 檔名命名規則（2026-07-20 訂定）
 

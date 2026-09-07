@@ -133,10 +133,11 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
    - ⛔ 頁面上的 `View Low-Res Proxy`（`app.extremereach.com/Media/Stream/…`）是串流預覽，不是交件檔。
 7. **`Acknowledge media delivery`**（`/Delivery/Acknowledge/{GUID}`）是回報「已收到」的登錄動作，**本流程不點**；要不要按由使用者決定（0907 尚未裁定）。
 8. 照下方「下載驗證」查大小（ABC PKG 多為百 MB 級）。
+9. **費用**：站上沒有計價欄位；若有計量點就是第 4 步的核准。首批照「看到就回報」在彙整表註明「ABC 無計價資訊、已核准 N 則」。
 
 > 兩站共同：**本流程只做「已編號清單上的素材」**。掃帶輪（S2）擷取 ENEX／ABC 只讀清單與文稿、從不核准也不下載，那套規則在 `13c1`／`13c1b`；這裡是 S6 下載，兩邊不要互抄。
 
-**ENEX／ABC 尚未實測的部分（2026-09-07 記錄，首次真跑時補）**：ENEX 直鏈的 curl 全檔落地（只驗到 `206 bytes 0-0/522565697`）、ABC 核准→Ready 的等待時間、ABC 導航下載在 Playwright 的落地檔名。首次跑到時把結果回寫本節並刪掉這一段。
+**ENEX／ABC 尚未實測的部分（2026-09-07 記錄，首次真跑時補）**：ENEX 直鏈的 curl 全檔落地（只驗到 `206 bytes 0-0/522565697`）；ABC 第 4 步用頁內 `fetch` 打 `ApproveNews` 是否真的把該列轉成 `Ready For Download`（0907 只看了連結、沒按）、核准→Ready 的等待時間、導航下載在 Playwright 的落地檔名。首次跑到時把結果回寫本節並刪掉這一段。
 
 **YouTube：** 用 `yt-dlp` 下載影片到 `D:\Downloads`（選合理可用的最高畫質 mp4）。沒有教「文稿」的抓取方式，若使用者要文稿，先問。**清單裡有多支彼此獨立的 YouTube 影片時，可以平行/背景執行多個 `yt-dlp` 下載，不用一支一支排隊等**，這是效率最好的一種下載方式。若同時下載官方/自動字幕，通常只需保留 `-orig`（原始語言）那一份即可，不必把翻譯版字幕也一起留著。
 
