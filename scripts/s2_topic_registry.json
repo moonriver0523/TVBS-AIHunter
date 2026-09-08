@@ -15,7 +15,7 @@
     },
     {
       "name": "俄打烏",
-      "charter": "俄羅斯主動發起的攻擊、飛彈／無人機空襲、地面進攻",
+      "charter": "俄羅斯對烏克蘭發動的攻擊行動",
       "aliases": [],
       "big": "烏俄",
       "tc": {
@@ -23,7 +23,7 @@
         "C": []
       },
       "first_seen": "2026-09-07",
-      "last_seen": "2026-09-07",
+      "last_seen": "2026-09-08",
       "resident": true
     },
     {
@@ -973,7 +973,7 @@
     },
     {
       "name": "尼泊爾洪災",
-      "charter": "尼泊爾（含中國西藏境外段）豪雨土石流：死傷失蹤統計、搜救行動、國際人道援助、生還者與家屬故事",
+      "charter": "尼泊爾冰川崩塌引發洪災的救援與生還故事",
       "aliases": [
         "尼泊爾水電廠隧道搜救",
         "尼泊爾洪災：生還者與家屬故事",
@@ -1001,7 +1001,7 @@
         "C": []
       },
       "first_seen": "2026-08-27",
-      "last_seen": "2026-09-05",
+      "last_seen": "2026-09-08",
       "resident": false
     },
     {
@@ -4338,6 +4338,474 @@
       "last_seen": "2026-09-08",
       "resident": false,
       "auto": true
+    },
+    {
+      "name": "邁阿密貨機墜舉",
+      "charter": "邁阿密機場亞馬遜貨機墜毀事故相關NTSB調查與現場畫面",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "川普改州名爭議",
+      "charter": "川普暗示將新墨西哥州改名引發的反應",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "地方選舉動態",
+      "charter": "美國地方層級初選、國會選戰動態",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "勞工與罷工",
+      "charter": "美國勞工罷工爭議",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "治安與意外死亡",
+      "charter": "美國治安案件與意外死亡事件",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "移民執法爭議",
+      "charter": "ICE等移民執法行動引發爭議",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "紐約市長9-11風波",
+      "charter": "紐約市長馬姆達尼與911紀念相關政治風波",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "夏威夷颶風羅威爾",
+      "charter": "颶風羅威爾侵襲夏威夷相關",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "加州颶風瑪麗海浪",
+      "charter": "颶風瑪麗為加州帶來強浪災情",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "大峽谷缺水危機",
+      "charter": "大峽谷因洪災水管損毀的缺水應對",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "加拿大反制關稅",
+      "charter": "加拿大對美反制關稅動態",
+      "aliases": [],
+      "big": "關稅",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "巴西示威衝突",
+      "charter": "巴西政治示威警民衝突",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "太平洋緝毒行動",
+      "charter": "美軍在太平洋的緝毒軍事行動",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "暖心人情故事",
+      "charter": "美國各地溫馨人情趣味報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "動物與生態",
+      "charter": "動物保育、野生動物相關趣聞",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "生活趣聞",
+      "charter": "軟性生活風格與趣味報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "勞動節活動",
+      "charter": "美國各地勞動節相關活動報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "電子偵測犬",
+      "charter": "警犬偵測電子產品協助執法的軟性科技報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "古巴民生困境",
+      "charter": "古巴長期停水停電與經濟困境對民生心理的衝擊",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "歐洲節慶趣聞",
+      "charter": "歐洲各地傳統節慶軟性報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "巴西獨立日集會",
+      "charter": "巴西獨立日左右派同步上街的政治集會",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "墨西哥衝浪客命案",
+      "charter": "澳洲衝浪客與美籍友人墨西哥遇害案審判進展",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "美網公開賽",
+      "charter": "美國網球公開賽SNTV賽事戰報",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "美國職棒小聯盟",
+      "charter": "美國職棒小聯盟賽事",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "美國海上封鎖伊朗",
+      "charter": "美軍對伊朗的海上封鎖行動",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "以色列空襲黎巴嫩",
+      "charter": "以色列對黎巴嫩南部的空襲與死傷",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "中國農業科技",
+      "charter": "中國大陸農業科技與生產突破",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "歐冠聯賽",
+      "charter": "歐洲冠軍聯賽賽事新聞",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "沙烏地職業足球聯賽",
+      "charter": "沙烏地阿拉伯職業足球聯賽賽事",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "印尼火山灰亂",
+      "charter": "印尼火山噴發造成的航空與民生影響",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "柯克遇刺案",
+      "charter": "美國保守派活動人士柯克遇刺案後續司法進度",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "阿根廷民間信仰",
+      "charter": "阿根廷民間信仰與朝聖文化報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "古巴宗教慶典",
+      "charter": "古巴宗教節慶與信仰活動",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "美國職棒大聯盟",
+      "charter": "美國職棒大聯盟例行賽事",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "南北韓軍事對峙",
+      "charter": "南北韓軍事緊張與國防對話動態",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "中國城市文化宣傳",
+      "charter": "中國大陸城市文化宣傳與軟實力報導",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-08",
+      "last_seen": "2026-09-08",
+      "resident": false
     }
   ]
 }
