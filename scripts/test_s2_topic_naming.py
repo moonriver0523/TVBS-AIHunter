@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
-"""A10 P1d-命名（2026-09-08）：收容式中主題名稱檢查。A 級硬擋新名、B 級只提醒。
+"""A10 P1d-命名（2026-09-08）：收容式中主題名稱檢查。開新名時 A／B 兩級都硬擋。
 
 **為什麼要機械檢查**：13f 命名三判準第 ③ 條「⛔ 不用『XX趣聞』『XX動態』
 『暖新聞』這類收容式名稱」從 0907 就寫在規則裡，但只是文字，沒有人擋——
 三天內登記簿從 241 漲到 500 多題，其中三十幾題是籮筐。P1b-2 的閘門逼出了
 「登記」，逼不出「別開籮筐名」。
 
-**判準是拿真實登記簿調的，兩條線各有測試釘死**：
-  A 級（硬擋）：剝掉開頭的限定詞後整個是空話。實掃零冤枉。
-  B 級（只提醒）：有事件內容、尾綴是空話。實掃有「紐約市長9-11風波」這種
-                  指具體事件的，**所以這條線絕對不可以升級成硬擋**。
+**判準是拿真實登記簿（500+ 題）調的，每一條都有測試釘死**：
+  A 級：剝掉開頭的限定詞後整個是空話（捷克趣聞→趣聞）。實掃 15 題、零冤枉。
+  B 級：尾綴是空話（美股動態、運動賽事花絮）。實掃 25 題。
+  例外：名字含數字或 ≥9 字 → 放行。實掃只放行 3 個（紐約市長9-11風波、
+        陸具身智能機器人展演、福島熊出沒緊急重量事件），這 3 個確實在講一件事。
+  ⚠️ 一開始 B 只提醒，回測「當晚新登記的 158 題」才發現 A 級 0 命中、B 級 8 命中——
+     A 級抓的是前一天的毛病，當晚的籮筐全長在 B 級。使用者因此裁決 B 也硬擋。
 
 用法：python -X utf8 scripts/test_s2_topic_naming.py
 """
@@ -58,14 +61,23 @@ for n in ("邁阿密貨機事故", "尼泊爾洪災", "習近平出訪埃及", "
     lv, why = S.collector_level(n)
     report(f"② 正常名字不被擋：{n}", lv is None, f"實得 {lv}／{why}")
 
-# ── ③ B 級只提醒，不可以升級成硬擋 ──────────────────────────────
-for n in ("西太平洋颱風動態", "地方選舉動態", "紐約市長9-11風波",
-          "阿根廷國家隊話題", "暖心人情故事"):
+# ── ③ B 級（尾綴是類別詞）也硬擋——使用者 2026-09-08 22:xx 裁決 ────
+# 回測當晚新登記的 158 題：A 級 0 命中、B 級 8 命中，而那 8 個正是當晚長出來的
+# 籮筐（美股動態／運動賽事花絮／資料畫面小品…）。A 級抓的是前一天的毛病。
+for n in ("西太平洋颱風動態", "地方選舉動態", "阿根廷國家隊話題", "暖心人情故事",
+          "美股動態", "運動賽事花絮", "資料畫面小品", "日本社會案件",
+          "英國王室動態", "文化獎項動態", "動物園萌趣動態"):
     lv, _why = S.collector_level(n)
-    report(f"③ B 級（只提醒）：{n}", lv == "B", f"實得 {lv}")
+    report(f"③ B 級（擋）：{n}", lv == "B", f"實得 {lv}")
 report("③ B 級的說明有給改法（去掉尾綴長什麼樣）",
        "西太平洋颱風" in S.collector_level("西太平洋颱風動態")[1],
        S.collector_level("西太平洋颱風動態")[1])
+
+# 例外：有數字或 9 字以上，尾綴通常是敘述的一部分而不是籮筐。
+# 實掃 28 個 B 級只放行這 3 個，其餘 25 個全擋。
+for n in ("紐約市長9-11風波", "陸具身智能機器人展演", "福島熊出沒緊急重量事件"):
+    lv, _why = S.collector_level(n)
+    report(f"③ 例外放行（有數字／夠長，真的在講一件事）：{n}", lv is None, f"實得 {lv}")
 
 # ── ④ 髒輸入不炸 ─────────────────────────────────────────────
 for label, v in (("None", None), ("空字串", ""), ("只有空白", "   "),
@@ -135,7 +147,7 @@ report("⑤ stdout 給改法（改掛既有格或用專有名詞重新命名）"
        "find-similar" in out and "專有名詞" in out, out.strip()[-500:])
 report("⑤ 不整批失敗（exit 0，其餘欄位照走）", code == 0, f"code={code}")
 
-# B 級照樣登記，只是多印一行提醒
+# B 級也擋
 d, sp, rp = new_dirs()
 bp = os.path.join(d, "b2.json")
 with open(bp, "w", encoding="utf-8") as f:
@@ -147,13 +159,25 @@ with open(rp, encoding="utf-8") as f:
     reg = json.load(f)
 with open(sp, encoding="utf-8") as f:
     it3 = {x["id"]: x for x in json.load(f)["items"]}.get("RT0003") or {}
-report("⑤ B 級照樣登記（只提醒不擋）",
-       any(t["name"] == "西太平洋颱風動態" for t in reg["topics"]))
-report("⑤ B 級的 category 照樣寫",
-       (it3.get("category") or {}).get("中主題") == "西太平洋颱風動態",
+report("⑤ B 級沒有進登記簿", not any(t["name"] == "西太平洋颱風動態"
+                                    for t in reg["topics"]))
+report("⑤ B 級那則 category 不寫", not (it3.get("category") or {}).get("中主題"),
        str(it3.get("category")))
-report("⑤ B 級有印 ⚠️ 提醒", "⚠️" in out and "西太平洋颱風動態" in out, out.strip()[-300:])
-report("⑤ B 級不印 ⛔", "⛔" not in out, out.strip()[-300:])
+report("⑤ B 級印 ⛔ 並指名", "⛔" in out and "西太平洋颱風動態" in out, out.strip()[-300:])
+
+# 例外名字照樣過
+d, sp, rp = new_dirs()
+bp = os.path.join(d, "b2b.json")
+with open(bp, "w", encoding="utf-8") as f:
+    json.dump({"entries": [entry("RT0005", "美國/紐約市長9-11風波/爭議")],
+               "new_topics": {"紐約市長9-11風波": {"charter": "紐約市長候選人的9-11言論爭議",
+                                                  "big": "美國"}}}, f, ensure_ascii=False)
+code, out = run(sp, rp, "add-batch", "--entries", bp)
+with open(rp, encoding="utf-8") as f:
+    reg = json.load(f)
+report("⑤ 例外名字照樣登記、不印 ⛔",
+       any(t["name"] == "紐約市長9-11風波" for t in reg["topics"]) and "⛔" not in out,
+       out.strip()[-200:])
 
 # ── ⑥ 舊的不碰：登記簿裡既有的籮筐名照樣可用（使用者 0908 裁決）──
 d, sp, rp = new_dirs()

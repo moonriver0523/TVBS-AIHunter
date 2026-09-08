@@ -645,7 +645,7 @@ def cmd_add_batch(state, args):
     reg_dirty = False
     gated, auto_registered = [], []
     sim_warn = []   # A10 P1c：開新名時撞到的相似格（警告用，不擋）
-    bad_names, soft_names = [], []   # A10 P1d-命名：A 級擋下的／B 級提醒的
+    bad_names = []   # A10 P1d-命名：被擋下來、沒有登記的收容式名稱
     if new_topics:
         if reg is None:
             reg = load_registry(getattr(args, "registry", None))
@@ -661,12 +661,14 @@ def cmd_add_batch(state, args):
             # 只拒**這一題**、不整批退回——同批其他中主題是好的，整批退回
             # 等於為一個名字丟掉整輪的判斷成果。這題的素材會落進既有的 🆕
             # 路徑（category 不寫），agent 改名或改掛既有格後重送即可。
+            # 使用者 2026-09-08 22:xx 裁決：B 級也硬擋（回測今晚新登記的 158 題，
+            # A 級 0 命中、B 級 8 命中，而那 8 個正是當晚長出來的籮筐——
+            # A 級抓的是前一天的毛病，當晚的毛病全在 B 級）。例外條件寫在
+            # collector_level 裡，命中例外的直接回 None、不吵。
             _lv, _why = collector_level(name)
-            if _lv == "A":
+            if _lv in ("A", "B"):
                 bad_names.append((name, _why))
                 continue
-            if _lv == "B":
-                soft_names.append((name, _why))
             # A10 P1c（2026-09-08）：登記**之前**先粗篩相似格。0908-1100 實錯——
             # agent 開【邁阿密貨機墜舉】時，登記簿已有貨機事故 40 則／貨機衝跑道
             # 9 則／機場貨機意外 3 則／空難 2 則，五格講同一件事共 54 則。
@@ -869,10 +871,6 @@ def cmd_add_batch(state, args):
         for _n, _why in bad_names:
             print(f"⛔ 【{_n}】{_why}")
         print("   " + COLLECTOR_FIX)
-    if soft_names:
-        print(f"⚠️ {len(soft_names)} 個新中主題的尾綴是類別詞（已登記，只是提醒）：")
-        for _n, _why in soft_names:
-            print(f"⚠️ 【{_n}】{_why}")
     if sim_warn:
         # A10 P1c：開了新名、但登記簿裡已經有很像的格子。⚠️ 只是警告——名字已經
         # 登記、素材也入庫了，這裡是要 agent 當場決定「併過去還是留著」。
@@ -1943,6 +1941,13 @@ def collector_level(name):
             break
     for w in sorted(COLLECTOR_WORDS, key=len, reverse=True):
         if n.endswith(w) and n != w:
+            # 例外：名字裡有數字，或長到 9 字以上——這種通常真的在講一件事，
+            # 尾綴是敘述的一部分不是籮筐。實掃 28 個 B 級只放行 3 個：
+            # 「紐約市長9-11風波」（有數字）、「陸具身智能機器人展演」（展演是
+            # 字面意思的展演）、「福島熊出沒緊急重量事件」。其餘 25 個
+            # （美股動態／運動賽事花絮／資料畫面小品／日本社會案件…）全該擋。
+            if any(ch.isdigit() for ch in n) or len(n) >= 9:
+                return None, ""
             return "B", f"尾綴「{w}」是類別詞，去掉會更像一件事（例：{n[:-len(w)]}）"
     return None, ""
 
