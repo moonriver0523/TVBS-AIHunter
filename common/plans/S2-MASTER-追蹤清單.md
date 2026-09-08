@@ -42,6 +42,7 @@
 - 三子代理評估 = `common/plans/2026-08-21-S2三站子代理並行掃帶可行性評估.md`（排程三站改派三子代理並行，D10 唯一來源；指引報告書，非授權實作）
 - 0821-1000三刀 = `common/plans/2026-08-21-0821-1000體檢-三刀建議.md`（0821-1000 浪費案例＋刀1 set-category 硬上限／刀2 hook 沒載入／刀3 from-raw；A11-1000／A23／A24 唯一來源）
 - 全檢 = `common/plans/2026-09-07-S2全面檢視與改進計畫.md`（2026-09-06 使用者 11 問的整體檢視；T12／T13／A31～A35／R21／D14～D17 唯一來源，並擴充 A26 刀4、掛接 T8／T9／A10／A16／A24）
+- 跨模型試跑 = `common/plans/2026-09-08-跨模型(Gemini-Codex)試跑紀錄.md`（claudeg/claudex 代理接 S2 定時掃帶的首次實測；E8 唯一來源）
 
 ---
 
@@ -58,6 +59,7 @@
 | E5 | AP detail 擷取偶發 selector 失效，靠 agent 事後自癒重跑 | 0819-2000 體檢 | ⬜列入觀察 | 首次樣本：16筆抓成全空/APundefined，agent自行重跑修正，最終資料乾淨但多花約2萬token、4分鐘；累積更多樣本再議是否加自動重試檢查 |
 | E6 | 輪次局部效率下降非則數所致，疑似偶發性行為/效率漂移 | 0819-2200 體檢＋使用者覆核；第2/3樣本0819-0430、0820-0730 | ⬜列入觀察 | 首次樣本：0819-2200耗時41.5分為當日最長，但三站則數其實沒增加(RT反而最少)；真正異常是RT呼叫數/單次分類呼叫耗時翻倍，具體表現為RT/NS對同一則反覆小幅裁切字數(重複做而非資料量大)；與D9/E5同屬偶發行為漂移家族，累積樣本再議。第2/3樣本改表現在NS站單次呼叫耗時異常(29.0秒、26.1秒/次，基準5.5~14.9秒)，scratch中間檔已被清理查不到裁切證據，僅token數字佐證；累積3樣本後0430/夜間時段略高但尚不足判定，維持觀察 |
 | E7 | AP 站 0830-1600 登入態掉線事故，事後即時重抓補齊（2026-08-30 22:5x 記錄） | 使用者下令補救；本次 agent 執行紀錄 | ✅ | **事故**：0830-1600 該輪 RT／NS 正常完成，AP 站因 Playwright `.playwright-s2-profile-v4` 登入態掉線，僅留 `ap_check.md`（未登入首頁快照），無 `ap_list/ap_detail/ap_batch/_audit_ap` 四份快照，狀態檔僅留 `AP-LOGIN-0830` 待人工殼。**補救**：使用者手動重新登入 v4 profile 後，確認 `mcp__browser__*` 已連上已登入 session；依 13c§2／13d§7（R6 0820 訂正）recipe 開 `topic?id=116e9ab7aa044476925398d731289267` 頁、`PageSize:50` 打 Page1（唯一可信來源，未動用 Page2+），50 則落檔 `ap_list_1600.json`（25KB，落在自檢區間）；用 `window_start`(13:00)–`checkpoint`(16:00) 台北時間換算 UTC 05:00–08:00 篩出窗內 20 則，其中 2 則依 13e SNTV 重複/直式規則排除（`AP5468647` 直式版、`AP5468645` 與 `AP5468644` 內容完全重複的橫式重出），實收 18 則；`item/details` API 補全文，自檢無 `APAP` 雙重前綴／無空 script。18 則寫 `ap_batch_1600.json`＋`add-batch`＋`set-category`＋`set-tc`（含機動 T「尼泊爾洪災」加掛）入庫，`AP4681246`／`AP4681224`（熊貓圓圓22歲慶生）依「涉臺一律至少🟡」規則標記，並把中主題由「台灣熊貓慶生」改名「圓圓22歲慶生」避開 `misplaced_topics()` 地緣詞誤判。落 `_audit_ap_1600.txt`（code\|ISO時間，比照 `_audit_ns_1600.txt` 格式）後跑 `s2_audit.py --mmdd 0830 --rt-list --ap-list --ns-list` 三站齊對：**RT／NS／AP 窗內皆零漏收**；剩 2 個 🔴 為已知非問題——AP 那 2 則正是上述刻意排除的 SNTV 重複/直式（13e 明文「純粹略過，不是待人工」，未寫 needs-review），RT 3 則跨日撞號（`RT7607/RT7609/RT7651`）屬 RT 站既有資料、與本次 AP 事故無關，留給例行輪次處理，未動 RT/NS 資料。`AP-LOGIN-0830` 待人工殼已 `needs-review done` 結案（純殼、無實質內容，done 後整筆移除）。渲染後 T/C 覆蓋率 100%、品質掃 0 命中。|
+| E8 | S2 改接 Gemini(claudeg)／Codex(claudex) 代理首次實測 | 跨模型試跑；使用者 2026-09-08 下令 | ⬜列入觀察 | **claudex（Codex `gpt-5.6-sol[1m]`）跑通**：完整一輪 V8 全站流程（NS/AP/RT/ENEX/ABC），checkpoint `0908-1200`，離開碼=0、耗時27.3分、新增39則、txt=True、無異常標記，`0907晚班交接.txt`已重渲染；僅證明「流程通」，**尚未與 sonnet 同時段品質比對**。**claudeg（Gemini）未跑通**：`gemini-pro` 遇 429 配額冷卻；使用者指定改用 `gemini-3.8-flash-high[1m]`（已加入 `cliproxyapi-gemini\config.yaml` alias＋`claudeg.ps1` 預設值，皆有 `.bak-*` 備份）後仍持續 429 quota，使用者確認訂閱配額本身是滿的，判斷是該模型 ID 在 Antigravity 端本身異常/限流，待核對正確 ID。**中途教訓**：試跑用的 checkpoint 若帶文字後綴（如「-claudeg試跑」）會被 `s2_state.py` 的 `CHECKPOINT_RE`（嚴格 `^\d{4}-\d{4}$`）擋下、寫入 0 則，須用純數字 `MMDD-HHMM`；順手查證 `Get-ScheduledTask` 得知目前 11:00–17:00 為排程空窗，試跑未影響任何正式輪次。**要看什麼**：累積更多跨模型樣本／等 Gemini 配額或模型 ID 問題解決／完成 claudex 39 則的人工品質比對，才能判斷是否進一步評估換線可行性，目前不立案動工 |
 
 ### R — 修復（品質與可靠性） → 詳情：[master-detail/R.md](master-detail/R.md)
 
