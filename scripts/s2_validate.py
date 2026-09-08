@@ -248,6 +248,11 @@ def side_lines(lines):
     大分類或中主題標題／下一段側錄 TC 行／通訊社素材行。
     原本只看空行，會把 `+` 後面的小分題與下一則通訊社素材整段吃進來，
     害「側錄不該用 ▎ 分段」對著別人的 ▎ 誤命中。
+
+    ⚠️ 中主題標題判定必須是「整行剛好是【…】」（2026-09-08 修，跟 side_units()
+    的判法對齊）。NHK 側錄內文常常在**內容行開頭**就帶地點括號，例如
+    「【名古屋市西區・莊內川】記者連線畫面顯示…」，只看 startswith("【") 會把這種
+    內容行誤判成標題、害上面那行 TC 被誤報「沒有內容」。
     """
     out = []
     for n, raw in enumerate(lines, 1):
@@ -257,7 +262,7 @@ def side_lines(lines):
             for nxt_raw in lines[n:]:
                 _, nxt = strip_mark(nxt_raw)
                 s = nxt.strip()
-                if not s or s == "+" or s.startswith(("【", "=")):
+                if not s or s == "+" or re.match(r"^【.+】$", s) or re.match(r"^=====+.+=====+$", s):
                     break
                 if SIDE_RE.match(nxt) or LINE_RE.match(nxt):
                     break
