@@ -74,3 +74,6 @@ A33 要「分派給記者」需要記者名單／專長／班別／每日上限�
 
 ### D18 T/C 核心字典英文別名層（2026-09-07，10-A31 試跑提出）
 `from-raw` 提示表餵的是站方原文（head＋first150），AP／RT／NS 幾乎全英文；`s2_pretag.suggest_tc` 重用 `tag_tc` 的中文關鍵詞表，故 0906 快照 26 則只命中 T? 1／C? 2／🇹🇼 0。A31 依「不擴充核心字典（D-裁決範圍）」只加了 D15 軍事國防／英國與涉臺詞的少量英文別名。擬定：`s2_pretag.py` 內加英文別名→中文 T/C 對照表（模組常數、只加不改），不碰 `TC-字典.md`／13f 名單；驗收用 0906／0907 快照命中率 ≥40%。待使用者裁決。
+
+### D19 把 A24 骨架收斂機制擴展到 ABC／ENEX（2026-09-08，0908-1700 token 體檢提出）
+`s2_batch_prep.py` 的 `SITE_SPEC`（`from-raw`／`build --skeleton`）只登記 `ns/ap/rt`；ABC／ENEX 走獨立的 `s2_platform_extract.py {abc|enex} → lint → merge` 三件套，沒有共用骨架收斂，逐則 `inspect` 仍是唯一查內容手段（0908-1700 ABC `abc_detail` inspect 11 次，屬工具 28,000 字元預算正常拆批，非重複浪費）。擬定：`SITE_SPEC` 加 `abc`／`enex` 條目，讓 `from-raw --site abc` 吃 platform 管線 raw 快照出提示表＋骨架，agent 判完接 `s2_platform_extract.py abc --entries <骨架>`。風險：①`SITE_SPEC` 是三站共用核心結構，ABC/ENEX 欄位形狀（無 CSV 標準殼、`script_html`／`synopsis_html` 全文）差異大，硬塞可能牽動既有 `dump`／`inspect`／`compare`／`snapshot` 對三站的行為；②`from-raw` 骨架格式能否無縫接上 platform 管線的 `--entries` schema 尚未逐欄驗證；③`test_s2_from_raw.py`／`test_s2_batch_prep.py` 假設站別只有三種，擴充要新增測試組，屬架構級任務不宜掃帶輪順手改。前提：先讀 `s2_platform_extract.py` 的 `--entries`／`--raw` schema 比對相容性。待使用者裁決。

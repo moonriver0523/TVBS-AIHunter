@@ -258,6 +258,11 @@ fetchAbcWindowRows() 陣列 → s2_platform_extract.py abc → 候選 JSON
 `cd` 不會延續到下一個指令。0905-0900 實錯：lint 被解析成
 `…\20260904\scripts\s2_platform_lint.py` → `[Errno 2] No such file or directory`。
 
+🔴 **`abc_entries_{HHMM}.json` 判完全部則後一次 `Write` 整包，⛔ 不要逐則 `Edit`**：
+同 `13c2` 對三站 batch.json 的規定。0908-1700 實錯：28 則逐一 `Edit` append，
+單這個檔就吃掉 28 次工具呼叫（同輪 NS 只用 3 次 `Write`、RT 1 次、ENEX 5 次
+`Edit` 就寫完）——先在腦內／scratch 把整包 `{id:entry}` 組好，**判完再寫一次**。
+
 ```
 # ⓪ entries 寫完先驗形狀（<1 秒，不碰網路）——⛔ 不要跳過
 cd E:/GitHub/TVBS-AIHunter && python scripts/s2_platform_extract.py check-entries --entries "<scratch>/abc_entries_{HHMM}.json"
