@@ -644,6 +644,7 @@ def cmd_add_batch(state, args):
         topic_mode != "off" or new_topics) else None
     reg_dirty = False
     gated, auto_registered = [], []
+    sim_warn = []   # A10 P1c：開新名時撞到的相似格（警告用，不擋）
     if new_topics:
         if reg is None:
             reg = load_registry(getattr(args, "registry", None))
@@ -655,6 +656,16 @@ def cmd_add_batch(state, args):
                 aliases = [x.strip() for x in re.split(r"[,，;；]", aliases) if x.strip()]
             elif not isinstance(aliases, list):
                 aliases = None
+            # A10 P1c（2026-09-08）：登記**之前**先粗篩相似格。0908-1100 實錯——
+            # agent 開【邁阿密貨機墜舉】時，登記簿已有貨機事故 40 則／貨機衝跑道
+            # 9 則／機場貨機意外 3 則／空難 2 則，五格講同一件事共 54 則。
+            # ⚠️ 只警告不擋：誤判率還沒量過，硬擋會在無人看的輪次卡住整批。
+            try:
+                _sim = similar_topics(name, reg, state, top=3)
+            except Exception:   # 相似度壞掉不准拖累入庫
+                _sim = []
+            if _sim:
+                sim_warn.append((name, _sim))
             _register_topic(reg, name, charter=str(spec.get("charter") or ""),
                             big=str(spec.get("big") or ""), aliases=aliases)
             reg_dirty = True
@@ -839,6 +850,17 @@ def cmd_add_batch(state, args):
         uniq = sorted(set(auto_registered))
         print(f"🆕 本輪自動登記 {len(uniq)} 個中主題待補 charter：{'、'.join(uniq)}"
               f"（auto:true，charter 取自摘要前 40 字，事後用 topic-register 覆寫）")
+    if sim_warn:
+        # A10 P1c：開了新名、但登記簿裡已經有很像的格子。⚠️ 只是警告——名字已經
+        # 登記、素材也入庫了，這裡是要 agent 當場決定「併過去還是留著」。
+        print(f"⚠️ 新開的 {len(sim_warn)} 個中主題撞到既有相似格（P1c 粗篩，沒擋）：")
+        for _name, _rows in sim_warn:
+            print(f"⚠️ 【{_name}】很像：")
+            for _ln in format_similar(_rows, indent="     "):
+                print(_ln)
+        print("   → 同一件事就把這批改掛則數最多的那格（`set-category` 改 category），"
+              "並用 `topic-alias` 把新名掛成別名；真的是新題就把 charter 寫成"
+              "「跟 X 的差別是…」，下一輪才判得出來。")
     if reg_dirty or auto_registered:
         save_registry(reg, getattr(args, "registry", None))
     # 收尾提醒同 set-category：這批入完之後，本檔還有哪些則沒 T/C——
@@ -1728,6 +1750,126 @@ def _auto_charter(state, raw_id, fallback=""):
     if not summ:
         summ = (fallback or it.get("raw_entry") or "").strip()
     return summ[:40]
+
+
+# ── A10 P1c（2026-09-08）：開新中主題前的相似格粗篩 ──────────────
+# ⛔ 不做內文模糊比對（A10 不變式）——只比**名稱／aliases／charter** 這些
+# 已經是人寫的短標籤，比對單位是共同子字串，不是語意。
+# 0908-1100 是這支的來由：agent 開了【邁阿密貨機墜舉】（還是錯字），而登記簿
+# 已經有【邁阿密貨機事故】40 則、【邁阿密貨機衝跑道】9 則、【邁阿密機場貨機
+# 意外】3 則、【邁阿密空難】2 則——五個格子講同一件事，共 54 則。
+# ⚠️ 這是**警告不是閘門**：誤判率還沒量過，硬擋會在無人看的輪次卡住整批。
+SIM_STOPWORDS_STR = "之了仍以及在將對已後於的等被"
+SIM_NAME_W = 2          # 名稱重疊比 charter 重疊值錢（名稱是 agent 下的標籤）
+SIM_TEXT_W = 1
+SIM_TEXT_CAP = 6        # charter 那半設上限，免得長 charter 靠零碎共同字灌分
+SIM_THRESHOLD = 8       # 對 0908 真實登記簿調的，見 test_s2_find_similar.py
+SIM_STRONG = 12         # 這條以上標「高」，以下標「弱」，agent 自己判
+
+
+def _common_len(a, b, min_seg=2):
+    """a 與 b 的**不重疊共同子字串**總長（每段至少 min_seg 字）＋命中片段。
+
+    貪婪：每次取當前最長的共同子字串、兩邊各扣掉一次，再找下一段。
+    「邁阿密機場貨機意外」對「邁阿密貨機墜舉」因此算出 邁阿密(3)＋貨機(2)＝5，
+    而不是只認最長那段（3）——同一事件被拆成不同語序時，靠的就是這個。
+    """
+    a = "".join(ch for ch in (a or "") if ch.strip())
+    b = "".join(ch for ch in (b or "") if ch.strip())
+    total, segs = 0, []
+    while a and b:
+        best, bi, bj = "", -1, -1
+        for i in range(len(a)):
+            for j in range(len(b)):
+                k = 0
+                while i + k < len(a) and j + k < len(b) and a[i + k] == b[j + k]:
+                    k += 1
+                if k > len(best):
+                    best, bi, bj = a[i:i + k], i, j
+        if len(best) < min_seg:
+            break
+        a2 = a[:bi] + a[bi + len(best):]
+        b2 = b[:bj] + b[bj + len(best):]
+        a, b = a2, b2
+        if best.strip(SIM_STOPWORDS_STR):   # 整段都是停用字不算命中
+            total += len(best)
+            segs.append(best)
+    return total, segs
+
+
+def _today_mid_counts(state):
+    counts = {}
+    vals = (state or {}).get("items")
+    vals = vals.values() if isinstance(vals, dict) else (vals or [])
+    for v in vals:
+        if not isinstance(v, dict):
+            continue
+        mid = (v.get("category") or {}).get("中主題")
+        if mid:
+            counts[mid] = counts.get(mid, 0) + 1
+    return counts
+
+
+def similar_topics(text, reg, state=None, top=5, threshold=SIM_THRESHOLD):
+    """回傳 [(score, 名稱, 今日則數, 命中片段)]，只留 score >= threshold。
+
+    比對池＝登記簿（name／aliases／charter）＋今日狀態檔的中主題。
+    附今日則數，讓 agent 一眼看出該併進哪個巨格（40 則那個通常就是正解）。
+    """
+    counts = _today_mid_counts(state)
+    seen, out = set(), []
+    for t in (reg or {}).get("topics", []):
+        if not isinstance(t, dict):   # 手改過的登記簿什麼型別都可能
+            continue
+        name = t.get("name")
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        if name == text:
+            continue
+        n_len, n_segs = _common_len(text, name)
+        extra = " ".join([*(t.get("aliases") or []), t.get("charter") or ""])
+        t_len, t_segs = _common_len(text, extra)
+        score = SIM_NAME_W * n_len + SIM_TEXT_W * min(t_len, SIM_TEXT_CAP)
+        if score >= threshold:
+            out.append((score, name, counts.get(name, 0),
+                        sorted(set(n_segs + t_segs), key=len, reverse=True)[:4]))
+    for mid, n in counts.items():        # 今日有、登記簿沒有的（R30 側門那種）
+        if mid in seen or mid == text:
+            continue
+        n_len, n_segs = _common_len(text, mid)
+        if SIM_NAME_W * n_len >= threshold:
+            out.append((SIM_NAME_W * n_len, mid, n,
+                        sorted(set(n_segs), key=len, reverse=True)[:4]))
+    out.sort(key=lambda x: (-x[0], -x[2], x[1]))
+    return out[:top]
+
+
+def format_similar(rows, indent="  "):
+    lines = []
+    for score, name, n, segs in rows:
+        mark = "高" if score >= SIM_STRONG else "弱"
+        cnt = f"（今日 {n} 則）" if n else "（今日 0 則）"
+        lines.append(f"{indent}[{mark}{score:>3}] {name}{cnt}　命中：{'／'.join(segs)}")
+    return lines
+
+
+def cmd_find_similar(state, args):
+    """開新中主題前先問一句「像不像既有的格子」。
+
+    用法：`s2_state.py find-similar --text "邁阿密貨機墜舉" [--top 5]`
+    沒有候選就印「無相似項」，⛔ 不要把空輸出當成沒查過。
+    """
+    reg = load_registry(getattr(args, "registry", None))
+    rows = similar_topics(args.text, reg, state, top=args.top or 5)
+    if not rows:
+        print(f"無相似項（比對池：登記簿 {len(reg.get('topics') or [])} 題＋今日中主題）")
+        return
+    print(f"「{args.text}」的相似格（分數越高越像；高≥{SIM_STRONG}）：")
+    for ln in format_similar(rows):
+        print(ln)
+    print("  → 同一件事就改掛既有格（則數最多的通常是正解）；"
+          "真的是新題再開，並在 new_topics 的 charter 寫清楚跟上面哪一格怎麼分。")
 
 
 def _register_topic(reg, name, charter="", big="", aliases=None, auto=False):
@@ -2905,6 +3047,10 @@ def main():
                     help="A10 P1b：改列前一日封存檔裡 ≥3 則的中主題＋charter，"
                          "建檔輪當今天命名參考（跟上面主流程互斥）")
     lt.add_argument("--archive-dir", help="測試用覆蓋 Archive 資料夾（預設 STATE_DIR/Archive）")
+    fs = sub.add_parser("find-similar",
+                        help="A10 P1c：開新中主題前先粗篩相似格（名稱／aliases／charter 子字串重疊）")
+    fs.add_argument("--text", required=True, help="要開的中主題名稱，或一句短摘要")
+    fs.add_argument("--top", type=int, default=5, help="最多列幾個候選（預設 5）")
     sc = sub.add_parser("scratch-dir", help="印出並建立今晚班次的暫存檔資料夾（{YYYYMMDD}/）")
     sc.add_argument("--mmdd", required=True, help="晚班起始日 MMDD（不是實際掃帶當下的日曆日）")
     d = sub.add_parser("diff")
@@ -3089,6 +3235,7 @@ def main():
         "remove": cmd_remove,
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,
         "scratch-dir": cmd_scratch_dir, "list-topics": cmd_list_topics,
+        "find-similar": cmd_find_similar,
     }[args.cmd](state, args)
 
 
