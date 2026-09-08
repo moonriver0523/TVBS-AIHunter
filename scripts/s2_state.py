@@ -645,6 +645,7 @@ def cmd_add_batch(state, args):
     reg_dirty = False
     gated, auto_registered = [], []
     sim_warn = []   # A10 P1c：開新名時撞到的相似格（警告用，不擋）
+    bad_names, soft_names = [], []   # A10 P1d-命名：A 級擋下的／B 級提醒的
     if new_topics:
         if reg is None:
             reg = load_registry(getattr(args, "registry", None))
@@ -656,6 +657,16 @@ def cmd_add_batch(state, args):
                 aliases = [x.strip() for x in re.split(r"[,，;；]", aliases) if x.strip()]
             elif not isinstance(aliases, list):
                 aliases = None
+            # A10 P1d-命名（2026-09-08 使用者裁決硬擋）：籮筐名不准開。
+            # 只拒**這一題**、不整批退回——同批其他中主題是好的，整批退回
+            # 等於為一個名字丟掉整輪的判斷成果。這題的素材會落進既有的 🆕
+            # 路徑（category 不寫），agent 改名或改掛既有格後重送即可。
+            _lv, _why = collector_level(name)
+            if _lv == "A":
+                bad_names.append((name, _why))
+                continue
+            if _lv == "B":
+                soft_names.append((name, _why))
             # A10 P1c（2026-09-08）：登記**之前**先粗篩相似格。0908-1100 實錯——
             # agent 開【邁阿密貨機墜舉】時，登記簿已有貨機事故 40 則／貨機衝跑道
             # 9 則／機場貨機意外 3 則／空難 2 則，五格講同一件事共 54 則。
@@ -669,8 +680,10 @@ def cmd_add_batch(state, args):
             _register_topic(reg, name, charter=str(spec.get("charter") or ""),
                             big=str(spec.get("big") or ""), aliases=aliases)
             reg_dirty = True
-        print(f"OK 由 batch new_topics 登記 {len(new_topics)} 個中主題："
-              f"{'、'.join(new_topics)}")
+        _ok_names = [n for n in new_topics if n not in {b[0] for b in bad_names}]
+        if _ok_names:
+            print(f"OK 由 batch new_topics 登記 {len(_ok_names)} 個中主題："
+                  f"{'、'.join(_ok_names)}")
     for n, e in enumerate(data, 1):
         if not isinstance(e, dict):
             skipped.append(f"第{n}筆: 不是物件")
@@ -850,6 +863,16 @@ def cmd_add_batch(state, args):
         uniq = sorted(set(auto_registered))
         print(f"🆕 本輪自動登記 {len(uniq)} 個中主題待補 charter：{'、'.join(uniq)}"
               f"（auto:true，charter 取自摘要前 40 字，事後用 topic-register 覆寫）")
+    if bad_names:
+        print(f"⛔ {len(bad_names)} 個 new_topics 是收容式名稱，**沒有登記**"
+              f"（13f 命名三判準③；這幾題的素材已入庫但 category 未寫）：")
+        for _n, _why in bad_names:
+            print(f"⛔ 【{_n}】{_why}")
+        print("   " + COLLECTOR_FIX)
+    if soft_names:
+        print(f"⚠️ {len(soft_names)} 個新中主題的尾綴是類別詞（已登記，只是提醒）：")
+        for _n, _why in soft_names:
+            print(f"⚠️ 【{_n}】{_why}")
     if sim_warn:
         # A10 P1c：開了新名、但登記簿裡已經有很像的格子。⚠️ 只是警告——名字已經
         # 登記、素材也入庫了，這裡是要 agent 當場決定「併過去還是留著」。
@@ -1870,6 +1893,67 @@ def cmd_find_similar(state, args):
         print(ln)
     print("  → 同一件事就改掛既有格（則數最多的通常是正解）；"
           "真的是新題再開，並在 new_topics 的 charter 寫清楚跟上面哪一格怎麼分。")
+
+
+# ── A10 P1d-命名（2026-09-08）：收容式中主題名稱檢查 ──────────────
+# 13f 三判準第 ③ 條「⛔ 不用『XX趣聞』『XX動態』『暖新聞』這類收容式名稱」
+# 從 0907 就寫在規則裡，但沒有機械檢查，所以三天內登記簿從 241 漲到 357 題，
+# 其中 35 題是籮筐。P1b-2 逼出了「登記」，逼不出「別開籮筐名」。
+#
+# 判準（拿 0908 真實登記簿 357 題調的，見 test_s2_topic_naming.py）：
+#   A 級＝把開頭的限定詞（地區／人物／領域）剝掉之後，剩下的整個是空話。
+#         「捷克趣聞」→剝掉捷克→「趣聞」；「暖新聞」本身就是空話。
+#         實掃 14 題全中、零冤枉 → **開新名時硬擋**。
+#   B 級＝有事件內容、但尾綴是空話（「西太平洋颱風動態」「地方選舉動態」）。
+#         實掃 21 題，其中「紐約市長9-11風波」這種指的是具體一件事，
+#         不能擋 → **只提醒**，建議去掉尾綴。
+# ⛔ 並列式（「動物與生態」「勞工與罷工」）**不做機械判斷**：抓「與／及／和」
+#    會誤判「習近平出訪埃及」（埃及含及）、「烏俄外交與和談」，誤判成本高於
+#    收益，留給 13f 的文字規則。
+# ⛔ 只在**開新名**時檢查。登記簿裡既有的 35 個籮筐名照常可用——
+#    使用者 2026-09-08 裁決「舊的先不碰」，清理是另一件事。
+COLLECTOR_WORDS = (
+    "趣聞", "奇聞", "小品", "動態", "整理包", "暖新聞", "軟性新聞", "新聞",
+    "話題", "事件", "案件", "風波", "現象", "觀察", "情況", "狀況", "綜合",
+    "雜錦", "花絮", "其他", "雜項", "展演", "故事", "圈",
+)
+# 剝頭用的限定詞：地區、人物、領域。只剝**一次**、只剝開頭。
+COLLECTOR_QUALIFIERS = (
+    "西太平洋", "斯洛伐克", "俄羅斯", "好萊塢", "演藝圈", "澳大利亞",
+    "國際", "美國", "歐洲", "中國", "大陸", "日本", "南韓", "北韓", "英國",
+    "法國", "德國", "臺灣", "台灣", "海外", "全球", "亞洲", "非洲", "中東",
+    "南美", "拉美", "捷克", "紐約", "加拿大", "印度", "巴西", "墨西哥",
+    "名人", "生活", "動物", "社會", "網路", "氣候", "軍事", "白宮", "川普",
+    "娛樂", "體育", "民生", "地方", "國內", "產業", "科技", "醫療", "文化",
+)
+
+
+def collector_level(name):
+    """回傳 (級別, 說明)：'A'＝籮筐名、'B'＝尾綴是空話、None＝沒問題。"""
+    n = (name or "").strip()
+    if not n:
+        return None, ""
+    if n in COLLECTOR_WORDS:
+        return "A", f"「{n}」本身就是類別詞，不是一件事"
+    for q in sorted(COLLECTOR_QUALIFIERS, key=len, reverse=True):
+        if n.startswith(q) and len(n) > len(q):
+            rest = n[len(q):]
+            if rest in COLLECTOR_WORDS:
+                return "A", f"「{q}」是限定詞，剝掉之後只剩類別詞「{rest}」"
+            break
+    for w in sorted(COLLECTOR_WORDS, key=len, reverse=True):
+        if n.endswith(w) and n != w:
+            return "B", f"尾綴「{w}」是類別詞，去掉會更像一件事（例：{n[:-len(w)]}）"
+    return None, ""
+
+
+COLLECTOR_FIX = (
+    "改法二選一：①這批本來就屬於某個既有格 → 拿掉這個 new_topics、"
+    "把 category 改掛那一格（先跑 `find-similar` 找）；"
+    "②真的是新的一件事 → 用**事件本身的專有名詞**命名"
+    "（如「邁阿密貨機事故」「休達移民」），不要用可以裝任何東西的類別詞。"
+    "命名三判準見 13f。"
+)
 
 
 def _register_topic(reg, name, charter="", big="", aliases=None, auto=False):
