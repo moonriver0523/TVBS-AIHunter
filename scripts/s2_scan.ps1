@@ -118,13 +118,42 @@ param(
     # 中主題**不論當天有沒有素材都印出空標題**（見 s2_render.group_items）。
     # 📌 要增刪固定中分類就改這個 JSON，不必動腳本；只想改今天一天則用
     #    `s2_state.py set-resident-topics`（那是當日覆寫，不影響隔天預設）。
-    [string]$ResidentTopicsFile = "$PSScriptRoot\s2_resident_topics.json"
+    [string]$ResidentTopicsFile = "$PSScriptRoot\s2_resident_topics.json",
+
+    # 2026-09-10 使用者裁定：0100/1100/1700/2200 四輪改走 Gemini（借
+    # C:\Users\User\cliproxyapi-gemini\claudeg.ps1 那套本機 CLIProxyAPI，
+    # Antigravity OAuth 訂閱，不吃 Claude 用量），04:30/07:00/20:00 維持 Claude。
+    # 'auto'＝照 $GeminiSlots 表自動判；手動測試/watchdog 代打想強制指定時
+    # 傳 'claude' 或 'gemini' 覆寫。
+    # ⚠️ 金鑰不放這裡——那組本機 proxy token 只存在
+    # C:\Users\User\cliproxyapi-gemini\Enable-GeminiEnv.ps1（不進這個 repo 的
+    # git 版控），下面用 dot-source 借值，不在這支腳本裡抄一份。
+    [ValidateSet('auto', 'claude', 'gemini')]
+    [string]$Provider = 'auto',
+
+    # HHmm 清單，只有 -Provider auto 時查表用。改分配只用改這裡，不用動下面邏輯。
+    [string[]]$GeminiSlots = @('0100', '1100', '1700', '2200'),
+
+    [string]$GeminiEnvScript = 'C:\Users\User\cliproxyapi-gemini\Enable-GeminiEnv.ps1'
 )
 
 $ErrorActionPreference = 'Stop'
 
 if (-not $Checkpoint) { $Checkpoint = Get-Date -Format 'MMdd-HHmm' }
 $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+
+# Provider 判定：'auto' 照 $Checkpoint 的 HHmm 查 $GeminiSlots 表；
+# 顯式傳 'claude'/'gemini' 直接照傳的用（手動代打/測試覆寫）。
+$hhmm = ($Checkpoint -split '-')[1]
+if ($Provider -eq 'auto') {
+    $EffectiveProvider = if ($GeminiSlots -contains $hhmm) { 'gemini' } else { 'claude' }
+} else {
+    $EffectiveProvider = $Provider
+}
+if ($EffectiveProvider -eq 'gemini' -and $Model -eq 'sonnet') {
+    # 只在使用者沒有另外明講 -Model（例如 opus）時才覆寫，避免蓋掉手動指定。
+    $Model = 'gemini-3.8-flash-high[1m]'
+}
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $runLog = Join-Path $LogDir "掃帶log-$Checkpoint.txt"
@@ -419,7 +448,7 @@ try {
     # （後面永遠不會有對應的 DONE），還順手生一個 0 bytes 的 掃帶log-*.txt。
     # 手動清過兩次。驗測試設定時 DryRun 要跑很多次，這條不修就等於紀錄檔報廢。
     if ($DryRun) {
-        Write-Host "--- DryRun [$Checkpoint] model=$Model effort=$Effort NoToolBan=$NoToolBan NoBashGuard=$NoBashGuard NoMinBoot=$NoMinBoot cwd=$scratchCwd（不寫 _輪次紀錄）---"
+        Write-Host "--- DryRun [$Checkpoint] provider=$EffectiveProvider model=$Model effort=$Effort NoToolBan=$NoToolBan NoBashGuard=$NoBashGuard NoMinBoot=$NoMinBoot cwd=$scratchCwd（不寫 _輪次紀錄）---"
         Write-Host "組出來的 claude 參數："
         Write-Host ($claudeArgs -join ' ')
         Write-Host "以下是會送出的 prompt 前 400 字："
@@ -427,8 +456,23 @@ try {
         exit 0
     }
 
-    Write-Run "START`tmodel=$Model`teffort=$Effort$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
-    Write-Host "START [$Checkpoint] model=$Model effort=$Effort log=$runLog"
+    Write-Run "START`tmodel=$Model`teffort=$Effort`tprovider=$EffectiveProvider$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
+    Write-Host "START [$Checkpoint] provider=$EffectiveProvider model=$Model effort=$Effort log=$runLog"
+
+    # Provider=gemini：dot-source 借值＋確保本機 proxy 在監聽，只設定這個
+    # process scope 的 ANTHROPIC_* 四個環境變數。金鑰本身不在這支腳本裡，
+    # 見 $GeminiEnvScript 開頭的註解。跑完（無論成不成功）都要清掉，
+    # 不然這個 pwsh 行程之後如果又被拿去做別的事，會被誤導去打 Gemini。
+    $geminiEnvSet = $false
+    if ($EffectiveProvider -eq 'gemini') {
+        try {
+            . $GeminiEnvScript
+            $geminiEnvSet = $true
+        } catch {
+            Write-Run "Gemini 環境設定失敗，本輪中止：$($_.Exception.Message)"
+            throw
+        }
+    }
 
     # 🔴 2026-08-30 修：`*>` 重導向讀取子行程 stdout 是照 [Console]::OutputEncoding／
     # $OutputEncoding 解碼，預設常是系統 ANSI（繁中機器＝Big5/950），而 `claude` 吐的是
@@ -460,6 +504,12 @@ try {
         claude @claudeArgs *> $runLog
         $code = $LASTEXITCODE
     } finally {
+        if ($geminiEnvSet) {
+            Remove-Item Env:\ANTHROPIC_BASE_URL   -ErrorAction SilentlyContinue
+            Remove-Item Env:\ANTHROPIC_API_KEY    -ErrorAction SilentlyContinue
+            Remove-Item Env:\ANTHROPIC_AUTH_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item Env:\ANTHROPIC_MODEL      -ErrorAction SilentlyContinue
+        }
         if ($encodingChanged) {
             try {
                 [Console]::OutputEncoding = $prevConsoleEncoding
