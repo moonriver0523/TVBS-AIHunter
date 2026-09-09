@@ -479,7 +479,7 @@
     },
     {
       "name": "威尼斯影展",
-      "charter": "威尼斯影展（含頒獎、影人動態、參展作品）",
+      "charter": "國際威尼斯影展電影首映與名導紅毯專訪",
       "aliases": [
         "影展"
       ],
@@ -489,7 +489,7 @@
         "C": []
       },
       "first_seen": "2026-08-31",
-      "last_seen": "2026-09-06",
+      "last_seen": "2026-09-09",
       "resident": false
     },
     {
@@ -973,7 +973,7 @@
     },
     {
       "name": "尼泊爾洪災",
-      "charter": "尼泊爾冰川崩塌引發洪災的救援與生還故事",
+      "charter": "尼泊爾暴雨引發之洪災災情與無人機科技物資運補救援",
       "aliases": [
         "尼泊爾水電廠隧道搜救",
         "尼泊爾洪災：生還者與家屬故事",
@@ -1001,7 +1001,7 @@
         "C": []
       },
       "first_seen": "2026-08-27",
-      "last_seen": "2026-09-08",
+      "last_seen": "2026-09-09",
       "resident": false
     },
     {
@@ -1114,15 +1114,15 @@
     },
     {
       "name": "剛果伊波拉疫情",
-      "charter": "剛果民主共和國貝尼週日再有5名伊波拉康復者出院",
+      "charter": "剛果民主共和國伊波拉疫情擴散與國際應變資源缺口",
       "aliases": [],
-      "big": "社會",
+      "big": "話題",
       "tc": {
         "T": [],
         "C": []
       },
       "first_seen": "2026-08-31",
-      "last_seen": "2026-09-06",
+      "last_seen": "2026-09-09",
       "resident": false
     },
     {
@@ -2275,15 +2275,15 @@
     },
     {
       "name": "氣候變遷",
-      "charter": "近200國代表在蒙古烏蘭巴托召開聯合國防治沙漠化會議",
+      "charter": "全球極端氣候對高山冰川環境衝擊",
       "aliases": [],
-      "big": "話題",
+      "big": "天氣",
       "tc": {
         "T": [],
         "C": []
       },
       "first_seen": "2026-08-28",
-      "last_seen": "2026-09-01",
+      "last_seen": "2026-09-09",
       "resident": false
     },
     {
@@ -3877,7 +3877,8 @@
       "name": "艾菲爾鐵塔性別爭議",
       "charter": "艾菲爾鐵塔員工抗議性別隔離接待事件",
       "aliases": [
-        "巴黎艾菲爾鐵塔性別爭議"
+        "巴黎艾菲爾鐵塔性別爭議",
+        "法國艾菲爾鐵塔女性員工隱藏爭議"
       ],
       "big": "話題",
       "tc": {
@@ -3984,15 +3985,17 @@
     },
     {
       "name": "挪威國王哈拉爾五世喪禮",
-      "charter": "奧斯陸警方週三將為已故國王哈拉爾五世舉行國葬，動員全國警力並調動瑞典拆彈小組支援",
-      "aliases": [],
+      "charter": "挪威國王哈拉爾五世逝世後喪禮籌辦與新王哈康繼位相關報導",
+      "aliases": [
+        "挪威國王哈拉爾喪禮"
+      ],
       "big": "話題",
       "tc": {
         "T": [],
         "C": []
       },
       "first_seen": "2026-09-08",
-      "last_seen": "2026-09-08",
+      "last_seen": "2026-09-09",
       "resident": false,
       "auto": true
     },
@@ -4068,7 +4071,7 @@
     },
     {
       "name": "荷姆茲海峽緊張情勢",
-      "charter": "美伊週末互有攻擊後，伊朗最高國安會新主席宣布將劃設荷姆茲海峽外「禁區」、企圖穿越",
+      "charter": "荷姆茲海峽美伊軍事緊張相關事件，與既有「荷莫茲海峽派兵評估放緩」討論的美方部署動態互補",
       "aliases": [],
       "big": "美伊",
       "tc": {
@@ -4076,7 +4079,7 @@
         "C": []
       },
       "first_seen": "2026-09-08",
-      "last_seen": "2026-09-08",
+      "last_seen": "2026-09-09",
       "resident": false,
       "auto": true
     },
@@ -4631,7 +4634,7 @@
     },
     {
       "name": "美網公開賽",
-      "charter": "美國網球公開賽SNTV賽事戰報",
+      "charter": "美國網球公開賽男女單打戰況與球星晉級",
       "aliases": [],
       "big": "體育",
       "tc": {
@@ -4639,7 +4642,7 @@
         "C": []
       },
       "first_seen": "2026-09-08",
-      "last_seen": "2026-09-08",
+      "last_seen": "2026-09-09",
       "resident": false
     },
     {
@@ -4879,7 +4882,9 @@
     {
       "name": "WTT澳門",
       "charter": "世界桌球職業大聯盟澳門站賽事",
-      "aliases": [],
+      "aliases": [
+        "世界桌球澳門站"
+      ],
       "big": "體育",
       "tc": {
         "T": [],
@@ -5457,7 +5462,7 @@
     },
     {
       "name": "911周年",
-      "charter": "911事件即將屆滿25週年的紀念與回顧報導",
+      "charter": "911事件屆滿25週年相關紀念活動、人物專訪",
       "aliases": [],
       "big": "社會",
       "tc": {
@@ -5465,7 +5470,7 @@
         "C": []
       },
       "first_seen": "2026-09-08",
-      "last_seen": "2026-09-08",
+      "last_seen": "2026-09-09",
       "resident": false,
       "auto": true
     },
@@ -5611,7 +5616,7 @@
     },
     {
       "name": "坡州咖啡廳冷凍倉庫命案",
-      "charter": "京畿道坡州一間咖啡廳冷凍倉庫發現遭冷凍致死的60多歲失蹤女性屍體，店主被列為嫌疑",
+      "charter": "南韓坡州咖啡廳冷凍庫命案偵辦進度",
       "aliases": [],
       "big": "社會",
       "tc": {
@@ -5619,7 +5624,7 @@
         "C": []
       },
       "first_seen": "2026-09-08",
-      "last_seen": "2026-09-08",
+      "last_seen": "2026-09-09",
       "resident": false,
       "auto": true
     },
@@ -6664,15 +6669,15 @@
     },
     {
       "name": "德國電網破壞案",
-      "charter": "德國電網遭連環蓄意破壞攻擊事件追蹤",
+      "charter": "德國多邦電網變電站遭連環破壞攻擊案的偵辦進度",
       "aliases": [],
-      "big": "社會",
+      "big": "歐洲",
       "tc": {
         "T": [],
         "C": []
       },
       "first_seen": "2026-09-08",
-      "last_seen": "2026-09-08",
+      "last_seen": "2026-09-09",
       "resident": false
     },
     {
@@ -6691,7 +6696,9 @@
     {
       "name": "挪威哈拉爾國王喪禮",
       "charter": "挪威哈拉爾國王逝世後喪禮相關報導",
-      "aliases": [],
+      "aliases": [
+        "挪威國王哈拉爾五世喪禮"
+      ],
       "big": "話題",
       "tc": {
         "T": [],
@@ -6716,15 +6723,15 @@
     },
     {
       "name": "匈牙利驅逐俄外交官",
-      "charter": "匈牙利外交政策轉向、驅逐俄外交官事件",
+      "charter": "匈牙利驅逐10名俄羅斯外交官與克里姆林宮對等反制之後續外交衝突",
       "aliases": [],
-      "big": "烏俄",
+      "big": "政治",
       "tc": {
         "T": [],
         "C": []
       },
       "first_seen": "2026-09-08",
-      "last_seen": "2026-09-08",
+      "last_seen": "2026-09-09",
       "resident": false
     },
     {
@@ -6952,6 +6959,3878 @@
       },
       "first_seen": "2026-09-08",
       "last_seen": "2026-09-08",
+      "resident": false
+    },
+    {
+      "name": "加州陷坑",
+      "charter": "加州馬里布車道因海岸侵蝕坍塌成天坑等地質意外",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "攝護腺癌篩檢",
+      "charter": "攝護腺癌篩檢意識與高風險族群衛教專題",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "墨西哥工程師受騙訴訟",
+      "charter": "墨西哥工程師遭誘騙來美從事勞力工作的集體訴訟與和解",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "鳳凰城愛心物資站",
+      "charter": "鳳凰城婦女自家門廊設物資站助街坊的暖新聞",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "魯比歐訪哥倫比亞",
+      "charter": "美國國務卿魯比歐訪問哥倫比亞相關外交動態",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "Lululemon新執行長難題",
+      "charter": "Lululemon新任執行長接手後須解決的業績與股價困境",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "加州州長辯論",
+      "charter": "CNN主辦加州州長選舉辯論相關動態",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "心臟移植藥費求助",
+      "charter": "心臟移植病患藥費負擔不起、捐贈者家屬伸援的暖新聞",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "包裝工球迷籬笆傳統",
+      "charter": "綠灣包裝工球迷勞動節重繪應援籬笆的年度傳統",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "人造雨技術助大鹽湖",
+      "charter": "無人機人造雨技術應用於猶他州大鹽湖水位提升",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "白宮北門廊整修完工",
+      "charter": "白宮北門廊安全升級與整修工程完工",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "科羅拉多藍天山公路完工",
+      "charter": "北美最高鋪面公路整修後首個完整旅遊季相關報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "遠距墮胎藥訴訟開庭",
+      "charter": "路易斯安那州對聯邦政府提告限縮遠距墮胎藥訴訟案",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "加州尿布化學物質法案",
+      "charter": "加州立法要求紙尿褲廠商揭露成分化學物質的法案",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "女童軍推新口味餅乾",
+      "charter": "美國女童軍年度新推出餅乾口味的消費新聞",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "英國航管系統故障",
+      "charter": "英國航管系統技術故障導致全國多機場航班大量取消延誤的後續發展",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "桑達斯基聲請新審",
+      "charter": "賓州州大性侵醜聞主角桑達斯基持續尋求翻案的司法動態",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "加薩布賴吉難民營空襲",
+      "charter": "以色列空襲加薩中部布賴吉難民營造成的破壞與居民反應",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "廈門投洽會",
+      "charter": "中國國際投資貿易洽談會在廈門舉行，全球投資人與會動態",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "古羅馬圖拉真浴場壁畫馬賽克重現",
+      "charter": "羅馬圖拉真浴場考古壁畫與馬賽克修復完成首度開放參觀",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "馬克宏會晤南韓總統李在明",
+      "charter": "法國總統馬克宏與南韓總統李在明簽署儀式，紀念建交140週年",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "蘇超流浪者隊尚克蘭德傷停",
+      "charter": "蘇超流浪者隊隊長尚克蘭德傷停消息及球隊前鋒荒",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美俄通話談烏克蘭局勢",
+      "charter": "川普與普欽通話後克里姆林宮對外說明內容，非前線戰事本身",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "利物浦馬克艾利斯特續約未談成",
+      "charter": "利物浦中場馬克艾利斯特球團未提供續約合約的受訪反應",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "國外UGC趣味短片",
+      "charter": "AP經銷的Newsflare等海外網友拍攝趣味/意外短片集錦",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "德國極右派崛起",
+      "charter": "德國極右選項黨(AfD)勝選薩克森-安哈特邦選舉引發的反應",
+      "aliases": [],
+      "big": "歐洲",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "尼泊爾Z世代抗爭週年",
+      "charter": "尼泊爾去年Gen Z反貪腐抗爭一週年紀念活動",
+      "aliases": [],
+      "big": "南亞",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "馬斯克紀錄片威尼斯首映",
+      "charter": "導演吉布尼執導馬斯克紀錄片在威尼斯影展首映及各方反應",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "以色列在敘利亞軍事活動",
+      "charter": "聯合國調查以色列在敘利亞南部軍事行動是否涉戰爭罪",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "中國航空市場成長",
+      "charter": "空中巴士對中國民航市場需求成長的預測與相關財經動態",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美國第三國遣返爭議",
+      "charter": "美國將移民遣返至第三國（如赤道幾內亞）引發的人權爭議",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "西班牙查獲地下錢莊",
+      "charter": "西班牙聯手歐洲刑警組織破獲跨國毒梟洗錢地下錢莊網絡",
+      "aliases": [],
+      "big": "歐洲",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "阿根廷顧問柯里梅多遭押",
+      "charter": "阿根廷政治顧問柯里梅多在玻利維亞遭羈押案件動態",
+      "aliases": [],
+      "big": "中南美",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "英吉利海峽移民溺斃審判",
+      "charter": "2021年英吉利海峽移民船難人蛇集團成員巴黎受審案",
+      "aliases": [],
+      "big": "歐洲",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "江西土石流搜救",
+      "charter": "中國大陸江西省村落土石流搜救行動進度",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "中國援助尼泊爾",
+      "charter": "中國對尼泊爾提供緊急援助物資的相關動態",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美國對古巴禁運",
+      "charter": "美國對古巴禁運政策造成的經濟衝擊相關報導",
+      "aliases": [],
+      "big": "中南美",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "印尼雷沃托洛克火山噴發",
+      "charter": "印尼倫巴塔島雷沃托洛克火山噴發、熔岩逼近村落",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "突尼西亞媒體整肅",
+      "charter": "突尼西亞記者遭當局起訴入獄引發的新聞自由抗議",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "歐冠揭幕戰前哨",
+      "charter": "歐冠聯賽揭幕戰各隊賽前記者會與備戰動態",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "羅馬尼亞逮捕俄籍間諜",
+      "charter": "羅馬尼亞當局逮捕一名40歲俄羅斯籍男子，指控其拍攝軍事基地與烏克蘭安托諾夫運輸機",
+      "aliases": [],
+      "big": "歐洲",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "克羅埃西亞反恐特勤隊35週年",
+      "charter": "克羅埃西亞反恐特勤隊盧奇科成立35週年，回顧其歷年執行人質救援、反恐等高難度任務",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "克羅埃西亞內雷特瓦柑橘蟲害",
+      "charter": "克羅埃西亞內雷特瓦河谷柑橘即將採收，果農面臨地中海果蠅蟲害威脅，目前缺乏有效防治",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "捷克百年龍舌蘭同時綻放",
+      "charter": "捷克一名園丁的花園中4株龍舌蘭同時綻放，龍舌蘭一生僅開花一次、壽命可達50年，最",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "克羅埃西亞伊斯特拉傳統文化節",
+      "charter": "克羅埃西亞伊斯特拉半島舉辦傳統文化慶典，居民展示手工糕點、保種原生牲畜等世代相傳",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "厄瓜多查緝非法採礦",
+      "charter": "厄瓜多軍方在納波河沿岸銷毀13台土製吸沙採礦設備，查獲盜採者用於淘取礦砂再運往加",
+      "aliases": [],
+      "big": "中南美",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "厄瓜多防災教育",
+      "charter": "厄瓜多沿岸社區發起「列印預防」計畫，用3D列印哨子教導學童在聖嬰現象洪患、土石流",
+      "aliases": [],
+      "big": "中南美",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美國油價汽油雙漲",
+      "charter": "美國原油與汽柴油價格同步走高，GasBuddy分析師迪韓預估一週內全國平均汽油價",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "史密森尼秘書長邦奇退休",
+      "charter": "史密森尼學會秘書長邦奇宣布退休，任職近38年，是首位非裔美人及首位歷史學家出任此",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "新藥治療慢性阻塞性肺病",
+      "charter": "藥廠阿斯特捷利康新藥「托佐拉基單抗」臨床試驗顯示可讓癮君子與戒菸者慢性阻塞性肺病",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美加貿易戰升溫",
+      "charter": "加拿大對逾700項美國商品課15%至50%反制關稅正式生效，川普揚言若加拿大飛機",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "NFL開季消費",
+      "charter": "NFL開季相關球迷消費／經濟調查報導",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南方邦聯爭議",
+      "charter": "美國南方邦聯象徵物、紀念碑相關爭議與政策變動",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "葉門胡塞攻沙國",
+      "charter": "伊朗支持的葉門胡塞組織對沙烏地阿拉伯的攻擊與衝突升級",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "移民政策",
+      "charter": "美國聯邦移民保護身分（如TPS）政策變動",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "邁阿密貨機空難",
+      "charter": "邁阿密MIA附近亞馬遜貨機墜毀事故追蹤",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "巴頓魯治警槍擊",
+      "charter": "路易斯安那州巴頓魯治警員開槍擊斃嫌犯事件",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "華爾街收盤",
+      "charter": "美股每日收盤行情",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "童軍餅乾",
+      "charter": "美國童軍新口味餅乾發表",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "加州海平面上升",
+      "charter": "聖嬰現象造成加州沿岸海平面上升預測與洪災風險",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "波特蘭高中化學外洩",
+      "charter": "奧勒岡波特蘭班森理工高中化學物質外洩緊急撤離事件",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "加州海浪毀屋",
+      "charter": "南加州強浪侵蝕沿岸住宅損害事件",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "麻州資料中心令",
+      "charter": "麻州州長簽署行政命令規範資料中心開發與用電",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "國務卿訪哥倫比亞",
+      "charter": "美國國務卿魯比歐出訪哥倫比亞相關外交行程",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "羅德島木瓜果園",
+      "charter": "羅德島木瓜（Pawpaw）果園趣聞專題",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "跨性別謀殺案宣判",
+      "charter": "紐約州跨性別男子遭凌虐殺害案件宣判與後續",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "德州國會議員談Head Start",
+      "charter": "德州聯邦眾議員談衛生部長到訪Head Start幼兒教育計畫",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "科羅拉多DNA分析師舞弊",
+      "charter": "科羅拉多前州調查局DNA分析師竄改鑑定資料遭判刑案件",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "雪莉雪柏出演阿拉丁",
+      "charter": "演員雪莉雪柏接演百老匯阿拉丁精靈角色",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "新罕布夏初選投票",
+      "charter": "新罕布夏州聯邦參議員席次初選相關報導",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "路易斯安那州大選手爭議",
+      "charter": "LSU球員資格爭議與SEC聯盟除籍討論",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "奧勒岡臭鼬入侵",
+      "charter": "奧勒岡波特蘭社區臭鼬數量暴增困擾居民趣聞",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "聖地牙哥小飛機墜毀",
+      "charter": "聖地牙哥行政機場小型飛機降落墜毀致2死事故",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "賓州國會議員談2028",
+      "charter": "賓州聯邦眾議員被問及是否角逐更高職位的政治動態",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "歐冠聯賽開踢前哨",
+      "charter": "歐冠聯賽新賽季開踢前各隊訓練與教練賽前記者會",
+      "aliases": [
+        "歐冠聯賽開踢"
+      ],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "威尼斯影展Company首映",
+      "charter": "威尼斯影展凱西亞佛列克執導新片Company首映紅毯與相關報導",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "肯亞護理師罷工",
+      "charter": "肯亞護理師集體協商協議未落實引發的罷工抗議行動",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "英國愛德華王子訪CERN",
+      "charter": "英國愛德華王子出訪歐洲核子研究組織相關報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "埃及希臘賽普勒斯峰會",
+      "charter": "埃及、希臘、賽普勒斯三方峰會談能源合作與中東情勢",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "伊朗展示美潛航器",
+      "charter": "伊朗發布聲稱捕獲美軍水下無人載具的畫面",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "亞歷山大王NY蠟像展",
+      "charter": "時尚設計師亞歷山大王在紐約策展的中國蠟藝家作品展",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "巴西大選民調",
+      "charter": "巴西總統大選民調追蹤（魯拉vs博索納羅之子等）",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "聯大新任主席就職",
+      "charter": "聯合國大會第81屆會期新任主席就任相關報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "阿爾巴尼亞反開發抗議",
+      "charter": "阿爾巴尼亞反庫許納投資度假案抗議示威",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "以色列屯墾區對UK制裁反應",
+      "charter": "英國制裁以色列屯墾區產品，當地屯墾者反應",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "塞內加爾債務重整",
+      "charter": "塞內加爾政府債務清償與重整計畫",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "馬里布天坑",
+      "charter": "加州馬里布海濱住宅車道地面塌陷天坑事故",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "西班牙足球生育支持計畫",
+      "charter": "西班牙足協推出女足球員與裁判生育治療支持方案",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "香港首任特首董建華辭世",
+      "charter": "香港回歸後首任行政長官董建華逝世相關報導",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "法國南韓峰會",
+      "charter": "法國總統馬克宏與南韓總統李在明巴黎峰會簽署多項合作協議",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "史密森尼秘書長請辭",
+      "charter": "史密森尼學會秘書長邦奇在川普政府施壓下宣布退休",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "環西自行車賽",
+      "charter": "環西班牙自行車賽逐站戰報",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "阿根廷政治顧問玻國移監",
+      "charter": "阿根廷政治顧問塞里梅多涉玻利維亞政治分析師槍擊案移監",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "以色列禁UK議員入境",
+      "charter": "繼柯賓之後，另一名遭以色列拒絕入境的英國國會議員、綠黨的喬恩斯受訪表示自己其實原",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "英國NHS病歷外洩爭議",
+      "charter": "英國諾丁漢刺殺案被害人歐馬利庫瑪的醫療紀錄遭與治療無關的NHS員工不當查閱，其父",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "貝內特批納坦雅胡失職",
+      "charter": "以色列前總理貝內特指控總理納坦雅胡在1023大屠殺前已收到多方情資示警卻毫無作為",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "俄亥俄州州長選集會衝突",
+      "charter": "俄亥俄州坎菲爾德市集上，一名男子涉嫌試圖闖入民主黨州長候選人艾克頓所在帳篷引發衝",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "麻州幼童謀殺案母親出庭",
+      "charter": "伊利諾州法蘭克福一名母親涉殺害2歲幼子出庭，法官駁回審前交保，辯護律師稱她犯案時",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "蘭西謀殺三子案後續",
+      "charter": "麻州克蘭西涉殺害三名幼子案上週因陪審團無法達成一致意見遭判無效審判，辯護律師雷丁",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "華為紐約受審",
+      "charter": "中國華為技術公司遭美方控以涉伊朗業務詐欺匯豐等銀行案於布魯克林聯邦法院展開陪審團",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "穆道夫案再審場地",
+      "charter": "南卡穆道夫殺妻兒案重審場地爭議與改判",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "伊利諾州母殺幼子案",
+      "charter": "伊利諾州喬利耶特母親涉殺害2歲幼子案司法程序",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "阿根廷福克蘭油田爭議",
+      "charter": "阿根廷對福克蘭群島（馬爾維納斯）海域石油探勘企業提告的主權爭議",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "疫苗政策爭議",
+      "charter": "美國官員對聯邦疫苗政策與衛生部長甘迺迪的批評爭議",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "阿拉巴馬少女失蹤尋回案",
+      "charter": "車牌辨識監視器協尋阿拉巴馬失蹤少女、前副警長遭控案",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "中企AI竊技術警告",
+      "charter": "美國聯邦機構警告中國AI企業以蒸餾手法竊取美國AI技術",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南方公園改名調侃川普",
+      "charter": "動畫南方公園更名調侃川普更改地名政策",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "加州拉哈布拉化學外洩",
+      "charter": "加州拉哈布拉化工廠化學外洩事件與解除警戒",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "斯波坎校園鎖定攻擊",
+      "charter": "華盛頓州斯波坎谷常青中學警員遭槍威脅開槍擊斃嫌犯、疑似爆裂物事件",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "紅崖鎮走失寵物豬",
+      "charter": "加州紅崖鎮走失迷你豬經警方協尋歸還飼主",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "阿拉巴馬國土安全局幹員性侵案",
+      "charter": "阿拉巴馬州西班牙堡國土安全調查局幹員涉性侵未成年人自首案",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "阿肯色動物虐待案",
+      "charter": "阿肯色州查爾斯頓動物虐待案、十犬獲救",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "西密西根NCAA上訴",
+      "charter": "中美聯盟就西密西根對密西根爭議終場判決向NCAA提出正式申訴",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "OpenAI解千禧年數學難題",
+      "charter": "OpenAI宣稱以AI技術解出千禧年數學難題",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "剛果伊波拉防疫宣導",
+      "charter": "剛果貝尼伊波拉倖存者向學童宣導防疫經驗",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "秘魯前印加古墓出土",
+      "charter": "秘魯昌昌文化遺址發現近完整前印加時期奇穆文化古墓",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "澤倫斯基訪挪威",
+      "charter": "烏克蘭總統澤倫斯基赴挪威出席哈拉爾國王喪禮並與挪威首相會談防空議題",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "沙國究責記者會",
+      "charter": "911受難者家屬在紐約沙烏地領事館外要求究責沙國涉911攻擊角色",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "歐冠聯賽開踢",
+      "charter": "歐冠聯賽新賽季開踢，賽前記者會、訓練與尼泊爾洪災默哀等花絮",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "加薩過冬人道危機",
+      "charter": "聯合國警示加薩即將入冬的人道危機，籲增加資金與物資准入",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "巴西最高法院危機",
+      "charter": "巴西最高法院大法官互控風波延燒，聯邦警察局長遭令停職",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "佛萊迪墨裘瑞80冥誕",
+      "charter": "皇后合唱團已故主唱佛萊迪墨裘瑞80歲冥誕蒙特勒紀念活動",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "法國艾菲爾鐵塔女性員工隱藏爭議",
+      "charter": "艾菲爾鐵塔女性員工於印度教團體參訪時被要求迴避引發爭議",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "挪威國王哈拉爾喪禮",
+      "charter": "挪威國王哈拉爾五世辭世後民眾悼念與喪禮籌備",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "德國援烏防空飛彈",
+      "charter": "德國國防部長宣布加碼對烏克蘭提供愛國者防空飛彈等軍援",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "秘魯訓練艦訪巴拿馬",
+      "charter": "秘魯海軍聯合號訓練帆船停靠巴拿馬進行海外教育航行",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "巴拿馬運河首位女性局長就職",
+      "charter": "艾斯皮諾德馬羅塔就任巴拿馬運河112年來首位女性局長",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "加州長灘高潮防災",
+      "charter": "加州長灘因海堤受損高潮淹水疏散沿岸住宅",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "羅芙琳與吉安努利離婚",
+      "charter": "美國演員羅莉羅芙琳與夫婿吉安努利提告離婚",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美國教育部長批閱讀成績下滑",
+      "charter": "教育部長麥克馬洪回應PISA閱讀成績下滑並籲裁撤聯邦教育部",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "鄰里互助",
+      "charter": "社區互助機制與時間銀行相關報導",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "移民搜捕",
+      "charter": "非法移民突擊搜捕與後續安置衍生事件",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "殉職警葬禮",
+      "charter": "因公殉職警察喪禮與悼念追思",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "幼童救母",
+      "charter": "幼童機警報案挽救家屬生命之突發急難事件",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "大學美足",
+      "charter": "全美大學體育東南聯盟與校際美式足球爭端",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "小岩城歷史",
+      "charter": "1957年小岩城事件歷史紀念與老兵回顧",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "貨機事故",
+      "charter": "貨機失事事故調查與官方安全簡報",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "關稅衝擊",
+      "charter": "對外關稅政策對在地商家與商品價格衝擊",
+      "aliases": [],
+      "big": "關稅",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "銅管竊案",
+      "charter": "公共機構與非營利組織管線金屬遭竊案件",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美伊衝突",
+      "charter": "美伊兩國軍事外交對抗與政要政策表態",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美軍空襲",
+      "charter": "美軍針對伊朗油輪或武裝目標之空襲行動",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "能源物價",
+      "charter": "國內油價走勢與能源政策變動",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "生成式AI",
+      "charter": "生成式人工智慧虛擬角色與產業應用",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南加巨浪",
+      "charter": "南加州海岸強浪湧潮與民宅災情",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美地方初選",
+      "charter": "美國各州聯邦及地方公職期中初選選情",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "校園命案",
+      "charter": "各級學校校園內學生身亡或命案調查",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美中經貿",
+      "charter": "美中經貿關係與製造業供應鏈爭端",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "黑人餐廳週",
+      "charter": "推廣非裔飲食文化之在地美食節慶",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "體育產業",
+      "charter": "職業巡迴賽商業財務危機與破產重組",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "殺妻疑案",
+      "charter": "殺妻重案偵辦與高額保釋聽證",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "共和黨大會",
+      "charter": "共和黨全美或地方期中選舉集會造勢",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "法庭受審",
+      "charter": "刑事重案被告出庭應訊與辯護答辯",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "軍事交火",
+      "charter": "中東區域飛彈發射與防空攔截動態",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "機場安檢",
+      "charter": "運輸安全管理局機場安檢試辦措施",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "首長異動",
+      "charter": "國家級學術文化機構秘書長及首長退休交接",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美哥關係",
+      "charter": "美國與哥倫比亞雙邊外交國防與反毒同盟",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "虐殺命案",
+      "charter": "殘酷虐殺罪犯司法重判無期徒刑判決",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "醫學研究",
+      "charter": "公衛流行病學與用藥發育醫學新知",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "特殊奧運",
+      "charter": "特殊奧林匹克運動趣味公益賽事",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美俄烏斡旋",
+      "charter": "美俄烏外交談判與官員斡旋表態",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "颶風重建",
+      "charter": "聯邦緊急管理署撥款災後住宅重建",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "川普言論",
+      "charter": "前總統川普各項政策主張與改名言論",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "選區重劃",
+      "charter": "國會選區重劃爭議與法院司法裁決",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "MLB職棒",
+      "charter": "美國職棒大聯盟例行賽事與球星里程碑",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "歐冠足球",
+      "charter": "歐洲冠軍聯賽小組賽與賽前賽後訪問",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "兩岸軍事",
+      "charter": "美台安全防衛夥伴關係與台北安全對話演說",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "主權地圖",
+      "charter": "外國政府因地圖或領土主張引發之主權爭議",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美地方選舉",
+      "charter": "美國各州地方選舉與造勢衝突事件",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "宗教民俗",
+      "charter": "各國傳統宗教遊行慶典與信徒祈願",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "巨浪崩塌",
+      "charter": "強大浪潮對沿海建築掏空與坍塌損害",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "歷史藝文",
+      "charter": "古老文物掛毯歷史展出與維護研究",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "農業產銷",
+      "charter": "氣候乾旱對農作物葡萄採收與產量衝擊",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "街頭技藝",
+      "charter": "國際城市街頭特技表演者生活與技藝展現",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "動物萌寵",
+      "charter": "各國動物園珍稀動物繁育與新生寶寶亮相對外展示",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美中司法訴訟",
+      "charter": "美國司法體系對中國科技大廠刑事起訴與審判",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "國際人道救援",
+      "charter": "國際糧食計劃署等人道組織援助與資金缺口",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "屯墾區制裁",
+      "charter": "國際社會針對約旦河西岸以色列定居點之貿易限制",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "沙烏地聯賽",
+      "charter": "沙烏地阿拉伯職業足球聯賽戰況",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "衝浪客命案",
+      "charter": "國際衝浪客海外遇害案件之司法審理",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "歷史紀念",
+      "charter": "歷史政治人物逝世紀念週年活動",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "香港國安法",
+      "charter": "香港國安法相關涉案團體與歷史案件司法審判",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "油價波動",
+      "charter": "地緣軍事衝突引發之國際原油價格波動",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "摔角手朝聖",
+      "charter": "傳統職業運動員宗教祈願與朝聖民俗",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "名人訴訟",
+      "charter": "知名演藝人士或公眾人物面臨之民刑事司法訴訟",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "山林火災",
+      "charter": "國際山林野火災害與民生基礎設施受損",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "猶他托育補助遭砍",
+      "charter": "猶他州因聯邦經費刪減，約900家庭將失去托育補助的政策衝擊",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "蘋果新任執行長交棒",
+      "charter": "蘋果硬體工程主管約翰特努斯接棒提姆庫克成為新任執行長的交接與背景",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "川普致贈幕僚現金禮",
+      "charter": "川普財產申報揭露致贈白宮親近幕僚現金禮引發的倫理爭議",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "芬蘭抗假訊息教育",
+      "charter": "芬蘭靠社會與教育扎根對抗境外假訊息與資訊操弄的專題報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "泰國幼兒園槍擊案",
+      "charter": "泰國春武里府幼兒園槍擊案，教師遭槍殺、兇手疑為死者丈夫",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "德國國會預算辯論",
+      "charter": "德國聯邦議會年度預算辯論，總理與各黨團領袖發言動態",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "世界桌球澳門站",
+      "charter": "WTT世界桌球澳門站賽事戰報",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "北京服貿會",
+      "charter": "2026中國國際服務貿易交易會北京場相關報導",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "黃河生態監督計畫",
+      "charter": "大陸各民主黨派啟動黃河流域生態保護五年民主監督計畫",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "孟加拉麻疹登革熱雙重疫情",
+      "charter": "孟加拉爆發史上最嚴重麻疹疫情同時登革熱病例激增，醫療量能告急",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美伊軍事升溫",
+      "charter": "美伊軍事對抗持續升級：伊朗襲擊美軍基地、美方制裁與經濟連鎖效應（含油價）",
+      "aliases": [],
+      "big": "美伊",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "臺灣防衛自主表態",
+      "charter": "臺灣政要就自主防衛、台海和平相關公開表態",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "印度走私動物救援",
+      "charter": "印度查獲疑似走私之外來保育類動物救援事件",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "日本強降雨",
+      "charter": "日本中東部強降雨引發之各地災情（山崩、淹水等）",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "以色列英國外交風波",
+      "charter": "以色列與英國之間的外交衝突事件（領事館關閉等）",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "俄美元首通話",
+      "charter": "普欽與川普直接通話討論烏俄戰爭解方的外交動態",
+      "aliases": [],
+      "big": "烏俄",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "中國8月CPI",
+      "charter": "中國8月消費者物價指數數據與解讀",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "DeepSeek籌備IPO",
+      "charter": "中國AI新創DeepSeek籌備上海科創板首次公開發行相關動態",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "臺灣核安演習測試無人機攻擊",
+      "charter": "台電核二廠核安演習首度測試無人機攻擊應變，因應11月核能公投前的社會關注",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "中國前8月外貿成長",
+      "charter": "中國前8月外貿數據與成長動能解讀",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "廈門國際投洽會",
+      "charter": "第26屆中國國際投資貿易洽談會（廈門）相關報導",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "巴金森桌球世錦賽",
+      "charter": "巴金森氏症病友透過桌球復健、備戰世界錦標賽的人物故事",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "西班牙馬約卡搶劫案",
+      "charter": "西班牙馬約卡島購物中心搶劫拖行店員案件",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "上海國際光影節",
+      "charter": "上海國際光影節活動報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "秘魯古墓考古發現",
+      "charter": "秘魯考古團隊發現完整奇穆文明古墓的考古新聞",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "墨西哥治安成果統計",
+      "charter": "墨西哥政府公布緝毒緝槍等治安執法成果數據",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "墨西哥薩波潘洪水",
+      "charter": "墨西哥薩波潘因淹水導致交通受困之救援事件",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "上海生育補助新政",
+      "charter": "上海孕婦產檢與生產費用全額醫保給付新政",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "克羅埃西亞神父釀酒",
+      "charter": "克羅埃西亞耶穌會神父兼職釀酒扶助修會的軟性人物故事",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "阿富汗戰爭傷殘者復健",
+      "charter": "阿富汗長年戰亂下地雷與空襲傷者的復健與重生故事",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "上海世界技能大賽備戰",
+      "charter": "第48屆世界技能大賽（上海）中國代表隊備戰花絮",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "上海國際偶戲節",
+      "charter": "上海國際木偶藝術節活動報導",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美國晨間財經速報",
+      "charter": "美國晨間財經新聞速報綜合彙整（關稅/股市/油價等）",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "AI風險示警",
+      "charter": "AI產品競賽下安全疑慮示警的科技新聞",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美期中選舉共和黨大會",
+      "charter": "共和黨史上首辦期中選舉大會相關報導",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "兒童心理健康假爭議",
+      "charter": "兒童心理健康假的教養／醫療建議話題",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "南韓對美投資與關稅",
+      "charter": "南韓對美戰略投資規劃與關稅談判進展",
+      "aliases": [],
+      "big": "關稅",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "韓法第一夫人文化外交",
+      "charter": "南韓總統國賓訪法期間的第一夫人文化交流活動",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "北韓軍越界與兩韓邊境緊張",
+      "charter": "北韓軍隊在非軍事區越界引發的兩韓邊境緊張動態",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "北韓國慶習普致賀",
+      "charter": "北韓建政紀念日中俄領導人致賀電動態",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "韓股重返7000點",
+      "charter": "南韓綜合股價指數重返7000點的財經新聞",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "Smilegate創辦人天價離婚",
+      "charter": "南韓遊戲業者Smilegate創辦人鉅額離婚訴訟判決",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "崔泰源世紀離婚訴訟",
+      "charter": "南韓SK集團會長崔泰源與盧素英離婚財產分割訴訟後續",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "三星工會集會物資採購爭議",
+      "charter": "三星電子工會物資採購涉利益迴避爭議",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南韓8月就業與青年就業寒冬",
+      "charter": "南韓8月整體就業與青年就業低迷的數據解讀",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "浦項鋼鐵首度罷工",
+      "charter": "浦項鋼鐵創廠以來首度部分罷工的勞資爭議",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "大韓航空機師面臨罷工",
+      "charter": "大韓航空機師工會勞資爭議調解與罷工威脅",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "陸資湧入馬來西亞",
+      "charter": "中國大陸企業大舉進軍馬來西亞市場對在地業者衝擊",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南韓校園暴力受害創高",
+      "charter": "南韓校園暴力受害率統計創新高",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "濟州警失蹤假結案案",
+      "charter": "濟州員警虛假簽結失蹤報案遭偵辦案件",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南韓急診醫療暴力",
+      "charter": "南韓急診室醫護人員遭受暴力事件統計",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南韓動物醫院消費糾紛",
+      "charter": "南韓寵物動物醫院消費爭議增加的社會現象",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "天安教會鐵鍊虐童致死案",
+      "charter": "南韓天安教會鐵鍊束縛虐童致死事件偵辦",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "公務員尋仇殺妻案",
+      "charter": "南韓現職公務員持刀殺害提告離婚妻子案件",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "韓警密錄器涉弊案",
+      "charter": "南韓警察廳密錄器標案採購弊端偵辦",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "藝人李赫宰酒駕肇事",
+      "charter": "南韓藝人李赫宰酒後駕車肇事案件",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "江南姐姐醫美APP個資外洩",
+      "charter": "南韓醫美平台江南姐姐用戶個資外洩事件",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "江南姐姐個資外洩與仿冒案",
+      "charter": "江南姐姐個資外洩延燒與越南跨國仿冒集團偵辦",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南韓失智資產信託暴增",
+      "charter": "南韓失智者資產信託保護服務申請量暴增",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美歷來最大加密幣竊案",
+      "charter": "新加坡籍男子涉美國史上最大加密貨幣竊案認罪",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "泰國嚴格槍枝管制立法",
+      "charter": "泰國校園槍擊案後推動槍枝管制修法",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南韓雙重國籍爭議",
+      "charter": "南韓多重國籍青年因兵役與國籍法規爭議喪失公民權",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南韓初秋早晚溫差與強風",
+      "charter": "南韓初秋冷氣團南下的溫差與強風特報",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "喀拉喀托之子火山噴發",
+      "charter": "印尼喀拉喀托之子火山噴發衝擊區域航班",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "韓企科技動態",
+      "charter": "南韓企業科技與軍工產業海外拓展動態彙整",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "AI資料中心投資潮",
+      "charter": "全球AI資料中心投資熱潮與經濟風險評估",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "星內政學院導入AI與虛擬訓練",
+      "charter": "新加坡內政群英學院導入AI與VR執法訓練科技",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "星擬推數位基礎設施法",
+      "charter": "新加坡研擬數位基礎設施監管法案",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "BTS北美巡演破紀錄",
+      "charter": "BTS北美巡迴演唱會創K-POP場次人次紀錄",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南韓地方焦點",
+      "charter": "南韓各地方政府文化與展覽活動彙整",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南韓學生文盲率與閱讀力",
+      "charter": "南韓學生閱讀能力下滑與數理能力對比調查",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "東南亞氣候行動考驗",
+      "charter": "東南亞氣候承諾轉化為具體行動的挑戰與青年倡議",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "盧比歐出訪拉美",
+      "charter": "美國國務卿盧比歐訪問哥倫比亞與厄瓜多的外交動態",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "雷諾阿博物館竊案",
+      "charter": "法國蔚藍海岸雷諾阿博物館名畫遭竊案件",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "哥倫比亞野火",
+      "charter": "哥倫比亞農墾走火釀森林大火之控制與災情",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "科羅拉多乾旱",
+      "charter": "美國科羅拉多州乾旱對水質、原物料及在地釀酒啤酒產業的經濟衝擊",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "美墨邊境無人機犯罪",
+      "charter": "墨西哥販毒集團在美墨邊境運用無人機進行監視、偷渡引導與攻擊的專題調查",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "塞爾維亞提前國會大選",
+      "charter": "塞爾維亞總統武契奇因應國內抗爭解散國會、提前於10月舉行大選的政情發展",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "氣候變遷泥炭地復育",
+      "charter": "美國北卡羅來納州推動泥炭地生態復育以封存土壤碳排放的氣候行動",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "委內瑞拉強震後續",
+      "charter": "委內瑞拉大地震後海外僑民援助與生還者心路歷程",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "加薩戰事衝擊",
+      "charter": "以色列與哈瑪斯在加薩走廊軍事行動、空襲與人道危機動態",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "歐洲住房危機",
+      "charter": "歐洲各國高租金與住宅短缺危機及歐盟相關短租平台監管政策",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "無人自駕賽車首秀",
+      "charter": "歐洲首度引進全自動AI無人駕駛方程式賽車在伊莫拉賽道競速",
+      "aliases": [],
+      "big": "科技",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "歐洲天然氣危機",
+      "charter": "歐洲天然氣價格暴漲與俄羅斯能源博弈對歐洲經濟之影響",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "中東傳統手工藝",
+      "charter": "中東地區瀕危傳統樂器與手工藝文化傳承人物專題",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "地中海移民救援",
+      "charter": "民間搜救組織在地中海救援偷渡難民船隻行動",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "兩國方案倡議",
+      "charter": "英法加等國際社會推動以巴兩國方案並反對非法定居點之具體作為",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "兩岸一中原則交鋒",
+      "charter": "兩岸針對聯大2758號決議與一中原則法理定位之官方論述交鋒",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "南海主權與外交爭端",
+      "charter": "中國與菲律賓在南海主權仲裁與外交互動爭議",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "中美科技角力",
+      "charter": "美中兩國在人工智慧大模型與尖端科技智慧財產權指控之交鋒",
+      "aliases": [],
+      "big": "大陸",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false
+    },
+    {
+      "name": "納坦雅胡獲襲擊預警爭議",
+      "charter": "CNN 09-09 150517 （主播）\n新報導：2023年10月7日前約一週",
+      "aliases": [],
+      "big": "中東",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "巴哈馬美籍小客機墜毀",
+      "charter": "CNN 09-09 163628 （主播）\n巴哈馬當局：一架載美國家庭、飛往邁阿",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "休士頓ICE執法爭議",
+      "charter": "CNN 09-09 164316 （主播）\n【休士頓ICE】有關 Lorenzo",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美參議員新罕布夏初選",
+      "charter": "CNN 09-09 170939 （主播）\n【新罕布夏初選】新罕布夏選民投美國聯",
+      "aliases": [],
+      "big": "美國",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "日本中道改革連合分裂",
+      "charter": "NHK 09-09 182418 （主播）\n以集結中道勢力為目標的中道改革連合，",
+      "aliases": [],
+      "big": "政治",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "美日貨幣干預",
+      "charter": "NHK 09-09 170807 （旁白）\n【貝森特】美國財政部長貝森特（Sco",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "日本小麥進口價調漲",
+      "charter": "NHK 09-09 170630 （旁白）\n以下用AI語音播先前新聞。農林水產省",
+      "aliases": [],
+      "big": "財經",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "丸龜製麵不當扣款遭勸告",
+      "charter": "NHK 09-09 170329 （主播）\n【丸龜製麵】經營丸龜製麵等餐飲連鎖的",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "NHK記者性侵懲戒免職",
+      "charter": "NHK 09-09 170506 （主播）\n【NHK懲戒】NHK以20多歲記者在",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "三浦海岸小學生落海搜救",
+      "charter": "NHK 09-09 170014 （主播）\n【三浦落海】神奈川縣三浦市城ヶ島（J",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "千葉千葉市逆向飛車案",
+      "charter": "NHK 09-09 181304 （主播）\n【高速公路逆走】被警察追的轎車在高速",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "加州馬里布海邊天坑",
+      "charter": "CNN 09-09 170646 （主播）\n【馬里布天坑】加州馬里布（Malib",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "南加拉哈布拉化工廠外洩",
+      "charter": "CNN 09-09 175852 （主播）\n【拉哈布拉化學】南加州官員追查化學外",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "德州女童打視訊救母",
+      "charter": "CNN 09-09 175916 （主播）\n【德州三歲】德州三歲女童被稱英雄：母",
+      "aliases": [],
+      "big": "社會",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "廣島灣牡蠣低氧極限警報",
+      "charter": "NHK 09-09 170719 （旁白）\n【廣島牡蠣】廣島縣特產養殖牡蠣：海中",
+      "aliases": [],
+      "big": "天氣",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "LIV高爾夫聲請破產重整",
+      "charter": "CNN 09-09 175707 （主播）\n【LIV高爾夫】Money Expr",
+      "aliases": [],
+      "big": "體育",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "史密森學會長官請辭",
+      "charter": "NHK 09-09 170854 （旁白）\n【史密森】華府等地博物館與研究機構的",
+      "aliases": [],
+      "big": "話題",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
+      "resident": false,
+      "auto": true
+    },
+    {
+      "name": "南方公園新季諷川普",
+      "charter": "動畫影集《南方公園》新一季內容諷刺川普政府施政的娛樂新聞",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-09",
+      "last_seen": "2026-09-09",
       "resident": false
     }
   ]
