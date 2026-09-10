@@ -547,10 +547,14 @@ try {
         $code = $LASTEXITCODE
     } finally {
         if ($geminiEnvSet) {
-            Remove-Item Env:\ANTHROPIC_BASE_URL   -ErrorAction SilentlyContinue
-            Remove-Item Env:\ANTHROPIC_API_KEY    -ErrorAction SilentlyContinue
-            Remove-Item Env:\ANTHROPIC_AUTH_TOKEN -ErrorAction SilentlyContinue
-            Remove-Item Env:\ANTHROPIC_MODEL      -ErrorAction SilentlyContinue
+            Remove-Item Env:\ANTHROPIC_BASE_URL      -ErrorAction SilentlyContinue
+            Remove-Item Env:\ANTHROPIC_API_KEY       -ErrorAction SilentlyContinue
+            Remove-Item Env:\ANTHROPIC_AUTH_TOKEN    -ErrorAction SilentlyContinue
+            Remove-Item Env:\ANTHROPIC_MODEL         -ErrorAction SilentlyContinue
+            # 2026-09-10 補：Enable-GeminiEnv.ps1 新增設了 CLAUDE_CODE_MAX_RETRIES=1
+            # （見該檔案開頭註解），這裡一併清掉，避免留在這個 pwsh 行程裡影響
+            # 之後萬一又被拿去跑 Claude 版呼叫時的重試次數。
+            Remove-Item Env:\CLAUDE_CODE_MAX_RETRIES -ErrorAction SilentlyContinue
         }
         if ($encodingChanged) {
             try {
