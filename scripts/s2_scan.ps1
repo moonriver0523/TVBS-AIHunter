@@ -132,9 +132,18 @@ param(
     [string]$Provider = 'auto',
 
     # HHmm 清單，只有 -Provider auto 時查表用。改分配只用改這裡，不用動下面邏輯。
-    [string[]]$GeminiSlots = @('0100', '1100', '1700', '2200'),
+    # 2026-09-10 使用者裁定：Gemini/Antigravity 這組帳號連環撞429（0910-1100／
+    # 1700／2000 都中），先全部改回 Sonnet、問題沒查清楚解決前不要排 Gemini。
+    # ⚠️ 不刪除 Gemini 這整套機制（provider/B/A/診斷留痕都留著），改回上線只要
+    # 把清單填回 @('0100','1100','1700','2200') 即可，不用重寫邏輯。
+    [string[]]$GeminiSlots = @(),
 
-    [string]$GeminiEnvScript = 'C:\Users\User\cliproxyapi-gemini\Enable-GeminiEnv.ps1'
+    [string]$GeminiEnvScript = 'C:\Users\User\cliproxyapi-gemini\Enable-GeminiEnv.ps1',
+
+    # 2026-09-10 使用者一次性指定：0910-2000 手動測試輪撞429不要走A（自動改Sonnet），
+    # 改由外部（claudeg3 session）接手。預設關閉（正常排程輪照舊用A，不受影響），
+    # 手動測試時明傳這個旗標才會跳過A的Claude補跑，只留診斷紀錄。
+    [switch]$NoAutoClaudeFallback
 )
 
 $ErrorActionPreference = 'Stop'
@@ -583,18 +592,23 @@ try {
             } catch {
                 Write-Run "Gemini 撞429診斷紀錄失敗（不影響本輪）：$($_.Exception.Message)"
             }
-            Write-Run "Gemini 執行中撞 429，離開碼=$code，改用 Claude 補跑本輪一次"
-            Write-Host "Gemini 撞 429，改用 Claude 重跑本輪..."
-            $EffectiveProvider = 'claude'
-            $Model = 'sonnet'
-            for ($i = 0; $i -lt $claudeArgs.Count; $i++) {
-                if ($claudeArgs[$i] -eq '--model') { $claudeArgs[$i + 1] = $Model; break }
-            }
-            try {
-                claude @claudeArgs *> $runLog
-                $code = $LASTEXITCODE
-            } catch {
-                Write-Run "Claude 補跑也失敗：$($_.Exception.Message)"
+            if ($NoAutoClaudeFallback) {
+                Write-Run "Gemini 執行中撞 429，離開碼=$code，已依 -NoAutoClaudeFallback 不自動改 Claude，交由外部處理（本輪不補跑）"
+                Write-Host "Gemini 撞 429，-NoAutoClaudeFallback 生效，不自動改 Claude——請外部（例如 claudeg3）接手本輪。"
+            } else {
+                Write-Run "Gemini 執行中撞 429，離開碼=$code，改用 Claude 補跑本輪一次"
+                Write-Host "Gemini 撞 429，改用 Claude 重跑本輪..."
+                $EffectiveProvider = 'claude'
+                $Model = 'sonnet'
+                for ($i = 0; $i -lt $claudeArgs.Count; $i++) {
+                    if ($claudeArgs[$i] -eq '--model') { $claudeArgs[$i + 1] = $Model; break }
+                }
+                try {
+                    claude @claudeArgs *> $runLog
+                    $code = $LASTEXITCODE
+                } catch {
+                    Write-Run "Claude 補跑也失敗：$($_.Exception.Message)"
+                }
             }
         }
     }
