@@ -227,7 +227,7 @@ const one = async (story, detailId) => {
 ⚠️ 這兩次都是在 **daily profile** 做的；掃帶輪用的是 **v4 profile**，
 兩者**不共用登入態**，V7-6 的「v4 profile 已登入 ABC」那一項**仍未驗**。
 
-### 回傳被卸載成檔案：照 `13g` 同一套三步，不要重試
+### 回傳被卸載成檔案：照 `13c2` §6 同一套三步，不要重試
 
 ABC 一輪可能上百則，**幾乎一定會被卸載**。⛔ 這不是錯誤、不用重試、不要換寫法：
 ① 路徑就在訊息裡（⛔ 不要 `find`）；② ⛔ 不要整包 `Read` 進 context——
@@ -278,7 +278,7 @@ cd E:/GitHub/TVBS-AIHunter && python scripts/s2_platform_extract.py abc \
 # ② 交件前 lint（有 ❌ 就停下來修）
 cd E:/GitHub/TVBS-AIHunter && python scripts/s2_platform_lint.py "<scratch>/{MMDD}-ABC-state.json"
 
-# ③ 整併進狀態檔（⛔ 一定要 --in-round，否則護欄 100% 誤擋，理由見 13g V5-3）
+# ③ 整併進狀態檔（⛔ 一定要 --in-round，否則護欄 100% 誤擋，理由見 13c1（ENEX）同一條）
 cd E:/GitHub/TVBS-AIHunter && python scripts/s2_platform_merge.py "<scratch>/{MMDD}-ABC-state.json" \
     --apply --in-round --file "…/{MMDD}-s2-state.json"
 
@@ -299,7 +299,7 @@ cd E:/GitHub/TVBS-AIHunter && python scripts/s2_batch_prep.py concat \
 lint 擋下來改完 entries 重跑 extract 時，txt 也會跟著重出（不會留舊的）；
 ③ `concat --site abc`／`--site enex` 已支援。
 
-### `--entries` 的形狀（同 ENEX，`13g` V5-3；這裡只記 ABC 的差別）
+### `--entries` 的形狀（同 ENEX（見 `13c1`）；這裡只記 ABC 的差別）
 
 - **鍵**：裸 `Story Number`（`090426021`）或帶前綴（`ABC090426021`）**都認得**
   （2026-09-04 起；在那之前只認裸鍵，寫成帶前綴會**整批無聲進 `dropped`**——

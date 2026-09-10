@@ -150,7 +150,7 @@ python scripts/s2_batch_prep.py search  "<scratch>/enex_raw_{HHMM}.json" --conta
 ```
 
 📌 **`--site` 不用給**（那個參數只認 `ns|ap|rt`，ENEX 用不到；不給就走通用邏輯）。
-⚠️ `--contains` 搜的是**內容**不是欄位名（13d §4 記過）。
+⚠️ `--contains` 搜的是**內容**不是欄位名（13c2 §4 記過）。
 
 ### Fallback 階梯（固定順序，不准跳步、不准重試同一步）
 
