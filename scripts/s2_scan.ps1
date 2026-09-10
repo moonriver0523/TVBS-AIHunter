@@ -381,6 +381,26 @@ try {
     if (-not (Test-Path $PromptFile)) { throw "找不到 prompt 範本：$PromptFile" }
     $prompt = (Get-Content $PromptFile -Raw -Encoding UTF8) -replace '\{CHECKPOINT\}', $Checkpoint
 
+    # Gemini 專用：讀規則檔攤開節流（2026-09-10 使用者裁定「先做1+讀規則延遲」）。
+    # 假設（未證實）：開工頭幾步連續 Read 8 份規則檔（合計近 28 萬字元）全擠在
+    # 同一分鐘內，可能撞到 Antigravity 這組帳號的每分鐘速率限制（TPM/QPM）而非
+    # 當日總配額（使用者已確認配額是滿的，不是配額耗盡）。這裡只加一句指示，
+    # 要求 agent 讀規則檔時每讀完一份用 Bash `sleep` 隔幾秒再讀下一份，把這波
+    # 尖峰攤開超過 1 分鐘 window。⚠️ 只在 $EffectiveProvider -eq 'gemini' 時加，
+    # 不影響 Claude 版 prompt。效果未驗證，先加這句＋下面的失敗診斷紀錄，
+    # 觀察 2000 那輪（Claude）之後、下一個 Gemini slot 再看有沒有改善。
+    if ($EffectiveProvider -eq 'gemini') {
+        $prompt += @"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ 本輪走 Gemini（Antigravity），開工讀規則檔時請節流：
+每用 Read 讀完一份規則檔（13／13e／13f／13c／13c1／13c1b／13c2／13c3
+這幾份），先用 Bash 執行 `sleep 6` 再讀下一份，不要連續背靠背讀完就好。
+目的是把開工瞬間的請求量攤開，降低撞到速率限制的機率。其餘流程不受影響。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"@
+    }
+
     if ($TestMode) {
         # 擺在最後面，蓋掉範本裡「窗內全部收齊」的預設立場
         $prompt += @"
@@ -541,6 +561,28 @@ try {
         $failLogText = ''
         try { $failLogText = Get-Content -LiteralPath $runLog -Raw -ErrorAction Stop } catch {}
         if ($failLogText -match 'RESOURCE_EXHAUSTED|"error_status"\s*:\s*429|"error"\s*:\s*"rate_limit"') {
+            # 診斷用留痕（2026-09-10）：等 Claude 補跑一覆寫 $runLog，原始 Gemini
+            # 失敗那份 transcript 就沒了，之前想比對「撞429當下累積讀了多少規則檔
+            # 內容」都補不到證據。這裡先把它另存一份，並粗算讀規則檔（Read 工具
+            # tool_result）累積字元數＋撞429距離開工經過幾秒，寫進 _輪次紀錄.txt，
+            # 之後才有實測數字可以確認/推翻「TPM 尖峰」這個假設。
+            # ⚠️ 純診斷，失敗不准影響本輪主流程。
+            try {
+                $failCopy = "$runLog.gemini-fail.txt"
+                Copy-Item -LiteralPath $runLog -Destination $failCopy -Force -ErrorAction Stop
+                $readCharsTotal = 0
+                $readCallCount = 0
+                Get-Content -LiteralPath $failCopy -Encoding UTF8 | ForEach-Object {
+                    if ($_ -match '"type"\s*:\s*"tool_result"' -and $_ -match '"content"\s*:\s*"') {
+                        $readCallCount++
+                        $readCharsTotal += $_.Length
+                    }
+                }
+                $secsToFail = [Math]::Round(((Get-Date) - $t0).TotalSeconds, 1)
+                Write-Run "Gemini 撞429診斷：距開工 ${secsToFail}s、log內tool_result筆數=$readCallCount、粗估累積字元數=$readCharsTotal、原始log另存於 $failCopy"
+            } catch {
+                Write-Run "Gemini 撞429診斷紀錄失敗（不影響本輪）：$($_.Exception.Message)"
+            }
             Write-Run "Gemini 執行中撞 429，離開碼=$code，改用 Claude 補跑本輪一次"
             Write-Host "Gemini 撞 429，改用 Claude 重跑本輪..."
             $EffectiveProvider = 'claude'
