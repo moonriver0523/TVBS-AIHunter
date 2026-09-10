@@ -356,13 +356,24 @@ def render_block(big, mids, base_mmdd):
         out.append("")                                # 中主題前空行
         if mid:
             out.append(f"【{mid}】")
-        for n, (sub, its) in enumerate(subs.items()):
-            if n:
+        # 2026-09-10 防呆：底下 0 則的小分題整個跳過，不印孤兒標題。
+        # `group_items` 自己產不出這種東西（`setdefault(sub, []).append(it)` 一定至少
+        # 一則），這道防呆是給**手改狀態檔／別的呼叫者**用的。
+        # ⚠️ `+` 分隔要數「已印出幾個小分題」而不是 enumerate 的原始索引 n——用 n 的話，
+        # 第一個小分題若被跳過，第二個就會冒出一個開頭多餘的 `+`。
+        # ⛔ 不要把同一套跳過搬到中主題層：`resident_topics` 刻意留空字典來印出
+        # 只有【中主題】標題、底下沒素材的常駐格（見 group_items），那是規格不是瑕疵。
+        shown = 0                                     # 已印出的小分題數
+        for sub, its in subs.items():
+            if not its:
+                continue
+            if shown:
                 out.append("+")                       # 小分題之間用 `+`，不用空行
             if sub:
                 out.append(sub)                       # 小分題＝裸行標題
             for it in its:
                 out.extend(render_item(it, base_mmdd))
+            shown += 1
     out.append("")                                    # 大分類末尾空行
     return out
 
