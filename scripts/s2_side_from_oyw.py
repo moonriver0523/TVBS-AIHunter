@@ -171,6 +171,13 @@ def segments(body):
         t = l.strip()
         if not t:
             continue
+        # 整行只有 `【小標】`＝來源 `_TC中文大段翻譯.txt` 自己的分節標題，不是逐字內容
+        # （跟下面「沒有 TC 就出現的散行」、`#####` 同一類，丟掉不算違反逐字鐵律）。
+        # ⚠️ 不丟的話它會黏進**內容**：夾在兩段之間走 L194 黏成前段尾巴，跟在裸 TC 行
+        # 後面則走 L189 被當成該段的內文開頭——後者就是 R35（0909 側錄摘要句首冒出
+        # 一個【…】，render 出來像「空標題＋一則」，使用者兩輪都誤判成空小分類）。
+        if re.fullmatch(r"【[^】]+】", t):
+            continue
         m = _SEG.match(t)
         if m and m.group(1):
             tc, rest = m.group(1), m.group(2)
