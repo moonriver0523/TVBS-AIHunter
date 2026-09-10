@@ -155,6 +155,19 @@ if ($EffectiveProvider -eq 'gemini' -and $Model -eq 'sonnet') {
     $Model = 'gemini-3.8-flash-high[1m]'
 }
 
+# B（2026-09-10）：開打前先問本機 Gemini proxy 是不是還在 429 冷卻中——
+# 冷卻期間硬打只會把冷卻時間越滾越長（0910-1100 實錯），不要重試，
+# 直接在這裡就退回 Claude，省掉一次注定失敗的 ~3 分鐘嘗試。
+$GeminiCooldownCheck = 'C:\Users\User\cliproxyapi-gemini\Test-GeminiCooldown.ps1'
+if ($EffectiveProvider -eq 'gemini' -and (Test-Path $GeminiCooldownCheck)) {
+    $geminiCooldownRemaining = & $GeminiCooldownCheck
+    if ($geminiCooldownRemaining -gt 0) {
+        Write-Host "Gemini 冷卻中（剩約 ${geminiCooldownRemaining}s），本輪開打前就改用 Claude，不硬撞。"
+        $EffectiveProvider = 'claude'
+        $Model = 'sonnet'
+    }
+}
+
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $runLog = Join-Path $LogDir "掃帶log-$Checkpoint.txt"
 
@@ -519,6 +532,31 @@ try {
             }
         }
     }
+    # A（2026-09-10）：Gemini 執行中途才撞 429（B 的事前檢查沒擋到的競態），
+    # 自動改用 Claude 補跑同一輪一次，輪次不開天窗。只在 provider=gemini
+    # 且離開碼非 0 時檢查；判準看 log 內容，不是隨便非 0 就切——非 429 的
+    # 失敗（例如 guard hook 擋、prompt 檔案問題）換 provider 也救不回來，
+    # 硬切只會把真正的錯誤原因蓋掉。
+    if ($EffectiveProvider -eq 'gemini' -and $code -ne 0) {
+        $failLogText = ''
+        try { $failLogText = Get-Content -LiteralPath $runLog -Raw -ErrorAction Stop } catch {}
+        if ($failLogText -match 'RESOURCE_EXHAUSTED|"error_status"\s*:\s*429|"error"\s*:\s*"rate_limit"') {
+            Write-Run "Gemini 執行中撞 429，離開碼=$code，改用 Claude 補跑本輪一次"
+            Write-Host "Gemini 撞 429，改用 Claude 重跑本輪..."
+            $EffectiveProvider = 'claude'
+            $Model = 'sonnet'
+            for ($i = 0; $i -lt $claudeArgs.Count; $i++) {
+                if ($claudeArgs[$i] -eq '--model') { $claudeArgs[$i + 1] = $Model; break }
+            }
+            try {
+                claude @claudeArgs *> $runLog
+                $code = $LASTEXITCODE
+            } catch {
+                Write-Run "Claude 補跑也失敗：$($_.Exception.Message)"
+            }
+        }
+    }
+
     $mins = [Math]::Round(((Get-Date) - $t0).TotalMinutes, 1)
 
     # ⚠️ 離開碼 0 不代表掃帶做完了。**只檢查「檔案在不在」也不夠**——
