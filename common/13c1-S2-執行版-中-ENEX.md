@@ -217,9 +217,9 @@ python scripts/s2_state.py --file "…/{MMDD}-s2-state.json" \
     set-tc --pairs "ENEX929047=T1,T2/C1;ENEX929039=T3/C2"
 ```
 
-⛔ **不要跑到 ③ 就停。** `13f:275` 訂的是 `add-batch → set-category → **set-tc**` 三步，
+⛔ **不要跑到 ③ 就停。** `13f`「各產線 T／C 由誰下」表訂的是 `add-batch → set-category → **set-tc**` 三步，
 而 `s2_platform_merge.py` 只封裝了前兩步（它是 A9 時代寫的，那時還沒有 `set-tc`）。
-⚠️ T（議題）沒有預設，一律照內容判、⛔ 不要自創（`13f:301`）；當天若有機動 T，
+⚠️ T（議題）沒有預設，一律照內容判、⛔ 不要自創（`13f`「來源預設 C」表）；當天若有機動 T，
 符合的素材要**加掛**（連同既有固定 T 一起下，不是取代）——merge 收工時會提醒。
 
 📌 **`18 §1` 那條「不准碰狀態檔」不包含這一步**：§1 的例外是「§7 經過設計的整併出口」，
@@ -305,7 +305,7 @@ python scripts/s2_state.py --file "…/{MMDD}-s2-state.json" \
 | 素材行寫法 | `13e` 素材行節 ＋ `18 §2` | 通用格式以 `13e` 為母規則，`18` 只寫更嚴格的部分 |
 | `▎URL：` | `18 §135` | ⛔ **不寫**。代碼本身能定位，URL 留在候選 JSON 的 `enex` 欄位 |
 | 計不計則數 | `18 §0` | **一則算一則，計進檔頭「收錄外電共 X 則」**（跟三站一樣，不是側錄那種不計） |
-| 大分類／T/C | `13f:275`／`13f:301` | 走 `add-batch → set-category --pairs → set-tc --pairs`。⚠️ **T（議題）沒有預設，一律照內容判，不要自創** |
+| 大分類／T/C | `13f`「各產線 T／C 由誰下」／「來源預設 C」兩表 | 走 `add-batch → set-category --pairs → set-tc --pairs`。⚠️ **T（議題）沒有預設，一律照內容判，不要自創** |
 | `src_text` | `18 §2` 必帶 | ENEX 直接用 `desc` 原文（`s2_platform_extract.py` 已內建），⛔ 不要寫自己的摘要或備註 |
 | 🔴🟡 重大標記 | prompt 收工第 4 步 | ENEX 素材**一樣要逐則過一次**，臺灣相關一律至少 🟡 |
 | 整則排除 | `18` ／ 計畫書 §三-a | `partner` 含 `TVBS` ＝自家素材，不寫摘要、記進候選檔 `skipped` |
