@@ -305,7 +305,7 @@ python scripts/s2_state.py --file "…/{MMDD}-s2-state.json" \
 | 素材行寫法 | `13e` 素材行節 ＋ `18 §2` | 通用格式以 `13e` 為母規則，`18` 只寫更嚴格的部分 |
 | `▎URL：` | `18 §135` | ⛔ **不寫**。代碼本身能定位，URL 留在候選 JSON 的 `enex` 欄位 |
 | 計不計則數 | `18 §0` | **一則算一則，計進檔頭「收錄外電共 X 則」**（跟三站一樣，不是側錄那種不計） |
-| 大分類／T/C | `13f`「各產線 T／C 由誰下」／「來源預設 C」兩表 | 走 `add-batch → set-category --pairs → set-tc --pairs`。⚠️ **T（議題）沒有預設，一律照內容判，不要自創** |
+| 大分類／T/C | `13f`「各產線 T／C 由誰下」／「來源預設 C」兩表 | ⛔ **不可自己叫 `add-batch`**（見本檔 V5-3）：前兩步由 `s2_platform_merge --apply --in-round` 內部做，跑完再自己下 `set-tc --pairs`。⚠️ **T（議題）沒有預設，一律照內容判，不要自創** |
 | `src_text` | `18 §2` 必帶 | ENEX 直接用 `desc` 原文（`s2_platform_extract.py` 已內建），⛔ 不要寫自己的摘要或備註 |
 | 🔴🟡 重大標記 | prompt 收工第 4 步 | ENEX 素材**一樣要逐則過一次**，臺灣相關一律至少 🟡 |
 | 整則排除 | `18` ／ 計畫書 §三-a | `partner` 含 `TVBS` ＝自家素材，不寫摘要、記進候選檔 `skipped` |
