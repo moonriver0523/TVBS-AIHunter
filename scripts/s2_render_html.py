@@ -649,11 +649,9 @@ function draw(){
         mh.append(btn(`複製（${n}）`,()=>copy(midText(mid,subs),`已複製「${mid}」${n} 則`)));
         list.append(mh);
       }
-      // A32：中主題 ≥8 則、且側欄沒在篩（nf===0）才折——有篩選時使用者已經在
-      // 縮小範圍看，篩出來的東西不該再被二次隱藏（見 Global Constraints）。
-      // ⚠️ 必須有 `mid`（有標題色塊）才折：折起來的東西要有地方放「＋N 則」鈕，
-      // 否則像「(無中主題)」這種沒有標題列的異常分組會摺起來卻沒有展開的入口。
-      const foldOn = !!mh && n>=BIG_MID_N && nf===0;
+      // A32 巨格折疊已於 2026-09-13 使用者訂案廢止：有素材的小分題一律展開列出，
+      // 不再因為中主題則數多就把小分題標題印出來、內容卻摺起來看不到。
+      const foldOn = false;
       let shown=0;              // 跨小分題累計「前 3 則」名額，只花在非標記則上
       const foldedEls=[];       // 這個中主題被摺起來的 .item，供「＋N 則」鈕統一 toggle
       subs.forEach((its,sub)=>{

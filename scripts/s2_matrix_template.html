@@ -576,9 +576,9 @@ function renderList(){
       arr.forEach(r=>{ const k=r.sub||""; if(!subMap.has(k)) subMap.set(k,[]); subMap.get(k).push(r); });
       mh.append(btn(`複製（${arr.length}）`,()=>copy(midText(mid,subMap),`已複製「${mid}」${arr.length} 則`)));
       list.append(mh);
-      // A32：中主題 ≥8 則、且沒有任何篩選在跑（activeFilterCount()===0）才折——
-      // 有篩選時使用者已經在縮小範圍看，篩出來的東西不該再被二次隱藏。
-      const foldOn = arr.length>=BIG_MID_N && activeFilterCount()===0;
+      // A32 巨格折疊已於 2026-09-13 使用者訂案廢止：有素材的小分題一律展開列出，
+      // 不再因為中主題則數多就把小分題標題印出來、內容卻摺起來看不到。
+      const foldOn = false;
       let shown=0;              // 跨小分題累計「前 3 則」名額，只花在非標記則上
       const foldedEls=[];       // 這個中主題被摺起來的 .item，供「＋N 則」鈕統一 toggle
       const bySub=groupBy(arr, r=>r.sub||"");
