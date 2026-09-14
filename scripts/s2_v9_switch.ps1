@@ -89,8 +89,9 @@ function Test-Busy {
 function Invoke-RulesCheck {
     # 🔴 輸出一定要 Out-Host：否則 python 的 stdout 會混進函式回傳值，
     #    `(Invoke-RulesCheck) -ne 0` 變成拿陣列比對而永遠為真（2026-09-14 實測踩到）。
-    & python -X utf8 $check --quiet | Out-Host
-    return $LASTEXITCODE
+    # python 叫不起來時不能讓腳本在「已換成 V9」的狀態下中止 → 當成檢查失敗回傳，走自動還原。
+    try { & python -X utf8 $check --quiet | Out-Host; return $LASTEXITCODE }
+    catch { Write-Host "❌ 無法執行 rules_check：$($_.Exception.Message)" -ForegroundColor Red; return 99 }
 }
 
 function Show-Status {
@@ -123,7 +124,11 @@ if ((Test-Busy) -and -not $Force) {
 if ($On) {
     $cur = Get-LiveVersion
     if ($cur -eq 'V9') { Write-Host '已經是 V9，不必再切。' -ForegroundColor Green; exit 0 }
-    if ($cur -ne 'V8') { Write-Host "❌ 目前 live 是 $cur，不是 V8；本支只負責 V8 ⇄ V9。" -ForegroundColor Red; exit 1 }
+    if ($cur -ne 'V8') {
+        Write-Host "❌ 目前 live 是 $cur，不是 V8；本支只負責 V8 ⇄ V9。" -ForegroundColor Red
+        if ($cur -eq 'MIXED') { Write-Host '   兩檔切一半：先跑 -Off 還原成 V8，再重跑 -On。' }
+        exit 1
+    }
     foreach ($n in $names) {
         if (-not (Test-Path -LiteralPath (Join-Path $v9dir $n))) { Write-Host "❌ 缺 V9 來源：$n" -ForegroundColor Red; exit 1 }
         $fork = Get-ForkBase $n; $now = Sha (Join-Path $common $n)
@@ -150,6 +155,11 @@ if ($On) {
 if ($Off) {
     $cur = Get-LiveVersion
     if ($cur -eq 'V8') { Write-Host '已經是 V8，不必再切。' -ForegroundColor Green; exit 0 }
+    # UNKNOWN／MISSING＝版頭被改過或缺檔，不是本支切出來的狀態；蓋掉可能丟別人的修改。
+    if ($cur -in @('UNKNOWN', 'MISSING') -and -not $Force) {
+        Write-Host "❌ live 版頭是 $cur（不是 V9／MIXED），可能有人手改過。先 git diff 確認；確定要用 V8 備份蓋掉請加 -Force。" -ForegroundColor Red
+        exit 1
+    }
     foreach ($n in $names) {
         $bak = Join-Path $bakdir $n
         if (-not (Test-Path -LiteralPath $bak)) { Write-Host "❌ 缺 V8 備份：$bak（改用 git 還原）" -ForegroundColor Red; exit 1 }
