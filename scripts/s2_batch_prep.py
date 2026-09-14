@@ -112,6 +112,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import s2_state  # noqa: E402  from-raw 讀狀態檔（唯讀，D12 已在庫標記）
@@ -1706,25 +1707,56 @@ def _iter_rename_entries(kind, payload):
 def _refuse_if_production_state(path):
     """拒絕操作生產狀態檔（R33 明文：禁止改生產 state、不繞 guard）。
 
-    判準沿用 `s2_state.py` 自己找狀態檔的方式：檔名 `{MMDD}-s2-state.json`
-    （`default_file()`／`_yesterday_state_path()`），或路徑落在
-    `s2_state.STATE_DIR`（含其下的 `Archive` 封存）底下。兩者任一命中就拒絕，
-    不判斷內容——寧可誤擋一份湊巧同名的工作檔，不能漏擋生產 state。"""
+    判準沿用 `s2_state.py` 自己找狀態檔的方式：
+      (a) 檔名符合 `{MMDD}-s2-state.json`（`default_file()`／
+          `_yesterday_state_path()`）——不管落在哪個目錄都拒絕；
+      (b) 檔案**直接**落在 `s2_state.STATE_DIR` 根目錄底下——掃帶輪次的
+          正式狀態檔就放在這一層；
+      (c) 檔案落在 `s2_state.STATE_DIR/Archive/**` 封存底下。
+    三者任一命中就拒絕，不判斷內容——寧可誤擋一份湊巧同名的工作檔，
+    不能漏擋生產 state。
+
+    🔴 2026-09-14 修正：原本用 `commonpath(ab, state_dir) == state_dir` 判「在
+    STATE_DIR 底下」，這連**帶日期的子資料夾**（`STATE_DIR\\20260909\\
+    ns_batch_0700.json` 這種掃帶輪次的工作 batch，`s2_scan.ps1` 每輪 cwd 就設
+    在這一層）都一併擋掉——掃帶當輪的工作檔反而全部被誤判成生產 state，
+    rc=2、什麼都沒寫。改成只擋「根目錄直接落檔」與「Archive 底下」這兩種
+    真正的生產路徑，帶日期的子資料夾（不是 Archive）維持放行。"""
     ab = os.path.abspath(path)
     base = os.path.basename(ab)
+
+    if _STATE_FILE_RE.match(base):
+        print(f'✗ 拒絕操作：{path} 看起來是生產狀態檔（檔名符合 '
+              f'{{MMDD}}-s2-state.json 命名慣例）。'
+              f'rename-field 只准動工作 batch／entries.json，不准碰生產 state '
+              f'（R33 明文界線；真的要修生產 state 請走 s2_state.py 的正常子指令）。',
+              file=sys.stderr)
+        sys.exit(2)
+
     try:
-        state_dir = os.path.abspath(s2_state.STATE_DIR).lower()
+        state_dir = os.path.abspath(s2_state.STATE_DIR)
     except Exception:
         state_dir = None
-    under_state_dir = False
-    if state_dir:
+    if not state_dir:
+        return
+
+    state_dir_l = state_dir.lower()
+    ab_l = ab.lower()
+    parent_l = os.path.dirname(ab_l)
+    archive_l = os.path.join(state_dir_l, 'archive')
+
+    where = None
+    if parent_l == state_dir_l:
+        where = f'直接落在 {s2_state.STATE_DIR} 根目錄底下'
+    else:
         try:
-            under_state_dir = os.path.commonpath([ab.lower(), state_dir]) == state_dir
+            if os.path.commonpath([ab_l, archive_l]) == archive_l:
+                where = f'落在 {s2_state.STATE_DIR} 的 Archive 封存底下'
         except ValueError:
-            under_state_dir = False  # 不同磁碟機（Windows），commonpath 會炸，視為不在底下
-    if _STATE_FILE_RE.match(base) or under_state_dir:
-        where = f'（位於 {s2_state.STATE_DIR} 底下）' if under_state_dir else ''
-        print(f'✗ 拒絕操作：{path} 看起來是生產狀態檔{where}。'
+            pass  # 不同磁碟機（Windows），commonpath 會炸，視為不在底下
+
+    if where:
+        print(f'✗ 拒絕操作：{path} 看起來是生產狀態檔（{where}）。'
               f'rename-field 只准動工作 batch／entries.json，不准碰生產 state '
               f'（R33 明文界線；真的要修生產 state 請走 s2_state.py 的正常子指令）。',
               file=sys.stderr)
@@ -1740,6 +1772,7 @@ def cmd_rename_field(args):
     _refuse_if_production_state(args.batch)
 
     in_abs = os.path.abspath(args.batch)
+    explicit_out = args.out is not None
     out = args.out
     if out:
         if os.path.abspath(out) == in_abs:
@@ -1753,6 +1786,19 @@ def cmd_rename_field(args):
             print(f'✗ 預設輸出檔名剛好等於輸入檔（{out}），請改用 --out 指定別的路徑',
                   file=sys.stderr)
             sys.exit(2)
+
+    # `--out` 也是寫入路徑，一樣要擋生產 state——不然 `--out 0914-s2-state.json`
+    # 會繞過上面對 `args.batch`（輸入檔）的檢查，直接把生產狀態檔當輸出目標覆寫掉。
+    _refuse_if_production_state(out)
+
+    # 只在**用預設輸出路徑**時檔案已存在才拒絕：明確指定 `--out` 是使用者的
+    # 主動選擇，維持既有行為（直接覆寫，不多此一舉檢查）；沒帶 --out 卻湊巧
+    # 撞到已存在的 `<name>.renamed.json`，代表這個檔名已經被別的東西用過，
+    # 悄悄覆寫掉比拒絕危險（R33 同一個「寧可誤擋」原則）。
+    if not explicit_out and os.path.exists(out) and not getattr(args, 'dry_run', False):
+        print(f'✗ 預設輸出檔 {out} 已存在，拒絕覆寫——請明確帶 --out 指到別的路徑'
+              f'（或指到這個路徑，代表你確認要覆寫）。', file=sys.stderr)
+        sys.exit(2)
 
     try:
         kind, payload = _load_batch_any(args.batch)
@@ -1801,8 +1847,23 @@ def cmd_rename_field(args):
     if getattr(args, 'dry_run', False):
         return
 
-    with open(out, 'w', encoding='utf-8') as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    # 原子寫入：先寫同目錄下的暫存檔，成功後才 `os.replace` 蓋到目的檔——
+    # 寫到一半（磁碟滿／權限問題／中途被砍）不會留下一份半寫壞的 `out`。
+    # 同目錄是刻意的：`os.replace` 跨磁碟機不保證原子，暫存檔留在同一個
+    # 磁碟機／同一個檔案系統才成立。
+    out_dir = os.path.dirname(os.path.abspath(out)) or '.'
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=out_dir, prefix='.s2rf_tmp_', suffix='.json')
+    try:
+        with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, out)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
     print(f'已寫入 {out}（原檔 {args.batch} 未動）', file=sys.stderr)
 
 
@@ -1914,7 +1975,10 @@ def main():
     p_rf.add_argument('batch', help='工作 batch JSON（list／wrapper／flatmap 三種既有形狀皆可，不可為生產 state）')
     p_rf.add_argument('--from', dest='from_key', required=True, help='要改掉的舊鍵名')
     p_rf.add_argument('--to', dest='to_key', required=True, help='改成的新鍵名')
-    p_rf.add_argument('--out', help='輸出路徑；不給就用 <檔名>.renamed.json（永不覆寫輸入檔）')
+    p_rf.add_argument('--out', help='輸出路徑；不給就用 <檔名>.renamed.json（永不覆寫輸入檔）。'
+                       '不給 --out 時若預設輸出檔已存在會拒絕（避免誤覆寫）；'
+                       '明確帶 --out 則一律直接覆寫該路徑，不檢查是否已存在。'
+                       '--out 與輸入檔同樣會被擋生產 state（R33）。')
     p_rf.add_argument('--dry-run', action='store_true', help='只印預覽（改到/跳過筆數），不寫任何檔案')
     p_rf.set_defaults(func=cmd_rename_field)
 

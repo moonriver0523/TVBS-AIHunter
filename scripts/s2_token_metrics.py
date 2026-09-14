@@ -224,13 +224,39 @@ def classify_bash_tool(cmd):
         # 只有「真的用 python 呼叫、但抓到的子指令名不在已知名單」才落
         # `s2_batch_prep:?<名字>` 這個明確可辨識的未知桶，不再悄悄併入
         # 's2_batch_prep.py' 通用桶（不然又會重演「看得到次數、看不出是誰」）。
-        is_invocation = re.search(r'\bpython3?\b[^\n]*s2_batch_prep\.py', cmd) is not None
-        if is_invocation:
-            m = re.search(r's2_batch_prep\.py["\']?\s+([a-z][a-z-]*)', cmd)
-            if m:
-                if m.group(1) in BATCH_PREP_SUBCOMMANDS:
-                    return f's2_batch_prep:{m.group(1)}'
-                return f's2_batch_prep:?{m.group(1)}'
+        #
+        # 🔴 2026-09-14 修正：原本 `is_invocation` 判準是
+        # `python3?\b[^\n]*s2_batch_prep\.py`——`[^\n]*` 只排除**真正的換行字元**，
+        # 一支 heredoc（`python - <<'PY' ... p='scripts/s2_batch_prep.py'\ns=io.…`）
+        # 送進 Bash 工具時整段常常是同一個字串（沒有實際換行、或換行落在
+        # 這個排除集之外），於是「python」跟字串賦值裡湊巧出現的
+        # `s2_batch_prep.py` 就被誤判成一次真的呼叫，接著抓到賦值後下一行的
+        # 開頭字元（例如 `s=io.` 的 `s`）當子指令，長出 `s2_batch_prep:?s`
+        # 這種幽靈桶。改成要求「python」與 `s2_batch_prep.py` 之間只能是
+        # 一般 CLI 旗標／路徑用字（不含引號、`<`、管線、`;`、`&`），且子指令
+        # token 必須**緊接在腳本路徑後面**（純空白分隔）——這樣的形狀只有真正
+        # 的命令列呼叫才會出現：字串賦值一定會被引號擋在腳本路徑左右，
+        # heredoc 一定會被 `<<` 擋在 python 與腳本路徑之間。
+        #
+        # 路徑本身允許整段用單引號／雙引號包住（`python "E:/x/s2_batch_prep.py"
+        # build` 這種帶空白路徑的正常寫法），但引號必須**完整包住整個路徑**、
+        # 緊接在空白之後開始——跟 `p='scripts/s2_batch_prep.py'` 這種賦值裡的
+        # 引號結構相同，兩者的差異不在引號本身，而在 python 與這段路徑之間
+        # 是否夾了 `<<` heredoc 記號（見下方旗標／參數字元集排除 `<`）。
+        m = re.search(
+            r'(?<![\'"\w])python3?'          # 呼叫用字，不可是字串/識別字的一部分
+            r'(?:\s+(?:"[^"\n]*"|\'[^\'\n]*\'|[^\s\'"<>|;&]+))*?'  # 旗標／參數
+            r'\s+(?:"[^"\n]*?s2_batch_prep\.py"'
+            r'|\'[^\'\n]*?s2_batch_prep\.py\''
+            r'|[^\s\'"<>|;&]*?s2_batch_prep\.py)'  # 腳本路徑（裸或整段加引號）
+            r'\s+([a-z][a-z0-9-]*)\b',        # 緊接在後、純空白分隔的子指令 token
+            cmd,
+        )
+        if m:
+            sub = m.group(1)
+            if sub in BATCH_PREP_SUBCOMMANDS:
+                return f's2_batch_prep:{sub}'
+            return f's2_batch_prep:?{sub}'
         return 's2_batch_prep.py'
     if 's2_render' in cmd:
         return 's2_render.py'

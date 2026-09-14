@@ -78,8 +78,29 @@ for cmd, want in (
     # 不能悄悄併入通用 's2_batch_prep.py' 桶（否則又看不出是誰在跑陌生指令）。
     ('python scripts/s2_batch_prep.py totally-new-sub x.json',
      's2_batch_prep:?totally-new-sub'),
+    ('python scripts/s2_batch_prep.py check-entries x.json',
+     's2_batch_prep:?check-entries'),
     ('python scripts/s2_render.py --file x.json', 's2_render.py'),
     ('ls -la', 'Bash（其他）'),
+    # 2026-09-14（review fix）：heredoc／字串賦值裡湊巧提到 s2_batch_prep.py
+    # 不算「真的呼叫」，要退回通用桶，不能長出 's2_batch_prep:?s' 這種幽靈桶
+    # （真實審查案例：`python - <<'PY' ... p='scripts/s2_batch_prep.py'\ns=io.…`，
+    # `<<` heredoc 記號夾在 python 與腳本路徑之間，且路徑本身是賦值裡的字串）。
+    (
+        "python - <<'PY'\nimport io, json\n"
+        "p='scripts/s2_batch_prep.py'\n"
+        "s=io.open(p, encoding='utf-8').read()\n"
+        "PY",
+        's2_batch_prep.py',
+    ),
+    # 同一種幽靈但整段擠成一行（沒有真正換行、退化成分號分隔）也要一樣退回：
+    (
+        "python -c \"import io; p='scripts/s2_batch_prep.py'; "
+        "s=io.open(p).read()\"",
+        # 這行其實是 `python -c`，會先被 classify_python_c 接走，
+        # 不會走到 s2_batch_prep 分支——放在這裡只是連帶驗證兩條分支不衝突。
+        'python -c:other',
+    ),
 ):
     got = tm.classify_bash_tool(cmd)
     check(f'分桶：{want}', got == want, f'實得 {got}')

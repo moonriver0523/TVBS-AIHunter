@@ -19,6 +19,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import sys
 import tempfile
 from contextlib import redirect_stdout, redirect_stderr
@@ -188,6 +189,142 @@ check('⑩ dry-run 沒有寫出任何檔案', not os.path.exists(out10_path))
 check('⑩ dry-run 仍印出改到 2 筆的預覽', '2 筆改到' in out10, out10[:200])
 check('⑩ dry-run 原檔不變', read_json(p10)[0].get('raw_entry') == '甲')
 
+# ── ⑪ STATE_DIR 判準（2026-09-14 review fix）─────────────────────────
+# 舊版 `commonpath(ab, state_dir) == state_dir` 會把**帶日期的子資料夾**
+# （掃帶輪次工作 batch 實際落腳處，`s2_scan.ps1` 每輪 cwd 設在這一層）也當成
+# 生產 state 一併擋掉。用 monkeypatch STATE_DIR 到一個乾淨的 tmp 目錄，
+# 分別驗根目錄／Archive 底下要擋，帶日期子資料夾要放行。
+STATE_ROOT = tempfile.mkdtemp(prefix='s2_rf_state_')
+_orig_state_dir = bp.s2_state.STATE_DIR
+bp.s2_state.STATE_DIR = STATE_ROOT
+
+os.makedirs(os.path.join(STATE_ROOT, '20260909'), exist_ok=True)
+os.makedirs(os.path.join(STATE_ROOT, 'Archive', '2026'), exist_ok=True)
+
+# ⑪a 帶日期子資料夾（非 Archive）── 要放行，不是生產 state
+p11a = write_json(os.path.join(STATE_ROOT, '20260909', 'ns_batch_0700.json'), [
+    {'id': 'NS0001', 'raw_entry': '甲'},
+])
+out11a, code11a = run(Args(batch=p11a, from_key='raw_entry', to_key='entry'))
+check('⑪a 日期子資料夾的工作 batch → 放行（exit 0）', code11a == 0, out11a[:200])
+check('⑪a 有寫出改名後的檔案',
+      os.path.exists(os.path.join(STATE_ROOT, '20260909', 'ns_batch_0700.renamed.json')))
+
+# ⑪b 直接落在 STATE_DIR 根目錄 ── 要拒絕
+p11b = write_json(os.path.join(STATE_ROOT, 'ns_batch_0700.json'), [
+    {'id': 'NS0002', 'raw_entry': '乙'},
+])
+out11b, code11b = run(Args(batch=p11b, from_key='raw_entry', to_key='entry'))
+check('⑪b STATE_DIR 根目錄直接落檔 → 拒絕（非 0 exit）', code11b != 0, code11b)
+check('⑪b 沒有寫出任何檔案',
+      not os.path.exists(os.path.join(STATE_ROOT, 'ns_batch_0700.renamed.json')))
+
+# ⑪c Archive 封存底下 ── 要拒絕（含更深一層巢狀）
+p11c = write_json(os.path.join(STATE_ROOT, 'Archive', '2026', 'ns_batch_0700.json'), [
+    {'id': 'NS0003', 'raw_entry': '丙'},
+])
+out11c, code11c = run(Args(batch=p11c, from_key='raw_entry', to_key='entry'))
+check('⑪c Archive 封存底下 → 拒絕（非 0 exit）', code11c != 0, code11c)
+check('⑪c 沒有寫出任何檔案',
+      not os.path.exists(os.path.join(STATE_ROOT, 'Archive', '2026', 'ns_batch_0700.renamed.json')))
+
+# ⑪d --out 指到生產 state 檔名 → 一樣要拒絕（不能繞過輸入檔檢查、只查 --out）
+p11d = write_json('out_target_1.json', [{'id': 'NS0004', 'raw_entry': '丁'}])
+out11d_target = os.path.join(TMP, '0914-s2-state.json')
+out11d, code11d = run(Args(batch=p11d, from_key='raw_entry', to_key='entry',
+                            out=out11d_target))
+check('⑪d --out 指到 {MMDD}-s2-state.json → 拒絕（非 0 exit）', code11d != 0, code11d)
+check('⑪d 沒有寫出任何檔案', not os.path.exists(out11d_target))
+
+bp.s2_state.STATE_DIR = _orig_state_dir
+shutil.rmtree(STATE_ROOT, ignore_errors=True)
+
+# ── ⑫ 真實路徑 dry-run（不 monkeypatch，用真正的 s2_state.STATE_DIR）────
+# 驗證掃帶輪次資料夾（STATE_DIR\<YYYYMMDD>\...）底下真實存在的工作 batch
+# 能被放行、且 --dry-run 真的不寫任何檔案。找不到真實檔案就跳過（環境依賴）。
+_real_state_dir = _orig_state_dir
+_real_candidates = []
+try:
+    for _d in sorted(os.listdir(_real_state_dir)):
+        _dp = os.path.join(_real_state_dir, _d)
+        if not (os.path.isdir(_dp) and _d[:1].isdigit() and _d.lower() != 'archive'):
+            continue
+        for _f in os.listdir(_dp):
+            if _f.endswith('.json') and '_batch_' in _f:
+                _real_candidates.append(os.path.join(_dp, _f))
+except OSError:
+    pass
+
+if _real_candidates:
+    _real_p = _real_candidates[0]
+    _real_out = _real_p[:-5] + '.renamed.json'
+    out12, code12 = run(Args(batch=_real_p, from_key='__不存在的鍵__', to_key='__也不存在__',
+                              dry_run=True))
+    # 來源鍵在真實檔案裡幾乎必然不存在（故意挑一個不存在的鍵名），
+    # 所以預期是「來源鍵全缺」拒絕，但重點是**不管哪種結果都不寫檔**、
+    # 且不能被誤判成生產 state（那會是完全不同的錯誤訊息、rc=2 且無關來源鍵）。
+    check('⑫ 真實日期子資料夾路徑不被誤判成生產 state',
+          '生產狀態檔' not in out12, out12[:300])
+    check('⑫ dry-run 對真實路徑沒有寫出任何檔案', not os.path.exists(_real_out))
+else:
+    print('SKIP  ⑫ 真實路徑 dry-run：找不到 STATE_DIR 底下任何日期子資料夾的 '
+          '_batch_ 工作檔，環境依賴、略過（不算失敗）')
+
+# ── ⑬ 預設輸出檔已存在 → 拒絕；明確 --out 則照樣覆寫 ─────────────────────
+p13 = write_json('exists_1.json', [{'id': 'RT0061', 'raw_entry': '甲'}])
+default_out13 = os.path.join(TMP, 'exists_1.renamed.json')
+with open(default_out13, 'w', encoding='utf-8') as f:
+    f.write('{"pre-existing": true}')  # 湊巧已經有這個檔名的東西
+out13, code13 = run(Args(batch=p13, from_key='raw_entry', to_key='entry'))
+check('⑬a 預設輸出檔已存在 → 拒絕（非 0 exit）', code13 != 0, code13)
+check('⑬a 既有檔案內容沒被動到',
+      read_json(default_out13) == {'pre-existing': True})
+
+# 明確帶 --out 指到同一個路徑 → 視為使用者主動選擇，照常覆寫
+out13b, code13b = run(Args(batch=p13, from_key='raw_entry', to_key='entry',
+                            out=default_out13))
+check('⑬b 明確 --out 指到已存在的檔案 → 照常覆寫（exit 0）', code13b == 0, code13b)
+check('⑬b 內容確實被改名後的結果覆寫',
+      read_json(default_out13)[0].get('entry') == '甲')
+
+# ── ⑭ 原子寫入：模擬寫檔中途失敗，輸出檔與暫存檔都不留殘骸 ────────────────
+p14 = write_json('atomic_1.json', [{'id': 'RT0071', 'raw_entry': '甲'}])
+out14_path = os.path.join(TMP, 'atomic_1.renamed.json')
+
+
+def _boom(*a, **kw):
+    raise RuntimeError('模擬寫檔中途失敗')
+
+
+def run_expect_exception(args):
+    """跟 `run()` 一樣包 stdout/stderr，但連一般例外（不只 SystemExit）都接住——
+    ⑭ 故意讓 `json.dump` 中途炸掉，驗的是「例外會往外傳、不被吞掉」，
+    用 `run()` 會讓這個例外直接砸穿測試腳本本身。"""
+    out, err = io.StringIO(), io.StringIO()
+    code = 1
+    try:
+        with redirect_stdout(out), redirect_stderr(err):
+            bp.cmd_rename_field(args)
+        code = 0
+    except SystemExit as e:
+        code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
+    except Exception:
+        code = 1
+    return out.getvalue() + err.getvalue(), code
+
+
+_orig_json_dump = bp.json.dump
+bp.json.dump = _boom
+try:
+    out14, code14 = run_expect_exception(Args(batch=p14, from_key='raw_entry', to_key='entry'))
+finally:
+    bp.json.dump = _orig_json_dump
+
+check('⑭a 模擬寫檔失敗 → 非 0 exit（例外沒被吞掉）', code14 != 0, code14)
+check('⑭a 沒有留下半寫壞的輸出檔', not os.path.exists(out14_path))
+_leftover_tmp = [f for f in os.listdir(TMP) if f.startswith('.s2rf_tmp_')]
+check('⑭a 沒有留下暫存檔殘骸', not _leftover_tmp, _leftover_tmp)
+
 # ── guard 驗證附帶檢查：呼叫 rename-field 這條指令本身要被 guard 放行 ────
 # （R33 明文界線：這支工具不是繞 guard，是既有授權路徑的窄出口——guard 不必改）
 sys.path.insert(0, HERE)
@@ -197,7 +334,6 @@ _cmd = ('python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py rename-field '
 check('guard：呼叫 rename-field 的標準指令被放行（basename 命中 s2_ 白名單）',
       guard.decide('Bash', _cmd) is None)
 
-import shutil  # noqa: E402
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)
