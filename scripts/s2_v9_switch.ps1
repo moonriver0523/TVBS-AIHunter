@@ -156,6 +156,12 @@ if ($Off) {
     $cur = Get-LiveVersion
     if ($cur -eq 'V8') { Write-Host '已經是 V8，不必再切。' -ForegroundColor Green; exit 0 }
     # UNKNOWN／MISSING＝版頭被改過或缺檔，不是本支切出來的狀態；蓋掉可能丟別人的修改。
+    # 逐檔檢查：MIXED 裡若有一檔是手改版頭（UNKNOWN），整體判定看不出來，蓋掉會丟修改。
+    $odd = @($names | Where-Object { (Get-FileVersion (Join-Path $common $_)) -notin @('V8', 'V9') })
+    if ($odd.Count -gt 0 -and -not $Force) {
+        Write-Host "❌ 這些檔版頭不是 V8／V9（可能有人手改過）：$($odd -join '、')。先 git diff 確認；確定要用 V8 備份蓋掉請加 -Force。" -ForegroundColor Red
+        exit 1
+    }
     if ($cur -in @('UNKNOWN', 'MISSING') -and -not $Force) {
         Write-Host "❌ live 版頭是 $cur（不是 V9／MIXED），可能有人手改過。先 git diff 確認；確定要用 V8 備份蓋掉請加 -Force。" -ForegroundColor Red
         exit 1
