@@ -706,8 +706,8 @@ def _is_offload_shell(data):
     不是「隨便一個 list 裡有個 dict 湊巧含 type/text 鍵」就中——避免把
     真正的站方 raw（裸陣列剛好有 type/text 欄位）誤判成殼。"""
     return bool(data) and all(
-        isinstance(it, dict) and it.get('type') == 'text'
-        and isinstance(it.get('text'), str)
+        isinstance(it, dict) and set(it.keys()) == {'type', 'text'}
+        and it.get('type') == 'text' and isinstance(it.get('text'), str)
         for it in data)
 
 
@@ -1795,7 +1795,7 @@ def _refuse_if_production_state(path):
     """拒絕操作生產狀態檔（R33 明文：禁止改生產 state、不繞 guard）。
 
     判準沿用 `s2_state.py` 自己找狀態檔的方式：
-      (a) 檔名符合 `{MMDD}-s2-state.json`（`default_file()`／
+      (a) 檔名符合 `{MMDD}-<線別>-state.json`（s2／ENEX／ABC…；`default_file()`／
           `_yesterday_state_path()`）——不管落在哪個目錄都拒絕；
       (b) 檔案**直接**落在 `s2_state.STATE_DIR` 根目錄底下——掃帶輪次的
           正式狀態檔就放在這一層；
@@ -1814,7 +1814,7 @@ def _refuse_if_production_state(path):
 
     if _STATE_FILE_RE.match(base):
         print(f'✗ 拒絕操作：{path} 看起來是生產狀態檔（檔名符合 '
-              f'{{MMDD}}-s2-state.json 命名慣例）。'
+              f'{{MMDD}}-<s2|ENEX|ABC…>-state.json 命名慣例）。'
               f'rename-field 只准動工作 batch／entries.json，不准碰生產 state '
               f'（R33 明文界線；真的要修生產 state 請走 s2_state.py 的正常子指令）。',
               file=sys.stderr)
