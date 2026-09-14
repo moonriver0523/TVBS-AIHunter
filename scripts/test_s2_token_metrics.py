@@ -54,9 +54,30 @@ for cmd, want in (
     ('python "E:/x/s2_batch_prep.py" build --site ap', 's2_batch_prep:build'),
     ('python scripts/s2_batch_prep.py --help', 's2_batch_prep.py'),  # 認不出就回舊桶名
     # 幽靈桶：.py 後面接第二個路徑時，`scripts` 會被抓成子指令。只收已知子指令。
+    # 這兩個案例不是用 python 呼叫（只是 grep/wc 提到檔名），要退回舊桶名，
+    # 不能落進 's2_batch_prep:?scripts' 未知桶——那個桶只留給「真的用 python
+    # 呼叫、但子指令名不在名單」的情況。
     ('grep -n "cap" scripts/s2_batch_prep.py scripts/test_s2_batch_prep.py',
      's2_batch_prep.py'),
     ('wc -l scripts/s2_batch_prep.py scripts/s2_render.py', 's2_batch_prep.py'),
+    # 2026-09-14（S2 省 Token 評估 P0）：補齊 s2_batch_prep.py 真實子指令名單
+    # （原本漏了 from-raw／timeline／fill-src-text／collate-category／concat）。
+    ('python scripts/s2_batch_prep.py from-raw raw.json --state s.json',
+     's2_batch_prep:from-raw'),
+    ('python scripts/s2_batch_prep.py timeline raw.json', 's2_batch_prep:timeline'),
+    ('python scripts/s2_batch_prep.py fill-src-text batch.json --detail d.json',
+     's2_batch_prep:fill-src-text'),
+    ('python scripts/s2_batch_prep.py collate-category batch1.json batch2.json',
+     's2_batch_prep:collate-category'),
+    ('python scripts/s2_batch_prep.py concat a.json b.json --site ap',
+     's2_batch_prep:concat'),
+    # R33：另一個 agent 同時在加的窄範圍子指令，先補分類不等落地。
+    ('python scripts/s2_batch_prep.py rename-field batch.json --from a --to b',
+     's2_batch_prep:rename-field'),
+    # 真的用 python 呼叫、但子指令名不在已知名單——要落明確可辨識的未知桶，
+    # 不能悄悄併入通用 's2_batch_prep.py' 桶（否則又看不出是誰在跑陌生指令）。
+    ('python scripts/s2_batch_prep.py totally-new-sub x.json',
+     's2_batch_prep:?totally-new-sub'),
     ('python scripts/s2_render.py --file x.json', 's2_render.py'),
     ('ls -la', 'Bash（其他）'),
 ):

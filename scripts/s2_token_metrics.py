@@ -167,9 +167,14 @@ S2_STATE_SUBCOMMANDS = (
 
 
 # `s2_batch_prep.py` 的子指令（跟該檔 add_parser() 那份對齊；新增子指令要一併補）。
+# 2026-09-14（S2 省 Token 評估 P0）：原本漏了 from-raw／timeline／fill-src-text／
+# collate-category／concat 五個子指令，這五個都落到通用 's2_batch_prep.py' 桶，
+# 看不出實際熱點。rename-field 是另一個 agent 同時在 s2_batch_prep.py 上加的
+# 窄範圍子指令（R33），這裡先補上分類，不等它落地才補。
 BATCH_PREP_SUBCOMMANDS = (
-    'dump', 'build', 'unwrap', 'inspect', 'search', 'snapshot',
-    'compare', 'dedup-check',
+    'dump', 'build', 'from-raw', 'unwrap', 'inspect', 'search', 'snapshot',
+    'timeline', 'fill-src-text', 'collate-category', 'concat',
+    'compare', 'dedup-check', 'rename-field',
 )
 
 
@@ -211,10 +216,21 @@ def classify_bash_tool(cmd):
         # 因此只能回頭爬 transcript。沒有這一刀，任何修法都無法用 --diff 驗收。
         # ⚠️ 只收**已知**子指令：不設限的話 `grep -n "cap" scripts/s2_batch_prep.py
         #    scripts/test_s2_batch_prep.py` 會把第二個路徑的 `scripts` 抓成子指令，
-        #    長出 `s2_batch_prep:scripts` 這種幽靈桶。認不出就退回舊桶名。
-        m = re.search(r's2_batch_prep\.py["\']?\s+([a-z][a-z-]*)', cmd)
-        if m and m.group(1) in BATCH_PREP_SUBCOMMANDS:
-            return f's2_batch_prep:{m.group(1)}'
+        #    長出 `s2_batch_prep:scripts` 這種幽靈桶。
+        # 2026-09-14（P0）：先判斷這行是不是真的用 python 呼叫這支腳本
+        # （`python ... s2_batch_prep.py <sub>`），不是的話（grep／wc 之類只是
+        # 提到檔名的呼叫）一律退回舊桶名 's2_batch_prep.py'，維持既有測試斷言
+        # 不變——那些案例本來就不是「呼叫了某個子指令」，硬塞進未知桶只會誤導。
+        # 只有「真的用 python 呼叫、但抓到的子指令名不在已知名單」才落
+        # `s2_batch_prep:?<名字>` 這個明確可辨識的未知桶，不再悄悄併入
+        # 's2_batch_prep.py' 通用桶（不然又會重演「看得到次數、看不出是誰」）。
+        is_invocation = re.search(r'\bpython3?\b[^\n]*s2_batch_prep\.py', cmd) is not None
+        if is_invocation:
+            m = re.search(r's2_batch_prep\.py["\']?\s+([a-z][a-z-]*)', cmd)
+            if m:
+                if m.group(1) in BATCH_PREP_SUBCOMMANDS:
+                    return f's2_batch_prep:{m.group(1)}'
+                return f's2_batch_prep:?{m.group(1)}'
         return 's2_batch_prep.py'
     if 's2_render' in cmd:
         return 's2_render.py'
@@ -400,6 +416,13 @@ def measure(session_path):
     output = sum(u.get('output_tokens', 0) for u in last_usage.values())
     input_tok = sum(u.get('input_tokens', 0) for u in last_usage.values())
 
+    # 2026-09-14（S2 省 Token 評估 P0）：單位備忘，避免混用——
+    # 'requests' 是去重後的 message.id 數，約等於一次模型請求（不是 HTTP 次數，
+    # transcript 看不到底層 HTTP 重試/分段）；'tool_calls' 是 tool_use content
+    # block 數（一次工具呼叫算一次，不分 Bash 內部又跑了幾個子指令）；
+    # 'tool_calls_by_name' 底下的 's2_batch_prep:<sub>' 等桶則是同一次 Bash
+    # 工具呼叫裡「呼叫了哪個 shell 子指令」的分類，跟 'tool_calls' 是不同層級
+    # 的計數（不要拿子指令桶的次數去對 tool_calls 或 requests）。
     return {
         'session_file': os.path.basename(session_path),
         'requests': len(last_usage),
