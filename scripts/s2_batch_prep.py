@@ -156,6 +156,54 @@ INSPECT_TEXT_BUDGET = 28000
 INSPECT_PREVIEW_CHARS = 200
 
 
+def _lint_row(entry_text, row):
+    """§四（R31/T12）：`build` 出口跑一次跟 `add-batch` 入庫時**同一套**共用
+    lint——直接呼叫 `s2_state.fmt_issues`／`pretag.lint` 這兩個既有純函式，
+    不複製規則、不另立一份會漂移的判準。呼叫參數對齊 `s2_state.cmd_add_batch`
+    實際呼叫 `pretag.lint()` 那一行（`sb_count=sb, footage_type=ft, tc=e.get("tc")`），
+    只是這裡拿的是 build 當下手上的 row 欄位，不是 add-batch 那邊算好的 `sb`
+    （那邊會依 `sb_applicable()` 把「數不出來」轉成 None，build 沒有原始
+    src_text 可判，直接傳 row 既有的 sb_count／footage_type，兩邊在多數情況
+    結果一致，差異只在 build 這關可能多幾則「數不出來」也照樣被當數字檢查——
+    這支只警告不擋，多印幾行提示不算壞事）。
+
+    ⚠️ **只警告，不修稿、不擋 build、不改輸出檔內容**——跟 `add-batch` 寫入時
+    的既有原則相同；檢查本身壞掉也不能拖累 build（外層已包 try/except）。
+    """
+    msgs = list(s2_state.fmt_issues(entry_text))
+    try:
+        msgs += list(pretag.lint(entry_text, sb_count=row.get('sb_count'),
+                                  footage_type=row.get('footage_type'),
+                                  tc=row.get('tc')))
+    except Exception:
+        pass
+    return msgs
+
+
+def _print_build_lint_warnings(warnings):
+    """印一份精簡的『ID: 原因』警告清單，長度受 `INSPECT_TEXT_BUDGET` 封頂——
+    跟 `inspect --fields` 同一個 28,000 字元預算（T9），避免這份警告本身
+    塞爆 Bash 工具回傳的靜默截斷線。只印到 stderr，不影響 stdout／輸出檔。"""
+    if not warnings:
+        return
+    header = (f'⚠️ 前置格式／lint 警告 {len(warnings)} 項（只警告，不擋 build、'
+              f'不改 entry；建議送 add-batch 之前先修，比事後 update-entry 便宜）：')
+    lines = [header]
+    total_len = len(header) + 1
+    shown = 0
+    for w in warnings:
+        ln = '  ' + w
+        if total_len + len(ln) + 1 > INSPECT_TEXT_BUDGET:
+            break
+        lines.append(ln)
+        total_len += len(ln) + 1
+        shown += 1
+    if shown < len(warnings):
+        lines.append(f'…另 {len(warnings) - shown} 項略（總長度受 '
+                     f'{INSPECT_TEXT_BUDGET:,} 字元預算限制，非全部截斷）')
+    print('\n'.join(lines), file=sys.stderr)
+
+
 def truncate(s, limit=SRC_TEXT_LIMIT):
     """截斷標記絕對不能含中文。
 
@@ -341,6 +389,7 @@ def cmd_build(args):
         # 註定被退回的產物，等於把坑往下游搬。
         new_topics = entries.get('_new_topics') if isinstance(entries, dict) else None
         new_topics = new_topics if isinstance(new_topics, dict) else {}
+        lint_warnings = []  # §四（R31/T12）：build 出口共用 lint，見 _lint_row
         for row in rows:
             item_id = row.get('id')
             raw_entry = entries.get(item_id)
@@ -380,6 +429,8 @@ def cmd_build(args):
                 }
             except Exception:
                 pass
+            for _reason in _lint_row(entry_text, new_row):
+                lint_warnings.append(f'{item_id}: {_reason}')
             batch.append(new_row)
 
         out = json.dumps({'entries': batch, 'new_topics': new_topics},
@@ -395,6 +446,7 @@ def cmd_build(args):
             print(f'⚠️ 骨架裡有、entries.json 沒填 entry 的 id（未填，不算錯，'
                   f'但確認是不是漏判，不進 batch）：{", ".join(str(m) for m in missing)}',
                   file=sys.stderr)
+        _print_build_lint_warnings(lint_warnings)
         return
 
     spec = SITE_SPEC[args.site]
@@ -403,6 +455,7 @@ def cmd_build(args):
     batch = []
     missing = []
     excluded = 0
+    lint_warnings = []  # §四（R31/T12）：build 出口共用 lint，見 _lint_row
     for it in items:
         item_id = spec['id_of'](it)
         if spec['skip_of'](it):
@@ -449,6 +502,8 @@ def cmd_build(args):
             }
         except Exception:
             pass
+        for _reason in _lint_row(entry_text, row):
+            lint_warnings.append(f'{item_id}: {_reason}')
         batch.append(row)
 
     # 🔴 2026-09-08 硬上線：跟 --skeleton 分支同一個理由，三站一律出新格式外殼。
@@ -467,6 +522,7 @@ def cmd_build(args):
               f'但確認是不是漏判）：{", ".join(missing)}', file=sys.stderr)
     if excluded:
         print(f'機械排除 {excluded} 則（見 dump 輸出的排除原因）', file=sys.stderr)
+    _print_build_lint_warnings(lint_warnings)
 
 
 def cmd_from_raw(args):
@@ -1587,6 +1643,169 @@ def cmd_dedup_check(args):
         print(f'  {a} vs {b}：{"、".join(bits)}')
 
 
+# ── R33 窄工具出口：工作 batch 欄位改名（2026-09-14）─────────────────────
+#
+# 背景：0909-0700 那輪 agent 想把 `ns_batch_0700.json` 裡打錯的鍵名
+# `raw_entry` 整批改成 `entry`，手寫 `python -c` 讀檔改字串再回寫被
+# `s2_bash_guard.py` 依 13d §4 攔下（guard 本身沒問題，是攔下之後沒有標準
+# 工具可走）。這支只做「把 entry 物件裡的一個鍵改名」這一件機械事：
+# 不是任意 JSON path 的 set-value，不執行任何程式碼，也不碰生產 state。
+#
+# 支援的形狀（跟 add-batch／build 已經在吃的一致，不重造第三種）：
+#   list     裸陣列 [ {...}, … ]（add-batch 舊格式／ENEX／ABC／側錄線）
+#   wrapper  {"entries": [...], "new_topics": {...}}（add-batch 新格式 batch.json）
+#   flatmap  {"ID1": {...}, "ID2": {...}, "_new_topics": {...}}（build --skeleton
+#            吃的 entries.json；`_new_topics`／`new_topics` 是保留鍵，原樣不動）
+
+_RENAME_RESERVED_KEYS = ('_new_topics', 'new_topics')
+
+# 生產狀態檔命名慣例：`{MMDD}-s2-state.json`（見 s2_state.default_file()／
+# _yesterday_state_path()），不管落在哪個目錄都拒絕——工作 batch 不會湊巧
+# 用這個檔名，誤判成本遠低於漏擋生產 state 的成本。
+_STATE_FILE_RE = re.compile(r'^\d{4}-s2-state\.json$', re.IGNORECASE)
+
+
+def _load_batch_any(path):
+    """讀『工作 batch JSON』，辨識三種既有形狀，回傳 `(kind, payload)`。
+
+    辨識不出來（頂層既非陣列、也不是含 `entries` 陣列的物件、也不是扁平
+    map）一律丟 `ValueError`，不猜、不假裝成功。"""
+    with open(path, encoding='utf-8') as f:
+        data = json.load(f)
+    if isinstance(data, list):
+        return 'list', data
+    if isinstance(data, dict):
+        if isinstance(data.get('entries'), list):
+            return 'wrapper', data
+        # 扁平 map：至少要有一個非保留鍵，否則跟「空物件」／「只有 new_topics
+        # 的殼」分不出來——那種情況直接留給下面「找不到可改的項目」去擋。
+        if any(k not in _RENAME_RESERVED_KEYS for k in data):
+            return 'flatmap', data
+    raise ValueError(
+        f'{path} 頂層形狀認不出來（不是陣列、不是含 entries 陣列的物件，'
+        f'也不是扁平 {{id: {{...}}}} map）')
+
+
+def _iter_rename_entries(kind, payload):
+    """回傳 `[(標籤, entry_dict)]`，entry_dict 是可以直接原地改的物件參照。
+
+    非 dict 的項目（例如舊格式 entries.json 裡的純字串 entry）沒有鍵可改，
+    直接跳過——不算錯，只是這一則沒有可改名的目標。"""
+    if kind == 'list':
+        return [(it.get('id', f'#{i}') if isinstance(it, dict) else f'#{i}', it)
+                for i, it in enumerate(payload) if isinstance(it, dict)]
+    if kind == 'wrapper':
+        return [(it.get('id', f'#{i}') if isinstance(it, dict) else f'#{i}', it)
+                for i, it in enumerate(payload['entries']) if isinstance(it, dict)]
+    if kind == 'flatmap':
+        return [(k, v) for k, v in payload.items()
+                if k not in _RENAME_RESERVED_KEYS and isinstance(v, dict)]
+    return []
+
+
+def _refuse_if_production_state(path):
+    """拒絕操作生產狀態檔（R33 明文：禁止改生產 state、不繞 guard）。
+
+    判準沿用 `s2_state.py` 自己找狀態檔的方式：檔名 `{MMDD}-s2-state.json`
+    （`default_file()`／`_yesterday_state_path()`），或路徑落在
+    `s2_state.STATE_DIR`（含其下的 `Archive` 封存）底下。兩者任一命中就拒絕，
+    不判斷內容——寧可誤擋一份湊巧同名的工作檔，不能漏擋生產 state。"""
+    ab = os.path.abspath(path)
+    base = os.path.basename(ab)
+    try:
+        state_dir = os.path.abspath(s2_state.STATE_DIR).lower()
+    except Exception:
+        state_dir = None
+    under_state_dir = False
+    if state_dir:
+        try:
+            under_state_dir = os.path.commonpath([ab.lower(), state_dir]) == state_dir
+        except ValueError:
+            under_state_dir = False  # 不同磁碟機（Windows），commonpath 會炸，視為不在底下
+    if _STATE_FILE_RE.match(base) or under_state_dir:
+        where = f'（位於 {s2_state.STATE_DIR} 底下）' if under_state_dir else ''
+        print(f'✗ 拒絕操作：{path} 看起來是生產狀態檔{where}。'
+              f'rename-field 只准動工作 batch／entries.json，不准碰生產 state '
+              f'（R33 明文界線；真的要修生產 state 請走 s2_state.py 的正常子指令）。',
+              file=sys.stderr)
+        sys.exit(2)
+
+
+def cmd_rename_field(args):
+    """把工作 batch JSON 裡每一則 entry 物件的一個鍵改名，輸出到新檔。
+
+    只做「改鍵名」這一件事：不接受任意 JSON path，不能順帶塞值、不執行
+    任何程式碼。來源鍵在全部項目裡都不存在、或目的鍵已經在任何一項存在，
+    一律整批拒絕、不寫任何檔案（見下方檢查順序）。"""
+    _refuse_if_production_state(args.batch)
+
+    in_abs = os.path.abspath(args.batch)
+    out = args.out
+    if out:
+        if os.path.abspath(out) == in_abs:
+            print('✗ --out 不能等於輸入檔——rename-field 一律輸出新檔，'
+                  '不原地覆寫（避免改壞了連原檔都救不回來）', file=sys.stderr)
+            sys.exit(2)
+    else:
+        base, ext = os.path.splitext(args.batch)
+        out = f'{base}.renamed{ext or ".json"}'
+        if os.path.abspath(out) == in_abs:
+            print(f'✗ 預設輸出檔名剛好等於輸入檔（{out}），請改用 --out 指定別的路徑',
+                  file=sys.stderr)
+            sys.exit(2)
+
+    try:
+        kind, payload = _load_batch_any(args.batch)
+    except (OSError, ValueError, json.JSONDecodeError) as e:
+        print(f'✗ 讀取失敗：{e}', file=sys.stderr)
+        sys.exit(2)
+
+    entries = _iter_rename_entries(kind, payload)
+    if not entries:
+        print(f'✗ {args.batch} 裡找不到任何可改名的物件項（辨識出的形狀是 '
+              f'{kind}，但沒有 dict 型的 entry）', file=sys.stderr)
+        sys.exit(2)
+
+    src, dst = args.from_key, args.to_key
+
+    conflict = [label for label, e in entries if dst in e]
+    if conflict:
+        print(f'✗ 目的鍵 {dst!r} 已經在 {len(conflict)} 筆裡存在，拒絕改名'
+              f'（改下去會覆蓋既有值）：{", ".join(str(x) for x in conflict[:20])}'
+              + ('…' if len(conflict) > 20 else ''), file=sys.stderr)
+        sys.exit(2)
+
+    have_src = [label for label, e in entries if src in e]
+    if not have_src:
+        print(f'✗ 來源鍵 {src!r} 在全部 {len(entries)} 筆裡都不存在，拒絕改名'
+              f'（可能是鍵名打錯，或這份檔案本來就不是要改的那份）', file=sys.stderr)
+        sys.exit(2)
+
+    renamed, skipped = [], []
+    for label, e in entries:
+        if src in e:
+            e[dst] = e.pop(src)
+            renamed.append(label)
+        else:
+            skipped.append(label)
+
+    prefix = '（--dry-run，未寫檔）' if getattr(args, 'dry_run', False) else ''
+    print(f'{prefix}改名 {src!r} → {dst!r}：{len(renamed)} 筆改到、'
+          f'{len(skipped)} 筆沒有這個鍵（跳過，不算錯）')
+    for label in renamed:
+        print(f'  ✓ {label}')
+    if skipped:
+        print(f'  沒有 {src!r} 這個鍵、跳過：{", ".join(str(x) for x in skipped)}',
+              file=sys.stderr)
+
+    if getattr(args, 'dry_run', False):
+        return
+
+    with open(out, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    print(f'已寫入 {out}（原檔 {args.batch} 未動）', file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -1689,6 +1908,15 @@ def main():
     p_cmp.set_defaults(func=cmd_compare)
     p_dc.set_defaults(func=cmd_dedup_check)
     p_search.set_defaults(func=cmd_search)
+
+    p_rf = sub.add_parser('rename-field',
+                          help='工作 batch JSON（entries.json／batch.json）裡把一個鍵改名，輸出到新檔（R33）')
+    p_rf.add_argument('batch', help='工作 batch JSON（list／wrapper／flatmap 三種既有形狀皆可，不可為生產 state）')
+    p_rf.add_argument('--from', dest='from_key', required=True, help='要改掉的舊鍵名')
+    p_rf.add_argument('--to', dest='to_key', required=True, help='改成的新鍵名')
+    p_rf.add_argument('--out', help='輸出路徑；不給就用 <檔名>.renamed.json（永不覆寫輸入檔）')
+    p_rf.add_argument('--dry-run', action='store_true', help='只印預覽（改到/跳過筆數），不寫任何檔案')
+    p_rf.set_defaults(func=cmd_rename_field)
 
     args = ap.parse_args()
     args.func(args)

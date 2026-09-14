@@ -581,6 +581,51 @@ check('build：純字串 entries 不含 category 鍵（舊格式不變）',
 check('build：純字串 entries 不含 tc 鍵（舊格式不變）',
       'tc' not in rowsB.get('RT1002', {}), str(rowsB.get('RT1002')))
 
+# ── §四（R31/T12）：build 出口共用 fmt_issues／pretag.lint，只警告不擋 ──────
+# 壞 entry：標了 (BITE) 但沒有 ▎BITE： 段（跟 add-batch 那條既有告警同一套判準）。
+LINT_RAW = write_json('lint_raw.json', [
+    {'code': 'RT2001', 'head': 'bad one', 'story': 'story bad', 'sb_count': 1},
+    {'code': 'RT2002', 'head': 'clean one', 'story': 'story clean', 'sb_count': 0},
+])
+LINT_ENTRIES = write_json('lint_entries.json', {
+    'RT2001': 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。',
+    'RT2002': 'RT2002 (測試 標題) ▎測試摘要。▎畫面：資料畫面。無BITE。',
+})
+LINT_OUT = os.path.join(TMP, 'lint_batch.json')
+outL, codeL = run(bp.cmd_build, Args(site='rt', raw=LINT_RAW, entries=LINT_ENTRIES,
+                                     checkpoint='0914-1200', out=LINT_OUT))
+check('build＋lint：壞 entry 仍 exit 0（只警告不擋）', codeL == 0, codeL)
+check('build＋lint：壞 entry 的 ID 出現在警告裡', 'RT2001:' in outL, outL[-600:])
+check('build＋lint：乾淨 entry（RT2002）沒有被列進警告', 'RT2002:' not in outL, outL[-600:])
+_lo = json.load(open(LINT_OUT, encoding='utf-8'))
+_lo_rows = {r['id']: r for r in _lo['entries']}
+check('build＋lint：輸出檔內容不受警告影響（entry 原文照舊、沒被改寫）',
+      _lo_rows['RT2001']['entry'] == 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。'
+      and _lo_rows['RT2002']['entry'] == 'RT2002 (測試 標題) ▎測試摘要。▎畫面：資料畫面。無BITE。')
+
+# --skeleton 分支同樣要跑同一套 lint（A24 骨架路徑，共用 _lint_row）
+LINT_SKEL = write_json('lint_skeleton.json', [
+    {'id': 'RT2001', 'source': 'RT', 'checkpoint': '0914-1200', 'status': 'has_script',
+     'src_text': 'x', 'sb_count': 1, 'entry': '', 'category': '', 'tc': ''},
+    {'id': 'RT2002', 'source': 'RT', 'checkpoint': '0914-1200', 'status': 'has_script',
+     'src_text': 'x', 'sb_count': 0, 'entry': '', 'category': '', 'tc': ''},
+])
+LINT_SKEL_ENTRIES = write_json('lint_skeleton_entries.json', {
+    'RT2001': {'entry': 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。'},
+    'RT2002': {'entry': 'RT2002 (測試 標題) ▎測試摘要。▎畫面：資料畫面。無BITE。'},
+})
+LINT_SKEL_OUT = os.path.join(TMP, 'lint_skeleton_batch.json')
+outLS, codeLS = run(bp.cmd_build, Args(site='rt', raw=None, entries=LINT_SKEL_ENTRIES,
+                                       checkpoint='0914-1200', out=LINT_SKEL_OUT,
+                                       skeleton=LINT_SKEL))
+check('build --skeleton＋lint：壞 entry 仍 exit 0', codeLS == 0, codeLS)
+check('build --skeleton＋lint：壞 entry 的 ID 出現在警告裡', 'RT2001:' in outLS, outLS[-600:])
+check('build --skeleton＋lint：乾淨 entry 沒有被列進警告', 'RT2002:' not in outLS, outLS[-600:])
+_lso = json.load(open(LINT_SKEL_OUT, encoding='utf-8'))
+_lso_rows = {r['id']: r for r in _lso['entries']}
+check('build --skeleton＋lint：輸出檔內容不受警告影響',
+      _lso_rows['RT2001']['entry'] == 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。')
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)
