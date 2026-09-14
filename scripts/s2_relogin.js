@@ -14,9 +14,16 @@
  *   `站名|登入網址|帳號|密碼`，見 memory `project_s2_five_sites_credentials.local.md`。
  *
  * 用法：
- *   node s2_relogin.js                 # 依序嘗試 NS/AP/ENEX/ABC
+ *   node s2_relogin.js                 # 依序嘗試 NS/AP/ENEX/ABC，預設 DAILY profile
  *   node s2_relogin.js --site NS,AP    # 只重登指定站（逗號分隔）
- *   node s2_relogin.js --profile <dir> # 預設 S2 v4 掃帶 profile；測試時可指向 daily profile
+ *   node s2_relogin.js --s2            # 改用 S2 掃帶生產 profile（v4）
+ *   node s2_relogin.js --profile <dir> # 自訂 profile 路徑（優先權最高）
+ *
+ * ⚠️ 2026-09-15 修正：預設值原本誤設成 S2 v4 掃帶 profile，導致「平常開這五站」
+ *    這種非掃帶用途的重登會誤登進 v4 profile（使用者手動瀏覽根本看不到效果，
+ *    還可能跟同時在跑的 S2 排程搶同一個 profile 鎖）。**預設改回 DAILY profile**
+ *    （`.playwright-daily-profile`，跟 `mcp__browser__*` 工具用的是同一個），
+ *    S2 掃帶場景要明確帶 `--s2` 或 `--profile .playwright-s2-profile-v4`。
  *
  * 離開碼：0＝全部成功（或該站已在登入態、不需重登）；3＝有站重登失敗（需人工介入）；
  *         1＝其他錯誤（例如讀不到帳密檔）。
@@ -30,7 +37,8 @@
 const fs = require('fs');
 
 const CRED_FILE = 'C:/Users/User/.s2_five_sites_credentials';
-const DEFAULT_PROFILE = 'C:/Users/User/.playwright-s2-profile-v4';
+const DAILY_PROFILE = 'C:/Users/User/.playwright-daily-profile';
+const S2_PROFILE = 'C:/Users/User/.playwright-s2-profile-v4';
 
 // 帳密檔裡的站名跟本檔 SITES 的 key 不完全一樣（例如帳密檔寫 CNN-NS／ABC-NEWSONE），
 // 這裡做別名對應，不改帳密檔格式。
@@ -120,16 +128,21 @@ function resolvePlaywright() {
 }
 
 function parseArgs(argv) {
-  const opts = { sites: Object.keys(SITES), profile: DEFAULT_PROFILE, headless: true };
+  const opts = { sites: Object.keys(SITES), profile: DAILY_PROFILE, headless: true };
+  let explicitProfile = null;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--site' && argv[i + 1]) {
       opts.sites = argv[++i].split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
     } else if (argv[i] === '--profile' && argv[i + 1]) {
-      opts.profile = argv[++i];
+      explicitProfile = argv[++i];
+    } else if (argv[i] === '--s2') {
+      opts.profile = S2_PROFILE;
     } else if (argv[i] === '--headed') {
       opts.headless = false;
     }
   }
+  // --profile 明確指定路徑優先權最高，不管跟 --s2 誰先誰後
+  if (explicitProfile) opts.profile = explicitProfile;
   return opts;
 }
 
