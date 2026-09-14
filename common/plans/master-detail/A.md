@@ -240,3 +240,17 @@
 `rule_shas` 目前記 prompt／13／13e／13f／13c／13c2／13d／13b，缺 `13g`／`13h`，`13b` 已退役。一行修；phases 站桶已有 ENEX／ABC 不必動。
 - **2026-09-07 ✅** `1f840a3`：RULE_FILES 去 `13b`、加 `13g`／`13h`。
 
+
+
+---
+
+### 2026-09-14 0914省T評估第一＋第二批上線（合併 `e96d670`；規則切 V9）
+
+- 範圍（使用者直接裁示）：評估 §二／§三／§四／§六；S1、§五行為變更、§七 T4、D19 不在範圍。
+- **§二（A35／T9／A24 量測）**：`s2_token_metrics.py` 補 from-raw／timeline／fill-src-text／collate-category／concat／rename-field 分桶；未知子指令進 `s2_batch_prep:?<名>`；heredoc 字串提及不算呼叫。直接省掃帶 Token ≈0，只提升判讀。
+- **§三（T8／T12／A24 文件權威化）**：只改 13c／13c2，另存 **V9 平行版** `common/v9/`，V8 原檔 `common/v9/_v8bak/`；`scripts/s2_v9_switch.ps1`（-On／-Off，擋輪次中／V8 漂移／手改版頭，切後跑 rules_check 失敗自動還原）。2026-09-14 11:2x 使用者下令合併＋切 V9，17:00 輪起生效。回滾：`pwsh -File scripts\s2_v9_switch.ps1 -Off`。
+- **§四（R31／T12）**：`build`（含 `--skeleton`）入庫前共用 `fmt_issues`／`pretag.lint` 印「ID: 原因」，只警告、輸出與結束碼不變。R31 原「收工輪對帳硬性化」裁決題**不因此結案**。
+- **§六（R33）**：`s2_batch_prep.py rename-field <batch> --from --to [--out] [--dry-run]`；只改 entry 鍵名、出新檔原子寫入、拒絕 `{MMDD}-<線>-state.json`／STATE_DIR 根／Archive、guard 不需改。另 `unwrap` 認 Claude Code 卸載殼，`from-raw` 拒非陣列／全空 id 垃圾輸入。
+- 驗收：三輪獨立複核（blocker 1＋should-fix 7 已修）；424 份真實 raw 新舊 `_load_raw_any` 逐份一致；測試 batch_prep 130／rename_field 52／token_metrics 77／from_raw 37／bash_guard 41 全綠。
+- **尚待觀察**：V9 首 3 輪看 `set-category`／`set-tc` 是否降為修補用、build 警告是否減少事後 `update-entry`（淨省＝取消量－新增量），勿用單輪平均推估。
+- **已知後續（未改，非 V9 分叉範圍）**：`13c3` 收工清單 5.5 仍把 `set-tc` 寫成必做；`13f` 約 156／287 行暗示每輪下 `set-category`——與 V9 口徑衝突，需另案處理。
