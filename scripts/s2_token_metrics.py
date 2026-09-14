@@ -167,9 +167,14 @@ S2_STATE_SUBCOMMANDS = (
 
 
 # `s2_batch_prep.py` 的子指令（跟該檔 add_parser() 那份對齊；新增子指令要一併補）。
+# 2026-09-14（S2 省 Token 評估 P0）：原本漏了 from-raw／timeline／fill-src-text／
+# collate-category／concat 五個子指令，這五個都落到通用 's2_batch_prep.py' 桶，
+# 看不出實際熱點。rename-field 是另一個 agent 同時在 s2_batch_prep.py 上加的
+# 窄範圍子指令（R33），這裡先補上分類，不等它落地才補。
 BATCH_PREP_SUBCOMMANDS = (
-    'dump', 'build', 'unwrap', 'inspect', 'search', 'snapshot',
-    'compare', 'dedup-check',
+    'dump', 'build', 'from-raw', 'unwrap', 'inspect', 'search', 'snapshot',
+    'timeline', 'fill-src-text', 'collate-category', 'concat',
+    'compare', 'dedup-check', 'rename-field',
 )
 
 
@@ -211,10 +216,56 @@ def classify_bash_tool(cmd):
         # 因此只能回頭爬 transcript。沒有這一刀，任何修法都無法用 --diff 驗收。
         # ⚠️ 只收**已知**子指令：不設限的話 `grep -n "cap" scripts/s2_batch_prep.py
         #    scripts/test_s2_batch_prep.py` 會把第二個路徑的 `scripts` 抓成子指令，
-        #    長出 `s2_batch_prep:scripts` 這種幽靈桶。認不出就退回舊桶名。
-        m = re.search(r's2_batch_prep\.py["\']?\s+([a-z][a-z-]*)', cmd)
-        if m and m.group(1) in BATCH_PREP_SUBCOMMANDS:
-            return f's2_batch_prep:{m.group(1)}'
+        #    長出 `s2_batch_prep:scripts` 這種幽靈桶。
+        # 2026-09-14（P0）：先判斷這行是不是真的用 python 呼叫這支腳本
+        # （`python ... s2_batch_prep.py <sub>`），不是的話（grep／wc 之類只是
+        # 提到檔名的呼叫）一律退回舊桶名 's2_batch_prep.py'，維持既有測試斷言
+        # 不變——那些案例本來就不是「呼叫了某個子指令」，硬塞進未知桶只會誤導。
+        # 只有「真的用 python 呼叫、但抓到的子指令名不在已知名單」才落
+        # `s2_batch_prep:?<名字>` 這個明確可辨識的未知桶，不再悄悄併入
+        # 's2_batch_prep.py' 通用桶（不然又會重演「看得到次數、看不出是誰」）。
+        #
+        # 🔴 2026-09-14 修正：原本 `is_invocation` 判準是
+        # `python3?\b[^\n]*s2_batch_prep\.py`——`[^\n]*` 只排除**真正的換行字元**，
+        # 一支 heredoc（`python - <<'PY' ... p='scripts/s2_batch_prep.py'\ns=io.…`）
+        # 送進 Bash 工具時整段常常是同一個字串（沒有實際換行、或換行落在
+        # 這個排除集之外），於是「python」跟字串賦值裡湊巧出現的
+        # `s2_batch_prep.py` 就被誤判成一次真的呼叫，接著抓到賦值後下一行的
+        # 開頭字元（例如 `s=io.` 的 `s`）當子指令，長出 `s2_batch_prep:?s`
+        # 這種幽靈桶。改成要求「python」與 `s2_batch_prep.py` 之間只能是
+        # 一般 CLI 旗標／路徑用字（不含引號、`<`、管線、`;`、`&`），且子指令
+        # token 必須**緊接在腳本路徑後面**（純空白分隔）——這樣的形狀只有真正
+        # 的命令列呼叫才會出現：字串賦值一定會被引號擋在腳本路徑左右，
+        # heredoc 一定會被 `<<` 擋在 python 與腳本路徑之間。
+        #
+        # 路徑本身允許整段用單引號／雙引號包住（`python "E:/x/s2_batch_prep.py"
+        # build` 這種帶空白路徑的正常寫法），但引號必須**完整包住整個路徑**、
+        # 緊接在空白之後開始——跟 `p='scripts/s2_batch_prep.py'` 這種賦值裡的
+        # 引號結構相同，兩者的差異不在引號本身，而在 python 與這段路徑之間
+        # 是否夾了 `<<` heredoc 記號（見下方旗標／參數字元集排除 `<`）。
+        # 2026-09-14（複核 N1）：原本呼叫用字只認裸的 `python`／`python3`，
+        # 接不到 `python.exe`，也接不到整段用引號包住的完整路徑
+        # （`"C:/…/python.exe" -X utf8 scripts/s2_batch_prep.py inspect` 這種
+        # 寫法）——那種情況整條指令直接落回沒分子指令的 's2_batch_prep.py'
+        # 通用桶。放寬呼叫用字：裸 `python3?(.exe)?`，或整段用單／雙引號包住
+        # 且以 `python3?(.exe)?` 結尾的路徑（跟腳本路徑那段的引號處理同一套
+        # 邏輯：引號必須完整包住整段、緊接在空白之後）。
+        m = re.search(
+            r'(?<![\'"\w])(?:python3?(?:\.exe)?'                    # 裸呼叫用字
+            r'|"[^"\n]*?python3?(?:\.exe)?"'                        # 雙引號整段路徑
+            r'|\'[^\'\n]*?python3?(?:\.exe)?\')'                    # 單引號整段路徑
+            r'(?:\s+(?:"[^"\n]*"|\'[^\'\n]*\'|[^\s\'"<>|;&]+))*?'  # 旗標／參數
+            r'\s+(?:"[^"\n]*?s2_batch_prep\.py"'
+            r'|\'[^\'\n]*?s2_batch_prep\.py\''
+            r'|[^\s\'"<>|;&]*?s2_batch_prep\.py)'  # 腳本路徑（裸或整段加引號）
+            r'\s+([a-z][a-z0-9-]*)\b',        # 緊接在後、純空白分隔的子指令 token
+            cmd,
+        )
+        if m:
+            sub = m.group(1)
+            if sub in BATCH_PREP_SUBCOMMANDS:
+                return f's2_batch_prep:{sub}'
+            return f's2_batch_prep:?{sub}'
         return 's2_batch_prep.py'
     if 's2_render' in cmd:
         return 's2_render.py'
@@ -400,6 +451,13 @@ def measure(session_path):
     output = sum(u.get('output_tokens', 0) for u in last_usage.values())
     input_tok = sum(u.get('input_tokens', 0) for u in last_usage.values())
 
+    # 2026-09-14（S2 省 Token 評估 P0）：單位備忘，避免混用——
+    # 'requests' 是去重後的 message.id 數，約等於一次模型請求（不是 HTTP 次數，
+    # transcript 看不到底層 HTTP 重試/分段）；'tool_calls' 是 tool_use content
+    # block 數（一次工具呼叫算一次，不分 Bash 內部又跑了幾個子指令）；
+    # 'tool_calls_by_name' 底下的 's2_batch_prep:<sub>' 等桶則是同一次 Bash
+    # 工具呼叫裡「呼叫了哪個 shell 子指令」的分類，跟 'tool_calls' 是不同層級
+    # 的計數（不要拿子指令桶的次數去對 tool_calls 或 requests）。
     return {
         'session_file': os.path.basename(session_path),
         'requests': len(last_usage),

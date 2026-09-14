@@ -54,11 +54,75 @@ for cmd, want in (
     ('python "E:/x/s2_batch_prep.py" build --site ap', 's2_batch_prep:build'),
     ('python scripts/s2_batch_prep.py --help', 's2_batch_prep.py'),  # 認不出就回舊桶名
     # 幽靈桶：.py 後面接第二個路徑時，`scripts` 會被抓成子指令。只收已知子指令。
+    # 這兩個案例不是用 python 呼叫（只是 grep/wc 提到檔名），要退回舊桶名，
+    # 不能落進 's2_batch_prep:?scripts' 未知桶——那個桶只留給「真的用 python
+    # 呼叫、但子指令名不在名單」的情況。
     ('grep -n "cap" scripts/s2_batch_prep.py scripts/test_s2_batch_prep.py',
      's2_batch_prep.py'),
     ('wc -l scripts/s2_batch_prep.py scripts/s2_render.py', 's2_batch_prep.py'),
+    # 2026-09-14（S2 省 Token 評估 P0）：補齊 s2_batch_prep.py 真實子指令名單
+    # （原本漏了 from-raw／timeline／fill-src-text／collate-category／concat）。
+    ('python scripts/s2_batch_prep.py from-raw raw.json --state s.json',
+     's2_batch_prep:from-raw'),
+    ('python scripts/s2_batch_prep.py timeline raw.json', 's2_batch_prep:timeline'),
+    ('python scripts/s2_batch_prep.py fill-src-text batch.json --detail d.json',
+     's2_batch_prep:fill-src-text'),
+    ('python scripts/s2_batch_prep.py collate-category batch1.json batch2.json',
+     's2_batch_prep:collate-category'),
+    ('python scripts/s2_batch_prep.py concat a.json b.json --site ap',
+     's2_batch_prep:concat'),
+    # R33：另一個 agent 同時在加的窄範圍子指令，先補分類不等落地。
+    ('python scripts/s2_batch_prep.py rename-field batch.json --from a --to b',
+     's2_batch_prep:rename-field'),
+    # 真的用 python 呼叫、但子指令名不在已知名單——要落明確可辨識的未知桶，
+    # 不能悄悄併入通用 's2_batch_prep.py' 桶（否則又看不出是誰在跑陌生指令）。
+    ('python scripts/s2_batch_prep.py totally-new-sub x.json',
+     's2_batch_prep:?totally-new-sub'),
+    ('python scripts/s2_batch_prep.py check-entries x.json',
+     's2_batch_prep:?check-entries'),
     ('python scripts/s2_render.py --file x.json', 's2_render.py'),
     ('ls -la', 'Bash（其他）'),
+    # 2026-09-14（review fix）：heredoc／字串賦值裡湊巧提到 s2_batch_prep.py
+    # 不算「真的呼叫」，要退回通用桶，不能長出 's2_batch_prep:?s' 這種幽靈桶
+    # （真實審查案例：`python - <<'PY' ... p='scripts/s2_batch_prep.py'\ns=io.…`，
+    # `<<` heredoc 記號夾在 python 與腳本路徑之間，且路徑本身是賦值裡的字串）。
+    (
+        "python - <<'PY'\nimport io, json\n"
+        "p='scripts/s2_batch_prep.py'\n"
+        "s=io.open(p, encoding='utf-8').read()\n"
+        "PY",
+        's2_batch_prep.py',
+    ),
+    # 同一種幽靈但整段擠成一行（沒有真正換行、退化成分號分隔）也要一樣退回：
+    (
+        "python -c \"import io; p='scripts/s2_batch_prep.py'; "
+        "s=io.open(p).read()\"",
+        # 這行其實是 `python -c`，會先被 classify_python_c 接走，
+        # 不會走到 s2_batch_prep 分支——放在這裡只是連帶驗證兩條分支不衝突。
+        'python -c:other',
+    ),
+    # 2026-09-14（複核 N1）：`python.exe` 裸呼叫、以及整段用引號包住的完整
+    # python.exe 路徑（agent 有時透過非標準 PATH 呼叫）原本接不到，整條指令
+    # 落回沒分子指令的 's2_batch_prep.py' 通用桶——批次量測時看不出到底
+    # 是哪個子指令在跑。
+    ('python.exe scripts/s2_batch_prep.py inspect raw.json', 's2_batch_prep:inspect'),
+    ('python3.exe scripts/s2_batch_prep.py build --site ap', 's2_batch_prep:build'),
+    ('"C:/Users/User/AppData/Local/Programs/Python/Python312/python.exe" '
+     '-X utf8 scripts/s2_batch_prep.py inspect raw.json', 's2_batch_prep:inspect'),
+    ("'C:/Python312/python.exe' -X utf8 scripts/s2_batch_prep.py build --site ns",
+     's2_batch_prep:build'),
+    # 引號包住的完整路徑＋未知子指令，一樣要落明確可辨識的未知桶，不是通用桶。
+    ('"C:/Python312/python.exe" scripts/s2_batch_prep.py totally-new-sub x.json',
+     's2_batch_prep:?totally-new-sub'),
+    # heredoc 幽靈排除對 python.exe／引號路徑同樣要維持——確認沒有因為放寬
+    # 呼叫用字而重新打開這個洞。
+    (
+        "\"C:/Python312/python.exe\" - <<'PY'\nimport io, json\n"
+        "p='scripts/s2_batch_prep.py'\n"
+        "s=io.open(p, encoding='utf-8').read()\n"
+        "PY",
+        's2_batch_prep.py',
+    ),
 ):
     got = tm.classify_bash_tool(cmd)
     check(f'分桶：{want}', got == want, f'實得 {got}')
