@@ -538,7 +538,28 @@ def cmd_from_raw(args):
     因為 prelim／early access 稿隨時可能補正式稿，機械排除等於永久漏收。
     """
     spec = SITE_SPEC[args.site]
-    items = dedup_by_id(spec, load_json(args.raw))
+    raw_data = load_json(args.raw)
+    # 🔴 2026-09-14（複核 S3）：`--raw` 這裡吃的是 unwrap 後的裸陣列
+    # （`from-raw` 不像 dump/inspect 等其他子指令走 `_load_raw_any` 自動
+    # 卸殼），原本沒檢查形狀——殼沒卸乾淨、或給錯檔案（例如整份 offload
+    # 殼、或 dict 而非 list）時，`dedup_by_id`／後續 `spec['id_of']` 會直接
+    # 對非 dict 項目呼叫 `.get()` 炸出一整段 traceback，或者每一筆算出來
+    # 的 id 都是空字串卻照樣生出一份「骨架」——那份骨架看起來像正常輸出，
+    # 實際上是垃圾（agent 據此判斷已在庫/機械排除都會判錯）。改成先驗證
+    # 形狀，錯就印清楚訊息、exit 2，不寫任何骨架檔。
+    if not isinstance(raw_data, list) or not all(isinstance(x, dict) for x in raw_data):
+        print(f'✗ {args.raw} 頂層不是「dict 陣列」（from-raw 只吃 unwrap 之後的'
+              f'裸陣列；殼沒卸乾淨的話先跑 `unwrap --out` 再指過來）。'
+              f'實際型別：{type(raw_data).__name__}', file=sys.stderr)
+        sys.exit(2)
+
+    items = dedup_by_id(spec, raw_data)
+    if items and all(not spec['id_of'](it) for it in items):
+        print(f'✗ {args.raw} 有 {len(items)} 筆，但每一筆算出的 id 都是空字串'
+              f'（多半是欄位名不對，或這份檔案根本不是 --site {args.site} 站的 raw，'
+              f'拒絕產出骨架，避免生出一份看起來正常、其實全空 id 的垃圾）',
+              file=sys.stderr)
+        sys.exit(2)
 
     have = {}
     if args.state:
@@ -656,6 +677,39 @@ def cmd_from_raw(args):
 # 依序嘗試，第一個「值是非空 list」的鍵勝出。
 KNOWN_WRAPPER_KEYS = ['Items', 'items', 'PeopleItems', 'results', 'data', 'entries']
 
+# Claude Code 「offload」殼（2026-09-14，複核 S3）：檔案太大時 Claude Code
+# 把工具結果落成本機檔，形狀固定是
+#   [{"type": "text", "text": "### Result\n<payload>\n### Page …"}]
+# `<payload>` 可能是裸 JSON，也可能包一層 ```json fenced code block```；
+# 兩種都要認。抓法：先找 `### Result` 這個標頭，內容取到下一個
+# `\n### ` 標頭（或檔尾）為止；再看這段內容裡有沒有 fenced code block，
+# 有就取 fence 內文，沒有就整段當 payload。解不出合法 JSON 一律丟
+# `ValueError`，不悄悄原樣複製（那等於把殼字串當資料塞進下游）。
+_OFFLOAD_RESULT_RE = re.compile(r'###\s*Result\s*\n(.*?)(?:\n###\s|\Z)', re.DOTALL)
+_OFFLOAD_FENCE_RE = re.compile(r'```(?:json)?\s*\n(.*?)\n```', re.DOTALL)
+
+
+def _extract_offload_payload(text):
+    """從 offload 殼的 text 欄位裡切出 `### Result` 段落，回傳可能還沒
+    解析的 JSON 字串（可能帶 fence）；找不到 `### Result` 標頭回 None。"""
+    m = _OFFLOAD_RESULT_RE.search(text)
+    if not m:
+        return None
+    body = m.group(1)
+    fence = _OFFLOAD_FENCE_RE.search(body)
+    return (fence.group(1) if fence else body).strip()
+
+
+def _is_offload_shell(data):
+    """判準刻意收緊：`data` 必須是**每一項**都是 `{"type": "text",
+    "text": <str>}` 這個固定形狀（Claude Code offload 殼的實際樣子），
+    不是「隨便一個 list 裡有個 dict 湊巧含 type/text 鍵」就中——避免把
+    真正的站方 raw（裸陣列剛好有 type/text 欄位）誤判成殼。"""
+    return bool(data) and all(
+        isinstance(it, dict) and it.get('type') == 'text'
+        and isinstance(it.get('text'), str)
+        for it in data)
+
 
 def _load_raw_any(path):
     """讀 raw 檔，回傳 (items, shell_desc)。
@@ -689,6 +743,32 @@ def _load_raw_any(path):
             f'{path} 不是合法 JSON，也不像 NS 的 id|日期 純文字清單。'
             f'原始錯誤：{e}；前 200 字元：{text[:200]!r}'
         )
+
+    if isinstance(data, list) and _is_offload_shell(data):
+        combined = '\n'.join(it['text'] for it in data)
+        payload_str = _extract_offload_payload(combined)
+        if payload_str is None:
+            raise ValueError(
+                f'{path} 看起來是 Claude Code offload 殼（type/text 陣列），'
+                f'但找不到 "### Result" 標頭，解不出實際內容')
+        try:
+            inner = json.loads(payload_str)
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f'{path} 是 offload 殼，"### Result" 段落解不出合法 JSON：{e}；'
+                f'片段：{payload_str[:200]!r}')
+        if isinstance(inner, list):
+            return inner, f'Claude Code offload 殼（### Result 內為裸陣列），{len(inner)} 筆'
+        if isinstance(inner, dict):
+            for key in KNOWN_WRAPPER_KEYS:
+                val = inner.get(key)
+                if isinstance(val, list) and val:
+                    return val, f'Claude Code offload 殼＋dict 殼，陣列在 "{key}" 鍵下，{len(val)} 筆'
+            raise ValueError(
+                f'{path} offload 殼內是 dict，但已知殼鍵 {KNOWN_WRAPPER_KEYS} '
+                f'都沒有非空陣列。實際頂層鍵：{list(inner.keys())}')
+        raise ValueError(
+            f'{path} offload 殼內解出的內容既非 list 也非 dict：{type(inner)}')
 
     if isinstance(data, list):
         return data, f'裸陣列（無殼），{len(data)} 筆'
@@ -1663,7 +1743,14 @@ _RENAME_RESERVED_KEYS = ('_new_topics', 'new_topics')
 # 生產狀態檔命名慣例：`{MMDD}-s2-state.json`（見 s2_state.default_file()／
 # _yesterday_state_path()），不管落在哪個目錄都拒絕——工作 batch 不會湊巧
 # 用這個檔名，誤判成本遠低於漏擋生產 state 的成本。
-_STATE_FILE_RE = re.compile(r'^\d{4}-s2-state\.json$', re.IGNORECASE)
+#
+# 🔴 2026-09-14（複核 S2）：原本只認 `{MMDD}-s2-state.json`，漏了平台整併線
+# 自己的狀態檔（ENEX／ABC，見 s2_platform_extract 等）——這兩站用的命名是
+# `{MMDD}-ENEX-state.json`／`{MMDD}-ABC-state.json`，站名不是固定的
+# `s2`，字面比對接不到，等於這兩站的生產 state 完全沒被這道檢查擋到。
+# 放寬成 `{MMDD}-{任意英數字站名}-state.json`——`s2` 本身也是英數字，
+# 舊行為完整涵蓋在新規則內，不是替換、是超集。
+_STATE_FILE_RE = re.compile(r'^\d{4}-[A-Za-z0-9]+-state\.json$', re.IGNORECASE)
 
 
 def _load_batch_any(path):
@@ -1771,18 +1858,38 @@ def cmd_rename_field(args):
     一律整批拒絕、不寫任何檔案（見下方檢查順序）。"""
     _refuse_if_production_state(args.batch)
 
-    in_abs = os.path.abspath(args.batch)
+    # 🔴 2026-09-14（複核 S1）：原本只用 `os.path.abspath(out) == in_abs` 做字串
+    # 比較，Windows 路徑大小寫不敏感——`--out NS_BATCH_1100.JSON` 對輸入
+    # `ns_batch_1100.json`（或它的 8.3 短檔名）字串比較不相等，實際上是同一
+    # 個檔案，於是「--out 等於輸入檔」的保護被繞過：先原地覆寫掉輸入檔，
+    # 再印「原檔未動」——比沒做這個檢查更糟（假安全感）。改成：
+    #   (a) `os.path.normcase(os.path.realpath(...))` 比較——解掉大小寫與
+    #       符號連結/8.3 短檔名，且不要求檔案存在（--out 常常還沒建立）；
+    #   (b) 兩邊都已存在時再用 `os.path.samefile` 補一刀，涵蓋 (a) 沒解開
+    #       的 hardlink／junction 等價情形。
+    in_real = os.path.normcase(os.path.realpath(args.batch))
+
+    def _same_as_input(candidate):
+        cand_real = os.path.normcase(os.path.realpath(candidate))
+        if cand_real == in_real:
+            return True
+        try:
+            return (os.path.exists(candidate) and os.path.exists(args.batch)
+                    and os.path.samefile(candidate, args.batch))
+        except OSError:
+            return False
+
     explicit_out = args.out is not None
     out = args.out
     if out:
-        if os.path.abspath(out) == in_abs:
+        if _same_as_input(out):
             print('✗ --out 不能等於輸入檔——rename-field 一律輸出新檔，'
                   '不原地覆寫（避免改壞了連原檔都救不回來）', file=sys.stderr)
             sys.exit(2)
     else:
         base, ext = os.path.splitext(args.batch)
         out = f'{base}.renamed{ext or ".json"}'
-        if os.path.abspath(out) == in_abs:
+        if _same_as_input(out):
             print(f'✗ 預設輸出檔名剛好等於輸入檔（{out}），請改用 --out 指定別的路徑',
                   file=sys.stderr)
             sys.exit(2)
@@ -1852,12 +1959,31 @@ def cmd_rename_field(args):
     # 同目錄是刻意的：`os.replace` 跨磁碟機不保證原子，暫存檔留在同一個
     # 磁碟機／同一個檔案系統才成立。
     out_dir = os.path.dirname(os.path.abspath(out)) or '.'
-    tmp_fd, tmp_path = tempfile.mkstemp(
-        dir=out_dir, prefix='.s2rf_tmp_', suffix='.json')
+    # 🔴 2026-09-14（複核 N3）：`--out` 帶不合法路徑（例如
+    # `x.json::$DATA` 這種 NTFS 保留字元組合）原本會讓 `mkstemp`／
+    # `os.replace` 炸出的 `OSError` 直接往外噴一整段 traceback——跟這支
+    # 工具其餘所有錯誤都印中文一行訊息＋乾淨 exit 2 的風格不一致，agent
+    # 也得自己解讀 traceback。改成明確接住 `OSError`，印友善訊息、
+    # 清掉暫存檔、exit 2；其他例外（例如 ⑭ 測試模擬的寫檔中途失敗）
+    # 維持原行為往外傳，不吞掉。
+    try:
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=out_dir, prefix='.s2rf_tmp_', suffix='.json')
+    except OSError as e:
+        print(f'✗ 寫入失敗：--out 路徑 {out!r} 建不了暫存檔（{e}）'
+              f'——檢查路徑是否合法、目錄是否存在', file=sys.stderr)
+        sys.exit(2)
     try:
         with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
         os.replace(tmp_path, out)
+    except OSError as e:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        print(f'✗ 寫入失敗：--out 路徑 {out!r} 寫不進去（{e}）', file=sys.stderr)
+        sys.exit(2)
     except Exception:
         try:
             os.remove(tmp_path)

@@ -626,6 +626,134 @@ _lso_rows = {r['id']: r for r in _lso['entries']}
 check('build --skeleton＋lint：輸出檔內容不受警告影響',
       _lso_rows['RT2001']['entry'] == 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。')
 
+# ── S3（複核 2026-09-14）：Claude Code offload 殼 → unwrap → from-raw ──────
+#
+# 背景：raw 檔太大時 Claude Code 會把工具結果落成本機「offload」檔，形狀是
+# `[{"type":"text","text":"### Result\n<payload>\n### Page …"}]`，`<payload>`
+# 可能裸 JSON、也可能包一層 ```json fenced code block```。`unwrap` 原本認
+# 不出這層殼，會把整個 `[{"type":"text",...}]` 當「裸陣列」直接原樣複製，
+# `from-raw` 拿到這種假裸陣列會對每個 `{"type":"text","text":...}` 算 id，
+# 全部算出空字串——生出一份看起來正常、其實全空 id 的垃圾骨架。
+
+NS_INNER = [
+    {'id': 'NS0001', 'desc': '測試描述一', 'script': '測試逐字稿一', 'ft': 'pkg'},
+    {'id': 'NS0002', 'desc': '測試描述二', 'script': '測試逐字稿二', 'ft': 'vo'},
+]
+
+
+def _offload_shell(payload_text):
+    return [{'type': 'text', 'text': f'### Result\n{payload_text}\n### Page 1/1'}]
+
+
+# S3-① unfenced payload：`### Result` 後面直接是裸 JSON
+OFFLOAD_UNFENCED = write_json(
+    'offload_unfenced.json',
+    _offload_shell(json.dumps(NS_INNER, ensure_ascii=False)))
+UNWRAPPED_UNFENCED = os.path.join(TMP, 'offload_unfenced_unwrapped.json')
+out_s3a, code_s3a = run(bp.cmd_unwrap, Args(raw=OFFLOAD_UNFENCED, out=UNWRAPPED_UNFENCED))
+check('S3① unwrap unfenced offload 殼 → exit 0', code_s3a == 0, out_s3a[:300])
+check('S3① unwrap 認出殼型是 offload（訊息點名）', 'offload' in out_s3a, out_s3a[:300])
+_s3a_data = json.load(open(UNWRAPPED_UNFENCED, encoding='utf-8'))
+check('S3① unwrap 卸殼後是乾淨的裸陣列（2 筆、id 正確）',
+      [it.get('id') for it in _s3a_data] == ['NS0001', 'NS0002'], str(_s3a_data))
+
+# S3-② fenced payload：`### Result` 後面包一層 ```json fenced code block```
+OFFLOAD_FENCED = write_json(
+    'offload_fenced.json',
+    _offload_shell('```json\n' + json.dumps(NS_INNER, ensure_ascii=False) + '\n```'))
+UNWRAPPED_FENCED = os.path.join(TMP, 'offload_fenced_unwrapped.json')
+out_s3b, code_s3b = run(bp.cmd_unwrap, Args(raw=OFFLOAD_FENCED, out=UNWRAPPED_FENCED))
+check('S3② unwrap fenced offload 殼 → exit 0', code_s3b == 0, out_s3b[:300])
+_s3b_data = json.load(open(UNWRAPPED_FENCED, encoding='utf-8'))
+check('S3② unwrap fenced 卸殼後是乾淨的裸陣列（2 筆、id 正確）',
+      [it.get('id') for it in _s3b_data] == ['NS0001', 'NS0002'], str(_s3b_data))
+
+# S3-③ end-to-end：unwrap 產出的裸陣列直接餵給 from-raw（NS 站），要能正常
+# 產出骨架，不是全空 id 的垃圾。
+FR_OUT = os.path.join(TMP, 'ns_from_offload_skeleton.json')
+out_s3c, code_s3c = run(bp.cmd_from_raw, Args(
+    site='ns', raw=UNWRAPPED_FENCED, checkpoint='0914-1500',
+    state=None, out=FR_OUT, page=None))
+check('S3③ from-raw 吃 unwrap 後的 offload 內容 → exit 0', code_s3c == 0, out_s3c[:300])
+_fr_skel = json.load(open(FR_OUT, encoding='utf-8'))
+check('S3③ 骨架 2 則、id 正確（不是全空 id 的垃圾）',
+      [r['id'] for r in _fr_skel] == ['NS0001', 'NS0002'], str(_fr_skel))
+
+# S3-④ 殼認得出來，但內容解不出合法 JSON → 明確 ValueError／unwrap exit 非 0，
+# 不悄悄把殼字串原樣複製當成資料。
+OFFLOAD_GARBAGE = write_json(
+    'offload_garbage.json',
+    _offload_shell('這不是 JSON，也沒有 fenced code block，就是一段爬蟲爬壞的文字'))
+UNWRAPPED_GARBAGE = os.path.join(TMP, 'offload_garbage_unwrapped.json')
+out_s3d, code_s3d = run(bp.cmd_unwrap, Args(raw=OFFLOAD_GARBAGE, out=UNWRAPPED_GARBAGE))
+check('S3④ offload 殼但內容解不出 JSON → 非 0 exit（不靜默假裝成功）', code_s3d != 0, out_s3d[:300])
+check('S3④ 沒有寫出任何檔案', not os.path.exists(UNWRAPPED_GARBAGE))
+
+# S3-⑤ from-raw 直接餵一份「不是 dict 陣列」的檔案（例如整份還沒卸殼的
+# offload 殼本身）→ 要明確拒絕、非 0 exit，不產出骨架。
+FR_BAD_SHAPE_OUT = os.path.join(TMP, 'ns_from_bad_shape_skeleton.json')
+out_s3e, code_s3e = run(bp.cmd_from_raw, Args(
+    site='ns', raw=OFFLOAD_UNFENCED, checkpoint='0914-1500',
+    state=None, out=FR_BAD_SHAPE_OUT, page=None))
+check('S3⑤ from-raw 吃到未卸殼的 offload 檔（每筆算出的 id 都空）→ 非 0 exit',
+      code_s3e != 0, out_s3e[:300])
+check('S3⑤ 沒有寫出任何骨架檔', not os.path.exists(FR_BAD_SHAPE_OUT))
+
+# S3-⑤b 頂層根本不是 list（例如整份還是 dict 殼，例如 AP 清單那種
+# {"Items": [...]}）→ 一樣要走「頂層不是 dict 陣列」這條分支拒絕。
+NOT_A_LIST = write_json('ns_not_a_list.json', {'Items': [{'id': 'NS9001'}]})
+FR_NOT_LIST_OUT = os.path.join(TMP, 'ns_not_list_skeleton.json')
+out_s3g, code_s3g = run(bp.cmd_from_raw, Args(
+    site='ns', raw=NOT_A_LIST, checkpoint='0914-1500',
+    state=None, out=FR_NOT_LIST_OUT, page=None))
+check('S3⑤b from-raw 吃到頂層是 dict（非裸陣列）→ 非 0 exit',
+      code_s3g != 0, out_s3g[:300])
+check('S3⑤b 錯誤訊息點名「頂層不是」dict 陣列', '頂層不是' in out_s3g, out_s3g[:300])
+check('S3⑤b 沒有寫出任何骨架檔', not os.path.exists(FR_NOT_LIST_OUT))
+
+# S3-⑥ from-raw 吃到一份「型是 dict 陣列，但每一筆算出的 id 都是空字串」
+# 的檔案（例如欄位名整批打錯）→ 拒絕，不生垃圾骨架。
+ALL_EMPTY_ID = write_json('ns_all_empty_id.json', [
+    {'not_id': 'x', 'desc': '甲'},
+    {'not_id': 'y', 'desc': '乙'},
+])
+FR_EMPTY_ID_OUT = os.path.join(TMP, 'ns_empty_id_skeleton.json')
+out_s3f, code_s3f = run(bp.cmd_from_raw, Args(
+    site='ns', raw=ALL_EMPTY_ID, checkpoint='0914-1500',
+    state=None, out=FR_EMPTY_ID_OUT, page=None))
+check('S3⑥ from-raw 每筆 id 都空 → 非 0 exit', code_s3f != 0, out_s3f[:300])
+check('S3⑥ 沒有寫出任何骨架檔', not os.path.exists(FR_EMPTY_ID_OUT))
+
+# ── S1（複核 2026-09-14）：rename-field --out 大小寫變體要判成同一個檔 ──
+S1_IN = write_json('s1_case_in.json', [{'id': 'RT9001', 'raw_entry': '甲'}])
+S1_OUT_UPPER = os.path.join(TMP, os.path.basename(S1_IN).upper())  # 大小寫變體
+out_s1, code_s1 = run(bp.cmd_rename_field, Args(
+    batch=S1_IN, from_key='raw_entry', to_key='entry', out=S1_OUT_UPPER, dry_run=False))
+check('S1 --out 只是輸入檔的大小寫變體 → 拒絕（非 0 exit）', code_s1 != 0, out_s1[:300])
+check('S1 原檔沒被改壞（仍是 raw_entry）',
+      json.load(open(S1_IN, encoding='utf-8'))[0].get('raw_entry') == '甲')
+
+# ── S2（複核 2026-09-14）：ENEX／ABC 平台狀態檔也要被 rename-field 擋掉 ──
+for _platform_state_name in ('0913-ENEX-state.json', '0913-ABC-state.json'):
+    _p_state = write_json(_platform_state_name, [{'id': 'X0001', 'raw_entry': '甲'}])
+    _out_s2, _code_s2 = run(bp.cmd_rename_field, Args(
+        batch=_p_state, from_key='raw_entry', to_key='entry', out=None, dry_run=False))
+    check(f'S2 {_platform_state_name} → 非 0 exit（平台生產 state 也要擋）',
+          _code_s2 != 0, _out_s2[:300])
+    check(f'S2 {_platform_state_name} 錯誤訊息講明是生產狀態檔',
+          '生產狀態檔' in _out_s2, _out_s2[:300])
+
+# ── N3（複核 2026-09-14）：--out 帶不合法路徑 → 友善錯誤、exit 2，不炸 traceback ──
+N3_IN = write_json('n3_in.json', [{'id': 'RT9101', 'raw_entry': '甲'}])
+N3_BAD_OUT = os.path.join(TMP, 'n3_bad_out.json::$DATA')  # NTFS 保留字元組合
+_tmp_before_n3 = set(os.listdir(TMP))
+out_n3, code_n3 = run(bp.cmd_rename_field, Args(
+    batch=N3_IN, from_key='raw_entry', to_key='entry', out=N3_BAD_OUT, dry_run=False))
+check('N3 --out 不合法路徑 → 非 0 exit（友善訊息，不是裸 traceback）',
+      code_n3 != 0 and 'Traceback' not in out_n3, out_n3[:300])
+_tmp_leftover_n3 = [f for f in os.listdir(TMP) if f.startswith('.s2rf_tmp_')]
+check('N3 沒有留下暫存檔殘骸', not _tmp_leftover_n3, str(_tmp_leftover_n3))
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)

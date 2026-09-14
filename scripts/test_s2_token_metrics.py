@@ -101,6 +101,28 @@ for cmd, want in (
         # 不會走到 s2_batch_prep 分支——放在這裡只是連帶驗證兩條分支不衝突。
         'python -c:other',
     ),
+    # 2026-09-14（複核 N1）：`python.exe` 裸呼叫、以及整段用引號包住的完整
+    # python.exe 路徑（agent 有時透過非標準 PATH 呼叫）原本接不到，整條指令
+    # 落回沒分子指令的 's2_batch_prep.py' 通用桶——批次量測時看不出到底
+    # 是哪個子指令在跑。
+    ('python.exe scripts/s2_batch_prep.py inspect raw.json', 's2_batch_prep:inspect'),
+    ('python3.exe scripts/s2_batch_prep.py build --site ap', 's2_batch_prep:build'),
+    ('"C:/Users/User/AppData/Local/Programs/Python/Python312/python.exe" '
+     '-X utf8 scripts/s2_batch_prep.py inspect raw.json', 's2_batch_prep:inspect'),
+    ("'C:/Python312/python.exe' -X utf8 scripts/s2_batch_prep.py build --site ns",
+     's2_batch_prep:build'),
+    # 引號包住的完整路徑＋未知子指令，一樣要落明確可辨識的未知桶，不是通用桶。
+    ('"C:/Python312/python.exe" scripts/s2_batch_prep.py totally-new-sub x.json',
+     's2_batch_prep:?totally-new-sub'),
+    # heredoc 幽靈排除對 python.exe／引號路徑同樣要維持——確認沒有因為放寬
+    # 呼叫用字而重新打開這個洞。
+    (
+        "\"C:/Python312/python.exe\" - <<'PY'\nimport io, json\n"
+        "p='scripts/s2_batch_prep.py'\n"
+        "s=io.open(p, encoding='utf-8').read()\n"
+        "PY",
+        's2_batch_prep.py',
+    ),
 ):
     got = tm.classify_bash_tool(cmd)
     check(f'分桶：{want}', got == want, f'實得 {got}')
