@@ -371,6 +371,19 @@ try {
     $w.WriteLine("pid=$PID checkpoint=$Checkpoint started=$stamp")
     $w.Flush()
 
+    # ── 開工前硬檢查：RT 嚴禁無頭（headless）跑（2026-09-15 訂案）──────────
+    # RT／AP／NS／ENEX／ABC 共用同一個 s2_mcp.json 啟動的瀏覽器，沒有「只切 RT」
+    # 這種選項——只要有人手滑在這份 MCP 設定裡加了 `--headless`，全站（含 RT）
+    # 都會被拖下水。這裡直接讀設定檔內容，一旦偵測到就整輪擋下、不放行，
+    # 不能只留文件規則靠 agent 自律（見 13c §1 RT 段那條純文件版）。
+    if (Test-Path $McpConfig) {
+        $mcpRaw = Get-Content $McpConfig -Raw -Encoding UTF8
+        if ($mcpRaw -match '--headless') {
+            Write-Run "ABORT`t偵測到 $McpConfig 含 --headless，RT 嚴禁無頭跑，本輪整個擋下不放行"
+            throw "s2_mcp.json 含 --headless，違反『RT 嚴禁無頭跑』鐵律，請拿掉該旗標後再重跑"
+        }
+    }
+
     # ── 建檔輪：新的一天由**腳本**開檔，不交給 agent 判斷（2026-08-10 訂案）──
     # 🔴 0810-1600 實錯：agent 去開 `0810-s2-state.json` 拿到 FileNotFoundError，
     #    於是**退回昨天那份繼續寫**，再改名輸出成 `0810晚班交接.txt`——
