@@ -148,5 +148,15 @@ out2 = add_batch_cli(sp2, [
 ])
 check("add-batch 的 lint 📏 併進「格式待修」段", "格式待修" in out2 and "📏" in out2, out2)
 
+d3, sp3 = new_state()
+entry_ns = "WE-006WE (記者包裝) ▎長片摘要。▎畫面：現場畫面▎無BITE。▎02:01"
+out3 = add_batch_cli(sp3, [
+    {"id": "WE-006WE", "source": "NS", "checkpoint": "0999-2000",
+     "status": "has_script", "footage_type": "PKG", "duration_ms": 121000,
+     "entry": entry_ns, "src_text": 'Reporter Sot: "quote"'},
+])
+check("add-batch 把 src_text／duration_ms 傳進 R41/R42 共用 lint",
+      "inline SOT" in out3 and "PKG/DONUT且時長>1分鐘" in out3, out3)
+
 print(f"\n共 {len(results)} 項，通過 {sum(results)}，失敗 {len(results) - sum(results)}")
 sys.exit(0 if all(results) else 1)
