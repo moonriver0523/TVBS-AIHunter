@@ -93,6 +93,7 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
 - **文稿（大幅省成本）**：`POST https://newsource-content-api-530.ns.cnn.com/api/v3/stories`（Bearer token 在 `localStorage.newsourceSession.token`）——**清單回應直接含 `content.bitcentral.script` 全文**，不必開任何詳情頁或 Preview modal。完整配方見 [`common/investigation-logs/2026-08-03-NS掃帶卡點報告-回覆.txt`](../common/investigation-logs/2026-08-03-NS掃帶卡點報告-回覆.txt)。
 - ⚠️ **影片下載不能 API 直取**（2026-08-03 實測結論）：NS 走 **Signiant 傳輸服務**（`POST /api/v2/download` → `downloadIds` → `/api/v2/download/config/{id}` 回的是 `sig://` 路徑＋Signiant 伺服器與憑證，前端載入 `transferapi.min.js` 由 Signiant 客戶端搬檔），**沒有 HTTP 直鏈可取**。NS 影片一律照下一節 UI 做法點 Download。
 - ⚠️ NS token 會過期，第一次呼叫拿到 `null` 是常態——重新整理頁面等登入完成再打；**連兩次拿不到就是真的登出，停下來請使用者登入**（agent 不得自行輸入帳密）。
+- ✅ **多分頁平行加速（2026-09-16 訂定）**：同一批清單裡有多筆 NS 素材時，可以一次開多個分頁（共用同一個 `.playwright-daily-profile`、同一份登入態），**每個分頁各自負責一筆，同時送出文稿API request＋同時在各自分頁點該筆的Download按鈕**，不用等第一筆「文稿→影片→下載確認」整套跑完才開始下一筆。**按下 Download 後要留合理等待時間再去查檔案大小**，NS 的下載流程建立需要一點時間，按了立刻查很容易誤判失敗。
 
 ## 各來源處理細節（UI 舊做法：API 失敗兩次時的退路，NS 影片則一律用這套）
 
