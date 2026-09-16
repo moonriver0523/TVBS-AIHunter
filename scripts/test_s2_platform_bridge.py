@@ -481,3 +481,26 @@ def test_from_raw_page_splits_hint_table(tmp_path, capsys, monkeypatch):
         assert e.code == 1
     cap3 = capsys.readouterr()
     assert "超出範圍" in cap3.err
+
+
+def test_from_raw_page_zero_is_out_of_range(tmp_path, capsys, monkeypatch):
+    """`--page 0` 是 falsy 但不是「沒給」，`args.page or 1` 這種寫法會把它悄悄
+    當成預設值 1（Codex複驗抓到，2026-09-16）；必須用 `is not None` 才會正確
+    當成超出範圍的頁碼報錯，不能得到跟沒帶 `--page` 一樣的結果。"""
+    monkeypatch.setattr(bridge, "INSPECT_TEXT_BUDGET", 1)
+    items = [
+        {"id": "ENEX100001", "title": "PAGEONE_HEAD", "desc": "d1",
+         "partner": "FR BFM", "url": "https://cdn.example/1.mp4",
+         "estat": "PUBLISHED", "nlid": 1},
+    ]
+    raw = _write(tmp_path / "enex_raw.json", items)
+    out = tmp_path / "enex_skeleton.json"
+
+    try:
+        _from_raw(site="enex", raw=str(raw), checkpoint="0916-0430",
+                  out=str(out), page=0)
+        raise AssertionError("expected SystemExit for --page 0")
+    except SystemExit as e:
+        assert e.code == 1
+    cap = capsys.readouterr()
+    assert "超出範圍" in cap.err

@@ -321,7 +321,7 @@ def cmd_from_raw(args):
         cur_len += ln_len
     pages.append(cur)  # 0 則時也留一頁空的，--page 1 才有東西可選
 
-    page_no = args.page or 1
+    page_no = args.page if args.page is not None else 1
     if page_no < 1 or page_no > len(pages):
         print(f"✗ --page {page_no} 超出範圍（共 {len(pages)} 頁）", file=sys.stderr)
         sys.exit(1)
