@@ -25,17 +25,27 @@ def _write_json(path: Path, payload) -> Path:
 
 def _items(*ids: str) -> list[dict[str, str]]:
     return [
-        {"id": item_id, "comp": "Editorial", "title": f"Synthetic {item_id}"}
+        {
+            "id": item_id,
+            "comp": "Editorial",
+            "func": "BroadcastVideo",
+            "title": f"Synthetic {item_id}",
+        }
         for item_id in ids
     ]
 
 
-def test_anchor_set_keeps_original_index_and_skips_standard_library_video():
+def test_anchor_set_keeps_original_index_and_skips_online_video():
     items = [
-        {"id": "AP-std", "comp": "StandardLibraryVideo", "title": "library"},
-        {"id": "AP-1", "comp": "Editorial", "title": "one"},
-        {"id": "AP-2", "comp": "Editorial", "title": "two"},
-        {"id": "AP-3", "comp": "Editorial", "title": "three"},
+        {
+            "id": "AP-online",
+            "comp": "StandardLibraryVideo",
+            "func": "OnlineVideo",
+            "title": "online",
+        },
+        {"id": "AP-1", "comp": "Editorial", "func": "BroadcastVideo", "title": "one"},
+        {"id": "AP-2", "comp": "Editorial", "func": "BroadcastVideo", "title": "two"},
+        {"id": "AP-3", "comp": "Editorial", "func": "BroadcastVideo", "title": "three"},
     ]
 
     result = coverage.build_anchor_set(items, 3)
@@ -53,8 +63,13 @@ def test_anchor_set_keeps_original_index_and_skips_standard_library_video():
 
 def test_anchor_set_marks_partial_when_fewer_usable_items_exist():
     items = [
-        {"id": "AP-std", "comp": "StandardLibraryVideo", "title": "library"},
-        {"id": "AP-1", "comp": "Editorial", "title": "one"},
+        {
+            "id": "AP-online",
+            "comp": "StandardLibraryVideo",
+            "func": "OnlineVideo",
+            "title": "online",
+        },
+        {"id": "AP-1", "comp": "Editorial", "func": "BroadcastVideo", "title": "one"},
     ]
 
     result = coverage.build_anchor_set(items, 3)
@@ -117,28 +132,45 @@ def test_check_overlap_fails_when_anchor_order_is_reversed():
 
     assert result["coverage_ok"] is False
     assert result["order_consistent"] is False
-    assert "相對順序" in result["reason"]
+    assert result["lis_length"] == 1
+    assert "LIS 長度" in result["reason"]
 
 
-def test_check_overlap_fails_when_anchor_order_is_interleaved():
+def test_check_overlap_allows_minor_reordering_when_lis_reaches_threshold():
+    # 舊版要求所有命中 index 嚴格遞增，這個案例會是 False；LIS 修法應放行。
     result = coverage.check_anchor_overlap(
         _items("AP-1", "AP-3", "AP-2", "AP-4"),
         _anchor_set(),
     )
 
-    assert result["coverage_ok"] is False
-    assert result["order_consistent"] is False
+    assert result["coverage_ok"] is True
+    assert result["order_consistent"] is True
+    assert result["lis_length"] == 3
+    assert "LIS 長度 3" in result["reason"]
 
 
-def test_check_overlap_fails_when_hits_are_standard_library_video_in_new_list():
-    """圖庫批次不能證明清單銜接：即使新清單裡有 3 個 id 對得上 anchor、
-    順序也遞增，只要那幾列在新清單裡的 comp 是 StandardLibraryVideo，
-    就不算真正命中（回歸測試，見 D21 review 抓到的偽陽性）。"""
+def test_check_overlap_fails_when_hits_are_online_video_in_new_list():
+    """OnlineVideo 不適合證明清單銜接，即使 comp 是 StandardLibraryVideo。"""
     new_items = [
-        {"id": "AP-1", "comp": "StandardLibraryVideo", "title": "one"},
-        {"id": "AP-2", "comp": "StandardLibraryVideo", "title": "two"},
-        {"id": "AP-3", "comp": "StandardLibraryVideo", "title": "three"},
-        {"id": "AP-tail", "comp": "Editorial", "title": "tail"},
+        {
+            "id": "AP-1",
+            "comp": "StandardLibraryVideo",
+            "func": "OnlineVideo",
+            "title": "one",
+        },
+        {
+            "id": "AP-2",
+            "comp": "StandardLibraryVideo",
+            "func": "OnlineVideo",
+            "title": "two",
+        },
+        {
+            "id": "AP-3",
+            "comp": "StandardLibraryVideo",
+            "func": "OnlineVideo",
+            "title": "three",
+        },
+        {"id": "AP-tail", "comp": "Editorial", "func": "BroadcastVideo", "title": "tail"},
     ]
 
     result = coverage.check_anchor_overlap(new_items, _anchor_set())
@@ -146,6 +178,82 @@ def test_check_overlap_fails_when_hits_are_standard_library_video_in_new_list():
     assert result["coverage_ok"] is False
     assert result["hits"]["count"] == 0
     assert "沒有命中任何 anchor" in result["reason"]
+
+
+def test_online_video_is_excluded_from_anchor_set_and_hits():
+    baseline = [
+        {"id": "AP-online", "comp": "Editorial", "func": "OnlineVideo"},
+        {"id": "AP-broadcast", "comp": "Editorial", "func": "BroadcastVideo"},
+    ]
+    anchors = coverage.build_anchor_set(baseline, 1)["anchors"]
+
+    result = coverage.check_anchor_overlap(
+        [
+            {"id": "AP-online", "comp": "Editorial", "func": "OnlineVideo"},
+            {"id": "AP-broadcast", "comp": "Editorial", "func": "BroadcastVideo"},
+        ],
+        [{"id": "AP-online", "index": 0}],
+        min_hits=1,
+    )
+
+    assert anchors == [{"id": "AP-broadcast", "index": 1}]
+    assert result["hits"]["count"] == 0
+    assert result["coverage_ok"] is False
+
+
+def test_broadcast_video_is_valid_even_when_comp_is_standard_library_video():
+    items = [
+        {
+            "id": "AP-broadcast",
+            "comp": "StandardLibraryVideo",
+            "func": "BroadcastVideo",
+        },
+    ]
+
+    anchors = coverage.build_anchor_set(items, 1)["anchors"]
+    result = coverage.check_anchor_overlap(items, anchors, min_hits=1)
+
+    assert anchors == [{"id": "AP-broadcast", "index": 0}]
+    assert result["coverage_ok"] is True
+    assert result["hits"]["count"] == 1
+
+
+def test_missing_func_falls_back_to_consumer_ready_sig():
+    items = [
+        {"id": "AP-online-missing", "comp": "Editorial", "sig": "ConsumerReady|SNTV"},
+        {
+            "id": "AP-online-empty",
+            "comp": "Editorial",
+            "func": "",
+            "sig": "consumerready|SNTV",
+        },
+        {"id": "AP-broadcast", "comp": "Editorial", "sig": "NewsroomReady"},
+    ]
+
+    anchors = coverage.build_anchor_set(items, 1)["anchors"]
+    result = coverage.check_anchor_overlap(
+        items,
+        [
+            {"id": "AP-online-missing", "index": 0},
+            {"id": "AP-online-empty", "index": 1},
+        ],
+        min_hits=1,
+    )
+
+    assert anchors == [{"id": "AP-broadcast", "index": 2}]
+    assert result["hits"]["count"] == 0
+    assert result["coverage_ok"] is False
+
+
+def test_missing_func_and_sig_is_conservatively_kept():
+    items = [{"id": "AP-old", "comp": "StandardLibraryVideo"}]
+
+    anchors = coverage.build_anchor_set(items, 1)["anchors"]
+    result = coverage.check_anchor_overlap(items, anchors, min_hits=1)
+
+    assert anchors == [{"id": "AP-old", "index": 0}]
+    assert result["coverage_ok"] is True
+    assert result["hits"]["count"] == 1
 
 
 def test_check_overlap_fails_clearly_when_there_is_no_overlap():
@@ -157,7 +265,7 @@ def test_check_overlap_fails_clearly_when_there_is_no_overlap():
     assert result["coverage_ok"] is False
     assert result["hits"]["count"] == 0
     assert "沒有命中任何 anchor" in result["reason"]
-    assert "需要至少 3 個" in result["reason"]
+    assert "未達門檻 3" in result["reason"]
 
 
 @pytest.mark.parametrize(
@@ -192,10 +300,15 @@ def test_cli_writes_anchor_and_overlap_json(tmp_path):
     baseline = _write_json(
         tmp_path / "baseline.json",
         [
-            {"id": "AP-std", "comp": "StandardLibraryVideo", "title": "library"},
-            {"id": "AP-1", "comp": "Editorial", "title": "one"},
-            {"id": "AP-2", "comp": "Editorial", "title": "two"},
-            {"id": "AP-3", "comp": "Editorial", "title": "three"},
+            {
+                "id": "AP-online",
+                "comp": "StandardLibraryVideo",
+                "func": "OnlineVideo",
+                "title": "online",
+            },
+            {"id": "AP-1", "comp": "Editorial", "func": "BroadcastVideo", "title": "one"},
+            {"id": "AP-2", "comp": "Editorial", "func": "BroadcastVideo", "title": "two"},
+            {"id": "AP-3", "comp": "Editorial", "func": "BroadcastVideo", "title": "three"},
         ],
     )
     new_list = _write_json(tmp_path / "new.json", _items("AP-x", "AP-1", "AP-2", "AP-3"))

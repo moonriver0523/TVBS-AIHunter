@@ -18,6 +18,7 @@ Examples::
 from __future__ import annotations
 
 import argparse
+from bisect import bisect_left
 import json
 from pathlib import Path
 from typing import Any
@@ -80,6 +81,16 @@ def load_ap_list(path: str | Path) -> list[dict[str, Any]]:
     return payload
 
 
+def _is_unsuitable_anchor(item: dict[str, Any]) -> bool:
+    """Return whether an AP item should be excluded from anchor matching."""
+    function = item.get("func")
+    if isinstance(function, str) and function.strip():
+        return function.strip() == "OnlineVideo"
+
+    signals = item.get("sig")
+    return isinstance(signals, str) and "consumerready" in signals.casefold()
+
+
 def build_anchor_set(items: list[dict[str, Any]], n: int) -> dict[str, Any]:
     """從清單前方掃描可用項目，產生以原始 index 定位的 anchor set。
 
@@ -93,7 +104,7 @@ def build_anchor_set(items: list[dict[str, Any]], n: int) -> dict[str, Any]:
     seen: set[str] = set()
     for index, item in enumerate(items):
         item_id = _item_id(item, index)
-        if item.get("comp") == STANDARD_LIBRARY_VIDEO or item_id in seen:
+        if _is_unsuitable_anchor(item) or item_id in seen:
             continue
         seen.add(item_id)
         anchors.append({"id": item_id, "index": index})
@@ -140,8 +151,16 @@ def _load_anchor_set(path: str | Path) -> list[dict[str, Any]]:
     return sorted(anchors, key=lambda anchor: anchor["index"])
 
 
-def _strictly_increasing(values: list[int]) -> bool:
-    return all(left < right for left, right in zip(values, values[1:]))
+def _lis_length(values: list[int]) -> int:
+    """Return the length of the longest strictly increasing subsequence."""
+    tails: list[int] = []
+    for value in values:
+        position = bisect_left(tails, value)
+        if position == len(tails):
+            tails.append(value)
+        else:
+            tails[position] = value
+    return len(tails)
 
 
 def check_anchor_overlap(
@@ -151,20 +170,20 @@ def check_anchor_overlap(
 ) -> dict[str, Any]:
     """比對 anchor 命中與相對順序，回傳可直接寫入 JSON 的結果。
 
-    anchor set 依基準快照 index 排序；本輪命中的 index 必須嚴格遞增，
-    也就是保留基準清單的相對順序。只使用 index，不使用 ts 或任何日期欄位。
+    anchor set 依基準快照 index 排序；本輪命中的 index 以 LIS 長度判斷
+    是否保留足夠的相對順序。只使用 index，不使用 ts 或任何日期欄位。
     """
     if min_hits <= 0:
         raise ValueError("min_hits 必須是大於 0 的整數")
 
     # 同一 ID 若在新清單重複，第一次出現的位置才是它在清單中的位置；
-    # 命中數仍然以不同 ID 計算。StandardLibraryVideo 批次項目不得被拿來
+    # 命中數仍然以不同 ID 計算。不適合當 anchor 的項目不得被拿來
     # 當 anchor 命中（即使 id 剛好等於某個 anchor），但原始 index 位移
     # 仍要保留，所以照樣 enumerate 全部項目，只是跳過建立映射。
     new_indices: dict[str, int] = {}
     for index, item in enumerate(items):
         item_id = _item_id(item, index)
-        if item.get("comp") == STANDARD_LIBRARY_VIDEO:
+        if _is_unsuitable_anchor(item):
             continue
         new_indices.setdefault(item_id, index)
 
@@ -179,33 +198,33 @@ def check_anchor_overlap(
     ]
     hit_count = len(hits)
 
-    order_consistent = False
-    if hit_count >= min_hits:
-        order_consistent = _strictly_increasing(
-            [hit["new_index"] for hit in hits]
-        )
+    lis_length = _lis_length([hit["new_index"] for hit in hits])
+    order_consistent = lis_length >= min_hits
 
     if hit_count == 0:
-        reason = f"沒有命中任何 anchor（需要至少 {min_hits} 個），無法確認清單銜接。"
+        reason = (
+            f"沒有命中任何 anchor，LIS 長度為 0，未達門檻 {min_hits}。"
+        )
     elif hit_count < min_hits:
         reason = (
-            f"命中 {hit_count} 個不同 anchor，少於門檻 {min_hits} 個，"
-            "無法確認清單銜接。"
+            f"命中 {hit_count} 個不同 anchor，少於門檻 {min_hits} 個；"
+            f"LIS 長度為 {lis_length}。"
         )
     elif not order_consistent:
         reason = (
-            f"命中 {hit_count} 個不同 anchor，但相對順序與基準清單不一致，"
-            "無法確認清單銜接。"
+            f"命中 {hit_count} 個不同 anchor，但 LIS 長度僅 {lis_length}，"
+            f"未達門檻 {min_hits}。"
         )
     else:
         reason = (
-            f"命中 {hit_count} 個不同 anchor，且相對順序與基準清單一致，"
-            "清單銜接成功。"
+            f"命中 {hit_count} 個不同 anchor，LIS 長度 {lis_length}"
+            f" 達到門檻 {min_hits}，清單銜接成功。"
         )
 
     return {
         "coverage_ok": hit_count >= min_hits and order_consistent,
         "hits": {"count": hit_count, "items": hits},
+        "lis_length": lis_length,
         "order_consistent": order_consistent,
         "reason": reason,
     }
