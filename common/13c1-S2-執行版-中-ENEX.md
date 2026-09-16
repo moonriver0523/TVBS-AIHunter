@@ -163,6 +163,17 @@ python scripts/s2_batch_prep.py search  "<scratch>/enex_raw_{HHMM}.json" --conta
 
 ---
 
+### V5-2b. 骨架橋接：優先用 `s2_platform_bridge.py`（D19，2026-09-16 起）
+
+⛔ **不要自己逐則讀 `desc` 湊 entries**：先跑
+`python scripts/s2_platform_bridge.py from-raw --site enex --raw <raw> --checkpoint {CHECKPOINT} --out <skeleton>`
+（`src_text` 已機械帶好），骨架每列只填 `entry`／`category`／`tc`／`skip` 四格，填完
+`python scripts/s2_platform_bridge.py build --skeleton <skeleton> --out <entries>`
+一次轉成下面 platform 吃的格式，再接 `s2_platform_extract.py enex`。`--help` 有完整範例；
+出錯不要自己重寫邏輯，直接照訊息處理或回報。
+
+---
+
 ## V5-3. ENEX 的整併路徑：**走 platform 三件套，不走 `add-batch` 直入**
 
 ```

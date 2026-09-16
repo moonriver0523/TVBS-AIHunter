@@ -244,6 +244,17 @@ ABC 一輪可能上百則，**幾乎一定會被卸載**。⛔ 這不是錯誤�
 
 ---
 
+### V7-2b. 骨架橋接：優先用 `s2_platform_bridge.py`（D19，2026-09-16 起）
+
+⛔ **不要逐則 `inspect` 翻頁湊 entries**：先跑
+`python scripts/s2_platform_bridge.py from-raw --site abc --raw <raw> --detail <detail> --checkpoint {CHECKPOINT} --out <skeleton>`
+（Detail全文／`detailId` 已機械帶入；Detail 頁務必抓 `#script_smry`，抓到父層 container
+會混進客服導覽雜訊），骨架每列只填 `entry`／`category`／`tc`／`skip` 四格，填完
+`python scripts/s2_platform_bridge.py build --skeleton <skeleton> --out <entries>`
+轉成下面 `check-entries` 吃的格式，再接原本 extract→lint→merge。`--help` 有完整範例。
+
+---
+
 ## V7-3. 整併路徑：走 platform 三件套（同 ENEX，⛔ 不走 `add-batch` 直入）
 
 ```
