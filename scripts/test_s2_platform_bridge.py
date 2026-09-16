@@ -326,3 +326,158 @@ def test_from_raw_d12_skips_has_script_keeps_pending(tmp_path, capsys):
     assert pending["prev_status"] == "pending"
     assert "已在庫略過" in captured.err
     assert "pending 保留" in captured.err
+
+
+# ── 5. Codex 驗收：全文不截斷／空 script_html／重複警告／--page ──
+
+def test_abc_from_raw_keeps_full_script_html_untruncated(tmp_path):
+    """骨架 src_text 必須是全文，不能套 truncate() 的 8,000 字上限。"""
+    long_body = "STORY: " + ("x" * 9000)
+    raw = _write(tmp_path / "abc_raw.json", [
+        {"News Story": "091601099", "Slug": "LongOne", "Length": "02:00"},
+    ])
+    detail = _write(tmp_path / "abc_detail.json", [
+        {"story": "091601099", "detailId": "9000099", "script_html": long_body},
+    ])
+    out = tmp_path / "abc_skeleton.json"
+    _from_raw(
+        site="abc", raw=str(raw), detail=str(detail),
+        checkpoint="0916-0430", out=str(out),
+    )
+    hit = _load(out)[0]
+    assert hit["src_text"] == long_body
+    assert len(hit["src_text"]) == len(long_body)
+    assert "截斷" not in hit["src_text"]
+    assert hit.get("detail_missing") is not True
+
+
+def test_abc_empty_script_html_marks_detail_missing(tmp_path, capsys):
+    """detail 對到但 script_html 空字串／null／缺欄，一樣標 detail_missing。"""
+    raw = _write(tmp_path / "abc_raw.json", [
+        {"News Story": "091601010", "Slug": "EmptyHtml", "Length": "01:00"},
+        {"News Story": "091601011", "Slug": "NullHtml", "Length": "01:00"},
+        {"News Story": "091601012", "Slug": "NoField", "Length": "01:00"},
+        {"News Story": "091601013", "Slug": "NoDetail", "Length": "01:00"},
+    ])
+    detail = _write(tmp_path / "abc_detail.json", [
+        {"story": "091601010", "detailId": "10", "script_html": ""},
+        {"story": "091601011", "detailId": "11", "script_html": None},
+        {"story": "091601012", "detailId": "12"},
+    ])
+    out = tmp_path / "abc_skeleton.json"
+    _from_raw(
+        site="abc", raw=str(raw), detail=str(detail),
+        checkpoint="0916-0430", out=str(out),
+    )
+    captured = capsys.readouterr()
+    by_id = {r["id"]: r for r in _load(out)}
+
+    for rid, did in (
+        ("ABC091601010", "10"),
+        ("ABC091601011", "11"),
+        ("ABC091601012", "12"),
+    ):
+        assert by_id[rid].get("detail_missing") is True, rid
+        assert by_id[rid]["src_text"] == ""
+        assert by_id[rid]["detailId"] == did
+        assert "全文欄位是空" in captured.err
+        assert rid in captured.err
+
+    missing = by_id["ABC091601013"]
+    assert missing.get("detail_missing") is True
+    assert missing["src_text"] == ""
+    assert missing["detailId"] == ""
+    assert "找不到對應" in captured.err
+    assert "ABC091601013" in captured.err
+
+
+def test_duplicate_ids_warn_on_stderr(tmp_path, capsys):
+    """detail／raw 重複保留第一筆並警告；build 重複則後筆覆蓋前筆並警告。"""
+    raw = _write(tmp_path / "abc_raw.json", [
+        {"News Story": "091601001", "Slug": "First", "Length": "01:00"},
+        {"News Story": "091601001", "Slug": "Second", "Length": "02:00"},
+    ])
+    detail = _write(tmp_path / "abc_detail.json", [
+        {"story": "091601001", "detailId": "111", "script_html": "FIRST BODY"},
+        {"story": "091601001", "detailId": "222", "script_html": "SECOND BODY"},
+    ])
+    skel_path = tmp_path / "abc_skeleton.json"
+    _from_raw(
+        site="abc", raw=str(raw), detail=str(detail),
+        checkpoint="0916-0430", out=str(skel_path),
+    )
+    captured = capsys.readouterr()
+    rows = _load(skel_path)
+    assert len(rows) == 1
+    assert rows[0]["hint"]["head"] == "First"
+    assert rows[0]["src_text"] == "FIRST BODY"
+    assert rows[0]["detailId"] == "111"
+    assert "detail 裡有重複" in captured.err
+    assert "raw 裡有重複 id" in captured.err
+    assert "只保留第一次出現的那筆" in captured.err
+
+    skel = [
+        {
+            "id": "ABC091601001", "source": "ABC",
+            "src_text": "A", "detailId": "1", "sb_count": 0,
+            "entry": "first entry", "category": "x", "skip": "",
+        },
+        {
+            "id": "ABC091601001", "source": "ABC",
+            "src_text": "B", "detailId": "2", "sb_count": 0,
+            "entry": "second entry", "category": "y", "skip": "",
+        },
+    ]
+    build_in = _write(tmp_path / "dup_skel.json", skel)
+    build_out = tmp_path / "dup_entries.json"
+    _build(skeleton=str(build_in), out=str(build_out))
+    build_cap = capsys.readouterr()
+    entries = _load(build_out)
+    assert list(entries) == ["ABC091601001"]
+    assert entries["ABC091601001"]["raw_entry"] == "second entry"
+    assert entries["ABC091601001"]["src_text"] == "B"
+    assert "後筆覆蓋前筆" in build_cap.err
+
+
+def test_from_raw_page_splits_hint_table(tmp_path, capsys, monkeypatch):
+    """--page 比照 s2_batch_prep：提示表超長就分頁，N 選第幾頁。"""
+    monkeypatch.setattr(bridge, "INSPECT_TEXT_BUDGET", 1)
+    items = [
+        {
+            "id": "ENEX100001", "title": "PAGEONE_HEAD", "desc": "d1",
+            "partner": "FR BFM", "url": "https://cdn.example/1.mp4",
+            "estat": "PUBLISHED", "nlid": 1,
+        },
+        {
+            "id": "ENEX100002", "title": "PAGETWO_HEAD", "desc": "d2",
+            "partner": "DE ARD", "url": "https://cdn.example/2.mp4",
+            "estat": "PUBLISHED", "nlid": 2,
+        },
+    ]
+    raw = _write(tmp_path / "enex_raw.json", items)
+    out = tmp_path / "enex_skeleton.json"
+
+    _from_raw(site="enex", raw=str(raw), checkpoint="0916-0430",
+              out=str(out), page=1)
+    cap1 = capsys.readouterr()
+    assert "PAGEONE_HEAD" in cap1.out
+    assert "PAGETWO_HEAD" not in cap1.out
+    assert "第 1/2 頁" in cap1.out
+    assert "骨架已寫" in cap1.err
+    assert len(_load(out)) == 2  # 分頁只切提示表，骨架仍是全份
+
+    _from_raw(site="enex", raw=str(raw), checkpoint="0916-0430",
+              out=str(out), page=2)
+    cap2 = capsys.readouterr()
+    assert "PAGETWO_HEAD" in cap2.out
+    assert "PAGEONE_HEAD" not in cap2.out
+    assert "最後一頁" in cap2.out
+
+    try:
+        _from_raw(site="enex", raw=str(raw), checkpoint="0916-0430",
+                  out=str(out), page=9)
+        raise AssertionError("expected SystemExit for out-of-range --page")
+    except SystemExit as e:
+        assert e.code == 1
+    cap3 = capsys.readouterr()
+    assert "超出範圍" in cap3.err

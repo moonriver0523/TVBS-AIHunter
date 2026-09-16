@@ -36,7 +36,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from s2_batch_prep import _load_raw_any  # noqa: E402  卸殼；不要重寫
+from s2_batch_prep import INSPECT_TEXT_BUDGET, _load_raw_any  # noqa: E402  卸殼／分頁預算；不要重寫
 from s2_platform_extract import (  # noqa: E402
     abc_length_mmss,
     bare_enex_id,
@@ -90,7 +90,8 @@ def _script_html_to_src_text(script_html):
     raw = "" if script_html is None else str(script_html).strip()
     if raw.lower() in _NONE_MARKERS:
         return ""
-    return truncate(_html_to_text(raw))
+    # 骨架必須帶全文；truncate 留給 extract_abc。
+    return _html_to_text(raw)
 
 
 def _lookup_status(have, item_id):
@@ -133,14 +134,20 @@ def _load_abc_detail(path):
         return {}
     items = _load_items(path)
     by_story = {}
+    dups = []
     for it in items:
         story = str(it.get("story") or it.get("News Story") or "").strip()
         if not story:
             continue
         if story.upper().startswith("ABC") and story[3:]:
             story = story[3:]
-        if story not in by_story:
-            by_story[story] = it
+        if story in by_story:
+            dups.append(story)
+            continue
+        by_story[story] = it
+    if dups:
+        print(f"⚠️ detail 裡有重複 story／News Story，只保留第一次出現的那筆："
+              f"{', '.join(dups)}", file=sys.stderr)
     return by_story
 
 
@@ -196,6 +203,9 @@ def _abc_row(it, checkpoint, detail_map):
             detail_id = ""
         else:
             detail_id = str(detail_id)
+        # detail 對到了但 script_html 空字串／null／缺欄 → 一樣標 detail_missing
+        if not src_text:
+            missing = True
     else:
         missing = True
     length = it.get("Length")
@@ -253,13 +263,17 @@ def cmd_from_raw(args):
     pending_kept = []
     known_gaps = []
     seen = set()
+    dup_ids = []
     for it in items:
         row = _enex_row(it, args.checkpoint) if site == "enex" else _abc_row(
             it, args.checkpoint, detail_map)
         if row is None:
             continue
         item_id = row["id"]
-        if not item_id or item_id in seen:
+        if not item_id:
+            continue
+        if item_id in seen:
+            dup_ids.append(item_id)
             continue
         seen.add(item_id)
 
@@ -273,8 +287,13 @@ def cmd_from_raw(args):
                 pending_kept.append(item_id)
 
         if row.get("detail_missing"):
-            known_gaps.append(
-                f"{item_id}: --detail 找不到對應 story，src_text／detailId 留空")
+            bare = _abc_story_of_id(item_id)
+            if detail_map.get(bare) or detail_map.get(item_id):
+                known_gaps.append(
+                    f"{item_id}: detail 有對到但全文欄位是空的，src_text 留空")
+            else:
+                known_gaps.append(
+                    f"{item_id}: --detail 找不到對應 story，src_text／detailId 留空")
         skeleton.append(row)
 
     out = args.out
@@ -292,11 +311,35 @@ def cmd_from_raw(args):
             f"#{idx}｜{row['id']}｜{hint.get('dur', '')}｜{hint.get('sb_count', 0)}｜"
             f"{hint.get('head', '')}｜{hint.get('first150', '')}"
         )
-    if all_lines:
-        print("\n".join(all_lines))
+    pages, cur, cur_len = [], [], 0
+    for ln in all_lines:
+        ln_len = len(ln) + 1
+        if cur and cur_len + ln_len > INSPECT_TEXT_BUDGET:
+            pages.append(cur)
+            cur, cur_len = [], 0
+        cur.append(ln)
+        cur_len += ln_len
+    pages.append(cur)  # 0 則時也留一頁空的，--page 1 才有東西可選
+
+    page_no = args.page or 1
+    if page_no < 1 or page_no > len(pages):
+        print(f"✗ --page {page_no} 超出範圍（共 {len(pages)} 頁）", file=sys.stderr)
+        sys.exit(1)
+
+    page_lines = pages[page_no - 1]
+    if page_lines:
+        print("\n".join(page_lines))
     else:
         print("（骨架 0 則）")
+    if len(pages) > 1:
+        if page_no < len(pages):
+            print(f"— 第 {page_no}/{len(pages)} 頁，--page {page_no + 1} 看下一頁 —")
+        else:
+            print(f"— 第 {page_no}/{len(pages)} 頁（最後一頁）—")
 
+    if dup_ids:
+        print(f"⚠️ raw 裡有重複 id，只保留第一次出現的那筆：{', '.join(dup_ids)}",
+              file=sys.stderr)
     if already_have:
         print(f"已在庫略過 {len(already_have)} 則：{', '.join(already_have)}",
               file=sys.stderr)
@@ -329,6 +372,7 @@ def cmd_build(args):
 
     entries = {}
     missing = []
+    dup_ids = []
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -353,7 +397,10 @@ def cmd_build(args):
         if source == "ABC" or "detailId" in row:
             value["src_text"] = row.get("src_text") or ""
             value["detailId"] = row.get("detailId") if row.get("detailId") is not None else ""
-        entries[str(item_id)] = value
+        sid = str(item_id)
+        if sid in entries:
+            dup_ids.append(sid)
+        entries[sid] = value
 
     out = json.dumps(entries, ensure_ascii=False, indent=2)
     if args.out:
@@ -362,6 +409,9 @@ def cmd_build(args):
         print(f"已寫入 {args.out}（{len(entries)} 則）", file=sys.stderr)
     else:
         print(out)
+    if dup_ids:
+        print(f"⚠️ 骨架裡有重複 id，後筆覆蓋前筆：{', '.join(dup_ids)}",
+              file=sys.stderr)
     if missing:
         print("⚠️ 骨架裡有、沒填 entry 的 id（未填，不算錯，該筆仍輸出給下游 extract 記 "
               f"known_gaps）：{', '.join(missing)}", file=sys.stderr)
@@ -384,7 +434,7 @@ def main(argv=None):
     p_fr.add_argument("--state", help="狀態檔路徑；給了才排除已 has_script 的 id")
     p_fr.add_argument("--checkpoint", required=True)
     p_fr.add_argument("--out", help="骨架 json 路徑；不給就用 raw 所在目錄組 {site}_skeleton_{HHMM}.json")
-    p_fr.add_argument("--page", type=int, help="提示表分頁（這支預設單頁全印；保留旗標跟三站對齊）")
+    p_fr.add_argument("--page", type=int, help="提示表分頁（每頁 ≤28,000 字元），預設第 1 頁")
     p_fr.set_defaults(func=cmd_from_raw)
 
     p_bd = sub.add_parser(
