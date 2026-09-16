@@ -167,4 +167,44 @@ check("bite_suggest：entry 已標 (BITE) → None（已決定過，不必再建
       pretag.bite_suggest(sb_count=1,
                            entry="RT9007 (備註) (BITE) ▎摘要。▎畫面：資料畫面▎BITE：某人「話」▎00:10") is None)
 
+
+# ── R41：WE-006WE 的 NS PKG inline SOT 實際格式（含 SUPERS 反例）───────
+# 這裡保留該筆 live script 的段落／標記形狀：PKG 敘事段內有講者名＋SOT＋引號，
+# 另有 SUPERS 區段的人名，後者不可算成 BITE 訊號。
+WE_006WE_SCRIPT = """--SUPERS--
+Ricky SOT: \"lower-third text, not a bite\"
+--REPORTER PKG-AS FOLLOWS--
+The package opens with Ricky/Spidey SOT \"The scene was chaotic.\" and then moves on.
+Rickey Sot: \"We saw the damage ourselves.\"
+The reporter adds context before Dr. Goore Sot: \"People are still waiting.\"
+Sot Flynn: \"We will keep looking for them.\"
+"""
+inline_count = pretag.inline_sot_count(WE_006WE_SCRIPT)
+check("R41 WE-006WE inline_sot_count 抓到實際 PKG 段落格式",
+      inline_count > 0, f"count={inline_count}")
+check("R41 SUPERS 區段的人名不算 inline SOT",
+      inline_count == 4, f"count={inline_count}")
+check("R41 散文／SOT package 沒有引號不誤判",
+      pretag.inline_sot_count("The SOT package is ready; no speaker quote here.") == 0)
+
+ENTRY_R41 = "WE-006WE (記者包裝) ▎PKG 摘要。▎畫面：現場畫面▎無BITE。▎02:01"
+msgs_r41 = pretag.lint(ENTRY_R41, footage_type="PKG", source="NS",
+                        src_text=WE_006WE_SCRIPT)
+check("R41 no_bite＋PKG＋inline SOT 會印新警告",
+      any("inline SOT" in msg for msg in msgs_r41), str(msgs_r41))
+
+# ── R42：NS PKG／DONUT 長片第一備註白名單 ────────────────────────
+ENTRY_R42 = "SE-003WE (記者包裝) ▎長片摘要。▎畫面：現場畫面▎無BITE。▎01:36"
+msgs_r42 = pretag.lint(ENTRY_R42, footage_type="DONUT", source="NS",
+                        duration_ms=96000)
+check("R42 NS DONUT 96 秒且第一括號無 SOT 會警告",
+      any("PKG/DONUT且時長>1分鐘" in msg for msg in msgs_r42), str(msgs_r42))
+check("R42 第一括號有 SOT 時不警告",
+      not any("PKG/DONUT且時長>1分鐘" in msg for msg in pretag.lint(
+          "SE-003WE (地方 SOT) ▎長片摘要。▎畫面：現場畫面▎無BITE。▎01:36",
+          footage_type="DONUT", source="NS", duration_ms=96000)))
+check("R42 60 秒整不警告",
+      not any("PKG/DONUT且時長>1分鐘" in msg for msg in pretag.lint(
+          ENTRY_R42, footage_type="PKG", source="NS", duration_ms=60000)))
+
 finish()

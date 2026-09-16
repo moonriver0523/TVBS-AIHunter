@@ -144,8 +144,8 @@ SRC_TEXT_LIMIT = 4000
 # 一併收，行為對 NS/AP 沒有 SOUNDBITE 段的稿子不影響（下面找不到就直接走原本截斷）。
 SOUNDBITE_RE = re.compile(r"\(\s*SOUNDBITE|SOUNDBITE\s*:|SUPERS\s*:", re.IGNORECASE)
 
-# 硬保留的頭段長度：SOUNDBITE 區段太靠前面時直接原樣收（走 plain cut 那條路即可），
-# 只有「頭段還沒截到就會先把 SOUNDBITE 砍掉」時才切換成保留策略。
+# 硬保留的頭段長度：逐字引言區段太靠前面時直接原樣收（走 plain cut 那條路即可），
+# 只有「頭段還沒截到就會先把引言砍掉」時才切換成保留策略。
 HEAD_KEEP = 500
 
 # `inspect --fields` 一次能印多少字元的全文預算（T9，2026-08-25）。
@@ -161,10 +161,10 @@ def _lint_row(entry_text, row):
     """§四（R31/T12）：`build` 出口跑一次跟 `add-batch` 入庫時**同一套**共用
     lint——直接呼叫 `s2_state.fmt_issues`／`pretag.lint` 這兩個既有純函式，
     不複製規則、不另立一份會漂移的判準。呼叫參數對齊 `s2_state.cmd_add_batch`
-    實際呼叫 `pretag.lint()` 那一行（`sb_count=sb, footage_type=ft, tc=e.get("tc")`），
+    實際呼叫 `pretag.lint()` 那一行（含 `source`／`duration_ms`／`src_text`），
     只是這裡拿的是 build 當下手上的 row 欄位，不是 add-batch 那邊算好的 `sb`
     （那邊會依 `sb_applicable()` 把「數不出來」轉成 None，build 沒有原始
-    src_text 可判，直接傳 row 既有的 sb_count／footage_type，兩邊在多數情況
+    src_text 可判，直接傳 row 既有的 sb_count／footage_type／duration_ms，兩邊在多數情況
     結果一致，差異只在 build 這關可能多幾則「數不出來」也照樣被當數字檢查——
     這支只警告不擋，多印幾行提示不算壞事）。
 
@@ -175,7 +175,10 @@ def _lint_row(entry_text, row):
     try:
         msgs += list(pretag.lint(entry_text, sb_count=row.get('sb_count'),
                                   footage_type=row.get('footage_type'),
-                                  tc=row.get('tc')))
+                                  tc=row.get('tc'),
+                                  duration_ms=row.get('duration_ms'),
+                                  src_text=row.get('src_text'),
+                                  source=row.get('source')))
     except Exception:
         pass
     return msgs
@@ -231,13 +234,20 @@ def truncate(s, limit=SRC_TEXT_LIMIT):
     end_marker = '...[TRUNCATED]'
     plain_cut = max(limit - len(end_marker), 0)
 
+    anchors = []
     m = SOUNDBITE_RE.search(s)
-    if m and m.start() >= plain_cut:
-        # 頭段截斷本來就會把 SOUNDBITE 段砍在外面，改保留策略
+    if m:
+        anchors.append(m.start())
+    inline_anchor = pretag.inline_sot_anchor(s)
+    if inline_anchor is not None:
+        anchors.append(inline_anchor)
+    tail_start = min((pos for pos in anchors if pos >= plain_cut), default=None)
+    if tail_start is not None:
+        # 頭段截斷本來就會把逐字引言或 NS inline SOT 砍在外面，改保留策略
         mid_marker = '...[SNIP]...'
         head = s[:min(HEAD_KEEP, plain_cut)]
         budget_for_tail = limit - len(head) - len(mid_marker)
-        tail = s[m.start():]
+        tail = s[tail_start:]
         if len(tail) > budget_for_tail:
             tail_cut = max(budget_for_tail - len(end_marker), 0)
             tail = tail[:tail_cut] + end_marker
@@ -257,7 +267,7 @@ def load_json(path):
 # skip_of：機械排除判準（NS 的 AUDIO TRACK／GRAPHIC 初稿佔位；13c §3）；
 #          回傳非空字串＝這則不收，不進 batch.json
 # status_of：機械推導 script_status（prelim／early access → pending）
-# extra_of：站別專屬欄位（NS: footage_type；AP: sb_count/has_sot；RT: sb_count）
+# extra_of：站別專屬欄位（NS: footage_type/duration_ms；AP: sb_count/has_sot；RT: sb_count）
 # src_text_of：機械組「瘦身後的站方原文」，跟現行 batch.json 既有格式對齊
 
 
@@ -289,7 +299,11 @@ SITE_SPEC = {
         'id_of': lambda it: it.get('id', ''),
         'skip_of': lambda it: it.get('skip', '') or '',
         'status_of': lambda it: 'has_script',
-        'extra_of': lambda it: {'footage_type': it.get('ft', '')},
+        'extra_of': lambda it: {
+            'footage_type': it.get('ft', ''),
+            # NS API 的 duration 是毫秒；正式欄位保留原值，供後續 lint／稽核使用。
+            'duration_ms': it.get('dur_ms', ''),
+        },
         'src_text_of': lambda it: truncate(
             f"DESC: {it.get('desc', '')}\nSCRIPT: {it.get('script', '')}"
         ),
@@ -493,6 +507,8 @@ def cmd_build(args):
         if tc is not None:
             row['tc'] = tc
         row.update(spec['extra_of'](it))
+        if spec['source'] == 'NS':
+            row['inline_sot_count'] = pretag.inline_sot_count(row['src_text'])
         # A31：機械 T/C／涉臺／(BITE) 建議，同 --skeleton 分支（見上）。
         try:
             _sug = pretag.suggest_tc(entry_text, source=row.get('source'))
@@ -590,6 +606,8 @@ def cmd_from_raw(args):
             'src_text': src_text,
         }
         row.update(spec['extra_of'](it))
+        if spec['source'] == 'NS':
+            row['inline_sot_count'] = pretag.inline_sot_count(src_text)
         # entry／category／tc 是 agent 判斷欄位，骨架只留空位——
         # 這支腳本不生成、不翻譯、不判斷 BITE（同 build 開頭的說明）。
         row['entry'] = ''
@@ -603,15 +621,21 @@ def cmd_from_raw(args):
         dur = it.get('dur')
         if dur is None:
             dur = it.get('dur_ms', '')
-        sb_count = spec['extra_of'](it).get('sb_count', 0)
+        extra = spec['extra_of'](it)
         # first150：src_text 正文前 150 字、去換行（提示表用，不是稽核落檔欄位）。
         first150 = re.sub(r'\s+', ' ', src_text).strip()[:150]
         row['hint'] = {
             'head': _title_of_any(it),
             'dur': dur,
-            'sb_count': sb_count,
             'first150': first150,
         }
+        if spec['source'] == 'NS':
+            row['hint'].update({
+                'footage_type': row.get('footage_type', ''),
+                'inline_sot_count': row['inline_sot_count'],
+            })
+        else:
+            row['hint']['sb_count'] = extra.get('sb_count', 0)
         skeleton.append(row)
 
     out = args.out
@@ -629,8 +653,14 @@ def cmd_from_raw(args):
     # 壞掉不擋提示表本體：這欄是建議，不是必要輸出。
     all_lines = []
     for idx, row in enumerate(skeleton, 1):
-        line = (f"#{idx}｜{row['id']}｜{row['hint']['dur']}｜{row['hint']['sb_count']}｜"
-                f"{row['hint']['head']}｜{row['hint']['first150']}")
+        hint = row['hint']
+        if row.get('source') == 'NS':
+            line = (f"#{idx}｜{row['id']}｜dur_ms={hint['dur']}｜sb=n/a｜"
+                    f"ft={hint['footage_type']}｜inline_sot={hint['inline_sot_count']}｜"
+                    f"{hint['head']}｜{hint['first150']}")
+        else:
+            line = (f"#{idx}｜{row['id']}｜{hint['dur']}｜{hint['sb_count']}｜"
+                    f"{hint['head']}｜{hint['first150']}")
         try:
             _text = f"{row['hint']['head']} {row['hint']['first150']}"
             _sug = pretag.suggest_tc(_text, source=row.get('source'))

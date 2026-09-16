@@ -156,6 +156,23 @@ FOOTAGE_NEG_KW = [
 # 函式內延後 import，見 `_active_special_t()` 的說明。
 _FT_MUST_BITE = {"SOT", "BUTTED SOTS", "SOT RAW", "ISO", "DONUT", "INTERVIEW", "RAW"}
 
+# NS PKG 的引言可能直接嵌在敘事段落中，不一定有 `--SOT--` 區塊標題。
+# 只把「講者名＋SOT＋引號」及「SOT＋講者名＋引號」視為 inline 訊號；
+# 單獨出現的 SOT／SOT package 不算。SUPERS 區段的人名也不算，避免把畫面字卡
+# 誤當成訪問。這組正規表示式刻意只負責找「訊號」，不擷取或改寫引言內容。
+# 上限避免把一整段沒有空白的正文當成「講者名」回溯到全文開頭。
+_NAME_TOKEN = r"[A-Za-z][A-Za-z0-9.'/-]{0,79}"
+_INLINE_SOT_RE = re.compile(
+    rf"(?:\b{_NAME_TOKEN}(?:\s*/\s*{_NAME_TOKEN})?"
+    rf"(?:\s+{_NAME_TOKEN}){{0,2}}\s+SOT\b\s*:?\s*[\"'“‘]"
+    rf"|\bSOT\s+{_NAME_TOKEN}(?:\s+{_NAME_TOKEN})?"
+    rf"\s*:?\s*[\"'“‘])",
+    re.IGNORECASE,
+)
+_SECTION_HEADER_RE = re.compile(
+    r"(?im)^[ \t]*--(?P<name>[A-Z][A-Z0-9 /-]*)--[ \t]*(?:\r?\n|$)"
+)
+
 _matrix_mod = None
 
 
@@ -190,6 +207,54 @@ def _active_special_t():
         return active or []
     except Exception:
         return []
+
+
+def _visible_inline_sot_spans(src_text):
+    """回傳非 `--SUPERS--` 區段內 inline SOT 候選的原文 span。"""
+    if not isinstance(src_text, str) or not src_text:
+        return []
+
+    spans = []
+    cursor = 0
+    skipping_supers = False
+    for header in _SECTION_HEADER_RE.finditer(src_text):
+        name = header.group("name").strip().upper()
+        if not skipping_supers:
+            for match in _INLINE_SOT_RE.finditer(src_text[cursor:header.start()]):
+                spans.append((cursor + match.start(), cursor + match.end()))
+            cursor = header.end()
+            skipping_supers = name == "SUPERS"
+            continue
+
+        # SUPERS 區段可能以 --END SUPERS-- 結束，也可能直接接下一個區段。
+        if name in {"SUPERS", "END SUPERS"}:
+            cursor = header.end()
+            continue
+        skipping_supers = False
+        cursor = header.start()
+
+    if not skipping_supers:
+        for match in _INLINE_SOT_RE.finditer(src_text[cursor:]):
+            spans.append((cursor + match.start(), cursor + match.end()))
+    return spans
+
+
+def inline_sot_count(src_text):
+    """計算全文中的具名 inline SOT 訊號；純函式，空值或非字串回 0。"""
+    return len(_visible_inline_sot_spans(src_text))
+
+
+def inline_sot_examples(src_text, limit=3):
+    """回傳少量 inline SOT 標記樣本，供提示／稽核顯示，不改原文。"""
+    if limit <= 0:
+        return []
+    return [src_text[start:end] for start, end in _visible_inline_sot_spans(src_text)[:limit]]
+
+
+def inline_sot_anchor(src_text):
+    """回傳第一個 inline SOT 在原文中的位置，供 `truncate()` 保留尾段。"""
+    spans = _visible_inline_sot_spans(src_text)
+    return spans[0][0] if spans else None
 
 
 def suggest_tc(text, source=None):
@@ -265,14 +330,54 @@ def _as_tc_dict(tc):
     return {"T": [], "C": []}
 
 
-def lint(entry, sb_count=None, has_sot=None, footage_type=None, tc=None):
-    """對已寫好的素材行做四項機械檢查，只警告不修，回傳訊息 list（可能是空的）。
+def _duration_seconds(duration_ms):
+    """把 `duration_ms`（NS 正式欄位）轉成秒；也接受既有 MM:SS 形狀。"""
+    if isinstance(duration_ms, bool) or duration_ms is None:
+        return None
+    if isinstance(duration_ms, (int, float)):
+        return float(duration_ms) / 1000
+
+    value = str(duration_ms).strip()
+    if not value:
+        return None
+    if ":" in value:
+        parts = value.split(":")
+        try:
+            if len(parts) == 2:
+                minutes, seconds = map(float, parts)
+                if minutes < 0 or not 0 <= seconds < 60:
+                    return None
+                return minutes * 60 + seconds
+            if len(parts) == 3:
+                hours, minutes, seconds = map(float, parts)
+                if hours < 0 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
+                    return None
+                return hours * 3600 + minutes * 60 + seconds
+        except ValueError:
+            return None
+        return None
+    try:
+        return float(value) / 1000
+    except ValueError:
+        return None
+
+
+def _first_bracket_has_sot(entry):
+    """判斷素材行第一個括號是否含 SOT 標記。"""
+    match = re.search(r"\(([^()\r\n]*)\)", entry or "")
+    return bool(match and re.search(r"SOT", match.group(1), re.IGNORECASE))
+
+
+def lint(entry, sb_count=None, has_sot=None, footage_type=None, tc=None,
+         duration_ms=None, src_text=None, source=None):
+    """對已寫好的素材行做機械檢查，只警告不修，回傳訊息 list（可能是空的）。
 
     四項檢查（前綴分別是）：
       📏 摘要 >150 字
       🎙 `(BITE)` 與 `▎BITE：` 段不一致
       🔖 畫面欄只有受訪／連線類詞卻標了 🔖（R19）
       🌀 機動 T active 且文本命中，但 `tc.T` 沒有掛
+      NS inline SOT／PKG-DONUT 長片第一備註漏標（R41／R42）
     """
     msgs = []
     e = entry or ""
@@ -293,9 +398,20 @@ def lint(entry, sb_count=None, has_sot=None, footage_type=None, tc=None):
         msgs.append("🎙 標了 (BITE) 但沒有 ▎BITE： 段，確認是否漏寫")
     if no_bite_marked and isinstance(sb_count, int) and sb_count > 0:
         msgs.append(f"🎙 稿內有 {sb_count} 個 SOUNDBITE 卻標「無BITE」，確認是否漏寫 ▎BITE： 段")
+    inline_count = inline_sot_count(src_text)
+    if no_bite_marked and inline_count > 0:
+        msgs.append(f"🎙 全文掃到 {inline_count} 段 inline SOT 卻標「無BITE」，確認是否漏寫 ▎BITE： 段")
     ft = str(footage_type or "").strip().upper()
     if no_bite_marked and ft in _FT_MUST_BITE:
         msgs.append(f"🎙 footageType={ft} 通常必有訪問聲音卻標「無BITE」，確認是否漏寫")
+
+    # R42：NS PKG／DONUT 超過 1 分鐘時，第一個備註括號應標 SOT。
+    # 只警告、不改 entry；source 明確帶入後，AP／RT 不會套用這條白名單。
+    if (str(source or "").strip().upper() == "NS"
+            and ft in {"PKG", "DONUT"}
+            and (_duration_seconds(duration_ms) or 0) > 60
+            and not _first_bracket_has_sot(e)):
+        msgs.append("🎙 PKG/DONUT且時長>1分鐘，依13e:406-415規則備註應標SOT卻沒標")
 
     # 🔖 負面：畫面欄只有受訪／連線類詞、沒有實拍內容卻標了 🔖（R19）。
     # ⚠️ 用 `fields.footage`（entry 裡 ▎畫面： 段的內容），不是 `footage_type`

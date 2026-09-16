@@ -636,8 +636,11 @@ check('build --skeleton＋lint：輸出檔內容不受警告影響',
 # 全部算出空字串——生出一份看起來正常、其實全空 id 的垃圾骨架。
 
 NS_INNER = [
-    {'id': 'NS0001', 'desc': '測試描述一', 'script': '測試逐字稿一', 'ft': 'pkg'},
-    {'id': 'NS0002', 'desc': '測試描述二', 'script': '測試逐字稿二', 'ft': 'vo'},
+    {'id': 'NS0001', 'desc': '測試描述一',
+     'script': '--REPORTER PKG-AS FOLLOWS-- Reporter Sot: "quote"',
+     'ft': 'pkg', 'dur_ms': 121000},
+    {'id': 'NS0002', 'desc': '測試描述二', 'script': '測試逐字稿二',
+     'ft': 'vo', 'dur_ms': 55000},
 ]
 
 
@@ -678,6 +681,55 @@ check('S3③ from-raw 吃 unwrap 後的 offload 內容 → exit 0', code_s3c == 
 _fr_skel = json.load(open(FR_OUT, encoding='utf-8'))
 check('S3③ 骨架 2 則、id 正確（不是全空 id 的垃圾）',
       [r['id'] for r in _fr_skel] == ['NS0001', 'NS0002'], str(_fr_skel))
+_fr_by_id = {r['id']: r for r in _fr_skel}
+check('R44 NS from-raw 骨架保留 footage_type／duration_ms／inline_sot_count',
+      _fr_by_id['NS0001'].get('footage_type') == 'pkg'
+      and _fr_by_id['NS0001'].get('duration_ms') == 121000
+      and _fr_by_id['NS0001'].get('inline_sot_count') == 1,
+      str(_fr_by_id['NS0001']))
+check('R44 NS 提示表不再印誤導 sb_count=0，改印 ft／inline_sot',
+      'sb=n/a' in out_s3c and 'ft=pkg' in out_s3c and 'inline_sot=1' in out_s3c
+      and '｜0｜' not in out_s3c, out_s3c[:500])
+
+NS_ENTRIES = write_json('ns_entries.json', {
+    'NS0001': {'entry': 'NS0001 (地方) ▎長片摘要。▎畫面：現場畫面▎無BITE。▎02:01'},
+    'NS0002': {'entry': 'NS0002 (地方) ▎短片摘要。▎畫面：資料畫面▎無BITE。▎00:55'},
+})
+NS_BATCH_OUT = os.path.join(TMP, 'ns_batch.json')
+out_s3h, code_s3h = run(bp.cmd_build, Args(
+    site='ns', raw=None, entries=NS_ENTRIES, checkpoint='0914-1500',
+    skeleton=FR_OUT, out=NS_BATCH_OUT))
+_ns_batch = json.load(open(NS_BATCH_OUT, encoding='utf-8'))
+_ns_rows = {r['id']: r for r in _ns_batch['entries']}
+check('R44 build --skeleton 保留 NS footage_type／duration_ms／inline_sot_count',
+      code_s3h == 0 and _ns_rows['NS0001'].get('footage_type') == 'pkg'
+      and _ns_rows['NS0001'].get('duration_ms') == 121000
+      and _ns_rows['NS0001'].get('inline_sot_count') == 1,
+      str(_ns_rows.get('NS0001')))
+
+# R41/R42 build lint 讀同一筆的 src_text＋結構化欄位，兩個提醒都要到出口。
+check('R41/R42 build lint 同時看到 inline SOT 與 duration 白名單',
+      'NS0001' in out_s3h and 'inline SOT' in out_s3h
+      and 'PKG/DONUT且時長>1分鐘' in out_s3h, out_s3h[-800:])
+
+NS_DIRECT_BATCH_OUT = os.path.join(TMP, 'ns_direct_batch.json')
+out_s3i, code_s3i = run(bp.cmd_build, Args(
+    site='ns', raw=UNWRAPPED_FENCED, entries=NS_ENTRIES,
+    checkpoint='0914-1500', out=NS_DIRECT_BATCH_OUT, skeleton=None))
+_ns_direct = json.load(open(NS_DIRECT_BATCH_OUT, encoding='utf-8'))
+_ns_direct_rows = {r['id']: r for r in _ns_direct['entries']}
+check('R44 build（raw＋entries，非 skeleton）也保留 NS 結構化欄位',
+      code_s3i == 0 and _ns_direct_rows['NS0001'].get('footage_type') == 'pkg'
+      and _ns_direct_rows['NS0001'].get('duration_ms') == 121000
+      and _ns_direct_rows['NS0001'].get('inline_sot_count') == 1,
+      str(_ns_direct_rows.get('NS0001')))
+
+# inline SOT 落在 4,000 字後也要留下可稽核錨點，不能被 truncate 靜默砍掉。
+_long_inline = 'x' * 4100 + ' Reporter Sot: "quote"'
+_long_kept = bp.truncate(_long_inline)
+check('R41 truncate 保留 4,000 字後的 inline SOT 錨點',
+      len(_long_kept) <= bp.SRC_TEXT_LIMIT and 'Reporter Sot' in _long_kept,
+      f'len={len(_long_kept)}')
 
 # S3-④ 殼認得出來，但內容解不出合法 JSON → 明確 ValueError／unwrap exit 非 0，
 # 不悄悄把殼字串原樣複製當成資料。

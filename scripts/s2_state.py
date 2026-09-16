@@ -762,8 +762,10 @@ def cmd_add_batch(state, args):
         # A31：lint 併進同一段「格式待修」輸出（13c2 §2「寫入當下就會跑」）。
         # 檢查本身壞掉絕不能擋住入庫，同 fmt_issues 的既有原則。
         try:
-            for reason in pretag.lint(e["entry"], sb_count=sb, footage_type=ft,
-                                       tc=e.get("tc")):
+            for reason in pretag.lint(
+                    e["entry"], sb_count=sb, footage_type=ft, tc=e.get("tc"),
+                    duration_ms=e.get("duration_ms"), src_text=e.get("src_text"),
+                    source=e.get("source")):
                 fmt.append(f"{i}: {reason}")
         except Exception:
             pass
