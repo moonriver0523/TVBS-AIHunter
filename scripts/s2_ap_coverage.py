@@ -158,10 +158,14 @@ def check_anchor_overlap(
         raise ValueError("min_hits 必須是大於 0 的整數")
 
     # 同一 ID 若在新清單重複，第一次出現的位置才是它在清單中的位置；
-    # 命中數仍然以不同 ID 計算。
+    # 命中數仍然以不同 ID 計算。StandardLibraryVideo 批次項目不得被拿來
+    # 當 anchor 命中（即使 id 剛好等於某個 anchor），但原始 index 位移
+    # 仍要保留，所以照樣 enumerate 全部項目，只是跳過建立映射。
     new_indices: dict[str, int] = {}
     for index, item in enumerate(items):
         item_id = _item_id(item, index)
+        if item.get("comp") == STANDARD_LIBRARY_VIDEO:
+            continue
         new_indices.setdefault(item_id, index)
 
     hits = [

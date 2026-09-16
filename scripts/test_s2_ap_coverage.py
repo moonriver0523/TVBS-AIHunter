@@ -130,6 +130,24 @@ def test_check_overlap_fails_when_anchor_order_is_interleaved():
     assert result["order_consistent"] is False
 
 
+def test_check_overlap_fails_when_hits_are_standard_library_video_in_new_list():
+    """圖庫批次不能證明清單銜接：即使新清單裡有 3 個 id 對得上 anchor、
+    順序也遞增，只要那幾列在新清單裡的 comp 是 StandardLibraryVideo，
+    就不算真正命中（回歸測試，見 D21 review 抓到的偽陽性）。"""
+    new_items = [
+        {"id": "AP-1", "comp": "StandardLibraryVideo", "title": "one"},
+        {"id": "AP-2", "comp": "StandardLibraryVideo", "title": "two"},
+        {"id": "AP-3", "comp": "StandardLibraryVideo", "title": "three"},
+        {"id": "AP-tail", "comp": "Editorial", "title": "tail"},
+    ]
+
+    result = coverage.check_anchor_overlap(new_items, _anchor_set())
+
+    assert result["coverage_ok"] is False
+    assert result["hits"]["count"] == 0
+    assert "沒有命中任何 anchor" in result["reason"]
+
+
 def test_check_overlap_fails_clearly_when_there_is_no_overlap():
     result = coverage.check_anchor_overlap(
         _items("AP-new-1", "AP-new-2", "AP-new-3"),
