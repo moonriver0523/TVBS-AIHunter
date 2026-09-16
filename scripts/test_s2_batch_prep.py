@@ -603,6 +603,26 @@ check('build＋lint：輸出檔內容不受警告影響（entry 原文照舊、�
       _lo_rows['RT2001']['entry'] == 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。'
       and _lo_rows['RT2002']['entry'] == 'RT2002 (測試 標題) ▎測試摘要。▎畫面：資料畫面。無BITE。')
 
+# 預檢沿用 build 的 lint，但不得印／寫正式 batch 輸出。
+LINT_DRY_OUT = os.path.join(TMP, 'lint_dry_run_batch.json')
+outLD, codeLD = run(bp.cmd_build, Args(site='rt', raw=LINT_RAW, entries=LINT_ENTRIES,
+                                       checkpoint='0914-1200', out=LINT_DRY_OUT,
+                                       dry_run=True))
+check('build --dry-run：壞 entry 仍印出警告',
+      codeLD == 0 and 'RT2001:' in outLD and '--dry-run' in outLD, outLD[-600:])
+check('build --dry-run：不寫 batch 輸出檔', not os.path.exists(LINT_DRY_OUT), LINT_DRY_OUT)
+
+# 同一站同一原因達門檻才給整批重寫提示，少量不過度提示。
+out_summary, _ = run(lambda pair: bp._print_build_lint_warnings(*pair),
+                      (['RT300%d: 第一備註寫了 BITE' % i for i in range(5)], 'rt'))
+out_small_summary, _ = run(lambda pair: bp._print_build_lint_warnings(*pair),
+                           (['RT300%d: 第一備註寫了 BITE' % i for i in range(4)], 'rt'))
+check('lint 匯總提示：同類問題達 5 則時出現',
+      '整批重寫 RT entries.json' in out_summary and '不要逐筆 Edit' in out_summary,
+      out_summary)
+check('lint 匯總提示：少於 5 則時不出現', '整批重寫' not in out_small_summary,
+      out_small_summary)
+
 # --skeleton 分支同樣要跑同一套 lint（A24 骨架路徑，共用 _lint_row）
 LINT_SKEL = write_json('lint_skeleton.json', [
     {'id': 'RT2001', 'source': 'RT', 'checkpoint': '0914-1200', 'status': 'has_script',
@@ -625,6 +645,15 @@ _lso = json.load(open(LINT_SKEL_OUT, encoding='utf-8'))
 _lso_rows = {r['id']: r for r in _lso['entries']}
 check('build --skeleton＋lint：輸出檔內容不受警告影響',
       _lso_rows['RT2001']['entry'] == 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。')
+
+LINT_SKEL_DRY_OUT = os.path.join(TMP, 'lint_skeleton_dry_run_batch.json')
+outLSD, codeLSD = run(bp.cmd_build, Args(site='rt', raw=None,
+                                         entries=LINT_SKEL_ENTRIES,
+                                         checkpoint='0914-1200', out=LINT_SKEL_DRY_OUT,
+                                         skeleton=LINT_SKEL, dry_run=True))
+check('build --skeleton --dry-run：仍跑 lint 且不寫輸出檔',
+      codeLSD == 0 and 'RT2001:' in outLSD and not os.path.exists(LINT_SKEL_DRY_OUT),
+      outLSD[-600:])
 
 # ── S3（複核 2026-09-14）：Claude Code offload 殼 → unwrap → from-raw ──────
 #

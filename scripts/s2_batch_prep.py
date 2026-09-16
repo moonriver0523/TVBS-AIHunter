@@ -184,7 +184,7 @@ def _lint_row(entry_text, row):
     return msgs
 
 
-def _print_build_lint_warnings(warnings):
+def _print_build_lint_warnings(warnings, site=None):
     """印一份精簡的『ID: 原因』警告清單，長度受 `INSPECT_TEXT_BUDGET` 封頂——
     跟 `inspect --fields` 同一個 28,000 字元預算（T9），避免這份警告本身
     塞爆 Bash 工具回傳的靜默截斷線。只印到 stderr，不影響 stdout／輸出檔。"""
@@ -193,11 +193,24 @@ def _print_build_lint_warnings(warnings):
     header = (f'⚠️ 前置格式／lint 警告 {len(warnings)} 項（只警告，不擋 build、'
               f'不改 entry；建議送 add-batch 之前先修，比事後 update-entry 便宜）：')
     lines = [header]
+    site_label = (site or '該站').upper()
+    reasons = {}
+    for warning in warnings:
+        _, separator, reason = warning.partition(': ')
+        if separator:
+            reasons[reason] = reasons.get(reason, 0) + 1
+    summaries = [
+        f'⚠️ 上面 {count} 則都是 {site_label} 的「{reason}」同類問題，'
+        f'建議整批重寫 {site_label} entries.json，不要逐筆 Edit 修補（見 13c 步驟3-4）'
+        for reason, count in reasons.items() if count >= 5
+    ]
     total_len = len(header) + 1
+    reserved = sum(len(summary) + 1 for summary in summaries)
+    warning_budget = max(total_len, INSPECT_TEXT_BUDGET - reserved)
     shown = 0
     for w in warnings:
         ln = '  ' + w
-        if total_len + len(ln) + 1 > INSPECT_TEXT_BUDGET:
+        if total_len + len(ln) + 1 > warning_budget:
             break
         lines.append(ln)
         total_len += len(ln) + 1
@@ -205,6 +218,7 @@ def _print_build_lint_warnings(warnings):
     if shown < len(warnings):
         lines.append(f'…另 {len(warnings) - shown} 項略（總長度受 '
                      f'{INSPECT_TEXT_BUDGET:,} 字元預算限制，非全部截斷）')
+    lines.extend(summaries)
     print('\n'.join(lines), file=sys.stderr)
 
 
@@ -379,6 +393,18 @@ def cmd_dump(args):
         print(out)
 
 
+def _write_or_preview_build(args, out, note):
+    """正式 build 寫輸出；`--dry-run` 只報預檢結果，不印／寫 batch。"""
+    if getattr(args, 'dry_run', False):
+        print(f'--dry-run：{note}；未寫入 batch 輸出')
+    elif args.out:
+        with open(args.out, 'w', encoding='utf-8') as f:
+            f.write(out)
+        print(f'已寫入 {args.out}{note}', file=sys.stderr)
+    else:
+        print(out)
+
+
 def cmd_build(args):
     entries = load_json(args.entries)
 
@@ -451,17 +477,12 @@ def cmd_build(args):
         out = json.dumps({'entries': batch, 'new_topics': new_topics},
                          ensure_ascii=False, indent=2)
         note = f'（{len(batch)} 則，新格式、過閘；new_topics {len(new_topics)} 題）'
-        if args.out:
-            with open(args.out, 'w', encoding='utf-8') as f:
-                f.write(out)
-            print(f'已寫入 {args.out}{note}', file=sys.stderr)
-        else:
-            print(out)
+        _write_or_preview_build(args, out, note)
         if missing:
             print(f'⚠️ 骨架裡有、entries.json 沒填 entry 的 id（未填，不算錯，'
                   f'但確認是不是漏判，不進 batch）：{", ".join(str(m) for m in missing)}',
                   file=sys.stderr)
-        _print_build_lint_warnings(lint_warnings)
+        _print_build_lint_warnings(lint_warnings, args.site)
         return
 
     spec = SITE_SPEC[args.site]
@@ -527,19 +548,14 @@ def cmd_build(args):
     # 這條分支沒有 entries.json 可以帶 `_new_topics`，所以 new_topics 固定空的；
     # 要開新中主題就照退回訊息在 batch 頂層自己補。
     out = json.dumps({'entries': batch, 'new_topics': {}}, ensure_ascii=False, indent=2)
-    if args.out:
-        with open(args.out, 'w', encoding='utf-8') as f:
-            f.write(out)
-        print(f'已寫入 {args.out}（{len(batch)} 則，新格式、過閘）', file=sys.stderr)
-    else:
-        print(out)
+    _write_or_preview_build(args, out, f'（{len(batch)} 則，新格式、過閘）')
 
     if missing:
         print(f'⚠️ raw 裡有但 entries.json 沒寫的 id（未收進 batch，不算錯，'
               f'但確認是不是漏判）：{", ".join(missing)}', file=sys.stderr)
     if excluded:
         print(f'機械排除 {excluded} 則（見 dump 輸出的排除原因）', file=sys.stderr)
-    _print_build_lint_warnings(lint_warnings)
+    _print_build_lint_warnings(lint_warnings, args.site)
 
 
 def cmd_from_raw(args):
@@ -2039,6 +2055,8 @@ def main():
     p_build.add_argument('--entries', required=True)
     p_build.add_argument('--checkpoint', required=True)
     p_build.add_argument('--out')
+    p_build.add_argument('--dry-run', action='store_true',
+                         help='只跑預檢與印警告，不印／寫 batch 輸出')
     p_build.add_argument('--skeleton', help='from-raw 產的骨架 json；給了就以它為底，'
                           '--entries 只需 {id:{entry,category,tc}} 覆蓋（A24）')
     p_build.set_defaults(func=cmd_build)
