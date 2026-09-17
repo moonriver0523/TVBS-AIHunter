@@ -353,4 +353,159 @@ def test_cli_writes_anchor_and_overlap_json(tmp_path):
     anchor_payload = json.loads(anchor_path.read_text(encoding="utf-8"))
     result_payload = json.loads(result_path.read_text(encoding="utf-8"))
     assert anchor_payload["partial"] is False
+    assert anchor_payload["list_path"] == str(baseline)
     assert result_payload["coverage_ok"] is True
+    assert result_payload["list_path"] == str(new_list)
+    assert result_payload["anchor_path"] == str(anchor_path)
+
+
+def test_check_overlap_cli_exits_1_when_coverage_fails(tmp_path):
+    """coverage_ok=False 時 CLI 必須 exit 1，且 stdout 完整保留 JSON 結果。"""
+    baseline = _write_json(tmp_path / "baseline.json", _items("AP-1", "AP-2", "AP-3"))
+    disjoint_list = _write_json(tmp_path / "disjoint.json", _items("AP-x", "AP-y", "AP-z"))
+    anchor_path = tmp_path / "anchor.json"
+    result_path = tmp_path / "result.json"
+
+    # 先產出 anchor
+    subprocess.run(
+        [sys.executable, str(SCRIPT), "anchor-set", "--list", str(baseline), "--n", "3", "--out", str(anchor_path)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    # 執行 check-overlap，預期回傳 1
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "check-overlap",
+            "--list",
+            str(disjoint_list),
+            "--anchor",
+            str(anchor_path),
+            "--out",
+            str(result_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1, f"預期 exit 1，實際為 {proc.returncode}"
+    # stdout 必須能被 json.loads 解析出完整 payload，證明未被 exit 吃掉
+    stdout_payload = json.loads(proc.stdout)
+    assert stdout_payload["coverage_ok"] is False
+    assert stdout_payload["hits"]["count"] == 0
+    assert stdout_payload["list_path"] == str(disjoint_list)
+    assert stdout_payload["anchor_path"] == str(anchor_path)
+    assert "未達門檻" in stdout_payload["reason"]
+
+    # 磁碟輸出檔也完整寫入
+    file_payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert file_payload == stdout_payload
+
+
+def test_check_overlap_cli_exits_1_when_order_is_reversed(tmp_path):
+    """命中數量夠但順序顛倒（order_consistent=False）時，CLI 必須 exit 1。"""
+    baseline = _write_json(tmp_path / "baseline.json", _items("AP-1", "AP-2", "AP-3"))
+    reversed_list = _write_json(tmp_path / "reversed.json", _items("AP-3", "AP-2", "AP-1"))
+    anchor_path = tmp_path / "anchor.json"
+    result_path = tmp_path / "result.json"
+
+    subprocess.run(
+        [sys.executable, str(SCRIPT), "anchor-set", "--list", str(baseline), "--n", "3", "--out", str(anchor_path)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "check-overlap",
+            "--list",
+            str(reversed_list),
+            "--anchor",
+            str(anchor_path),
+            "--out",
+            str(result_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 1
+    stdout_payload = json.loads(proc.stdout)
+    assert stdout_payload["coverage_ok"] is False
+    assert stdout_payload["order_consistent"] is False
+    assert stdout_payload["lis_length"] == 1
+
+
+def test_check_overlap_cli_exits_0_when_coverage_succeeds(tmp_path):
+    """coverage_ok=True 時 CLI 維持 exit 0，且 stdout 輸出完整 JSON。"""
+    baseline = _write_json(tmp_path / "baseline.json", _items("AP-1", "AP-2", "AP-3"))
+    overlap_list = _write_json(tmp_path / "overlap.json", _items("AP-new", "AP-1", "AP-2", "AP-3"))
+    anchor_path = tmp_path / "anchor.json"
+    result_path = tmp_path / "result.json"
+
+    subprocess.run(
+        [sys.executable, str(SCRIPT), "anchor-set", "--list", str(baseline), "--n", "3", "--out", str(anchor_path)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "check-overlap",
+            "--list",
+            str(overlap_list),
+            "--anchor",
+            str(anchor_path),
+            "--out",
+            str(result_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 0
+    stdout_payload = json.loads(proc.stdout)
+    assert stdout_payload["coverage_ok"] is True
+    assert stdout_payload["list_path"] == str(overlap_list)
+    assert stdout_payload["anchor_path"] == str(anchor_path)
+
+
+def test_check_overlap_cli_exits_2_on_error(tmp_path):
+    """缺少必要參數或輸入檔案格式損毀時，CLI exit 2。"""
+    bad_file = tmp_path / "bad.json"
+    bad_file.write_text("not a json", encoding="utf-8")
+    result_path = tmp_path / "result.json"
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "check-overlap",
+            "--list",
+            str(bad_file),
+            "--anchor",
+            str(bad_file),
+            "--out",
+            str(result_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert proc.returncode == 2
