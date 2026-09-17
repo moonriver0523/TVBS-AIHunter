@@ -681,34 +681,16 @@ try {
         $added = @($st.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint }).Count
     }
 
-    # ── 收工五站留痕整合（2026-09-17 項目2）：呼叫 s2_finish.py ──
-    try {
-        $finishArgs = @(
-            "$PSScriptRoot\s2_finish.py",
-            '--checkpoint', $Checkpoint
-        )
-        if ($statePath) { $finishArgs += @('--state-file', $statePath) }
-        if ($scratchCwd) { $finishArgs += @('--scratch', $scratchCwd) }
-        # 固定排程輪若未啟用 ENEX/ABC，標記 not-scheduled，不卡死流程
-        $finishArgs += @('--not-scheduled', 'ENEX', '--not-scheduled', 'ABC')
-
-        python @finishArgs
-        $finishExit = $LASTEXITCODE
-        if ($finishExit -ne 0) {
-            Write-Run "收工對帳留痕未全數通過（exit $finishExit）"
-        }
-    } catch {
-        Write-Run "收工留痕整合例外（不中斷收尾）：$($_.Exception.Message)"
-    }
-
-    # 重新讀取狀態檔以反映最新留痕與新增結果
-    if ($statePath -and (Test-Path $statePath)) {
-        try {
-            $st = Get-Content $statePath -Raw -Encoding UTF8 | ConvertFrom-Json
-        } catch {}
-    }
-
-    # 對帳留痕檢查（2026-08-24 補，09-17 升級五站）
+    # 對帳留痕檢查（2026-08-24 補）：s2_audit.py 有沒有跑過、寫進 reconcile_log。
+    # ⚠️ **不自動補跑**——跟 set-top 不同，這裡沒有「唯一正確答案」可以無腦補：
+    # 稽核結果（🔴／🟡、疑似放錯分類…）本來就要 agent 當場看過、判斷、可能改分類，
+    # 殼層自動跑只會補出數字、補不出那個判斷，等於製造一份沒人看過的假紀錄。
+    # 只負責偵測＋喊出來，讓當天／隔輪的人知道要回頭補（0824-0100 實錯：
+    # 三站快照都存了，`s2_audit.py` 卻整段沒跑，直到使用者自己發現才補）。
+    # 缺哪幾站要**指名**（2026-09-01 補）：原本只說「沒跑或沒跑完」，
+    # 0901-1700／2000 兩輪都中，但成因完全不同——1700 是 NS 登出整站進不去（合理），
+    # 2000 是 RT 快照明明有、agent 下 s2_audit 時漏帶 --rt-list（真的漏做）。
+    # 通知裡看不出差別，就只能人工翻 log 才知道要不要處理。
     $reconcileMissing = $false
     $reconcileGap = @()
     if ($statePath -and $st -and $st.reconcile_log) {
@@ -716,16 +698,6 @@ try {
         if (-not $entry) {
             $reconcileMissing = $true
             $reconcileGap = @('RT', 'AP', 'NS')
-        } elseif ($entry._schema -eq 's2-reconcile/v1') {
-            $missSites = @()
-            foreach ($s in @('RT', 'AP', 'NS', 'ENEX', 'ABC')) {
-                $v = $entry.$s
-                if (-not $v -or $v.status -eq 'missing-evidence') { $missSites += $s }
-            }
-            if ($missSites.Count -gt 0) {
-                $reconcileMissing = $true
-                $reconcileGap = $missSites
-            }
         } else {
             $stations = @($entry.PSObject.Properties.Name)
             $reconcileGap = @(@('RT', 'AP', 'NS') | Where-Object { $stations -notcontains $_ })
@@ -803,34 +775,11 @@ try {
             # 對帳的「窗內未收」才是真漏收，值得寫進通知
             $rl = $st.reconcile_log.$Checkpoint
             if ($rl) {
-                $missCountList = @()
-                $needsRevList = @()
-                $missEvidList = @()
-                if ($rl._schema -eq 's2-reconcile/v1') {
-                    foreach ($station in @('RT', 'AP', 'NS', 'ENEX', 'ABC')) {
-                        $v = $rl.$station
-                        if (-not $v -or $v.status -eq 'missing-evidence') { $missEvidList += $station }
-                        elseif ($v.status -eq 'needs-review') {
-                            if ($v.missing -gt 0) { $missCountList += "$station 漏$($v.missing)" }
-                            else { $needsRevList += "$station 待人工" }
-                        }
-                        elseif ($v.status -eq 'ok' -and $v.missing -gt 0) {
-                            $missCountList += "$station 漏$($v.missing)"
-                        }
-                    }
-                } else {
-                    $miss = @('RT', 'AP', 'NS') | ForEach-Object {
-                        $v = $rl.$_
-                        if ($v -and $v.missing -gt 0) { "$_ 漏$($v.missing)" }
-                    }
-                    if ($miss) { $missCountList += $miss }
+                $miss = @('RT', 'AP', 'NS') | ForEach-Object {
+                    $v = $rl.$_
+                    if ($v -and $v.missing -gt 0) { "$_ 漏$($v.missing)" }
                 }
-                $parts = @()
-                if ($missCountList) { $parts += ("窗內未收：" + ($missCountList -join '／')) }
-                if ($needsRevList) { $parts += ("待人工：" + ($needsRevList -join '／')) }
-                if ($missEvidList) { $parts += ("缺對帳證據：" + ($missEvidList -join '／')) }
-                if (-not $parts) { $parts += "窗內零漏收" }
-                $missTxt = "`n" + ($parts -join "`n")
+                $missTxt = if ($miss) { "`n窗內未收：" + ($miss -join '／') } else { "`n窗內零漏收" }
             } else {
                 $missTxt = "`n⚠️ 沒有對帳留痕"
             }

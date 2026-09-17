@@ -207,90 +207,6 @@ def norm_id(s):
     return s.strip().replace("RTV", "RT", 1) if s.strip().startswith("RTV") else s.strip()
 
 
-# ── 項目3：中央 Source 與 ID Schema 規則（2026-09-17）────────────────
-SOURCE_VALUES = frozenset({
-    "AP", "RT", "NS",
-    "SIDE_CNN", "SIDE_NHK",
-    "YT", "YNA", "CNA",
-    "ENEX", "ABC",
-})
-
-PLACEHOLDER_ID_RE = re.compile(
-    r"^(?:TODO|TBD|N/?A|UNKNOWN|NONE|TEST|SAMPLE|FAKE|DUMMY|"
-    r"PLACEHOLDER|SCRIPT[-_ ]?TODO|CATEGORY[-_ ]?FIX|RT[-_ ]?MISC)",
-    re.I,
-)
-
-SOURCE_ID_RULES = {
-    "RT": re.compile(r"^RT\d{4}$"),
-    "AP": re.compile(r"^(?:AP\d{7}|AP(?:cctv|cns)\d{6})$"),
-    "NS": re.compile(r"^[A-Z]{2,6}-\d{1,4}[A-Z]{2}$"),
-    "SIDE_CNN": re.compile(r"^CNN (?:\d{2}-\d{2} )?\d{6}$"),
-    "SIDE_NHK": re.compile(r"^NHK (?:\d{2}-\d{2} )?\d{6}$"),
-    "YT": re.compile(r"^(?:YT:[A-Za-z0-9_-]+|YNA\d{2,3}|CNA\d{2,3})$"),
-    "YNA": re.compile(r"^YNA\d{2,3}$"),
-    "CNA": re.compile(r"^CNA\d{2,3}$"),
-    "ENEX": re.compile(r"^ENEX\d{4,8}$"),
-    "ABC": re.compile(r"^ABC\d{6,16}$"),
-}
-
-OTH_ID_RE = re.compile(r"^OTH\d{2,3}$")
-
-
-def validate_material_row(row, *, context="add"):
-    """驗證單筆素材行之 source、ID 及 placeholder 合法性。回傳錯誤字串清單。
-    context 可為 'add', 'add-batch', 'needs-review' 等。
-    """
-    if not isinstance(row, dict):
-        return ["素材資料必須是字典物件"]
-
-    # note shell 判定（needs-review 備忘殼）
-    script_status = row.get("script_status") or row.get("status")
-    raw_entry = row.get("raw_entry") or row.get("entry")
-    is_note_shell = (script_status == "note" and not (raw_entry or "").strip())
-
-    if is_note_shell:
-        if context in ("add", "add-batch"):
-            return ["這不是 needs-review 備忘殼；備忘請改用 needs-review add。"]
-        return []
-
-    raw_id = row.get("id")
-    if not isinstance(raw_id, str) or not raw_id.strip():
-        return ["缺少有效的素材 ID 或 ID 為空"]
-    if "\n" in raw_id or "\r" in raw_id:
-        return [f"ID 不得為多行字串：{raw_id!r}"]
-
-    raw_src = row.get("source")
-    if not isinstance(raw_src, str) or not raw_src.strip():
-        return ["缺少有效的 source 或 source 為空"]
-    if "\n" in raw_src or "\r" in raw_src:
-        return [f"source 不得為多行字串：{raw_src!r}"]
-
-    item_id = norm_id(raw_id)
-    source = raw_src.strip()
-
-    # 檢查 placeholder
-    if PLACEHOLDER_ID_RE.search(item_id):
-        return [f"ID '{item_id}' 命中假項目/占位符關鍵字，不得作為真素材入庫"]
-
-    # 檢查 OTH 例外
-    if OTH_ID_RE.match(item_id):
-        if PLACEHOLDER_ID_RE.search(source):
-            return [f"OTH 素材 source '{source}' 不得為占位符"]
-        return []
-
-    # 一般來源白名單
-    if source not in SOURCE_VALUES:
-        return [f"source '{source}' 不在允許白名單，且不是受控相容來源；合法 source: {', '.join(sorted(SOURCE_VALUES))}"]
-
-    # 檢查 source 對應的 ID 規則
-    rule = SOURCE_ID_RULES.get(source)
-    if rule and not rule.match(item_id):
-        return [f"ID '{item_id}' 不符合 source '{source}' 的格式規則"]
-
-    return []
-
-
 def scratch_dir(mmdd, base_dir=None):
     """回傳（並確保建立）某晚班次的暫存檔資料夾：{base_dir}/{YYYYMMDD}/。
 
@@ -443,26 +359,6 @@ def strip_agent_note(src_text):
     return "\n".join(lines[:cut]).rstrip(), "\n".join(lines[cut:]).strip()
 
 
-def validate_src_text(source, src_text, *, note_shell=False):
-    """驗證 RT/AP/NS 的 src_text 原文合規性，回傳錯誤清單（list of str）。
-    非 GATED_SOURCES 或 note_shell 豁免。
-    """
-    if note_shell:
-        return []
-    src = (source or "").strip().upper()
-    if src not in GATED_SOURCES:
-        return []
-
-    if not isinstance(src_text, str) or not src_text.strip():
-        return ["src_text 缺少站方原文（不得為空或非字串）"]
-
-    _, stripped_note = strip_agent_note(src_text)
-    if stripped_note:
-        return [f"src_text 尾端疑似混入 agent 說明（包含中文註記：{stripped_note[:60]!r}）"]
-
-    return []
-
-
 def sb_applicable(src_text):
     """`sb_count` 這個數字有沒有意義？（2026-08-09）
 
@@ -574,20 +470,6 @@ def new_item(source, checkpoint, status, entry, sb_count=None, src_text=None,
 
 
 def cmd_add(state, args):
-    raw_row = {
-        "id": args.id,
-        "source": args.source,
-        "status": args.status,
-    }
-    errs = validate_material_row(raw_row, context="add")
-    if errs:
-        print(f"⛔ state schema gate：素材尚未寫入。\n"
-              f"  ID：{args.id}\n"
-              f"  source：{args.source}\n"
-              f"  原因：{'; '.join(errs)}\n"
-              f"  修復：請確認 source 白名單與 ID 格式規則，不得包含 TODO/假素材代碼。\n"
-              f"  這不是 needs-review 備忘殼；備忘請改用 needs-review add。")
-        sys.exit(2)
     i = norm_id(args.id)
     if i in state["items"]:
         print(f"ERROR: {i} 已存在，要更新內容請用 update-entry")
@@ -737,65 +619,6 @@ def cmd_add_batch(state, args):
         print("ERROR: --entries 需為 JSON 陣列（或含 entries 陣列的物件）")
         sys.exit(2)
     _reject_bare_array(data, is_new_format, getattr(args, "auto_register", False))
-
-    # ── 項目3：state source/ID schema preflight gate ──────────────────
-    schema_errors = []
-    for row in data:
-        if not isinstance(row, dict):
-            schema_errors.append(("（非物件）", "資料項不是 JSON 物件"))
-            continue
-        errs = validate_material_row(row, context="add-batch")
-        if errs:
-            row_id = str(row.get("id") or "（無ID）")
-            row_src = str(row.get("source") or "（無source）")
-            schema_errors.append((row_id, f"source={row_src}：{'; '.join(errs)}"))
-
-    if schema_errors:
-        print(f"⛔ state schema gate：偵測到 {len(schema_errors)} 筆素材未通過格式檢查，整批尚未寫入（不寫 state，不寫 registry）：", file=sys.stderr)
-        for rid, msg in schema_errors[:10]:
-            print(f"  • {rid} -> {msg}", file=sys.stderr)
-        if len(schema_errors) > 10:
-            print(f"  …另 {len(schema_errors) - 10} 筆略", file=sys.stderr)
-        print("  修復：請修正 entries 中 source 白名單與 ID 格式，確認無 TODO/假項目，若為備忘請用 needs-review add。", file=sys.stderr)
-        sys.exit(2)
-
-    # ── 項目4：src_text 寫入前硬閘 ────────────────────────────────────
-    allow_missing_src = getattr(args, "allow_missing_src_text", False)
-    src_text_errors = []
-    missing_src_allowed_ids = set()
-
-    for row in data:
-        if not isinstance(row, dict):
-            continue
-        row_id = norm_id(str(row.get("id") or ""))
-        row_src = str(row.get("source") or "").strip().upper()
-        if row_src not in GATED_SOURCES:
-            continue
-        # 若已在庫且只是補分類（P1b-2 救援路徑），不重複擋
-        if row_id in state["items"] and not state["items"][row_id].get("category"):
-            continue
-        src_val = row.get("src_text")
-        errs = validate_src_text(row_src, src_val)
-        if errs:
-            is_missing = not isinstance(src_val, str) or not src_val.strip()
-            if is_missing and allow_missing_src:
-                missing_src_allowed_ids.add(row_id)
-            else:
-                src_text_errors.append((row_id, "; ".join(errs)))
-
-    if src_text_errors:
-        print(f"⛔ src_text 寫入前硬閘：偵測到 {len(src_text_errors)} 筆素材 src_text 不合規，整批尚未寫入：", file=sys.stderr)
-        for rid, msg in src_text_errors[:10]:
-            print(f"  • {rid}：{msg}", file=sys.stderr)
-        if len(src_text_errors) > 10:
-            print(f"  …另 {len(src_text_errors) - 10} 筆略", file=sys.stderr)
-        print("  修復：回到瀏覽器重新取得站方原文，只把原文放進 src_text；", file=sys.stderr)
-        print("        agent 判斷、sb_count 解釋、翻譯備註不要放進 src_text。修復後重跑 add-batch。", file=sys.stderr)
-        sys.exit(2)
-
-    if missing_src_allowed_ids:
-        print(f"⚠️ 使用 --allow-missing-src-text 放行 {len(missing_src_allowed_ids)} 筆缺 src_text 素材（已自動掛 needs_review）：{', '.join(sorted(missing_src_allowed_ids))}", file=sys.stderr)
-
     added, skipped, notes, flagged, fmt = [], [], [], [], []
     refilled = []  # P1b-2：已在庫但沒分類、這批帶了分類 → 只補分類（閘門救援路徑）
     no_src = []   # R11 防呆（2026-08-13）：漏帶 src_text 要當場喊，不能等稽核翻舊帳
@@ -931,10 +754,7 @@ def cmd_add_batch(state, args):
                                      platform=e.get("platform"))
         if not e.get("src_text"):
             no_src.append(i)
-        if i in missing_src_allowed_ids:
-            state["items"][i]["needs_review"] = "src_text_missing: 明確使用 --allow-missing-src-text，待人工回補站方原文"
-            flagged.append(f"{i}: 缺 src_text（已掛待人工）")
-        elif doubt:
+        if doubt:
             state["items"][i]["needs_review"] = doubt
             flagged.append(f"{i}: {doubt}")
         for reason in fmt_issues(e["entry"]):
@@ -3347,8 +3167,6 @@ def main():
                          "（charter 取該則摘要前 40 字，標 auto:true），"
                          "而不是留空等 new_topics。⛔ 舊格式（純陣列）預設本來就不擋，"
                          "這個旗標讓它額外把新名字也記進登記簿")
-    ab.add_argument("--allow-missing-src-text", action="store_true",
-                    help="放寬 RT/AP/NS 缺漏 src_text（仍拒絕混入 agent 說明），自動加入 needs_review")
     u = sub.add_parser("update-entry")
     # ⚠️ `--id` 不再 required：批次走 `--batch`，兩者擇一（函式裡檢查）。
     u.add_argument("--id")

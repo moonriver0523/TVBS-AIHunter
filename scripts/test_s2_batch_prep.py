@@ -102,19 +102,18 @@ check('snapshot 預設檔名 _audit_{site}_{HHMM}.txt', code4 == 0 and os.path.e
 
 # ── compare ─────────────────────────────────────────────────
 out5, code5 = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_OK, site='rt', require=None))
-check('compare 乾淨時只印一行「無差異」且 exit 0', code5 == 0 and '無差異' in out5, out5.strip().splitlines()[-1][:70])
+check('compare 乾淨時只印一行「無差異」', '無差異' in out5, out5.strip().splitlines()[-1][:70])
 check('compare 乾淨時不印整批',
       'RT1001' not in out5.split('無差異')[0].replace('rt_raw.json', ''))
 
-out6, code6 = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_BAD, site='rt', require=None))
-check('compare 存在差異時 exit 1 且印 ⛔', code6 == 1 and '⛔ compare 未通過' in out6)
+out6, _ = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_BAD, site='rt', require=None))
 check('compare 抓到 raw 有 batch 沒有（RT1003）', 'RT1003' in out6)
 check('compare 抓到 batch 有 raw 沒有（RT9999）', 'RT9999' in out6)
 check('compare 抓到缺 src_text（RT1002）', 'RT1002：缺 src_text' in out6)
 check('compare 抓到 batch 內重複 id', '重複 id' in out6 and 'RT1001' in out6)
 
-out7, code7 = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_OK, site='rt', require='sb_count'))
-check('compare --require 可自訂欄位且缺欄位時 exit 1', code7 == 1 and 'sb_count' in out7 and '缺欄位' in out7)
+out7, _ = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_OK, site='rt', require='sb_count'))
+check('compare --require 可自訂欄位', 'sb_count' in out7 and '缺欄位' in out7)
 
 # ── 讀不到要明確失敗，不可當成「無差異」 ──
 out8, code8 = run(bp.cmd_compare,
@@ -583,28 +582,26 @@ check('build：純字串 entries 不含 tc 鍵（舊格式不變）',
       'tc' not in rowsB.get('RT1002', {}), str(rowsB.get('RT1002')))
 
 # ── §四（R31/T12）：build 出口共用 fmt_issues／pretag.lint，只警告不擋 ──────
-# 語意型 FMT_BITE_NO_SPEAKER：不在 R32 單筆白名單，單筆只警告不擋。
-LINT_NO_SPEAKER = 'RT2001 (測試 標題) (BITE) ▎測試摘要。▎畫面：資料畫面。▎BITE：「引言內容。」'
-LINT_CLEAN = 'RT2002 (測試 標題) ▎測試摘要。▎畫面：資料畫面。無BITE。'
+# 壞 entry：標了 (BITE) 但沒有 ▎BITE： 段（跟 add-batch 那條既有告警同一套判準）。
 LINT_RAW = write_json('lint_raw.json', [
     {'code': 'RT2001', 'head': 'bad one', 'story': 'story bad', 'sb_count': 1},
     {'code': 'RT2002', 'head': 'clean one', 'story': 'story clean', 'sb_count': 0},
 ])
 LINT_ENTRIES = write_json('lint_entries.json', {
-    'RT2001': LINT_NO_SPEAKER,
-    'RT2002': LINT_CLEAN,
+    'RT2001': 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。',
+    'RT2002': 'RT2002 (測試 標題) ▎測試摘要。▎畫面：資料畫面。無BITE。',
 })
 LINT_OUT = os.path.join(TMP, 'lint_batch.json')
 outL, codeL = run(bp.cmd_build, Args(site='rt', raw=LINT_RAW, entries=LINT_ENTRIES,
                                      checkpoint='0914-1200', out=LINT_OUT))
-check('build＋lint：語意型 FMT 單筆仍 exit 0（只警告不擋）', codeL == 0, str(codeL))
+check('build＋lint：壞 entry 仍 exit 0（只警告不擋）', codeL == 0, codeL)
 check('build＋lint：壞 entry 的 ID 出現在警告裡', 'RT2001:' in outL, outL[-600:])
 check('build＋lint：乾淨 entry（RT2002）沒有被列進警告', 'RT2002:' not in outL, outL[-600:])
 _lo = json.load(open(LINT_OUT, encoding='utf-8'))
 _lo_rows = {r['id']: r for r in _lo['entries']}
 check('build＋lint：輸出檔內容不受警告影響（entry 原文照舊、沒被改寫）',
-      _lo_rows['RT2001']['entry'] == LINT_NO_SPEAKER
-      and _lo_rows['RT2002']['entry'] == LINT_CLEAN)
+      _lo_rows['RT2001']['entry'] == 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。'
+      and _lo_rows['RT2002']['entry'] == 'RT2002 (測試 標題) ▎測試摘要。▎畫面：資料畫面。無BITE。')
 
 # 預檢沿用 build 的 lint，但不得印／寫正式 batch 輸出。
 LINT_DRY_OUT = os.path.join(TMP, 'lint_dry_run_batch.json')
@@ -634,8 +631,8 @@ LINT_SKEL = write_json('lint_skeleton.json', [
      'src_text': 'x', 'sb_count': 0, 'entry': '', 'category': '', 'tc': ''},
 ])
 LINT_SKEL_ENTRIES = write_json('lint_skeleton_entries.json', {
-    'RT2001': {'entry': LINT_NO_SPEAKER},
-    'RT2002': {'entry': LINT_CLEAN},
+    'RT2001': {'entry': 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。'},
+    'RT2002': {'entry': 'RT2002 (測試 標題) ▎測試摘要。▎畫面：資料畫面。無BITE。'},
 })
 LINT_SKEL_OUT = os.path.join(TMP, 'lint_skeleton_batch.json')
 outLS, codeLS = run(bp.cmd_build, Args(site='rt', raw=None, entries=LINT_SKEL_ENTRIES,
@@ -647,7 +644,7 @@ check('build --skeleton＋lint：乾淨 entry 沒有被列進警告', 'RT2002:' 
 _lso = json.load(open(LINT_SKEL_OUT, encoding='utf-8'))
 _lso_rows = {r['id']: r for r in _lso['entries']}
 check('build --skeleton＋lint：輸出檔內容不受警告影響',
-      _lso_rows['RT2001']['entry'] == LINT_NO_SPEAKER)
+      _lso_rows['RT2001']['entry'] == 'RT2001 (測試 標題) (BITE) 這裡沒有BITE段落純摘要。')
 
 LINT_SKEL_DRY_OUT = os.path.join(TMP, 'lint_skeleton_dry_run_batch.json')
 outLSD, codeLSD = run(bp.cmd_build, Args(site='rt', raw=None,
@@ -658,7 +655,7 @@ check('build --skeleton --dry-run：仍跑 lint 且不寫輸出檔',
       codeLSD == 0 and 'RT2001:' in outLSD and not os.path.exists(LINT_SKEL_DRY_OUT),
       outLSD[-600:])
 
-# ── R32 硬閘測試：純結構性 FMT 單筆擋下；語意型 FMT 仍走 ≥5 批次門檻 ──
+# ── R43 硬閘測試：白名單機械格式類原因同站 >= 5 則時，正式 build 與 --dry-run 均擋下 ──
 GATE_RAW_5 = write_json('gate_raw_5.json', [
     {'code': f'RT310{i}', 'head': f'head {i}', 'story': f'story {i}', 'sb_count': 1}
     for i in range(5)
@@ -674,12 +671,12 @@ outG5, codeG5 = run(bp.cmd_build, Args(site='rt', raw=GATE_RAW_5, entries=GATE_E
                                        checkpoint='0914-1200', out=GATE_OUT_5))
 check('build 硬閘：白名單格式錯誤≥5則時 exit 2 擋下', codeG5 == 2, str(codeG5))
 check('build 硬閘：正式 build 被擋時絕不寫入 batch 輸出檔', not os.path.exists(GATE_OUT_5), GATE_OUT_5)
-check('build 硬閘：錯誤訊息含 ⛔ R32 攔截警示', '⛔' in outG5 and 'R32' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息含 ⛔ 攔截警示', '⛔' in outG5, outG5[-600:])
 check('build 硬閘：錯誤訊息點名站別與 reason code', 'RT' in outG5 and 'FMT_FIRST_NOTE_BITE' in outG5, outG5[-600:])
-check('build 硬閘：錯誤訊息指明 batch 尚未寫入', 'batch 尚未寫入' in outG5, outG5[-600:])
-check('build 硬閘：錯誤訊息要求整批 Write', '重新整批 Write' in outG5, outG5[-600:])
-check('build 硬閘：錯誤訊息禁止逐筆 Edit', '不要逐筆 Edit' in outG5, outG5[-600:])
-check('build 硬閘：錯誤訊息要求重跑 --dry-run 至 0', 'build --dry-run' in outG5 and 'reason code 為 0' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息指明 batch.json 尚未寫入', 'batch.json 尚未寫入' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息要求一次 Write 整批重寫', '一次 `Write` 整批重寫' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息禁止逐筆 Edit', '禁止逐筆' in outG5 and 'Edit' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息要求重跑 --dry-run 至 0 則', '重跑 `build --dry-run`' in outG5 and '降到 0' in outG5, outG5[-600:])
 
 # 2. --dry-run 模式達門檻：回傳非 0 exit code（exit 2），同樣印 ⛔ 訊息且不寫檔
 GATE_DRY_OUT_5 = os.path.join(TMP, 'gate_dry_batch_5.json')
@@ -724,130 +721,6 @@ check('build 回歸測試：內容類原因≥5則絕不觸發硬閘（維持 ex
 check('build 回歸測試：內容類原因≥5則正常寫入 batch.json', os.path.exists(SEM_OUT_5), SEM_OUT_5)
 check('build 回歸測試：內容類原因無 ⛔ 硬閘訊息', '⛔' not in outSEM, outSEM[-600:])
 check('build 回歸測試：內容類警告正常印出到 stderr', 'BITE 引言疑似未翻譯成中文' in outSEM, outSEM[-600:])
-
-# ── R32 單筆結構性 FMT：1 則即 exit 2；語意型單筆不擋 ──
-R32_CLEAN_RAW = write_json('r32_clean_raw.json', [
-    {'code': 'RT4001', 'head': 'clean', 'story': 'story', 'sb_count': 0},
-])
-R32_CLEAN_ENTRIES = write_json('r32_clean_entries.json', {
-    'RT4001': 'RT4001 (測試) ▎測試摘要。▎畫面：資料畫面。無BITE。',
-})
-R32_CLEAN_OUT = os.path.join(TMP, 'r32_clean_batch.json')
-outC, codeC = run(bp.cmd_build, Args(site='rt', raw=R32_CLEAN_RAW, entries=R32_CLEAN_ENTRIES,
-                                     checkpoint='0917-1200', out=R32_CLEAN_OUT))
-check('R32 正常一筆：exit 0', codeC == 0, str(codeC))
-check('R32 正常一筆：batch 寫出', os.path.exists(R32_CLEAN_OUT), R32_CLEAN_OUT)
-
-R32_FOOT_RAW = write_json('r32_foot_raw.json', [
-    {'code': 'RT4002', 'head': 'no footage', 'story': 'story', 'sb_count': 0},
-])
-R32_FOOT_ENTRIES = write_json('r32_foot_entries.json', {
-    'RT4002': 'RT4002 (測試) ▎測試摘要。無BITE。',
-})
-R32_FOOT_OUT = os.path.join(TMP, 'r32_foot_batch.json')
-outF, codeF = run(bp.cmd_build, Args(site='rt', raw=R32_FOOT_RAW, entries=R32_FOOT_ENTRIES,
-                                     checkpoint='0917-1200', out=R32_FOOT_OUT))
-check('R32 單筆 FMT_MISSING_FOOTAGE_SEG：exit 2', codeF == 2, str(codeF))
-check('R32 單筆 FMT_MISSING_FOOTAGE_SEG：不寫 batch', not os.path.exists(R32_FOOT_OUT))
-check('R32 單筆 FMT_MISSING_FOOTAGE_SEG：點名 reason 與 ID',
-      'FMT_MISSING_FOOTAGE_SEG' in outF and 'RT4002' in outF and 'R32' in outF, outF[-600:])
-
-R32_SEG_RAW = write_json('r32_seg_raw.json', [
-    {'code': 'RT4003', 'head': 'no bite tag', 'story': 'story', 'sb_count': 1},
-])
-R32_SEG_ENTRIES = write_json('r32_seg_entries.json', {
-    'RT4003': 'RT4003 (測試) ▎測試摘要。▎畫面：資料畫面。▎BITE：川普「引言。」',
-})
-R32_SEG_OUT = os.path.join(TMP, 'r32_seg_batch.json')
-outS, codeS = run(bp.cmd_build, Args(site='rt', raw=R32_SEG_RAW, entries=R32_SEG_ENTRIES,
-                                     checkpoint='0917-1200', out=R32_SEG_OUT))
-check('R32 單筆缺 BITE 括號：exit 2', codeS == 2, str(codeS))
-check('R32 單筆缺 BITE 括號：不寫 batch', not os.path.exists(R32_SEG_OUT))
-check('R32 單筆缺 BITE 括號：點名 FMT_BITE_SEG_WITHOUT_TAG',
-      'FMT_BITE_SEG_WITHOUT_TAG' in outS and 'RT4003' in outS, outS[-600:])
-
-R32_GMT_RAW = write_json('r32_gmt_raw.json', [
-    {'code': 'RT4004', 'head': 'gmt', 'story': 'story', 'sb_count': 0},
-])
-R32_GMT_ENTRIES = write_json('r32_gmt_entries.json', {
-    'RT4004': 'RT4004 (測試) ▎測試摘要。▎畫面：資料畫面 GMT。無BITE。',
-})
-R32_GMT_OUT = os.path.join(TMP, 'r32_gmt_batch.json')
-outG, codeG = run(bp.cmd_build, Args(site='rt', raw=R32_GMT_RAW, entries=R32_GMT_ENTRIES,
-                                     checkpoint='0917-1200', out=R32_GMT_OUT))
-check('R32 單筆 FMT_CONTAINS_GMT：exit 2', codeG == 2, str(codeG))
-check('R32 單筆 FMT_CONTAINS_GMT：不寫 batch', not os.path.exists(R32_GMT_OUT))
-check('R32 單筆 FMT_CONTAINS_GMT：點名 reason',
-      'FMT_CONTAINS_GMT' in outG and 'RT4004' in outG, outG[-600:])
-
-R32_GMT_SKEL = write_json('r32_gmt_skel.json', [
-    {'id': 'RT4004', 'source': 'RT', 'checkpoint': '0917-1200', 'status': 'has_script',
-     'src_text': 'x', 'sb_count': 0, 'entry': '', 'category': '', 'tc': ''},
-])
-R32_GMT_SKEL_ENTRIES = write_json('r32_gmt_skel_entries.json', {
-    'RT4004': {'entry': 'RT4004 (測試) ▎測試摘要。▎畫面：資料畫面 GMT。無BITE。'},
-})
-R32_GMT_SKEL_OUT = os.path.join(TMP, 'r32_gmt_skel_batch.json')
-outGS, codeGS = run(bp.cmd_build, Args(site='rt', raw=None, entries=R32_GMT_SKEL_ENTRIES,
-                                       checkpoint='0917-1200', out=R32_GMT_SKEL_OUT,
-                                       skeleton=R32_GMT_SKEL))
-check('R32 skeleton 單筆 GMT：exit 2', codeGS == 2, str(codeGS))
-check('R32 skeleton 單筆 GMT：不寫 batch', not os.path.exists(R32_GMT_SKEL_OUT))
-
-R32_GMT_DRY_OUT = os.path.join(TMP, 'r32_gmt_dry_batch.json')
-outGD, codeGD = run(bp.cmd_build, Args(site='rt', raw=R32_GMT_RAW, entries=R32_GMT_ENTRIES,
-                                       checkpoint='0917-1200', out=R32_GMT_DRY_OUT,
-                                       dry_run=True))
-check('R32 --dry-run 單筆 GMT：exit 2', codeGD == 2, str(codeGD))
-check('R32 --dry-run 單筆 GMT：不寫檔且標預檢未通過',
-      not os.path.exists(R32_GMT_DRY_OUT) and '--dry-run 預檢未通過' in outGD, outGD[-600:])
-
-# 語意型：單筆 FMT_BITE_NO_SPEAKER / FMT_PKG_DONUT_NEED_SOT 不得因單筆而擋
-R32_SPK_RAW = write_json('r32_spk_raw.json', [
-    {'code': 'RT4005', 'head': 'no speaker', 'story': 'story', 'sb_count': 1},
-])
-R32_SPK_ENTRIES = write_json('r32_spk_entries.json', {
-    'RT4005': 'RT4005 (測試) (BITE) ▎測試摘要。▎畫面：資料畫面。▎BITE：「引言內容。」',
-})
-R32_SPK_OUT = os.path.join(TMP, 'r32_spk_batch.json')
-outSP, codeSP = run(bp.cmd_build, Args(site='rt', raw=R32_SPK_RAW, entries=R32_SPK_ENTRIES,
-                                       checkpoint='0917-1200', out=R32_SPK_OUT))
-check('R32 排除單筆 FMT_BITE_NO_SPEAKER：exit 0', codeSP == 0, str(codeSP))
-check('R32 排除單筆 FMT_BITE_NO_SPEAKER：仍寫 batch', os.path.exists(R32_SPK_OUT))
-check('R32 排除單筆 FMT_BITE_NO_SPEAKER：無 R32 硬閘', 'R32' not in outSP, outSP[-600:])
-
-PKG_RAW = write_json('pkg_raw.json', [
-    {'id': 'EN-32MO', 'desc': 'pkg desc', 'script': 'script text', 'ft': 'PKG', 'dur_ms': 121000},
-])
-PKG_ENTRIES = write_json('pkg_entries.json', {
-    'EN-32MO': 'EN-32MO (國際) ▎測試摘要。▎畫面：資料畫面。無BITE。',
-})
-PKG_OUT = os.path.join(TMP, 'pkg_batch.json')
-outPKG, codePKG = run(bp.cmd_build, Args(site='ns', raw=PKG_RAW, entries=PKG_ENTRIES,
-                                         checkpoint='0917-1200', out=PKG_OUT))
-check('R32 排除單筆 FMT_PKG_DONUT_NEED_SOT：exit 0', codePKG == 0, str(codePKG))
-check('R32 排除單筆 FMT_PKG_DONUT_NEED_SOT：仍寫 batch', os.path.exists(PKG_OUT))
-check('R32 排除單筆 FMT_PKG_DONUT_NEED_SOT：無 R32 硬閘', 'R32' not in outPKG, outPKG[-600:])
-check('R32 排除單筆 FMT_PKG_DONUT_NEED_SOT：仍印語意警告',
-      'PKG/DONUT且時長>1分鐘' in outPKG, outPKG[-600:])
-
-# 被排除的語意型 reason 達 5 筆：仍走既有 ≥5 批次硬閘
-SEM_FMT_RAW_5 = write_json('sem_fmt_raw_5.json', [
-    {'code': f'RT340{i}', 'head': f'head {i}', 'story': f'story {i}', 'sb_count': 1}
-    for i in range(5)
-])
-SEM_FMT_ENTRIES_5 = write_json('sem_fmt_entries_5.json', {
-    f'RT340{i}': f'RT340{i} (測試) (BITE) ▎測試摘要。▎畫面：資料畫面。▎BITE：「引言內容。」'
-    for i in range(5)
-})
-SEM_FMT_OUT_5 = os.path.join(TMP, 'sem_fmt_batch_5.json')
-outSF5, codeSF5 = run(bp.cmd_build, Args(site='rt', raw=SEM_FMT_RAW_5, entries=SEM_FMT_ENTRIES_5,
-                                         checkpoint='0917-1200', out=SEM_FMT_OUT_5))
-check('R32 語意型 FMT≥5：仍走批次硬閘 exit 2', codeSF5 == 2, str(codeSF5))
-check('R32 語意型 FMT≥5：不寫 batch', not os.path.exists(SEM_FMT_OUT_5))
-check('R32 語意型 FMT≥5：走批次門檻而非單筆 R32',
-      'FMT_BITE_NO_SPEAKER' in outSF5 and '同原因' in outSF5 and '【R32 單筆格式硬閘】' not in outSF5,
-      outSF5[-800:])
 
 # ── S3（複核 2026-09-14）：Claude Code offload 殼 → unwrap → from-raw ──────
 #

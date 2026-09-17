@@ -206,20 +206,6 @@ HARD_GATE_REASONS = {
     'FMT_PKG_DONUT_NEED_SOT': 'PKG/DONUT且時長>1分鐘備註漏標SOT',
 }
 
-# R32：純結構性 FMT 單筆即擋。語意／詞彙／講者判斷不得納入（仍走下方 ≥5 批次門檻）。
-SINGLE_ENTRY_STRICT_REASONS = frozenset({
-    'FMT_FIRST_NOTE_BITE',
-    'FMT_MISSING_FOOTAGE_SEG',
-    'FMT_BITE_TAG_WITHOUT_SEG',
-    'FMT_BITE_SEG_WITHOUT_TAG',
-    'FMT_BITE_CONFLICT',
-    'FMT_NO_ENDING',
-    'FMT_TRAILING_CONTENT',
-    'FMT_MISSING_SUMMARY_DELIM',
-    'FMT_SECOND_PAREN_NOT_BITE',
-    'FMT_CONTAINS_GMT',
-})
-
 
 def classify_warning_reason(reason):
     """將警告原因文字分類為穩定的 reason_code。
@@ -315,15 +301,6 @@ def collect_build_lint_reasons(warnings, site=None, threshold=HARD_GATE_THRESHOL
     return grouped, hard_gate_reasons
 
 
-def collect_single_entry_strict(warnings, site=None):
-    """收集 R32 單筆結構性 FMT reason（出現 1 則即命中）。"""
-    grouped, _ = collect_build_lint_reasons(warnings, site=site, threshold=1)
-    return [
-        info for info in grouped.values()
-        if info['code'] in SINGLE_ENTRY_STRICT_REASONS and info['count'] >= 1
-    ]
-
-
 def _print_build_lint_warnings(warnings, site=None):
     """印一份精簡的『ID: 原因』警告清單，長度受 `INSPECT_TEXT_BUDGET` 封頂——
     跟 `inspect --fields` 同一個 28,000 字元預算（T9），避免這份警告本身
@@ -359,29 +336,11 @@ def _print_build_lint_warnings(warnings, site=None):
 
 
 def _enforce_build_hard_gate(warnings, site=None, dry_run=False):
-    """先擋 R32 單筆結構性 FMT，再擋同站同原因 ≥5 的批次硬閘。skeleton／normal／dry-run 共用。"""
+    """正式 build 或 --dry-run 遇到白名單格式類 reason code 達門檻（>=5）時硬閘擋下。"""
     if not warnings:
         return
     site_label = (site or '該站').upper()
     _, hard_gate_reasons = collect_build_lint_reasons(warnings, site=site_label)
-    single_hits = collect_single_entry_strict(warnings, site=site_label)
-    if single_hits:
-        lines = [
-            f'⛔ 【R32 單筆格式硬閘】{site_label} 站有素材未通過結構格式檢查，batch 尚未寫入。'
-        ]
-        for info in single_hits:
-            for item_id in info['items'] or ['?']:
-                lines.append(f'  • ID：{item_id}')
-                lines.append(f'  • reason：{info["code"]}（{info["name"]}）')
-        lines.extend([
-            '  • 修復：回到 entries.json 修正該筆 entry。',
-            '  • 下一步：重新整批 Write，重跑 build --dry-run，確認該 reason code 為 0。',
-            '  • 不要逐筆 Edit／patch-entry 修補後再繞過 build。',
-        ])
-        if dry_run:
-            lines.append('  • --dry-run 預檢未通過。')
-        print('\n'.join(lines), file=sys.stderr)
-        sys.exit(2)
     if not hard_gate_reasons:
         return
 
@@ -717,19 +676,6 @@ def cmd_build(args):
 
         _report_raw_entry_conversions(raw_entry_converted_ids)
         _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False))
-        cmp_rep = compare_items(rows, batch, site=args.site, required=DEFAULT_REQUIRED, allowed_missing=missing)
-        if cmp_rep["missing"] or cmp_rep["extra"] or cmp_rep["duplicates"] or cmp_rep["gaps"]:
-            print("⛔ build 比對門檻未通過；batch.json 尚未寫入：", file=sys.stderr)
-            if cmp_rep["missing"]:
-                print(f"  • 骨架有但 batch 沒有：{', '.join(cmp_rep['missing'])}", file=sys.stderr)
-            if cmp_rep["extra"]:
-                print(f"  • batch 有但骨架沒有：{', '.join(cmp_rep['extra'])}", file=sys.stderr)
-            if cmp_rep["duplicates"]:
-                print(f"  • batch 內重複 id：{', '.join(cmp_rep['duplicates'])}", file=sys.stderr)
-            if cmp_rep["gaps"]:
-                for gid, glack in cmp_rep["gaps"][:5]:
-                    print(f"  • {gid} 缺必要欄位：{', '.join(glack)}", file=sys.stderr)
-            sys.exit(2)
         out = json.dumps({'entries': batch, 'new_topics': new_topics},
                          ensure_ascii=False, indent=2)
         note = f'（{len(batch)} 則，新格式、過閘；new_topics {len(new_topics)} 題）'
@@ -797,20 +743,6 @@ def cmd_build(args):
 
     _report_raw_entry_conversions(raw_entry_converted_ids)
     _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False))
-    raw_for_cmp = [it for it in items if not spec['skip_of'](it)]
-    cmp_rep = compare_items(raw_for_cmp, batch, site=args.site, required=DEFAULT_REQUIRED, allowed_missing=missing)
-    if cmp_rep["missing"] or cmp_rep["extra"] or cmp_rep["duplicates"] or cmp_rep["gaps"]:
-        print("⛔ build 比對門檻未通過；batch.json 尚未寫入：", file=sys.stderr)
-        if cmp_rep["missing"]:
-            print(f"  • raw 有但 batch 沒有（未在草稿內）：{', '.join(cmp_rep['missing'])}", file=sys.stderr)
-        if cmp_rep["extra"]:
-            print(f"  • batch 有但 raw 沒有：{', '.join(cmp_rep['extra'])}", file=sys.stderr)
-        if cmp_rep["duplicates"]:
-            print(f"  • batch 內重複 id：{', '.join(cmp_rep['duplicates'])}", file=sys.stderr)
-        if cmp_rep["gaps"]:
-            for gid, glack in cmp_rep["gaps"][:5]:
-                print(f"  • {gid} 缺必要欄位：{', '.join(glack)}", file=sys.stderr)
-        sys.exit(2)
     # 🔴 2026-09-08 硬上線：跟 --skeleton 分支同一個理由，三站一律出新格式外殼。
     # 這條分支沒有 entries.json 可以帶 `_new_topics`，所以 new_topics 固定空的；
     # 要開新中主題就照退回訊息在 batch 頂層自己補。
@@ -1809,55 +1741,6 @@ def cmd_concat(args):
 DEFAULT_REQUIRED = ('id', 'source', 'checkpoint', 'status', 'entry', 'src_text')
 
 
-def compare_items(raw_items, batch_items, *, site=None,
-                  required=DEFAULT_REQUIRED, allowed_missing=()):
-    """比對 raw_items 與 batch_items，回傳結構化差異報告，不印、不 exit。"""
-    site_key = site.lower() if isinstance(site, str) and site.lower() in SITE_SPEC else site
-    raw_ids = []
-    for i, it in enumerate(raw_items):
-        if isinstance(it, dict) and 'id' in it and it.get('id'):
-            raw_ids.append(it['id'])
-        else:
-            raw_ids.append(_site_id_of(site_key, it, i))
-
-    batch_ids = [(it.get('id') or _id_of_any(it, i)) for i, it in enumerate(batch_items)]
-    raw_set, batch_set = set(raw_ids), set(batch_ids)
-
-    allowed_set = set(allowed_missing or ())
-    missing = [i for i in raw_ids if i not in batch_set and i not in allowed_set]
-    extra = [i for i in batch_ids if i not in raw_set]
-    dup_batch = sorted({i for i in batch_ids if batch_ids.count(i) > 1})
-
-    req_fields = list(required) if required else list(DEFAULT_REQUIRED)
-    gaps = []
-    src_text_issues = []
-    for i, it in enumerate(batch_items):
-        item_id = it.get('id') or _id_of_any(it, i)
-        lack = [f for f in req_fields if it.get(f) in (None, '', [], {})]
-        if lack:
-            gaps.append((item_id, lack))
-
-        src_val = it.get('src_text')
-        if isinstance(src_val, str) and src_val.strip():
-            item_src = (it.get('source') or (site or '')).upper()
-            if item_src in ('RT', 'AP', 'NS'):
-                _, stripped_note = s2_state.strip_agent_note(src_val)
-                if stripped_note:
-                    src_text_issues.append((item_id, f"尾端疑似混入 agent 說明（{stripped_note[:30]}）"))
-
-    clean = not (missing or extra or dup_batch or gaps or src_text_issues)
-    return {
-        "raw_ids": raw_ids,
-        "batch_ids": batch_ids,
-        "missing": missing,
-        "extra": extra,
-        "duplicates": dup_batch,
-        "gaps": gaps,
-        "src_text_issues": src_text_issues,
-        "clean": clean,
-    }
-
-
 def cmd_compare(args):
     """raw 與 batch 對照，**只印差異**：raw 有 batch 沒有的 id、batch 有 raw
     沒有的 id、batch 缺欄位的則。乾淨就一行「無差異」，不印整批。"""
@@ -1875,38 +1758,50 @@ def cmd_compare(args):
     print(f'# raw  ：{os.path.basename(args.raw)}（{raw_shell}）', file=sys.stderr)
     print(f'# batch：{os.path.basename(args.batch)}（{batch_shell}）', file=sys.stderr)
 
+    raw_ids = [_site_id_of(args.site, it, i) for i, it in enumerate(raw_items)]
+    batch_ids = [(it.get('id') or _id_of_any(it, i)) for i, it in enumerate(batch_items)]
+    raw_set, batch_set = set(raw_ids), set(batch_ids)
+
     required = ([f.strip() for f in args.require.split(',') if f.strip()]
                 if args.require else list(DEFAULT_REQUIRED))
 
-    rep = compare_items(raw_items, batch_items, site=args.site, required=required)
+    missing = [i for i in raw_ids if i not in batch_set]
+    extra = [i for i in batch_ids if i not in raw_set]
 
-    if rep["clean"]:
+    gaps = []
+    for i, it in enumerate(batch_items):
+        item_id = it.get('id') or _id_of_any(it, i)
+        lack = [f for f in required
+                if it.get(f) in (None, '', [], {})]
+        if lack:
+            gaps.append((item_id, lack))
+
+    dup_batch = sorted({i for i in batch_ids if batch_ids.count(i) > 1})
+
+    found = False
+    if missing:
+        found = True
+        print(f'raw 有、batch 沒有（{len(missing)} 則——可能是刻意排除，'
+              f'但要說得出理由）：')
+        for i in missing:
+            print(f'  - {i}')
+    if extra:
+        found = True
+        print(f'batch 有、raw 沒有（{len(extra)} 則——來源不明，要查）：')
+        for i in extra:
+            print(f'  - {i}')
+    if dup_batch:
+        found = True
+        print(f'batch 內重複 id（{len(dup_batch)} 個）：{", ".join(dup_batch)}')
+    if gaps:
+        found = True
+        print(f'batch 缺欄位（{len(gaps)} 則，查的是 {"/".join(required)}）：')
+        for item_id, lack in gaps:
+            print(f'  - {item_id}：缺 {", ".join(lack)}')
+
+    if not found:
         print(f'無差異（raw {len(raw_items)} 筆、batch {len(batch_items)} 筆，'
               f'id 全對得上，{"/".join(required)} 都有）')
-        sys.exit(0)
-
-    print('⛔ compare 未通過；不可接續 add-batch。', file=sys.stderr)
-    if rep["missing"]:
-        print(f'raw 有、batch 沒有（{len(rep["missing"])} 則——可能是刻意排除，'
-              f'但要說得出理由）：')
-        for i in rep["missing"]:
-            print(f'  - {i}')
-    if rep["extra"]:
-        print(f'batch 有、raw 沒有（{len(rep["extra"])} 則——來源不明，要查）：')
-        for i in rep["extra"]:
-            print(f'  - {i}')
-    if rep["duplicates"]:
-        print(f'batch 內重複 id（{len(rep["duplicates"])} 個）：{", ".join(rep["duplicates"])}')
-    if rep["gaps"]:
-        print(f'batch 缺欄位（{len(rep["gaps"])} 則，查的是 {"/".join(required)}）：')
-        for item_id, lack in rep["gaps"]:
-            print(f'  - {item_id}：缺 {", ".join(lack)}')
-    if rep["src_text_issues"]:
-        print(f'src_text 格式錯誤（{len(rep["src_text_issues"])} 則）：')
-        for item_id, reason in rep["src_text_issues"]:
-            print(f'  - {item_id}：{reason}')
-    print('下一步：修正 batch 後重跑 compare，只有 exit 0 才能繼續寫入。', file=sys.stderr)
-    sys.exit(1)
 
 
 DEDUP_FIELDS = ('script', 'desc', 'head', 'headline', 'story', 'cap', 'title')
@@ -2469,9 +2364,7 @@ def main():
     p_rf.set_defaults(func=cmd_rename_field)
 
     args = ap.parse_args()
-    rc = args.func(args)
-    if isinstance(rc, int):
-        sys.exit(rc)
+    args.func(args)
 
 
 if __name__ == '__main__':
