@@ -270,9 +270,9 @@ fetchAbcWindowRows() 陣列 → s2_platform_extract.py abc → 候選 JSON
 `…\20260904\scripts\s2_platform_lint.py` → `[Errno 2] No such file or directory`。
 
 🔴 **`abc_entries_{HHMM}.json` 判完全部則後一次 `Write` 整包，⛔ 不要逐則 `Edit`**：
-同 `13c2` 對三站 batch.json 的規定。0908-1700 實錯：28 則逐一 `Edit` append，
+同 `13c` / `13c2` 對三站 entries 的硬性規定（同格式原因≥5則硬閘擋下）。0908-1700 實錯：28 則逐一 `Edit` append，
 單這個檔就吃掉 28 次工具呼叫（同輪 NS 只用 3 次 `Write`、RT 1 次、ENEX 5 次
-`Edit` 就寫完）——先在腦內／scratch 把整包 `{id:entry}` 組好，**判完再寫一次**。
+`Edit` 就寫完）——先在腦內／scratch 把整包 `{id:entry}` 組好，**判完再寫一次**；格式問題一律整批重寫，禁止逐筆修補。
 
 ```
 # ⓪ entries 寫完先驗形狀（<1 秒，不碰網路）——⛔ 不要跳過

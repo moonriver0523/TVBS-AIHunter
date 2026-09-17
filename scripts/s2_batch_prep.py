@@ -168,7 +168,7 @@ def _lint_row(entry_text, row):
     結果一致，差異只在 build 這關可能多幾則「數不出來」也照樣被當數字檢查——
     這支只警告不擋，多印幾行提示不算壞事）。
 
-    ⚠️ **只警告，不修稿、不擋 build、不改輸出檔內容**——跟 `add-batch` 寫入時
+    ⚠️ **白名單格式類原因達門檻才擋，其餘維持只警告**——跟 `add-batch` 寫入時
     的既有原則相同；檢查本身壞掉也不能拖累 build（外層已包 try/except）。
     """
     msgs = list(s2_state.fmt_issues(entry_text))
@@ -184,25 +184,138 @@ def _lint_row(entry_text, row):
     return msgs
 
 
+HARD_GATE_THRESHOLD = 5
+
+# 白名單：僅限確認為機械格式類別的 reason_code，達到門檻（>=5）時觸發硬閘擋下
+# 內容／語意／啟發式判斷（如引言翻譯、事實判斷、選材適當性、摘要字數）嚴格排除於白名單外，維持只警告不擋
+HARD_GATE_REASONS = {
+    'FMT_FIRST_NOTE_BITE': '第一備註寫了 BITE',
+    'FMT_MISSING_FOOTAGE_SEG': '缺 ▎畫面： 段',
+    'FMT_BITE_TAG_WITHOUT_SEG': '有 (BITE) 但缺 ▎BITE： 段',
+    'FMT_BITE_SEG_WITHOUT_TAG': '有 ▎BITE： 但缺 (BITE) 第二括號',
+    'FMT_BITE_CONFLICT': '(BITE) 與 無BITE 矛盾',
+    'FMT_NO_ENDING': '結尾既非 無BITE 也無 BITE： 段',
+    'FMT_TRAILING_CONTENT': '行尾有多餘內容',
+    'FMT_MISSING_SUMMARY_DELIM': '摘要前缺 ▎ 標記',
+    'FMT_NOTE_FILE_USAGE': '備註用 FILE/檔案（應為 資料畫面）',
+    'FMT_SECOND_PAREN_NOT_BITE': '第二括號不是 (BITE)',
+    'FMT_CONTAINS_GMT': '素材行出現 GMT',
+    'FMT_OPERATIONAL_NOTE': '操作/狀態備註寫進素材行',
+    'FMT_BITE_NO_SPEAKER': '▎BITE：無講者',
+    'FMT_WRAP_WITHOUT_NOTE': '出現 WRAP 但備註未標 整理包',
+    'FMT_PKG_DONUT_NEED_SOT': 'PKG/DONUT且時長>1分鐘備註漏標SOT',
+}
+
+
+def classify_warning_reason(reason):
+    """將警告原因文字分類為穩定的 reason_code。
+    回傳 (reason_code, is_hard_gate, display_name)。
+    若為白名單機械格式，is_hard_gate=True；內容/語意/未知警告 is_hard_gate=False。
+    """
+    r = (reason or '').strip()
+    if r in HARD_GATE_REASONS:
+        return r, True, HARD_GATE_REASONS[r]
+
+    # 機械格式白名單匹配
+    if '第一備註寫了 BITE' in r:
+        return 'FMT_FIRST_NOTE_BITE', True, HARD_GATE_REASONS['FMT_FIRST_NOTE_BITE']
+    if '缺 ▎畫面： 段' in r or '缺 ▎畫面:' in r:
+        return 'FMT_MISSING_FOOTAGE_SEG', True, HARD_GATE_REASONS['FMT_MISSING_FOOTAGE_SEG']
+    if '有 (BITE) 但缺 ▎BITE： 段' in r or '標了 (BITE) 但沒有 ▎BITE： 段' in r:
+        return 'FMT_BITE_TAG_WITHOUT_SEG', True, HARD_GATE_REASONS['FMT_BITE_TAG_WITHOUT_SEG']
+    if '有 ▎BITE： 但缺 (BITE) 第二括號' in r or '有 ▎BITE: 但缺 (BITE) 第二括號' in r:
+        return 'FMT_BITE_SEG_WITHOUT_TAG', True, HARD_GATE_REASONS['FMT_BITE_SEG_WITHOUT_TAG']
+    if '(BITE) 與 無BITE 矛盾' in r:
+        return 'FMT_BITE_CONFLICT', True, HARD_GATE_REASONS['FMT_BITE_CONFLICT']
+    if '結尾既非 無BITE 也無 BITE： 段' in r or '結尾既非 無BITE 也無 BITE:' in r:
+        return 'FMT_NO_ENDING', True, HARD_GATE_REASONS['FMT_NO_ENDING']
+    if '行尾有多餘內容' in r:
+        return 'FMT_TRAILING_CONTENT', True, HARD_GATE_REASONS['FMT_TRAILING_CONTENT']
+    if '摘要前缺 ▎ 標記' in r:
+        return 'FMT_MISSING_SUMMARY_DELIM', True, HARD_GATE_REASONS['FMT_MISSING_SUMMARY_DELIM']
+    if '備註用 FILE/檔案' in r:
+        return 'FMT_NOTE_FILE_USAGE', True, HARD_GATE_REASONS['FMT_NOTE_FILE_USAGE']
+    if r.startswith('第二括號不是 (BITE)'):
+        return 'FMT_SECOND_PAREN_NOT_BITE', True, HARD_GATE_REASONS['FMT_SECOND_PAREN_NOT_BITE']
+    if '素材行出現 GMT' in r:
+        return 'FMT_CONTAINS_GMT', True, HARD_GATE_REASONS['FMT_CONTAINS_GMT']
+    if '操作/狀態備註寫進素材行' in r or '操作備註寫進素材行' in r:
+        return 'FMT_OPERATIONAL_NOTE', True, HARD_GATE_REASONS['FMT_OPERATIONAL_NOTE']
+    if '▎BITE：無講者' in r or '▎BITE:無講者' in r:
+        return 'FMT_BITE_NO_SPEAKER', True, HARD_GATE_REASONS['FMT_BITE_NO_SPEAKER']
+    if '出現 WRAP 但備註未標 整理包' in r:
+        return 'FMT_WRAP_WITHOUT_NOTE', True, HARD_GATE_REASONS['FMT_WRAP_WITHOUT_NOTE']
+    if 'PKG/DONUT且時長>1分鐘' in r:
+        return 'FMT_PKG_DONUT_NEED_SOT', True, HARD_GATE_REASONS['FMT_PKG_DONUT_NEED_SOT']
+
+    # 內容／語意／啟發式判斷類（非白名單，不套硬閘）
+    if 'BITE 引言疑似未翻譯成中文' in r:
+        return 'SEM_BITE_UNTRANSLATED', False, 'BITE 引言疑似未翻譯成中文'
+    if '超過 150 字' in r or '超過150字' in r:
+        return 'SEM_SUMMARY_TOO_LONG', False, '摘要超過 150 字上限'
+    if '個 SOUNDBITE 卻標「無BITE」' in r:
+        return 'SEM_POSSIBLE_MISSING_BITE', False, '稿內有 SOUNDBITE 卻標無BITE'
+    if '段 inline SOT 卻標「無BITE」' in r:
+        return 'SEM_POSSIBLE_MISSING_INLINE_SOT', False, '全文有 inline SOT 卻標無BITE'
+    if '通常必有訪問聲音卻標「無BITE」' in r:
+        return 'SEM_POSSIBLE_MISSING_FT_BITE', False, 'footageType 通常必有訪問卻標無BITE'
+    if '依 R19 不應標 🔖' in r:
+        return 'SEM_INVALID_BOOKMARK', False, '受訪連線類畫面不應標 🔖'
+    if '機動 T active' in r:
+        return 'SEM_SPECIAL_T_SUGGESTION', False, '機動 T 建議'
+
+    # 其他未知警告：預設為非硬閘類
+    return 'WARN_OTHER', False, r
+
+
+def collect_build_lint_reasons(warnings, site=None, threshold=HARD_GATE_THRESHOLD):
+    """統計警告清單的原因分布，回傳 (grouped_reasons, hard_gate_reasons)。
+    grouped_reasons: dict of {code: {'code': code, 'name': name, 'count': int,
+                                      'is_hard_gate': bool, 'site': str, 'items': [id, ...]}}
+    hard_gate_reasons: list of dict（僅包含 is_hard_gate 為 True 且 count >= threshold 的項目）
+    """
+    site_label = (site or '該站').upper()
+    grouped = {}
+    for warning in warnings or []:
+        item_id, sep, reason = warning.partition(': ')
+        raw_reason = reason if sep else warning
+        code, is_hard_gate, name = classify_warning_reason(raw_reason)
+        if code not in grouped:
+            grouped[code] = {
+                'code': code,
+                'reason_code': code,
+                'name': name,
+                'count': 0,
+                'is_hard_gate': is_hard_gate,
+                'site': site_label,
+                'items': [],
+            }
+        grouped[code]['count'] += 1
+        if item_id:
+            grouped[code]['items'].append(item_id)
+
+    hard_gate_reasons = [
+        info for info in grouped.values()
+        if info['is_hard_gate'] and info['count'] >= threshold
+    ]
+    return grouped, hard_gate_reasons
+
+
 def _print_build_lint_warnings(warnings, site=None):
     """印一份精簡的『ID: 原因』警告清單，長度受 `INSPECT_TEXT_BUDGET` 封頂——
     跟 `inspect --fields` 同一個 28,000 字元預算（T9），避免這份警告本身
     塞爆 Bash 工具回傳的靜默截斷線。只印到 stderr，不影響 stdout／輸出檔。"""
     if not warnings:
         return
-    header = (f'⚠️ 前置格式／lint 警告 {len(warnings)} 項（只警告，不擋 build、'
-              f'不改 entry；建議送 add-batch 之前先修，比事後 update-entry 便宜）：')
+    header = (f'⚠️ 前置格式／lint 警告 {len(warnings)} 項（白名單格式類原因達門檻才擋，'
+              f'其餘維持只警告、不改 entry；建議送 add-batch 之前先修，比事後 update-entry 便宜）：')
     lines = [header]
     site_label = (site or '該站').upper()
-    reasons = {}
-    for warning in warnings:
-        _, separator, reason = warning.partition(': ')
-        if separator:
-            reasons[reason] = reasons.get(reason, 0) + 1
+    grouped, _ = collect_build_lint_reasons(warnings, site=site_label)
     summaries = [
-        f'⚠️ 上面 {count} 則都是 {site_label} 的「{reason}」同類問題，'
+        f'⚠️ 上面 {info["count"]} 則都是 {site_label} 的「{info["name"]}」同類問題，'
         f'建議整批重寫 {site_label} entries.json，不要逐筆 Edit 修補（見 13c 步驟3-4）'
-        for reason, count in reasons.items() if count >= 5
+        for info in grouped.values() if info['count'] >= HARD_GATE_THRESHOLD
     ]
     total_len = len(header) + 1
     reserved = sum(len(summary) + 1 for summary in summaries)
@@ -220,6 +333,39 @@ def _print_build_lint_warnings(warnings, site=None):
                      f'{INSPECT_TEXT_BUDGET:,} 字元預算限制，非全部截斷）')
     lines.extend(summaries)
     print('\n'.join(lines), file=sys.stderr)
+
+
+def _enforce_build_hard_gate(warnings, site=None, dry_run=False):
+    """正式 build 或 --dry-run 遇到白名單格式類 reason code 達門檻（>=5）時硬閘擋下。"""
+    if not warnings:
+        return
+    site_label = (site or '該站').upper()
+    _, hard_gate_reasons = collect_build_lint_reasons(warnings, site=site_label)
+    if not hard_gate_reasons:
+        return
+
+    _print_build_lint_warnings(warnings, site=site_label)
+    lines = [
+        f'⛔ 【建批硬閘攔截】{site_label} 站偵測到機械格式錯誤達到硬閘門檻（同站同原因 ≥{HARD_GATE_THRESHOLD} 則），拒絕放行：'
+    ]
+    for r in hard_gate_reasons:
+        items_str = ', '.join(r['items'][:10]) + ('…' if len(r['items']) > 10 else '')
+        lines.append(
+            f'  • 站別：{r["site"]} | 代碼：{r["reason_code"]}（{r["name"]}）| 共 {r["count"]} 則\n'
+            f'    涉及項目：{items_str}'
+        )
+    status_desc = ('--dry-run 預檢未通過，batch.json 尚未寫入！'
+                   if dry_run else
+                   '正式 build 已中斷，batch.json 尚未寫入！')
+    lines.extend([
+        f'  • 狀態：{status_desc}',
+        f'  • 處置要求：',
+        f'    1. 必須使用一次 `Write` 整批重寫 {site_label} entries.json（修正上述格式問題）。',
+        f'    2. 嚴格禁止逐筆使用 Edit / patch-entry 修補這類機械格式問題！',
+        f'    3. 重寫後請先重跑 `build --dry-run` 預檢，直到該 reason code 計數降到 0 才能跑正式 build。'
+    ])
+    print('\n'.join(lines), file=sys.stderr)
+    sys.exit(2)
 
 
 def truncate(s, limit=SRC_TEXT_LIMIT):
@@ -474,6 +620,7 @@ def cmd_build(args):
                 lint_warnings.append(f'{item_id}: {_reason}')
             batch.append(new_row)
 
+        _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False))
         out = json.dumps({'entries': batch, 'new_topics': new_topics},
                          ensure_ascii=False, indent=2)
         note = f'（{len(batch)} 則，新格式、過閘；new_topics {len(new_topics)} 題）'
@@ -544,6 +691,7 @@ def cmd_build(args):
             lint_warnings.append(f'{item_id}: {_reason}')
         batch.append(row)
 
+    _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False))
     # 🔴 2026-09-08 硬上線：跟 --skeleton 分支同一個理由，三站一律出新格式外殼。
     # 這條分支沒有 entries.json 可以帶 `_new_topics`，所以 new_topics 固定空的；
     # 要開新中主題就照退回訊息在 batch 頂層自己補。
