@@ -566,6 +566,31 @@ def warn_unreconciled(state):
     # 正是這整條鏈要抓的 0806 失效形狀（test_s2_reconcile_gate 有專案釘死）。
     done = log.get(_key)
     done = done if isinstance(done, dict) else {}
+
+    # s2-reconcile/v1 支援（五站統一規格）
+    if done.get("_schema") == "s2-reconcile/v1":
+        missing_evidence = []
+        needs_review_stations = []
+        for s in ("RT", "AP", "NS", "ENEX", "ABC"):
+            rec = done.get(s)
+            if not isinstance(rec, dict) or rec.get("status") == "missing-evidence" or "status" not in rec:
+                missing_evidence.append(s)
+            elif rec.get("status") == "needs-review":
+                needs_review_stations.append(s)
+
+        if not missing_evidence:
+            rev_txt = f"（含待人工：{'／'.join(needs_review_stations)}）" if needs_review_stations else ""
+            print(f"OK 清單對帳五站留痕完成（{_key}）{rev_txt}")
+            return
+
+        bar = "!" * 60
+        tail = "：" + "／".join(missing_evidence) + " 缺證據"
+        print(f"\n{bar}\n⚠️  這一輪（{_key}）清單對帳留痕未完成{tail}")
+        if needs_review_stations:
+            print(f"    注意：{'／'.join(needs_review_stations)} 為 needs-review 待人工，已留痕。")
+        print(f"    補做：使用 scripts/s2_finish.py 完成五站對帳或標記例外。\n{bar}")
+        return
+
     miss = [s for s in ("RT", "AP", "NS") if s not in done]
     if not miss:
         print(f"OK 清單對帳三站齊全（{_key}）")
