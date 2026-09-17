@@ -243,6 +243,38 @@ check('RT list（code 鍵）骨架 2 則、id 正確（既有行為不變）',
       rt_list_ids == ['RT8001', 'RT8002'], f'實際：{rt_list_ids}')
 
 
+# ── 修法 A：from-raw 提示表輸出補印 schema 契約（分頁時每頁都要有）──────────
+check('from-raw 提示表含 schema 契約文字',
+      'entries.json 每筆請填' in fr_out
+      and '工作草稿內容鍵一律用 entry，不是 raw_entry' in fr_out)
+
+# 測試多頁場景：造出超過 28,000 字元預算的大量項目
+MULTI_PAGE_RAW = write_json('multi_page_raw.json', [
+    {
+        'id': f'AP9{i:03d}',
+        'head': f'Head line text for item {i} with enough length to consume page budget ' * 3,
+        'script': f'SHOTLIST: description of item {i} ' * 5,
+        'sb_count': 0, 'has_sot': False, 'prelim': False, 'dur': '00:01:00', 'src': 'AP',
+    }
+    for i in range(150)
+])
+mp_skel_out = os.path.join(TMP, 'mp_skeleton.json')
+mp_p1_out, code_p1 = run(bp.cmd_from_raw, Args(
+    site='ap', raw=MULTI_PAGE_RAW, checkpoint='0907-1200', state=None,
+    out=mp_skel_out, page=1,
+))
+mp_p2_out, code_p2 = run(bp.cmd_from_raw, Args(
+    site='ap', raw=MULTI_PAGE_RAW, checkpoint='0907-1200', state=None,
+    out=mp_skel_out, page=2,
+))
+check('from-raw 多頁：第一頁成功（exit 0）', code_p1 == 0, str(code_p1))
+check('from-raw 多頁：第一頁包含 schema 契約文字',
+      '工作草稿內容鍵一律用 entry，不是 raw_entry' in mp_p1_out)
+check('from-raw 多頁：第二頁成功（exit 0）', code_p2 == 0, str(code_p2))
+check('from-raw 多頁：第二頁亦包含 schema 契約文字',
+      '工作草稿內容鍵一律用 entry，不是 raw_entry' in mp_p2_out)
+
+
 shutil.rmtree(TMP, ignore_errors=True)
 
 print(f'\n共 {len(results)} 項，通過 {sum(results)}，失敗 {len(results) - sum(results)}')
