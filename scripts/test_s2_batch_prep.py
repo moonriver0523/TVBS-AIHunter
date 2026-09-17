@@ -902,6 +902,123 @@ check('N3 --out 不合法路徑 → 非 0 exit（友善訊息，不是裸 traceb
 _tmp_leftover_n3 = [f for f in os.listdir(TMP) if f.startswith('.s2rf_tmp_')]
 check('N3 沒有留下暫存檔殘骸', not _tmp_leftover_n3, str(_tmp_leftover_n3))
 
+# ── 修法 B：build 對 raw_entry 常見筆誤做窄範圍自動修復 ──────────────────
+# 1. 只有 raw_entry 沒有 entry 時：正式 build 與 --dry-run 自動修復為 entry
+RAW_ENTRY_ONLY_DISK = write_json('raw_entry_only.json', {
+    'RT9501': {
+        'raw_entry': 'RT9501 (地方) ▎測試草稿摘要。▎畫面：資料畫面。無BITE。',
+        'category': '國際/測試',
+        'tc': 'T1/C1',
+    }
+})
+RAW_ENTRY_RAW = write_json('raw_entry_raw.json', [
+    {'code': 'RT9501', 'head': 'head 9501', 'story': 'story 9501', 'sb_count': 0}
+])
+RAW_ENTRY_OUT = os.path.join(TMP, 'raw_entry_batch.json')
+disk_before = open(RAW_ENTRY_ONLY_DISK, encoding='utf-8').read()
+
+out_re, code_re = run(bp.cmd_build, Args(
+    site='rt', raw=RAW_ENTRY_RAW, entries=RAW_ENTRY_ONLY_DISK,
+    checkpoint='0914-1200', out=RAW_ENTRY_OUT, dry_run=False
+))
+check('build raw_entry 修復：正式 build 成功（exit 0）', code_re == 0, str(code_re))
+check('build raw_entry 修復：輸出檔已寫出', os.path.exists(RAW_ENTRY_OUT))
+re_data = json.load(open(RAW_ENTRY_OUT, encoding='utf-8'))['entries'][0]
+check('build raw_entry 修復：輸出 batch 正確包含 entry 欄位',
+      re_data.get('entry') == 'RT9501 (地方) ▎測試草稿摘要。▎畫面：資料畫面。無BITE。')
+check('build raw_entry 修復：輸出 batch 絕不殘留 raw_entry 鍵', 'raw_entry' not in re_data)
+check('build raw_entry 修復：印出彙總警告點名 ID',
+      '⚠️ 偵測到 1 筆工作草稿使用 raw_entry' in out_re and 'RT9501' in out_re, out_re[-500:])
+check('build raw_entry 修復：原始 entries.json 檔案內容完全不變',
+      open(RAW_ENTRY_ONLY_DISK, encoding='utf-8').read() == disk_before)
+
+# 1b. --dry-run 同樣自動修復且不寫檔
+RAW_ENTRY_DRY_OUT = os.path.join(TMP, 'raw_entry_dry_batch.json')
+out_re_dry, code_re_dry = run(bp.cmd_build, Args(
+    site='rt', raw=RAW_ENTRY_RAW, entries=RAW_ENTRY_ONLY_DISK,
+    checkpoint='0914-1200', out=RAW_ENTRY_DRY_OUT, dry_run=True
+))
+check('build raw_entry 修復：--dry-run 成功（exit 0）', code_re_dry == 0, str(code_re_dry))
+check('build raw_entry 修復：--dry-run 不寫入檔案', not os.path.exists(RAW_ENTRY_DRY_OUT))
+check('build raw_entry 修復：--dry-run 亦印出彙總警告',
+      '⚠️ 偵測到 1 筆工作草稿使用 raw_entry' in out_re_dry and 'RT9501' in out_re_dry, out_re_dry[-500:])
+
+# 1c. --skeleton 分支同樣自動修復
+RAW_ENTRY_SKEL = write_json('raw_entry_skel.json', [
+    {'id': 'RT9501', 'source': 'RT', 'checkpoint': '0914-1200', 'status': 'has_script',
+     'src_text': 'x', 'sb_count': 0, 'entry': '', 'category': '', 'tc': ''}
+])
+RAW_ENTRY_SKEL_OUT = os.path.join(TMP, 'raw_entry_skel_batch.json')
+out_re_skel, code_re_skel = run(bp.cmd_build, Args(
+    site='rt', raw=None, entries=RAW_ENTRY_ONLY_DISK,
+    checkpoint='0914-1200', out=RAW_ENTRY_SKEL_OUT, skeleton=RAW_ENTRY_SKEL, dry_run=False
+))
+check('build --skeleton raw_entry 修復：成功（exit 0）', code_re_skel == 0, str(code_re_skel))
+check('build --skeleton raw_entry 修復：輸出檔已寫出', os.path.exists(RAW_ENTRY_SKEL_OUT))
+re_skel_data = json.load(open(RAW_ENTRY_SKEL_OUT, encoding='utf-8'))['entries'][0]
+check('build --skeleton raw_entry 修復：輸出 batch 包含 entry 且無 raw_entry',
+      re_skel_data.get('entry') == 'RT9501 (地方) ▎測試草稿摘要。▎畫面：資料畫面。無BITE。'
+      and 'raw_entry' not in re_skel_data)
+
+# 2. 同一筆同時有 entry 又有 raw_entry：拒絕猜測、exit 2 不寫 batch
+CONFLICT_ENTRIES = write_json('conflict_entries.json', {
+    'RT9502': {
+        'entry': '正確 entry',
+        'raw_entry': '誤植 raw_entry',
+        'category': '國際/測試',
+    }
+})
+CONFLICT_RAW = write_json('conflict_raw.json', [
+    {'code': 'RT9502', 'head': 'head 9502', 'story': 'story 9502', 'sb_count': 0}
+])
+CONFLICT_OUT = os.path.join(TMP, 'conflict_batch.json')
+out_cf, code_cf = run(bp.cmd_build, Args(
+    site='rt', raw=CONFLICT_RAW, entries=CONFLICT_ENTRIES,
+    checkpoint='0914-1200', out=CONFLICT_OUT, dry_run=False
+))
+check('build 衝突護欄：同時有 entry 與 raw_entry 則 exit 2', code_cf == 2, str(code_cf))
+check('build 衝突護欄：不寫入 batch 輸出檔', not os.path.exists(CONFLICT_OUT))
+check('build 衝突護欄：錯誤訊息包含 ⛔ 與衝突指引',
+      '⛔' in out_cf and '同時包含 "entry" 與 "raw_entry"' in out_cf and 'batch 尚未寫入' in out_cf,
+      out_cf[-500:])
+
+# 3. raw_entry 不是字串型別時：不自動修復，維持缺欄位/未填處理
+NON_STR_RAW_ENTRY = write_json('non_str_raw_entry.json', {
+    'RT9503': {'raw_entry': 12345, 'category': '國際/測試'}
+})
+NON_STR_RAW = write_json('non_str_raw.json', [
+    {'code': 'RT9503', 'head': 'head 9503', 'story': 'story 9503', 'sb_count': 0}
+])
+NON_STR_SKEL = write_json('non_str_skel.json', [
+    {'id': 'RT9503', 'source': 'RT', 'checkpoint': '0914-1200', 'status': 'has_script',
+     'src_text': 'x', 'sb_count': 0, 'entry': '', 'category': '', 'tc': ''}
+])
+NON_STR_OUT = os.path.join(TMP, 'non_str_batch.json')
+out_ns, code_ns = run(bp.cmd_build, Args(
+    site='rt', raw=None, entries=NON_STR_RAW_ENTRY,
+    checkpoint='0914-1200', out=NON_STR_OUT, skeleton=NON_STR_SKEL, dry_run=False
+))
+check('build 非字串 raw_entry：不自動修復（未填警告）',
+      '未填' in out_ns or '沒填' in out_ns, out_ns[-500:])
+check('build 非字串 raw_entry：未修復就不印 raw_entry 轉換警告',
+      '已暫轉為 entry' not in out_ns, out_ns[-500:])
+
+# 4. 正常純 entry 草稿：既有行為不受影響，不印轉換警告
+NORMAL_ENTRIES = write_json('normal_entries.json', {
+    'RT9504': {'entry': 'RT9504 (地方) ▎正常摘要。▎畫面：資料畫面。無BITE。'}
+})
+NORMAL_SKEL = write_json('normal_skel.json', [
+    {'id': 'RT9504', 'source': 'RT', 'checkpoint': '0914-1200', 'status': 'has_script',
+     'src_text': 'x', 'sb_count': 0, 'entry': '', 'category': '', 'tc': ''}
+])
+NORMAL_OUT = os.path.join(TMP, 'normal_batch.json')
+out_norm, code_norm = run(bp.cmd_build, Args(
+    site='rt', raw=None, entries=NORMAL_ENTRIES,
+    checkpoint='0914-1200', out=NORMAL_OUT, skeleton=NORMAL_SKEL, dry_run=False
+))
+check('build 正常草稿：exit 0 且不印轉換警告',
+      code_norm == 0 and '已暫轉為 entry' not in out_norm, out_norm[-500:])
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)

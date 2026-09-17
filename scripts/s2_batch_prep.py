@@ -551,6 +551,64 @@ def _write_or_preview_build(args, out, note):
         print(out)
 
 
+def parse_draft_entry(item_id, draft_payload):
+    """解析 entries.json 中的單筆草稿項目，回傳：
+      (entry_text, category, tc, status_override, was_converted)
+
+    安全護欄：
+    1. 若草稿物件同時包含 'entry' 與 'raw_entry'：
+       視為資料衝突，不猜測、不覆蓋，直接以 exit code 2 終止並印出 ⛔ 錯誤。
+    2. 若草稿物件無 'entry' 鍵、但有字串型別的 'raw_entry' 鍵：
+       視為常見筆誤，記憶體內自動轉為 entry 使用（不改寫原檔），was_converted=True。
+    3. raw_entry 非字串型別時不自動修復，entry_text 維持空字串，由下游缺欄位邏輯處理。
+    4. 若草稿直接是字串，視為純文字 entry_text。
+    5. 其他型別回傳空 entry_text。
+    """
+    if isinstance(draft_payload, dict):
+        has_entry = 'entry' in draft_payload
+        has_raw_entry = 'raw_entry' in draft_payload
+
+        if has_entry and has_raw_entry:
+            print(f'⛔ {item_id} entries.json 草稿同時包含 "entry" 與 "raw_entry" 鍵，'
+                  f'資料衝突拒絕猜測或覆蓋；batch 尚未寫入。請確認保留正確內容後重試。',
+                  file=sys.stderr)
+            sys.exit(2)
+
+        category = draft_payload.get('category')
+        tc = draft_payload.get('tc')
+        status_override = draft_payload.get('status')
+
+        if has_entry:
+            val = draft_payload.get('entry')
+            entry_text = val if isinstance(val, str) else ''
+            return entry_text, category, tc, status_override, False
+        elif has_raw_entry:
+            val = draft_payload.get('raw_entry')
+            if isinstance(val, str):
+                return val, category, tc, status_override, True
+            else:
+                return '', category, tc, status_override, False
+        else:
+            return '', category, tc, status_override, False
+
+    elif isinstance(draft_payload, str):
+        return draft_payload, None, None, None, False
+    else:
+        return '', None, None, None, False
+
+
+def _report_raw_entry_conversions(converted_ids):
+    """印出 raw_entry 自動修復為 entry 的彙總警告。"""
+    if not converted_ids:
+        return
+    shown_ids = ', '.join(converted_ids[:10])
+    if len(converted_ids) > 10:
+        shown_ids += '…'
+    print(f'⚠️ 偵測到 {len(converted_ids)} 筆工作草稿使用 raw_entry；'
+          f'build 已暫轉為 entry，原 entries.json 未修改。（涉及 ID：{shown_ids}）',
+          file=sys.stderr)
+
+
 def cmd_build(args):
     entries = load_json(args.entries)
 
@@ -577,18 +635,14 @@ def cmd_build(args):
         new_topics = entries.get('_new_topics') if isinstance(entries, dict) else None
         new_topics = new_topics if isinstance(new_topics, dict) else {}
         lint_warnings = []  # §四（R31/T12）：build 出口共用 lint，見 _lint_row
+        raw_entry_converted_ids = []
         for row in rows:
             item_id = row.get('id')
-            raw_entry = entries.get(item_id)
-            if isinstance(raw_entry, dict):
-                entry_text = raw_entry.get('entry', '')
-                category = raw_entry.get('category')
-                tc = raw_entry.get('tc')
-                status_override = raw_entry.get('status')
-            elif isinstance(raw_entry, str):
-                entry_text, category, tc, status_override = raw_entry, None, None, None
-            else:
-                entry_text, category, tc, status_override = '', None, None, None
+            draft_payload = entries.get(item_id)
+            (entry_text, category, tc,
+             status_override, was_converted) = parse_draft_entry(item_id, draft_payload)
+            if was_converted:
+                raw_entry_converted_ids.append(item_id)
             if not entry_text:
                 missing.append(item_id)
                 continue
@@ -620,6 +674,7 @@ def cmd_build(args):
                 lint_warnings.append(f'{item_id}: {_reason}')
             batch.append(new_row)
 
+        _report_raw_entry_conversions(raw_entry_converted_ids)
         _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False))
         out = json.dumps({'entries': batch, 'new_topics': new_topics},
                          ensure_ascii=False, indent=2)
@@ -639,6 +694,7 @@ def cmd_build(args):
     missing = []
     excluded = 0
     lint_warnings = []  # §四（R31/T12）：build 出口共用 lint，見 _lint_row
+    raw_entry_converted_ids = []
     for it in items:
         item_id = spec['id_of'](it)
         if spec['skip_of'](it):
@@ -647,17 +703,11 @@ def cmd_build(args):
         if item_id not in entries:
             missing.append(item_id)
             continue
-        raw_entry = entries[item_id]
-        if isinstance(raw_entry, dict):
-            entry_text = raw_entry.get('entry', '')
-            status_override = raw_entry.get('status')
-            category = raw_entry.get('category')
-            tc = raw_entry.get('tc')
-        else:
-            entry_text = raw_entry
-            status_override = None
-            category = None
-            tc = None
+        draft_payload = entries[item_id]
+        (entry_text, category, tc,
+         status_override, was_converted) = parse_draft_entry(item_id, draft_payload)
+        if was_converted:
+            raw_entry_converted_ids.append(item_id)
 
         row = {
             'id': item_id,
@@ -691,6 +741,7 @@ def cmd_build(args):
             lint_warnings.append(f'{item_id}: {_reason}')
         batch.append(row)
 
+    _report_raw_entry_conversions(raw_entry_converted_ids)
     _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False))
     # 🔴 2026-09-08 硬上線：跟 --skeleton 分支同一個理由，三站一律出新格式外殼。
     # 這條分支沒有 entries.json 可以帶 `_new_topics`，所以 new_topics 固定空的；
@@ -834,10 +885,16 @@ def cmd_from_raw(args):
         except Exception:
             pass
         all_lines.append(line)
+    FROM_RAW_SCHEMA_CONTRACT = (
+        'entries.json 每筆請填 {"<id>":{"entry":"…","category":"…","tc":"…"}}；'
+        '工作草稿內容鍵一律用 entry，不是 raw_entry（raw_entry是狀態檔專用欄位，草稿階段不要用）。'
+    )
+    contract_overhead = len(FROM_RAW_SCHEMA_CONTRACT) + 1
+    page_budget = max(INSPECT_TEXT_BUDGET - contract_overhead, 200)
     pages, cur, cur_len = [], [], 0
     for ln in all_lines:
         ln_len = len(ln) + 1
-        if cur and cur_len + ln_len > INSPECT_TEXT_BUDGET:
+        if cur and cur_len + ln_len > page_budget:
             pages.append(cur)
             cur, cur_len = [], 0
         cur.append(ln)
@@ -849,7 +906,9 @@ def cmd_from_raw(args):
         print(f'✗ --page {page_no} 超出範圍（共 {len(pages)} 頁）', file=sys.stderr)
         sys.exit(1)
 
-    print('\n'.join(pages[page_no - 1]))
+    print(FROM_RAW_SCHEMA_CONTRACT)
+    if pages[page_no - 1]:
+        print('\n'.join(pages[page_no - 1]))
     if len(pages) > 1:
         if page_no < len(pages):
             print(f'— 第 {page_no}/{len(pages)} 頁，--page {page_no + 1} 看下一頁 —')
