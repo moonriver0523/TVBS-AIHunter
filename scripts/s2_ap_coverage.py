@@ -21,6 +21,7 @@ import argparse
 from bisect import bisect_left
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
 
@@ -246,6 +247,7 @@ def next_page_size(current: int) -> int | None:
 def cmd_anchor_set(args: argparse.Namespace) -> dict[str, Any]:
     items = load_ap_list(args.list_path)
     payload = build_anchor_set(items, args.n)
+    payload["list_path"] = str(args.list_path)
     _write_json(args.out, payload)
     print(f"anchor-set: {len(payload['anchors'])} anchors -> {args.out}")
     return payload
@@ -255,9 +257,12 @@ def cmd_check_overlap(args: argparse.Namespace) -> dict[str, Any]:
     items = load_ap_list(args.list_path)
     anchors = _load_anchor_set(args.anchor)
     payload = check_anchor_overlap(items, anchors, args.min_hits)
+    payload["list_path"] = str(args.list_path)
+    payload["anchor_path"] = str(args.anchor)
     _write_json(args.out, payload)
-    print(payload["reason"])
-    print(f"check-overlap: result -> {args.out}")
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    print(payload["reason"], file=sys.stderr)
+    print(f"check-overlap: result -> {args.out}", file=sys.stderr)
     return payload
 
 
@@ -306,11 +311,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        args.func(args)
+        result = args.func(args)
     except ValueError as exc:
         parser.error(str(exc))
+    if args.command == "check-overlap":
+        if isinstance(result, dict) and not result.get("coverage_ok", False):
+            return 1
     return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
