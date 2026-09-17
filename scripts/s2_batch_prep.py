@@ -206,6 +206,20 @@ HARD_GATE_REASONS = {
     'FMT_PKG_DONUT_NEED_SOT': 'PKG/DONUT且時長>1分鐘備註漏標SOT',
 }
 
+# R32：純結構性 FMT 單筆即擋。語意／詞彙／講者判斷不得納入（仍走下方 ≥5 批次門檻）。
+SINGLE_ENTRY_STRICT_REASONS = frozenset({
+    'FMT_FIRST_NOTE_BITE',
+    'FMT_MISSING_FOOTAGE_SEG',
+    'FMT_BITE_TAG_WITHOUT_SEG',
+    'FMT_BITE_SEG_WITHOUT_TAG',
+    'FMT_BITE_CONFLICT',
+    'FMT_NO_ENDING',
+    'FMT_TRAILING_CONTENT',
+    'FMT_MISSING_SUMMARY_DELIM',
+    'FMT_SECOND_PAREN_NOT_BITE',
+    'FMT_CONTAINS_GMT',
+})
+
 
 def classify_warning_reason(reason):
     """將警告原因文字分類為穩定的 reason_code。
@@ -301,6 +315,15 @@ def collect_build_lint_reasons(warnings, site=None, threshold=HARD_GATE_THRESHOL
     return grouped, hard_gate_reasons
 
 
+def collect_single_entry_strict(warnings, site=None):
+    """收集 R32 單筆結構性 FMT reason（出現 1 則即命中）。"""
+    grouped, _ = collect_build_lint_reasons(warnings, site=site, threshold=1)
+    return [
+        info for info in grouped.values()
+        if info['code'] in SINGLE_ENTRY_STRICT_REASONS and info['count'] >= 1
+    ]
+
+
 def _print_build_lint_warnings(warnings, site=None):
     """印一份精簡的『ID: 原因』警告清單，長度受 `INSPECT_TEXT_BUDGET` 封頂——
     跟 `inspect --fields` 同一個 28,000 字元預算（T9），避免這份警告本身
@@ -336,11 +359,29 @@ def _print_build_lint_warnings(warnings, site=None):
 
 
 def _enforce_build_hard_gate(warnings, site=None, dry_run=False):
-    """正式 build 或 --dry-run 遇到白名單格式類 reason code 達門檻（>=5）時硬閘擋下。"""
+    """先擋 R32 單筆結構性 FMT，再擋同站同原因 ≥5 的批次硬閘。skeleton／normal／dry-run 共用。"""
     if not warnings:
         return
     site_label = (site or '該站').upper()
     _, hard_gate_reasons = collect_build_lint_reasons(warnings, site=site_label)
+    single_hits = collect_single_entry_strict(warnings, site=site_label)
+    if single_hits:
+        lines = [
+            f'⛔ 【R32 單筆格式硬閘】{site_label} 站有素材未通過結構格式檢查，batch 尚未寫入。'
+        ]
+        for info in single_hits:
+            for item_id in info['items'] or ['?']:
+                lines.append(f'  • ID：{item_id}')
+                lines.append(f'  • reason：{info["code"]}（{info["name"]}）')
+        lines.extend([
+            '  • 修復：回到 entries.json 修正該筆 entry。',
+            '  • 下一步：重新整批 Write，重跑 build --dry-run，確認該 reason code 為 0。',
+            '  • 不要逐筆 Edit／patch-entry 修補後再繞過 build。',
+        ])
+        if dry_run:
+            lines.append('  • --dry-run 預檢未通過。')
+        print('\n'.join(lines), file=sys.stderr)
+        sys.exit(2)
     if not hard_gate_reasons:
         return
 
