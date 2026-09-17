@@ -655,6 +655,73 @@ check('build --skeleton --dry-run：仍跑 lint 且不寫輸出檔',
       codeLSD == 0 and 'RT2001:' in outLSD and not os.path.exists(LINT_SKEL_DRY_OUT),
       outLSD[-600:])
 
+# ── R43 硬閘測試：白名單機械格式類原因同站 >= 5 則時，正式 build 與 --dry-run 均擋下 ──
+GATE_RAW_5 = write_json('gate_raw_5.json', [
+    {'code': f'RT310{i}', 'head': f'head {i}', 'story': f'story {i}', 'sb_count': 1}
+    for i in range(5)
+])
+GATE_ENTRIES_5 = write_json('gate_entries_5.json', {
+    f'RT310{i}': f'RT310{i} (BITE) ▎摘要。▎畫面：資料畫面。無BITE。'
+    for i in range(5)
+})
+GATE_OUT_5 = os.path.join(TMP, 'gate_batch_5.json')
+
+# 1. 正式 build 達門檻：exit 2、不寫 batch、錯誤訊息包含 ⛔ 與完整關鍵字
+outG5, codeG5 = run(bp.cmd_build, Args(site='rt', raw=GATE_RAW_5, entries=GATE_ENTRIES_5,
+                                       checkpoint='0914-1200', out=GATE_OUT_5))
+check('build 硬閘：白名單格式錯誤≥5則時 exit 2 擋下', codeG5 == 2, str(codeG5))
+check('build 硬閘：正式 build 被擋時絕不寫入 batch 輸出檔', not os.path.exists(GATE_OUT_5), GATE_OUT_5)
+check('build 硬閘：錯誤訊息含 ⛔ 攔截警示', '⛔' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息點名站別與 reason code', 'RT' in outG5 and 'FMT_FIRST_NOTE_BITE' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息指明 batch.json 尚未寫入', 'batch.json 尚未寫入' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息要求一次 Write 整批重寫', '一次 `Write` 整批重寫' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息禁止逐筆 Edit', '禁止逐筆' in outG5 and 'Edit' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息要求重跑 --dry-run 至 0 則', '重跑 `build --dry-run`' in outG5 and '降到 0' in outG5, outG5[-600:])
+
+# 2. --dry-run 模式達門檻：回傳非 0 exit code（exit 2），同樣印 ⛔ 訊息且不寫檔
+GATE_DRY_OUT_5 = os.path.join(TMP, 'gate_dry_batch_5.json')
+outGD5, codeGD5 = run(bp.cmd_build, Args(site='rt', raw=GATE_RAW_5, entries=GATE_ENTRIES_5,
+                                         checkpoint='0914-1200', out=GATE_DRY_OUT_5,
+                                         dry_run=True))
+check('build --dry-run 硬閘：白名單格式錯誤≥5則時回傳非0 exit code（exit 2）', codeGD5 == 2, str(codeGD5))
+check('build --dry-run 硬閘：不寫入輸出檔', not os.path.exists(GATE_DRY_OUT_5), GATE_DRY_OUT_5)
+check('build --dry-run 硬閘：包含 ⛔ 與預檢未通過提示', '⛔' in outGD5 and '--dry-run 預檢未通過' in outGD5, outGD5[-600:])
+
+# 3. --skeleton 分支達門檻：同樣 exit 2 且不寫檔
+GATE_SKEL_5 = write_json('gate_skel_5.json', [
+    {'id': f'RT310{i}', 'source': 'RT', 'checkpoint': '0914-1200', 'status': 'has_script',
+     'src_text': 'x', 'sb_count': 1, 'entry': '', 'category': '', 'tc': ''}
+    for i in range(5)
+])
+GATE_SKEL_ENTRIES_5 = write_json('gate_skel_entries_5.json', {
+    f'RT310{i}': {'entry': f'RT310{i} (BITE) ▎摘要。▎畫面：資料畫面。無BITE。'}
+    for i in range(5)
+})
+GATE_SKEL_OUT_5 = os.path.join(TMP, 'gate_skel_batch_5.json')
+outGS5, codeGS5 = run(bp.cmd_build, Args(site='rt', raw=None, entries=GATE_SKEL_ENTRIES_5,
+                                         checkpoint='0914-1200', out=GATE_SKEL_OUT_5,
+                                         skeleton=GATE_SKEL_5))
+check('build --skeleton 硬閘：白名單格式錯誤≥5則時 exit 2', codeGS5 == 2, str(codeGS5))
+check('build --skeleton 硬閘：不寫入 batch 輸出檔', not os.path.exists(GATE_SKEL_OUT_5), GATE_SKEL_OUT_5)
+
+# 4. 回歸測試：內容/語意類警告即使 >= 5 則，也絕不觸發硬閘（exit 0、正常產出 batch）
+SEM_RAW_5 = write_json('sem_raw_5.json', [
+    {'code': f'RT320{i}', 'head': f'head {i}', 'story': f'story {i}', 'sb_count': 1}
+    for i in range(5)
+])
+# 觸發「BITE 引言疑似未翻譯成中文」內容警告（英文字元多於中文字元，非白名單機械格式）
+SEM_ENTRIES_5 = write_json('sem_entries_5.json', {
+    f'RT320{i}': f'RT320{i} (地方) (BITE) ▎測試摘要。▎畫面：資料畫面。▎BITE：拜登「This is an English soundbite without translation.」'
+    for i in range(5)
+})
+SEM_OUT_5 = os.path.join(TMP, 'sem_batch_5.json')
+outSEM, codeSEM = run(bp.cmd_build, Args(site='rt', raw=SEM_RAW_5, entries=SEM_ENTRIES_5,
+                                         checkpoint='0914-1200', out=SEM_OUT_5))
+check('build 回歸測試：內容類原因≥5則絕不觸發硬閘（維持 exit 0）', codeSEM == 0, str(codeSEM))
+check('build 回歸測試：內容類原因≥5則正常寫入 batch.json', os.path.exists(SEM_OUT_5), SEM_OUT_5)
+check('build 回歸測試：內容類原因無 ⛔ 硬閘訊息', '⛔' not in outSEM, outSEM[-600:])
+check('build 回歸測試：內容類警告正常印出到 stderr', 'BITE 引言疑似未翻譯成中文' in outSEM, outSEM[-600:])
+
 # ── S3（複核 2026-09-14）：Claude Code offload 殼 → unwrap → from-raw ──────
 #
 # 背景：raw 檔太大時 Claude Code 會把工具結果落成本機「offload」檔，形狀是
