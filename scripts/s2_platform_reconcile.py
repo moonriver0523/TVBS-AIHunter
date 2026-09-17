@@ -35,6 +35,79 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 
+def reconcile_candidate(doc, true_count, site):
+    """回傳統一 reconcile record，不直接寫檔。
+
+    輸入：
+    - doc: candidate JSON 物件
+    - true_count: agent 用健康檢查取得的真實則數
+    - site: 必須是 ENEX 或 ABC
+    """
+    site_clean = (site or "").strip().upper()
+    if site_clean not in ("ENEX", "ABC"):
+        raise ValueError(f"site 必須是 ENEX 或 ABC，得到: {site}")
+
+    if not isinstance(doc, dict):
+        return {
+            "status": "missing-evidence",
+            "source": site_clean,
+            "evidence_path": None,
+            "list": None,
+            "got": None,
+            "missing": None,
+            "missing_ids": [],
+            "reason_code": "MISSING_CANDIDATE",
+            "reason": "缺少候選檔資料",
+        }
+
+    counts = doc.get("counts") or {}
+    claimed = counts.get("掃描")
+    got = counts.get("收錄")
+
+    if claimed is None or true_count is None:
+        return {
+            "status": "missing-evidence",
+            "source": site_clean,
+            "evidence_path": None,
+            "list": claimed,
+            "got": got,
+            "missing": None,
+            "missing_ids": [],
+            "reason_code": "MISSING_EVIDENCE",
+            "reason": "缺少 counts.掃描 或 true_count",
+        }
+
+    delta = true_count - claimed
+    missing_count = abs(delta)
+    if delta == 0:
+        status = "ok"
+        reason_code = None
+        reason = None
+    else:
+        status = "needs-review"
+        reason_code = "COUNT_MISMATCH"
+        direction = "少算" if delta > 0 else "多算"
+        reason = f"清單對帳不符：candidate counts.掃描={claimed}，健康檢查真實={true_count}，agent {direction} {missing_count} 則"
+
+    rec = {
+        "status": status,
+        "source": site_clean,
+        "evidence_path": None,
+        "list": claimed,
+        "got": got,
+        "missing": missing_count,
+        "missing_ids": [],
+        "true_count": true_count,
+        "reported_count": claimed,
+        "delta": delta,
+    }
+    if reason_code:
+        rec["reason_code"] = reason_code
+    if reason:
+        rec["reason"] = reason
+    return rec
+
+
 def main():
     ap = argparse.ArgumentParser(description="ENEX／ABC 候選檔清單對帳")
     ap.add_argument("--file", required=True, help="候選檔路徑（…-state.json）")
@@ -42,6 +115,10 @@ def main():
                      help="agent 用 18 檔 §10 健康檢查查詢實測到的窗內真實則數")
     ap.add_argument("--apply", action="store_true",
                      help="不一致時把落差寫進候選檔的 needs_review（省略＝只報告）")
+    ap.add_argument("--state-file", help="正式狀態檔路徑（可選：將對帳紀錄寫入正式狀態檔）")
+    ap.add_argument("--checkpoint", help="對應之 checkpoint（搭配 --state-file 使用）")
+    ap.add_argument("--site", choices=["ENEX", "ABC", "enex", "abc"],
+                    help="站別（搭配 --state-file 使用，預設從檔名推導）")
     args = ap.parse_args()
 
     try:
@@ -51,32 +128,57 @@ def main():
         print(f"ERROR 讀不到候選檔：{e}", file=sys.stderr)
         return 2
 
-    counts = doc.get("counts", {})
-    claimed = counts.get("掃描")
-    if claimed is None:
-        print("ERROR candidate 缺 counts.掃描，無從對帳", file=sys.stderr)
+    site = args.site
+    if not site:
+        fname = args.file.upper()
+        if "ENEX" in fname:
+            site = "ENEX"
+        elif "ABC" in fname:
+            site = "ABC"
+        else:
+            site = "ENEX"
+    site = site.upper()
+
+    rec = reconcile_candidate(doc, args.true_count, site)
+    rec["evidence_path"] = args.file
+
+    if rec["status"] == "missing-evidence":
+        print(f"ERROR: {rec.get('reason')}", file=sys.stderr)
         return 2
 
-    diff = args.true_count - claimed
+    diff = rec["delta"]
+    claimed = rec["list"]
     if diff == 0:
         print(f"✅ 對帳一致：counts.掃描={claimed}，真實={args.true_count}")
-        return 0
+    else:
+        print(f"⚠️ {rec['reason']}")
 
-    direction = "少算" if diff > 0 else "多算"
-    note = (f"清單對帳不符：candidate counts.掃描={claimed}，"
-            f"健康檢查真實={args.true_count}，agent {direction} {abs(diff)} 則")
-    print(f"⚠️ {note}")
+    # 寫入候選檔 needs_review
+    if diff != 0 and args.apply:
+        doc.setdefault("needs_review", [])
+        if rec["reason"] not in doc["needs_review"]:
+            doc["needs_review"].append(rec["reason"])
+        with open(args.file, "w", encoding="utf-8") as f:
+            json.dump(doc, f, ensure_ascii=False, indent=2)
+        print(f"OK 已寫入候選檔 needs_review：{args.file}")
 
-    if not args.apply:
+    # 若指定了 state-file 與 checkpoint，寫入正式 state
+    if args.state_file and args.checkpoint:
+        try:
+            import s2_state
+            st = s2_state.load(args.state_file)
+            log = st["_top"].setdefault("reconcile_log", {})
+            entry_log = log.setdefault(args.checkpoint, {})
+            entry_log[site] = rec
+            s2_state.save(st, args.state_file)
+            print(f"OK 已將 {site} 對帳紀錄寫入狀態檔 {args.state_file}（{args.checkpoint}）")
+        except Exception as e:
+            print(f"⚠️ 寫入狀態檔 reconcile_log 失敗：{e}", file=sys.stderr)
+
+    if diff != 0 and not args.apply:
         print("（未加 --apply，候選檔未寫入——記得處理，不要放著）")
         return 1
 
-    doc.setdefault("needs_review", [])
-    if note not in doc["needs_review"]:
-        doc["needs_review"].append(note)
-    with open(args.file, "w", encoding="utf-8") as f:
-        json.dump(doc, f, ensure_ascii=False, indent=2)
-    print(f"OK 已寫入候選檔 needs_review：{args.file}")
     return 0
 
 

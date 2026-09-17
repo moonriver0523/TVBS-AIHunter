@@ -134,5 +134,35 @@ for label, s in (("items 是 dict（舊格式）", st("0809-0700", {"0809-0700":
     except Exception as e:                        # noqa: BLE001
         report(f"髒資料不炸（{label}）", False, f"{type(e).__name__}: {e}")
 
+# ── s2-reconcile/v1 五站統一規格測試 ──────────────────────────────
+V1_ALL_OK = {
+    "_schema": "s2-reconcile/v1",
+    "RT": {"status": "ok"}, "AP": {"status": "ok"}, "NS": {"status": "ok"},
+    "ENEX": {"status": "ok"}, "ABC": {"status": "ok"}
+}
+out_v1 = cap(st("0917-1200", {"0917-1200": V1_ALL_OK}))
+report("v1 五站全 ok → 報五站留痕完成", "OK 清單對帳五站留痕完成" in out_v1, out_v1.strip()[:60])
+report("v1 五站全 ok → 不出警告橫幅", "!!!!" not in out_v1)
+
+V1_WITH_NEEDS_REVIEW = {
+    "_schema": "s2-reconcile/v1",
+    "RT": {"status": "ok"}, "AP": {"status": "ok"}, "NS": {"status": "ok"},
+    "ENEX": {"status": "needs-review", "reason": "待人工"},
+    "ABC": {"status": "not-scheduled"}
+}
+out_v1_nr = cap(st("0917-1200", {"0917-1200": V1_WITH_NEEDS_REVIEW}))
+report("v1 包含 needs-review 與 not-scheduled → 視為留痕完成（不誤報缺證據）",
+       "OK 清單對帳五站留痕完成" in out_v1_nr and "含待人工：ENEX" in out_v1_nr, out_v1_nr.strip()[:60])
+report("v1 包含 needs-review → 不出缺站警告橫幅", "!!!!" not in out_v1_nr)
+
+V1_MISSING_EVIDENCE = {
+    "_schema": "s2-reconcile/v1",
+    "RT": {"status": "ok"}, "AP": {"status": "missing-evidence"}, "NS": {"status": "ok"},
+    "ENEX": {"status": "not-scheduled"}, "ABC": {"status": "not-scheduled"}
+}
+out_v1_miss = cap(st("0917-1200", {"0917-1200": V1_MISSING_EVIDENCE}))
+report("v1 缺少 evidence → 出現缺證據警告", "清單對帳留痕未完成" in out_v1_miss and "AP 缺證據" in out_v1_miss, out_v1_miss.strip()[:60])
+report("v1 缺少 evidence → 仍不 sys.exit", not str(out_v1_miss).startswith("__EXIT__"))
+
 print("\n" + ("全部通過" if ok else "有項目失敗"))
 sys.exit(0 if ok else 1)
