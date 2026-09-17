@@ -443,9 +443,6 @@ def strip_agent_note(src_text):
     return "\n".join(lines[:cut]).rstrip(), "\n".join(lines[cut:]).strip()
 
 
-GATED_SOURCES = ("RT", "AP", "NS")
-
-
 def validate_src_text(source, src_text, *, note_shell=False):
     """驗證 RT/AP/NS 的 src_text 原文合規性，回傳錯誤清單（list of str）。
     非 GATED_SOURCES 或 note_shell 豁免。
