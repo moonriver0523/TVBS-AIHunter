@@ -443,6 +443,29 @@ def strip_agent_note(src_text):
     return "\n".join(lines[:cut]).rstrip(), "\n".join(lines[cut:]).strip()
 
 
+GATED_SOURCES = ("RT", "AP", "NS")
+
+
+def validate_src_text(source, src_text, *, note_shell=False):
+    """驗證 RT/AP/NS 的 src_text 原文合規性，回傳錯誤清單（list of str）。
+    非 GATED_SOURCES 或 note_shell 豁免。
+    """
+    if note_shell:
+        return []
+    src = (source or "").strip().upper()
+    if src not in GATED_SOURCES:
+        return []
+
+    if not isinstance(src_text, str) or not src_text.strip():
+        return ["src_text 缺少站方原文（不得為空或非字串）"]
+
+    _, stripped_note = strip_agent_note(src_text)
+    if stripped_note:
+        return [f"src_text 尾端疑似混入 agent 說明（包含中文註記：{stripped_note[:60]!r}）"]
+
+    return []
+
+
 def sb_applicable(src_text):
     """`sb_count` 這個數字有沒有意義？（2026-08-09）
 
@@ -739,6 +762,43 @@ def cmd_add_batch(state, args):
         print("  修復：請修正 entries 中 source 白名單與 ID 格式，確認無 TODO/假項目，若為備忘請用 needs-review add。", file=sys.stderr)
         sys.exit(2)
 
+    # ── 項目4：src_text 寫入前硬閘 ────────────────────────────────────
+    allow_missing_src = getattr(args, "allow_missing_src_text", False)
+    src_text_errors = []
+    missing_src_allowed_ids = set()
+
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        row_id = norm_id(str(row.get("id") or ""))
+        row_src = str(row.get("source") or "").strip().upper()
+        if row_src not in GATED_SOURCES:
+            continue
+        # 若已在庫且只是補分類（P1b-2 救援路徑），不重複擋
+        if row_id in state["items"] and not state["items"][row_id].get("category"):
+            continue
+        src_val = row.get("src_text")
+        errs = validate_src_text(row_src, src_val)
+        if errs:
+            is_missing = not isinstance(src_val, str) or not src_val.strip()
+            if is_missing and allow_missing_src:
+                missing_src_allowed_ids.add(row_id)
+            else:
+                src_text_errors.append((row_id, "; ".join(errs)))
+
+    if src_text_errors:
+        print(f"⛔ src_text 寫入前硬閘：偵測到 {len(src_text_errors)} 筆素材 src_text 不合規，整批尚未寫入：", file=sys.stderr)
+        for rid, msg in src_text_errors[:10]:
+            print(f"  • {rid}：{msg}", file=sys.stderr)
+        if len(src_text_errors) > 10:
+            print(f"  …另 {len(src_text_errors) - 10} 筆略", file=sys.stderr)
+        print("  修復：回到瀏覽器重新取得站方原文，只把原文放進 src_text；", file=sys.stderr)
+        print("        agent 判斷、sb_count 解釋、翻譯備註不要放進 src_text。修復後重跑 add-batch。", file=sys.stderr)
+        sys.exit(2)
+
+    if missing_src_allowed_ids:
+        print(f"⚠️ 使用 --allow-missing-src-text 放行 {len(missing_src_allowed_ids)} 筆缺 src_text 素材（已自動掛 needs_review）：{', '.join(sorted(missing_src_allowed_ids))}", file=sys.stderr)
+
     added, skipped, notes, flagged, fmt = [], [], [], [], []
     refilled = []  # P1b-2：已在庫但沒分類、這批帶了分類 → 只補分類（閘門救援路徑）
     no_src = []   # R11 防呆（2026-08-13）：漏帶 src_text 要當場喊，不能等稽核翻舊帳
@@ -874,7 +934,10 @@ def cmd_add_batch(state, args):
                                      platform=e.get("platform"))
         if not e.get("src_text"):
             no_src.append(i)
-        if doubt:
+        if i in missing_src_allowed_ids:
+            state["items"][i]["needs_review"] = "src_text_missing: 明確使用 --allow-missing-src-text，待人工回補站方原文"
+            flagged.append(f"{i}: 缺 src_text（已掛待人工）")
+        elif doubt:
             state["items"][i]["needs_review"] = doubt
             flagged.append(f"{i}: {doubt}")
         for reason in fmt_issues(e["entry"]):
@@ -3287,6 +3350,8 @@ def main():
                          "（charter 取該則摘要前 40 字，標 auto:true），"
                          "而不是留空等 new_topics。⛔ 舊格式（純陣列）預設本來就不擋，"
                          "這個旗標讓它額外把新名字也記進登記簿")
+    ab.add_argument("--allow-missing-src-text", action="store_true",
+                    help="放寬 RT/AP/NS 缺漏 src_text（仍拒絕混入 agent 說明），自動加入 needs_review")
     u = sub.add_parser("update-entry")
     # ⚠️ `--id` 不再 required：批次走 `--batch`，兩者擇一（函式裡檢查）。
     u.add_argument("--id")

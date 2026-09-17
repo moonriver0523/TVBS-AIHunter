@@ -102,18 +102,19 @@ check('snapshot 預設檔名 _audit_{site}_{HHMM}.txt', code4 == 0 and os.path.e
 
 # ── compare ─────────────────────────────────────────────────
 out5, code5 = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_OK, site='rt', require=None))
-check('compare 乾淨時只印一行「無差異」', '無差異' in out5, out5.strip().splitlines()[-1][:70])
+check('compare 乾淨時只印一行「無差異」且 exit 0', code5 == 0 and '無差異' in out5, out5.strip().splitlines()[-1][:70])
 check('compare 乾淨時不印整批',
       'RT1001' not in out5.split('無差異')[0].replace('rt_raw.json', ''))
 
-out6, _ = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_BAD, site='rt', require=None))
+out6, code6 = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_BAD, site='rt', require=None))
+check('compare 存在差異時 exit 1 且印 ⛔', code6 == 1 and '⛔ compare 未通過' in out6)
 check('compare 抓到 raw 有 batch 沒有（RT1003）', 'RT1003' in out6)
 check('compare 抓到 batch 有 raw 沒有（RT9999）', 'RT9999' in out6)
 check('compare 抓到缺 src_text（RT1002）', 'RT1002：缺 src_text' in out6)
 check('compare 抓到 batch 內重複 id', '重複 id' in out6 and 'RT1001' in out6)
 
-out7, _ = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_OK, site='rt', require='sb_count'))
-check('compare --require 可自訂欄位', 'sb_count' in out7 and '缺欄位' in out7)
+out7, code7 = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_OK, site='rt', require='sb_count'))
+check('compare --require 可自訂欄位且缺欄位時 exit 1', code7 == 1 and 'sb_count' in out7 and '缺欄位' in out7)
 
 # ── 讀不到要明確失敗，不可當成「無差異」 ──
 out8, code8 = run(bp.cmd_compare,
