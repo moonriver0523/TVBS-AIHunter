@@ -368,6 +368,20 @@ def _first_bracket_has_sot(entry):
     return bool(match and re.search(r"SOT", match.group(1), re.IGNORECASE))
 
 
+def pkg_donut_needs_sot(footage_type, duration_ms):
+    """R42／13e:406-415 判準抽成公用函式（2026-09-18，R43方向2機械化修法）：
+    NS 的 PKG／DONUT 且時長 >1 分鐘時，第一備註應標 SOT。
+
+    `lint()`（草稿寫完後才驗）與 `s2_batch_prep.cmd_from_raw()`（草稿寫之前
+    先在提示表機械標記提醒）兩處都要用**同一個**判準，不能各自重寫一份
+    ——否則兩處門檻漂移（例如一個用 `>60`、一個用 `>=60`）會讓「提示表沒警示
+    但硬閘擋下」這種自相矛盾的情況發生，比完全沒有提示更誤導人。
+    只回傳布林值，不含「有沒有標 SOT」的檢查（那要有 entry 文字才判得出來，
+    `lint()` 自己接著呼叫 `_first_bracket_has_sot()`）。"""
+    ft = str(footage_type or "").strip().upper()
+    return ft in {"PKG", "DONUT"} and (_duration_seconds(duration_ms) or 0) > 60
+
+
 def lint(entry, sb_count=None, has_sot=None, footage_type=None, tc=None,
          duration_ms=None, src_text=None, source=None):
     """對已寫好的素材行做機械檢查，只警告不修，回傳訊息 list（可能是空的）。
@@ -408,8 +422,7 @@ def lint(entry, sb_count=None, has_sot=None, footage_type=None, tc=None,
     # R42：NS PKG／DONUT 超過 1 分鐘時，第一個備註括號應標 SOT。
     # 只警告、不改 entry；source 明確帶入後，AP／RT 不會套用這條白名單。
     if (str(source or "").strip().upper() == "NS"
-            and ft in {"PKG", "DONUT"}
-            and (_duration_seconds(duration_ms) or 0) > 60
+            and pkg_donut_needs_sot(footage_type, duration_ms)
             and not _first_bracket_has_sot(e)):
         msgs.append("🎙 PKG/DONUT且時長>1分鐘，依13e:406-415規則備註應標SOT卻沒標")
 

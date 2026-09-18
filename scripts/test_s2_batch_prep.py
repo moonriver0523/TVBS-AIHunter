@@ -721,6 +721,122 @@ check('build 回歸測試：內容類原因≥5則絕不觸發硬閘（維持 ex
 check('build 回歸測試：內容類原因≥5則正常寫入 batch.json', os.path.exists(SEM_OUT_5), SEM_OUT_5)
 check('build 回歸測試：內容類原因無 ⛔ 硬閘訊息', '⛔' not in outSEM, outSEM[-600:])
 check('build 回歸測試：內容類警告正常印出到 stderr', 'BITE 引言疑似未翻譯成中文' in outSEM, outSEM[-600:])
+check('build 回歸測試：內容類原因不落 gate lock 檔（不觸發 Edit 技術鎖）',
+      not os.path.exists(bp._gate_lock_path(SEM_ENTRIES_5, 'RT')))
+
+
+def gate_scenario_dir(name):
+    """gate lock 的作用範圍是「entries.json 所在目錄 ＋ 站別」，不是檔名——
+    production 每輪各站的 entries.json 本來就落在各自獨立的 scratch 目錄，
+    這裡每個情境各開一個子目錄，避免測試 fixture 互相共用同一份 lock 檔。"""
+    d = os.path.join(TMP, name)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def write_json_in(dir_, name, obj):
+    p = os.path.join(dir_, name)
+    with open(p, 'w', encoding='utf-8') as f:
+        json.dump(obj, f, ensure_ascii=False)
+    return p
+
+
+# ── R43 遵守修法方向1：gate lock 標記檔（Edit 技術鎖）── ─────────────────
+# 硬閘觸發時要落一份 <site>_gate_lock.json（跟 entries.json 同目錄），
+# 給 PreToolUse hook（s2_gate_guard.py）技術性擋 Edit；重跑 build/--dry-run
+# 確認 reason code 計數降到 0 時要自動清除。
+
+# 情境一：驗 lock 檔內容欄位（站別／entries_path／reasons／dry_run）
+_dir_content = gate_scenario_dir('gatelock_content')
+GATE_ENTRIES_CONTENT = write_json_in(_dir_content, 'entries.json', {
+    f'RT313{i}': f'RT313{i} (BITE) ▎摘要。▎畫面：資料畫面。無BITE。'
+    for i in range(5)
+})
+GATE_RAW_CONTENT = write_json_in(_dir_content, 'raw.json', [
+    {'code': f'RT313{i}', 'head': f'head {i}', 'story': f'story {i}', 'sb_count': 1}
+    for i in range(5)
+])
+GATE_LOCK_PATH_CONTENT = bp._gate_lock_path(GATE_ENTRIES_CONTENT, 'RT')
+run(bp.cmd_build, Args(site='rt', raw=GATE_RAW_CONTENT, entries=GATE_ENTRIES_CONTENT,
+                       checkpoint='0918-2200', out=None))
+check('gate lock：正式 build 觸發硬閘時落一份 gate lock 檔', os.path.exists(GATE_LOCK_PATH_CONTENT), GATE_LOCK_PATH_CONTENT)
+with open(GATE_LOCK_PATH_CONTENT, encoding='utf-8') as f:
+    _lock5 = json.load(f)
+check('gate lock：內容含正確站別', _lock5.get('site') == 'RT', json.dumps(_lock5, ensure_ascii=False))
+check('gate lock：內容含 entries.json 絕對路徑（正斜線）',
+      _lock5.get('entries_path', '').replace('\\', '/') == os.path.abspath(GATE_ENTRIES_CONTENT).replace('\\', '/'),
+      json.dumps(_lock5, ensure_ascii=False))
+check('gate lock：內容含觸發的 reason code 與筆數',
+      any(r.get('code') == 'FMT_FIRST_NOTE_BITE' and r.get('count') == 5 for r in _lock5.get('reasons', [])),
+      json.dumps(_lock5, ensure_ascii=False))
+check('gate lock：正式 build 觸發時 dry_run 欄位為 False', _lock5.get('dry_run') is False,
+      json.dumps(_lock5, ensure_ascii=False))
+
+# --dry-run 再次命中同一個 entries.json → 同一份 lock 被覆寫（dry_run 欄位改 True，不新增第二份）
+run(bp.cmd_build, Args(site='rt', raw=GATE_RAW_CONTENT, entries=GATE_ENTRIES_CONTENT,
+                       checkpoint='0918-2200', out=None, dry_run=True))
+with open(GATE_LOCK_PATH_CONTENT, encoding='utf-8') as f:
+    _lock5_dry = json.load(f)
+check('gate lock：--dry-run 觸發後 dry_run 欄位更新為 True', _lock5_dry.get('dry_run') is True,
+      json.dumps(_lock5_dry, ensure_ascii=False))
+check('gate lock：同目錄同站別只有一份 lock 檔（覆寫不新增）',
+      len([p for p in os.listdir(_dir_content) if p.endswith('_gate_lock.json')]) == 1)
+
+# 情境二：完整生命週期——觸發 → 整批 Write 修好 → 重跑 --dry-run 確認歸零 → 自動清鎖
+_dir_cycle = gate_scenario_dir('gatelock_cycle')
+GATE_ENTRIES_CYCLE = write_json_in(_dir_cycle, 'entries.json', {
+    f'RT311{i}': f'RT311{i} (BITE) ▎摘要。▎畫面：資料畫面。無BITE。'
+    for i in range(5)
+})
+GATE_RAW_CYCLE = write_json_in(_dir_cycle, 'raw.json', [
+    {'code': f'RT311{i}', 'head': f'head {i}', 'story': f'story {i}', 'sb_count': 1}
+    for i in range(5)
+])
+GATE_LOCK_PATH_CYCLE = bp._gate_lock_path(GATE_ENTRIES_CYCLE, 'RT')
+_, _code_cycle_trigger = run(bp.cmd_build, Args(site='rt', raw=GATE_RAW_CYCLE, entries=GATE_ENTRIES_CYCLE,
+                                                checkpoint='0918-2200', out=None, dry_run=True))
+check('gate lock 生命週期：觸發後 exit 2 且 lock 存在',
+      _code_cycle_trigger == 2 and os.path.exists(GATE_LOCK_PATH_CYCLE))
+
+# 模擬 agent 依指示用一次整批 Write 重寫（測試層面直接改寫同路徑內容）
+with open(GATE_ENTRIES_CYCLE, 'w', encoding='utf-8') as f:
+    json.dump({
+        f'RT311{i}': f'RT311{i} ▎摘要 {i}。▎畫面：資料畫面。無BITE。'
+        for i in range(5)
+    }, f, ensure_ascii=False)
+
+_out_cycle_recheck, _code_cycle_recheck = run(
+    bp.cmd_build, Args(site='rt', raw=GATE_RAW_CYCLE, entries=GATE_ENTRIES_CYCLE,
+                       checkpoint='0918-2200', out=None, dry_run=True))
+check('gate lock 生命週期：內容修好後重跑 --dry-run 成功（exit 0）', _code_cycle_recheck == 0, str(_code_cycle_recheck))
+check('gate lock 生命週期：reason code 計數降到 0 時自動清鎖',
+      not os.path.exists(GATE_LOCK_PATH_CYCLE), GATE_LOCK_PATH_CYCLE)
+check('gate lock 生命週期：自動清鎖訊息含 ✅', '✅' in _out_cycle_recheck and 'gate lock 已清除' in _out_cycle_recheck,
+      _out_cycle_recheck[-400:])
+
+# 情境三：gate-clear 子指令——手動清鎖逃生路徑
+_dir_manual = gate_scenario_dir('gatelock_manual')
+GATE_ENTRIES_MANUAL = write_json_in(_dir_manual, 'entries.json', {
+    f'RT312{i}': f'RT312{i} (BITE) ▎摘要。▎畫面：資料畫面。無BITE。'
+    for i in range(5)
+})
+GATE_RAW_MANUAL = write_json_in(_dir_manual, 'raw.json', [
+    {'code': f'RT312{i}', 'head': f'head {i}', 'story': f'story {i}', 'sb_count': 1}
+    for i in range(5)
+])
+GATE_LOCK_PATH_MANUAL = bp._gate_lock_path(GATE_ENTRIES_MANUAL, 'RT')
+run(bp.cmd_build, Args(site='rt', raw=GATE_RAW_MANUAL, entries=GATE_ENTRIES_MANUAL,
+                       checkpoint='0918-2200', out=None, dry_run=True))
+check('gate-clear 前置：lock 存在', os.path.exists(GATE_LOCK_PATH_MANUAL), GATE_LOCK_PATH_MANUAL)
+
+_out_gc, _code_gc = run(bp.cmd_gate_clear, Args(site='rt', entries=GATE_ENTRIES_MANUAL))
+check('gate-clear：手動清除成功（exit 0）', _code_gc == 0, str(_code_gc))
+check('gate-clear：lock 檔案已刪除', not os.path.exists(GATE_LOCK_PATH_MANUAL))
+check('gate-clear：訊息含已手動清除字樣', '已手動清除' in _out_gc, _out_gc)
+
+_out_gc2, _code_gc2 = run(bp.cmd_gate_clear, Args(site='rt', entries=GATE_ENTRIES_MANUAL))
+check('gate-clear：lock 已不存在時再呼叫不報錯（exit 0）', _code_gc2 == 0, str(_code_gc2))
+check('gate-clear：lock 已不存在時印出提示而非報錯', '沒有找到' in _out_gc2, _out_gc2)
 
 # ── S3（複核 2026-09-14）：Claude Code offload 殼 → unwrap → from-raw ──────
 #

@@ -335,16 +335,84 @@ def _print_build_lint_warnings(warnings, site=None):
     print('\n'.join(lines), file=sys.stderr)
 
 
-def _enforce_build_hard_gate(warnings, site=None, dry_run=False):
-    """正式 build 或 --dry-run 遇到白名單格式類 reason code 達門檻（>=5）時硬閘擋下。"""
-    if not warnings:
+GATE_LOCK_SUFFIX = '_gate_lock.json'
+
+
+def _gate_lock_path(entries_path, site_label):
+    """gate lock 跟 entries.json 放同一個目錄，檔名 `<站別小寫>_gate_lock.json`。"""
+    d = os.path.dirname(os.path.abspath(entries_path))
+    return os.path.join(d, f'{site_label.lower()}{GATE_LOCK_SUFFIX}')
+
+
+def _write_gate_lock(entries_path, site_label, hard_gate_reasons, dry_run):
+    """硬閘觸發時落一份 lock 標記檔，供 PreToolUse hook（s2_gate_guard.py）
+    技術性擋掉對同一 entries.json 的 Edit——不只是印訊息建議。"""
+    if not entries_path:
         return
+    lock = {
+        'site': site_label,
+        'entries_path': os.path.abspath(entries_path).replace('\\', '/'),
+        'reasons': [
+            {'code': r['reason_code'], 'name': r['name'], 'count': r['count']}
+            for r in hard_gate_reasons
+        ],
+        'triggered_at': datetime.datetime.now().isoformat(timespec='seconds'),
+        'dry_run': bool(dry_run),
+    }
+    try:
+        with open(_gate_lock_path(entries_path, site_label), 'w', encoding='utf-8') as f:
+            json.dump(lock, f, ensure_ascii=False, indent=2)
+    except OSError as exc:
+        # lock 檔寫不出去不能拖累硬閘本身（硬閘攔截仍照常 exit 2）——
+        # 只是這一次 Edit 技術鎖會失效，退化回純文字警告。
+        print(f'⚠️ gate lock 寫入失敗（不影響硬閘攔截，但 Edit 技術鎖這次不會生效）：{exc}',
+              file=sys.stderr)
+
+
+def _clear_gate_lock(entries_path, site_label):
+    """清除時機②：重跑 build/--dry-run 確認該站 reason code 計數已降到 0。
+    （清除時機①「一次完整 Write 發生」由 s2_gate_guard.py 的 PostToolUse 處理。）"""
+    if not entries_path:
+        return
+    path = _gate_lock_path(entries_path, site_label)
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+            print(f'✅ {site_label} gate lock 已清除（reason code 計數已降到 0）：{path}',
+                  file=sys.stderr)
+    except OSError as exc:
+        print(f'⚠️ gate lock 清除失敗：{exc}', file=sys.stderr)
+
+
+def cmd_gate_clear(args):
+    """逃生路徑：手動清除 gate lock，避免流程死鎖（方向1第4點）。"""
+    site_label = args.site.upper()
+    path = _gate_lock_path(args.entries, site_label)
+    if not os.path.exists(path):
+        print(f'ℹ️ 沒有找到 {site_label} 的 gate lock（{path}），無需清除。', file=sys.stderr)
+        return
+    os.remove(path)
+    print(f'✅ 已手動清除 {site_label} gate lock：{path}', file=sys.stderr)
+
+
+def _enforce_build_hard_gate(warnings, site=None, dry_run=False, entries_path=None):
+    """正式 build 或 --dry-run 遇到白名單格式類 reason code 達門檻（>=5）時硬閘擋下。
+
+    2026-09-18（R43 遵守修法方向1）：觸發時額外落一份 gate lock 標記檔
+    （`_write_gate_lock`），交給 PreToolUse hook（s2_gate_guard.py）技術性擋掉
+    對同一 entries.json 的 Edit——文字警告管不住 agent 選擇忽略指示逐筆修補
+    這件事（連續 4 輪實錯），要在工具層真的擋下來。
+    reason code 計數降到 0（含 warnings 整體變空）時，同一路徑自動清鎖
+    （`_clear_gate_lock`）——這是清除時機②，時機①見 s2_gate_guard.py。"""
     site_label = (site or '該站').upper()
-    _, hard_gate_reasons = collect_build_lint_reasons(warnings, site=site_label)
+    grouped, hard_gate_reasons = collect_build_lint_reasons(warnings or [], site=site_label)
     if not hard_gate_reasons:
+        _clear_gate_lock(entries_path, site_label)
         return
 
-    _print_build_lint_warnings(warnings, site=site_label)
+    if warnings:
+        _print_build_lint_warnings(warnings, site=site_label)
+    _write_gate_lock(entries_path, site_label, hard_gate_reasons, dry_run)
     lines = [
         f'⛔ 【建批硬閘攔截】{site_label} 站偵測到機械格式錯誤達到硬閘門檻（同站同原因 ≥{HARD_GATE_THRESHOLD} 則），拒絕放行：'
     ]
@@ -361,7 +429,8 @@ def _enforce_build_hard_gate(warnings, site=None, dry_run=False):
         f'  • 狀態：{status_desc}',
         f'  • 處置要求：',
         f'    1. 必須使用一次 `Write` 整批重寫 {site_label} entries.json（修正上述格式問題）。',
-        f'    2. 嚴格禁止逐筆使用 Edit / patch-entry 修補這類機械格式問題！',
+        f'    2. 嚴格禁止逐筆使用 Edit / patch-entry 修補這類機械格式問題！'
+        f'（此次已技術性鎖定 Edit，逐筆修補會被工具層拒絕，見 gate lock）',
         f'    3. 重寫後請先重跑 `build --dry-run` 預檢，直到該 reason code 計數降到 0 才能跑正式 build。'
     ])
     print('\n'.join(lines), file=sys.stderr)
@@ -675,7 +744,7 @@ def cmd_build(args):
             batch.append(new_row)
 
         _report_raw_entry_conversions(raw_entry_converted_ids)
-        _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False))
+        _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False), entries_path=args.entries)
         out = json.dumps({'entries': batch, 'new_topics': new_topics},
                          ensure_ascii=False, indent=2)
         note = f'（{len(batch)} 則，新格式、過閘；new_topics {len(new_topics)} 題）'
@@ -742,7 +811,7 @@ def cmd_build(args):
         batch.append(row)
 
     _report_raw_entry_conversions(raw_entry_converted_ids)
-    _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False))
+    _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False), entries_path=args.entries)
     # 🔴 2026-09-08 硬上線：跟 --skeleton 分支同一個理由，三站一律出新格式外殼。
     # 這條分支沒有 entries.json 可以帶 `_new_topics`，所以 new_topics 固定空的；
     # 要開新中主題就照退回訊息在 batch 頂層自己補。
@@ -845,12 +914,27 @@ def cmd_from_raw(args):
             'first150': first150,
         }
         if spec['source'] == 'NS':
+            # R43方向2（2026-09-18）：機械算出「PKG/DONUT且時長>1分鐘」門檻
+            # 直接標在提示表上，agent 不用自己拿 dur_ms／ft 心算——跟硬閘
+            # （`s2_pretag.lint()`）用**同一個** `pkg_donut_needs_sot()`，
+            # 門檻不會漂移（見該函式 docstring）。
             row['hint'].update({
                 'footage_type': row.get('footage_type', ''),
                 'inline_sot_count': row['inline_sot_count'],
+                'needs_sot': pretag.pkg_donut_needs_sot(
+                    row.get('footage_type', ''), row.get('duration_ms', '')),
             })
         else:
-            row['hint']['sb_count'] = extra.get('sb_count', 0)
+            sb_count = extra.get('sb_count', 0)
+            row['hint']['sb_count'] = sb_count
+            # 同上（方向2）：AP／RT 用既有 `bite_suggest()` heuristic（sb_count／
+            # has_sot 訊號）在**草稿寫之前**就標「疑似有 BITE」提醒——entry
+            # 還沒寫、傳空字串，跟 `build` 階段 `row["suggest"]["bite"]` 用
+            # 同一個函式，不重寫一份會漂移的判準。這只是提醒「該用兩段式
+            # 括號結構」，不是「一定要標 BITE」的判定——那仍是 agent 的
+            # 編輯判斷，heuristic 錯的方向（漏報／誤報）由 agent 自己收斂。
+            row['hint']['bite_hint'] = bool(pretag.bite_suggest(
+                sb_count=sb_count, has_sot=extra.get('has_sot'), entry=''))
         skeleton.append(row)
 
     out = args.out
@@ -873,9 +957,13 @@ def cmd_from_raw(args):
             line = (f"#{idx}｜{row['id']}｜dur_ms={hint['dur']}｜sb=n/a｜"
                     f"ft={hint['footage_type']}｜inline_sot={hint['inline_sot_count']}｜"
                     f"{hint['head']}｜{hint['first150']}")
+            if hint.get('needs_sot'):
+                line += "｜⚠️SOT（PKG/DONUT>1分鐘，第一備註要含SOT字樣）"
         else:
             line = (f"#{idx}｜{row['id']}｜{hint['dur']}｜{hint['sb_count']}｜"
                     f"{hint['head']}｜{hint['first150']}")
+            if hint.get('bite_hint'):
+                line += "｜⚠️疑似BITE（兩段式括號：(地點/主題)(BITE)）"
         try:
             _text = f"{row['hint']['head']} {row['hint']['first150']}"
             _sug = pretag.suggest_tc(_text, source=row.get('source'))
@@ -888,6 +976,8 @@ def cmd_from_raw(args):
     FROM_RAW_SCHEMA_CONTRACT = (
         'entries.json 每筆請填 {"<id>":{"entry":"…","category":"…","tc":"…"}}；'
         '工作草稿內容鍵一律用 entry，不是 raw_entry（raw_entry是狀態檔專用欄位，草稿階段不要用）。'
+        '有BITE時第一備註別漏：CODE (地點/主題備註)(BITE) ▎摘要…▎畫面：…▎BITE：…（不是 CODE (BITE) ▎…，'
+        '(BITE) 前面一定要有描述括號）；下表 ⚠️疑似BITE／⚠️SOT 是機械算好的提醒，不是判定，仍要自己確認內容。'
     )
     contract_overhead = len(FROM_RAW_SCHEMA_CONTRACT) + 1
     page_budget = max(INSPECT_TEXT_BUDGET - contract_overhead, 200)
@@ -2362,6 +2452,12 @@ def main():
                        '--out 與輸入檔同樣會被擋生產 state（R33）。')
     p_rf.add_argument('--dry-run', action='store_true', help='只印預覽（改到/跳過筆數），不寫任何檔案')
     p_rf.set_defaults(func=cmd_rename_field)
+
+    p_gc = sub.add_parser('gate-clear', help='手動清除硬閘 gate lock（逃生路徑；正常應由整批 Write '
+                          '或 dry-run 歸零自動清除，見 _clear_gate_lock）')
+    p_gc.add_argument('--site', required=True, choices=['ns', 'ap', 'rt'])
+    p_gc.add_argument('--entries', required=True, help='entries.json 路徑，用來定位同目錄下的 gate lock 檔')
+    p_gc.set_defaults(func=cmd_gate_clear)
 
     args = ap.parse_args()
     args.func(args)

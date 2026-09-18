@@ -275,6 +275,70 @@ check('from-raw 多頁：第二頁亦包含 schema 契約文字',
       '工作草稿內容鍵一律用 entry，不是 raw_entry' in mp_p2_out)
 
 
+# ── R43方向2（2026-09-18）：機械化提示表標記，取代加13c/13e規則文字 ──────
+# AP／RT：⚠️疑似BITE 用既有 bite_suggest()（sb_count／has_sot）heuristic，
+# 在草稿寫之前就提醒兩段式括號結構；獨立於 Task 1 的斷言之外另外檢核每一行，
+# 不只信「至少出現一次」（R42 當年 pretag.lint() 的獨立驗證方法：逐行核對
+# 觸發/不觸發兩種情況都要各自驗證到，不能只驗證觸發那一半）。
+fr_lines = {ln.split('｜')[1]: ln for ln in fr_out.splitlines() if ln.startswith('#')}
+check('提示表含 AP1001/AP1003/AP1004 三行（AP1002 被D12已在庫排除，不在表內、下面負向測試改用AP1004）',
+      set(fr_lines) == {'AP1001', 'AP1003', 'AP1004'}, str(sorted(fr_lines)))
+check('AP1001（sb_count=1）提示表行有 ⚠️疑似BITE',
+      '⚠️疑似BITE' in fr_lines.get('AP1001', ''), fr_lines.get('AP1001'))
+check('AP1003（sb_count=2/has_sot=True）提示表行有 ⚠️疑似BITE',
+      '⚠️疑似BITE' in fr_lines.get('AP1003', ''), fr_lines.get('AP1003'))
+check('AP1004（sb_count=0/has_sot=False）提示表行沒有 ⚠️疑似BITE（負向：不誤報）',
+      '⚠️疑似BITE' not in fr_lines.get('AP1004', ''), fr_lines.get('AP1004'))
+check('schema 契約補印兩段式括號格式範本（CODE (地點/主題備註)(BITE)）',
+      'CODE (地點/主題備註)(BITE)' in fr_out, fr_out[:400])
+check('schema 契約講明 ⚠️ 標記是提醒不是判定',
+      '不是判定，仍要自己確認內容' in fr_out, fr_out[:400])
+
+# NS：⚠️SOT 用 s2_pretag.pkg_donut_needs_sot()（PKG/DONUT 且 dur_ms>60000），
+# 跟硬閘（`lint()`）共用同一個判準函式，這裡四種情境各自驗證（含邊界值 60 秒整
+# 不觸發，跟 test_s2_pretag.py 既有「R42 60 秒整不警告」邊界案例對齊）。
+NS_SOT_RAW = write_json('ns_sot_raw.json', [
+    {'id': 'NS-SOT-01', 'ft': 'DONUT', 'dur_ms': 111000, 'desc': 'long donut',
+     'script': 'SCRIPT: long donut script', 'created': '2026-09-18T00:00:00Z'},
+    {'id': 'NS-SOT-02', 'ft': 'PKG', 'dur_ms': 45000, 'desc': 'short pkg',
+     'script': 'SCRIPT: short pkg script', 'created': '2026-09-18T00:00:00Z'},
+    {'id': 'NS-SOT-03', 'ft': 'VO/SIL', 'dur_ms': 120000, 'desc': 'long vosil',
+     'script': 'SCRIPT: long vosil script', 'created': '2026-09-18T00:00:00Z'},
+    {'id': 'NS-SOT-04', 'ft': 'PKG', 'dur_ms': 60000, 'desc': 'exactly 60s pkg',
+     'script': 'SCRIPT: exactly 60 seconds', 'created': '2026-09-18T00:00:00Z'},
+])
+ns_sot_skel_out = os.path.join(TMP, 'ns_sot_skeleton.json')
+ns_sot_out, ns_sot_code = run(bp.cmd_from_raw, Args(
+    site='ns', raw=NS_SOT_RAW, checkpoint='0918-2200', state=None,
+    out=ns_sot_skel_out, page=None,
+))
+check('NS SOT 提示表 from-raw 成功（exit 0）', ns_sot_code == 0, str(ns_sot_code))
+ns_sot_lines = {ln.split('｜')[1]: ln for ln in ns_sot_out.splitlines() if ln.startswith('#')}
+check('NS-SOT-01（DONUT 111秒>60秒）提示表行有 ⚠️SOT',
+      '⚠️SOT' in ns_sot_lines.get('NS-SOT-01', ''), ns_sot_lines.get('NS-SOT-01'))
+check('NS-SOT-02（PKG 45秒<60秒）提示表行沒有 ⚠️SOT（負向：時長不夠不誤報）',
+      '⚠️SOT' not in ns_sot_lines.get('NS-SOT-02', ''), ns_sot_lines.get('NS-SOT-02'))
+check('NS-SOT-03（VO/SIL 120秒但非PKG/DONUT）提示表行沒有 ⚠️SOT（負向：類型不符不誤報）',
+      '⚠️SOT' not in ns_sot_lines.get('NS-SOT-03', ''), ns_sot_lines.get('NS-SOT-03'))
+check('NS-SOT-04（PKG 剛好60秒，邊界不觸發，跟硬閘>60而非>=60對齊）提示表行沒有 ⚠️SOT',
+      '⚠️SOT' not in ns_sot_lines.get('NS-SOT-04', ''), ns_sot_lines.get('NS-SOT-04'))
+
+# 獨立驗證：直接呼叫 `s2_pretag.pkg_donut_needs_sot()` 本體（不透過 from-raw），
+# 確認提示表標記跟硬閘用的是同一個函式、同一個結果——不是兩份各自輸出巧合一致。
+import importlib.util as _ilu
+_pretag_spec = _ilu.spec_from_file_location('pretag_check', os.path.join(HERE, 's2_pretag.py'))
+_pretag = _ilu.module_from_spec(_pretag_spec)
+_pretag_spec.loader.exec_module(_pretag)
+check('pkg_donut_needs_sot() 本體：DONUT 111秒 → True', _pretag.pkg_donut_needs_sot('DONUT', 111000) is True)
+check('pkg_donut_needs_sot() 本體：PKG 45秒 → False', _pretag.pkg_donut_needs_sot('PKG', 45000) is False)
+check('pkg_donut_needs_sot() 本體：VO/SIL 120秒 → False（類型不符）', _pretag.pkg_donut_needs_sot('VO/SIL', 120000) is False)
+check('pkg_donut_needs_sot() 本體：PKG 剛好60秒 → False（>60非>=60）', _pretag.pkg_donut_needs_sot('PKG', 60000) is False)
+check('pkg_donut_needs_sot() 本體：footage_type 為 None 不炸、回 False',
+      _pretag.pkg_donut_needs_sot(None, 111000) is False)
+check('pkg_donut_needs_sot() 本體：duration_ms 為 None 不炸、回 False',
+      _pretag.pkg_donut_needs_sot('DONUT', None) is False)
+
+
 shutil.rmtree(TMP, ignore_errors=True)
 
 print(f'\n共 {len(results)} 項，通過 {sum(results)}，失敗 {len(results) - sum(results)}')

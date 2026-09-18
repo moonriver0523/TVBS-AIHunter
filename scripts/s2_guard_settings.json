@@ -10,6 +10,28 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python E:/GitHub/TVBS-AIHunter/scripts/s2_gate_guard.py",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python E:/GitHub/TVBS-AIHunter/scripts/s2_gate_guard.py",
+            "timeout": 20
+          }
+        ]
       }
     ]
   }
