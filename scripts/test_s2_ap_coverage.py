@@ -9,6 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+if __name__ == "__main__":
+    print("SKIP: pytest-only（從 repo 根目錄跑 pytest scripts/test_s2_ap_coverage.py）")
+    sys.exit(0)
+
 import pytest
 
 from scripts import s2_ap_coverage as coverage

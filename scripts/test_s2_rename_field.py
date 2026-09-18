@@ -325,6 +325,50 @@ check('⑭a 沒有留下半寫壞的輸出檔', not os.path.exists(out14_path))
 _leftover_tmp = [f for f in os.listdir(TMP) if f.startswith('.s2rf_tmp_')]
 check('⑭a 沒有留下暫存檔殘骸', not _leftover_tmp, _leftover_tmp)
 
+# ── ⑮ entries_map_envelope（scoped 1259 步驟 7）────────────────
+p15 = write_json('emap.json', {
+    'checkpoint': '0917-1300',
+    'checkpoint_label': '補漏',
+    'run_id': '2fc482da-2bc8-4e9e-b43a-55922e17dd3e',
+    'advisory_issues': [],
+    'extra_meta': 1,
+    'entries': {
+        'RT0001': {'raw_entry': '甲', 'category': '國際'},
+        'RT0002': {'raw_entry': '乙'},
+    },
+})
+out15 = os.path.join(TMP, 'emap.out.json')
+o, c = run(Args(batch=p15, from_key='raw_entry', to_key='entry', out=out15))
+check('⑮ entries_map_envelope 改名成功', c == 0, o)
+got15 = read_json(out15) if os.path.exists(out15) else {}
+check('⑮ 只改 entries map 內層，不把 entries 當素材 id',
+      isinstance(got15.get('entries'), dict)
+      and got15['entries']['RT0001'].get('entry') == '甲'
+      and 'raw_entry' not in got15['entries']['RT0001']
+      and got15['entries']['RT0002'].get('entry') == '乙')
+check('⑮ root metadata 原樣保留',
+      got15.get('checkpoint') == '0917-1300'
+      and got15.get('checkpoint_label') == '補漏'
+      and got15.get('run_id') == '2fc482da-2bc8-4e9e-b43a-55922e17dd3e'
+      and got15.get('advisory_issues') == []
+      and got15.get('extra_meta') == 1)
+
+p15b = write_json('emap_empty.json', {
+    'checkpoint': '0917-1300',
+    'entries': {},
+})
+out15b = os.path.join(TMP, 'emap_empty.out.json')
+o, c = run(Args(batch=p15b, from_key='raw_entry', to_key='entry', out=out15b))
+check('⑮ 空 map 辨識為 entries_map、回沒有可改項目（不是 flatmap）',
+      c == 2 and '沒有可改項目' in o and 'flatmap' not in o, o)
+check('⑮ 空 map 不寫檔', not os.path.exists(out15b))
+kind15, _ = bp._load_batch_any(p15)
+check('⑮ _load_batch_any kind=entries_map_envelope',
+      kind15 == 'entries_map_envelope', kind15)
+kind15e, _ = bp._load_batch_any(p15b)
+check('⑮ 空 map kind 仍是 entries_map_envelope',
+      kind15e == 'entries_map_envelope', kind15e)
+
 # ── guard 驗證附帶檢查：呼叫 rename-field 這條指令本身要被 guard 放行 ────
 # （R33 明文界線：這支工具不是繞 guard，是既有授權路徑的窄出口——guard 不必改）
 sys.path.insert(0, HERE)

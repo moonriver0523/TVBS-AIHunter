@@ -54,9 +54,10 @@ def codes_from(path):
         print(f"ERROR: 稿單讀取失敗（{e}）")
         sys.exit(2)
     out = []
-    for c in re.findall(sv.CODE, txt):
-        c = S.norm_id(c)
-        if c not in out:
+    extra = r"|RTV\d{4}"
+    for c in re.findall(sv.CODE + extra, txt):
+        c = c.strip()
+        if c and c not in out:
             out.append(c)
     return out
 
@@ -95,7 +96,11 @@ def main():
     for f in files:
         st = S.load(f)
         inv = st["items"]
-        hits = [c for c in codes if c in inv]
+        hits = []
+        for c in codes:
+            key = S.lookup_id(c, st)
+            if key in inv and key not in hits:
+                hits.append(key)
         if not hits:
             continue
         new = [c for c in hits if not inv[c].get("aired")]

@@ -76,35 +76,35 @@ def item(id_, extra=None):
 
 d, sp = new_state()
 entries = [
-    item("AA1", {"category": "社會/測試案/子題", "tc": "社會/美國"}),
-    item("AA2", {"tc": "不存在的T/美國"}),
-    item("AA3", {"tc": "政治,社會,財經,體育/美國"}),
+    item("ENEX1001", {"category": "社會/測試案/子題", "tc": "社會/美國"}),
+    item("ENEX1002", {"tc": "不存在的T/美國"}),
+    item("ENEX1003", {"tc": "政治,社會,財經,體育/美國"}),
 ]
 out = add_batch(sp, entries)
 
 # ── ① 帶合法 category＋tc → 一次入庫＋分類＋標 T/C ──────────────────────
-v1 = json.loads(run(sp, "get", "--id", "AA1"))
+v1 = json.loads(run(sp, "get", "--id", "ENEX1001"))
 report("① category 有寫入", v1.get("category") == {"大分類": "社會", "中主題": "測試案", "小分題": "子題"},
        f"實得 {v1.get('category')!r}")
 report("① tc 有寫入", v1.get("tc") == {"T": ["社會"], "C": ["美國"]},
        f"實得 {v1.get('tc')!r}")
 
 # ── ② tc 用了不在字典裡的名稱 → 素材照樣入庫、tc 缺、退件有留痕 ──────────
-v2 = json.loads(run(sp, "get", "--id", "AA2"))
-report("② AA2 素材照樣入庫", v2.get("script_status") == "has_script")
-report("② AA2 沒有 tc（退件）", not v2.get("tc"), f"實得 {v2.get('tc')!r}")
+v2 = json.loads(run(sp, "get", "--id", "ENEX1002"))
+report("② ENEX1002 素材照樣入庫", v2.get("script_status") == "has_script")
+report("② ENEX1002 沒有 tc（退件）", not v2.get("tc"), f"實得 {v2.get('tc')!r}")
 report("② stdout 有講清楚是字典查不到", "不在 TC-字典" in out, out[:400])
 
 # ── ③ T 超過上限（4 個）→ 整則退回，素材仍入庫 ──────────────────────────
-v3 = json.loads(run(sp, "get", "--id", "AA3"))
-report("③ AA3 素材照樣入庫", v3.get("script_status") == "has_script")
-report("③ AA3 沒有 tc（超上限退回）", not v3.get("tc"), f"實得 {v3.get('tc')!r}")
+v3 = json.loads(run(sp, "get", "--id", "ENEX1003"))
+report("③ ENEX1003 素材照樣入庫", v3.get("script_status") == "has_script")
+report("③ ENEX1003 沒有 tc（超上限退回）", not v3.get("tc"), f"實得 {v3.get('tc')!r}")
 
 # ── 退回明細要記進 tc_rejected，且不計進 tc_calls（上限是擋逐則呼叫，不是擋批次）──
 top = raw(sp)
 report("退回明細記進 _top.tc_rejected[本輪 checkpoint]",
-       any("AA2" in x for x in (top.get("tc_rejected") or {}).get("0999-1700", []))
-       and any("AA3" in x for x in (top.get("tc_rejected") or {}).get("0999-1700", [])),
+       any("ENEX1002" in x for x in (top.get("tc_rejected") or {}).get("0999-1700", []))
+       and any("ENEX1003" in x for x in (top.get("tc_rejected") or {}).get("0999-1700", [])),
        f"實得 {top.get('tc_rejected')!r}")
 report("add-batch 內建的 T/C 不計進 tc_calls",
        "0999-1700" not in (top.get("tc_calls") or {}),
@@ -112,8 +112,8 @@ report("add-batch 內建的 T/C 不計進 tc_calls",
 
 # ── 舊格式（沒有 category／tc 兩鍵）行為完全不變 ─────────────────────────
 d2, sp2 = new_state()
-out_old = add_batch(sp2, [item("BB1")])
-v_old = json.loads(run(sp2, "get", "--id", "BB1"))
+out_old = add_batch(sp2, [item("ENEX1004")])
+v_old = json.loads(run(sp2, "get", "--id", "ENEX1004"))
 report("舊格式 batch：素材照樣入庫", v_old.get("script_status") == "has_script")
 report("舊格式 batch：category 仍是 None（沒被憑空生出東西）", v_old.get("category") is None,
        f"實得 {v_old.get('category')!r}")

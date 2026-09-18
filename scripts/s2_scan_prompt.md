@@ -31,9 +31,11 @@
 
 ## 本輪參數
 
-- **checkpoint 一律寫 `{CHECKPOINT}`**（完整格式，不要只寫時間）。
+- **checkpoint 一律寫 `{CHECKPOINT}`**（機碼 `MMdd-HHmm`，不要只寫時間、不要把補掃後綴塞進機碼）。
+  `run_id` 由 launcher 產，收工 `set-run --checkpoint {CHECKPOINT} --run-id {RUN_ID}`（有 label 再帶 `--checkpoint-label`）。
   ⛔ **開局絕對不要跑 `set-top`**——執行順序鐵律與理由見 `13c3` 尾
   「收工清單總表」第 5.5 列。
+- **NS id** 文法與 **AP／RT `src_text` advisory** 見 `13c`「文法短指路」／`13c2` §5。
 - **掃描窗**：狀態檔目前 `checkpoint` 到現在，自己 `resume` 看，不要猜。
 - **掃描順序固定 NS → AP → RT → ENEX → ABC**（不可調換，理由見 `13c` V5-1／V7-1 兩小節）。
 - 本輪是否掃 ENEX／ABC，對照 `{CHECKPOINT}` 查 `13c` V5-1／V7-1 的輪次表；

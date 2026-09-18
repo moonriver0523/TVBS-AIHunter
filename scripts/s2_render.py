@@ -29,6 +29,7 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import s2_validate as sv  # noqa: E402  共用行辨識 regex 與檔頭生成，不重寫一套
+import s2_material_schema as schema  # noqa: E402
 import s2_topic_dedupe as td
 import s2_pending  # noqa: E402  待整併偵測（零副作用，不會拉進 s2_state）  # noqa: E402  render 後同名小分題跨大分類重複偵測
 
@@ -404,6 +405,18 @@ def render(state, window="", base_mmdd="", date=""):
     body = build_body(state, base_mmdd)
     alerts = state.get("alerts") or []
     header = sv.header_from_lines(body, window, date, base_mmdd, alerts)
+    items = state.get("items") or {}
+    if isinstance(items, list):
+        vals = [x for x in items if isinstance(x, dict)]
+    else:
+        vals = [v for v in items.values() if isinstance(v, dict)]
+    n_miss = sum(
+        1 for v in vals
+        if v.get("src_text_missing") or (
+            v.get("source") in schema.SRC_TEXT_POLICY
+            and schema.src_text_missing(v.get("source"), v.get("src_text"))))
+    if n_miss:
+        header.append(f"⚠️ 原文待補 {n_miss} 則")
     return "\n".join(header + [""] + body).rstrip("\n") + "\n"
 
 
@@ -703,8 +716,8 @@ def main():
             live_dir = os.path.dirname(os.path.abspath(args.file))
             datebar = rh.build_datebar(base, rh.find_archive_dates(live_dir))
             # A10 v2（2026-08-24 使用者裁決）：線上版換成 T/C 矩陣版。
-            # ⛔ 這不是第三條 render 路——`s2_render_html.py --matrix` 那條獨立入口
-            #    也呼叫同一支 build_html（2026-08-11 事故就是只接一條）。
+            # ⛔ 這不是第三條 render 路——獨立入口是 `s2_render_matrix.py`，
+            #    與排程這條都呼叫同一支 build_html（2026-08-11 事故就是只接一條）。
             # 緊急開關：設環境變數 S2_HTML_LEGACY=1 就退回舊版面，不必改程式、
             # 不必 git revert——排程輪次中途也能用。
             if os.environ.get("S2_HTML_LEGACY") == "1":

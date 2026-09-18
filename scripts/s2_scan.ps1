@@ -28,8 +28,12 @@
 #>
 [CmdletBinding()]
 param(
-    # 覆寫 checkpoint（預設用現在時間算 {MMDD}-{HHMM}）。補掃時可傳 "0806-1300-補漏"。
+    # 覆寫 checkpoint（預設用現在時間算 {MMDD}-{HHMM}）。舊後綴 "0806-1300-補漏" 只在此拆成 label。
     [string]$Checkpoint,
+
+    [string]$RunId,
+
+    [string]$CheckpointLabel,
 
     # 2026-08-09 由 opus 改 sonnet（使用者指定）。改的時候**三個地方要一起改**：
     # 這裡的預設值、工作排程器 `S2掃帶` 的 -Model 引數、`s2_watchdog.ps1` 代打時帶的值。
@@ -147,8 +151,48 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$script:TerminalWritten = $false
 
 if (-not $Checkpoint) { $Checkpoint = Get-Date -Format 'MMdd-HHmm' }
+if ([string]::IsNullOrWhiteSpace($CheckpointLabel) -and $Checkpoint -match '^(\d{4}-\d{4})-(.+)$') {
+    $Checkpoint = $Matches[1]
+    $CheckpointLabel = $Matches[2]
+}
+$env:_S2_CLI_CP = $Checkpoint
+if ($RunId) { $env:_S2_CLI_RUN_ID = $RunId } else { Remove-Item Env:\_S2_CLI_RUN_ID -ErrorAction SilentlyContinue }
+if ($CheckpointLabel) { $env:_S2_CLI_LABEL = $CheckpointLabel } else { Remove-Item Env:\_S2_CLI_LABEL -ErrorAction SilentlyContinue }
+$resolvePy = @"
+import json, os, sys
+sys.path.insert(0, r'$PSScriptRoot')
+import s2_material_schema as s
+cli_rid = os.environ.get('_S2_CLI_RUN_ID') or None
+cli_lab = os.environ.get('_S2_CLI_LABEL') or None
+ctx, issue = s.resolve_run_context(
+    checkpoint=os.environ.get('_S2_CLI_CP'),
+    run_id=cli_rid,
+    checkpoint_label=cli_lab,
+    env_checkpoint=os.environ.get('S2_CHECKPOINT'),
+    env_run_id=os.environ.get('S2_RUN_ID'),
+    env_checkpoint_label=os.environ.get('S2_CHECKPOINT_LABEL'),
+    generate_if_missing=True)
+if issue:
+    print(issue.message, file=sys.stderr)
+    sys.exit(2)
+print(json.dumps({'checkpoint': ctx.checkpoint, 'run_id': ctx.run_id, 'checkpoint_label': ctx.checkpoint_label}, ensure_ascii=False))
+"@
+$resolveOut = & python -X utf8 -c $resolvePy
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "run context 解析失敗（離開碼 2）"
+    exit 2
+}
+$ctx = ($resolveOut | Select-Object -Last 1) | ConvertFrom-Json
+$Checkpoint = [string]$ctx.checkpoint
+$RunId = [string]$ctx.run_id
+$CheckpointLabel = $ctx.checkpoint_label
+$env:S2_CHECKPOINT = $Checkpoint
+$env:S2_RUN_ID = $RunId
+if ($CheckpointLabel) { $env:S2_CHECKPOINT_LABEL = [string]$CheckpointLabel }
+else { Remove-Item Env:\S2_CHECKPOINT_LABEL -ErrorAction SilentlyContinue }
 $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 
 # Provider 判定：'auto' 照 $Checkpoint 的 HHmm 查 $GeminiSlots 表；
@@ -178,7 +222,7 @@ if ($EffectiveProvider -eq 'gemini' -and (Test-Path $GeminiCooldownCheck)) {
 }
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-$runLog = Join-Path $LogDir "掃帶log-$Checkpoint.txt"
+$runLog = Join-Path $LogDir "掃帶log-$Checkpoint-$RunId.txt"
 
 # 遙測檔改放雲端（2026-08-12）。建目錄失敗（G: 沒掛載）就整組退回本機 $LogDir，
 # **不准讓它中斷掃帶**——這裡是紀錄，不是掃帶本體。
@@ -204,28 +248,64 @@ function Write-Line([string]$path, [string]$text) {
     for ($i = 1; $i -le 3; $i++) {
         try {
             $text | Add-Content -Path $path -Encoding UTF8 -ErrorAction Stop
-            return
+            return $true
         } catch {
             if ($i -eq 3) {
                 Write-Warning "寫紀錄失敗（已重試 3 次，不影響本輪）：$path — $($_.Exception.Message)"
                 Write-Warning "遺失的內容：$text"
-                return
+                return $false
             }
             Start-Sleep -Milliseconds (300 * $i)
         }
     }
+    return $false
 }
 
-function Write-Run([string]$line) {
-    Write-Line $runsLog "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$Checkpoint`t$line"
+function Write-Run {
+    param(
+        [Parameter(Mandatory)][string]$Event,
+        [string]$Detail = ''
+    )
+    $lab = if ($null -eq $CheckpointLabel) { '' } else { [string]$CheckpointLabel }
+    $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`t$Checkpoint`t$RunId`t$Event`t$lab`t$Detail"
+    return [bool](Write-Line $runsLog $line)
 }
 
 function Write-Skip([string]$why) {
-    # ⚠️ 跳過一定要留痕。0806 的教訓：只在終端機講一句等於沒發生過，
-    # 而排程根本沒有終端機可看。
-    Write-Line $skipLog "$stamp`t$Checkpoint`t$why"
-    Write-Run "SKIP`t$why"
+    # 跳過紀錄維持 3 欄、沒有 run_id。撞鎖查 SKIP；收工異常查 DONE detail。
+    $null = Write-Line $skipLog "$stamp`t$Checkpoint`t$why"
+    $null = Write-Run -Event SKIP -Detail $why
     Write-Host "SKIP [$Checkpoint] $why"
+}
+
+function Get-RunItems {
+    param($Items)
+    $selected = @()
+    $issues = @()
+    foreach ($it in @($Items)) {
+        if ($null -eq $it) { continue }
+        $rid = $null
+        $cp = $null
+        if ($it.PSObject.Properties['first_seen_run_id']) {
+            $rid = [string]$it.first_seen_run_id
+            if ([string]::IsNullOrWhiteSpace($rid)) { $rid = $null }
+        }
+        if ($it.PSObject.Properties['first_seen_checkpoint']) {
+            $cp = [string]$it.first_seen_checkpoint
+            if ([string]::IsNullOrWhiteSpace($cp)) { $cp = $null }
+        }
+        $hitRun = $null -ne $rid -and $rid -eq $RunId
+        $hitCp = $null -ne $cp -and $cp -eq $Checkpoint
+        if ($hitRun -and $hitCp) {
+            $selected += $it
+        } elseif ($hitRun -or $hitCp) {
+            $issues += [pscustomobject]@{
+                code = 'RUN_ITEM_TUPLE_MISMATCH'
+                id   = $it.id
+            }
+        }
+    }
+    return [pscustomobject]@{ Items = $selected; Issues = $issues }
 }
 
 function New-ShiftState {
@@ -243,7 +323,7 @@ function New-ShiftState {
     $mmdd = $Checkpoint.Substring(0, 4)
     $today = Join-Path $StateDir "$mmdd-s2-state.json"
     if (Test-Path $today) {
-        Write-Run "NEWDAY`tSKIP 今天的狀態檔已存在，不重建：$mmdd-s2-state.json"
+        $null = Write-Run -Event NEWDAY -Detail "SKIP 今天的狀態檔已存在，不重建：$mmdd-s2-state.json"
         return
     }
 
@@ -277,18 +357,18 @@ function New-ShiftState {
                 #    補救 regex 只認 alerts／items，漏網的 null 會讓 Python 端炸掉。
                 $mids = @($cfg[$k] | Where-Object { $_ -and "$_".Trim() })
                 if ($mids.Count) { $resident[$k] = $mids }
-                else { Write-Run "NEWDAY`tWARN 常駐中主題「$k」清單是空的，略過" }
+                else { $null = Write-Run -Event NEWDAY -Detail "WARN 常駐中主題「$k」清單是空的，略過" }
             }
             if ($resident.Count) {
                 $body.resident_topics = $resident
                 $desc = ($resident.Keys | ForEach-Object { "$_=$($resident[$_] -join '／')" }) -join '；'
-                Write-Run "NEWDAY`t常駐中主題已帶入：$desc"
+                $null = Write-Run -Event NEWDAY -Detail "常駐中主題已帶入：$desc"
             }
         } else {
-            Write-Run "NEWDAY`tWARN 找不到常駐中主題設定檔，本日不帶入：$ResidentTopicsFile"
+            $null = Write-Run -Event NEWDAY -Detail "WARN 找不到常駐中主題設定檔，本日不帶入：$ResidentTopicsFile"
         }
     } catch {
-        Write-Run "NEWDAY`tWARN 常駐中主題設定檔讀取失敗，本日不帶入：$($_.Exception.Message)"
+        $null = Write-Run -Event NEWDAY -Detail "WARN 常駐中主題設定檔讀取失敗，本日不帶入：$($_.Exception.Message)"
     }
 
     # ⚠️ PowerShell 的 ConvertTo-Json 對空陣列會吐 null，Python 端會炸；用 -Depth 保住結構
@@ -296,7 +376,7 @@ function New-ShiftState {
     # 空集合被轉成 null 的兩個欄位補回來（實測 items/alerts 會中招）
     $json = $json -replace '"alerts":\s*null', '"alerts": []' -replace '"items":\s*null', '"items": []'
     [System.IO.File]::WriteAllText($today, $json, (New-Object System.Text.UTF8Encoding($false)))
-    Write-Run "NEWDAY`t已建立 $mmdd-s2-state.json（window_start=$($body.window_start)）"
+    $null = Write-Run -Event NEWDAY -Detail "已建立 $mmdd-s2-state.json（window_start=$($body.window_start)）"
     Write-Host "NEWDAY 已建立 $mmdd-s2-state.json"
 
     # ── 上一班歸檔：Archive\{YYYYMMDD}\ ────────────────────────────
@@ -327,7 +407,7 @@ function New-ShiftState {
             $sN = (Get-ChildItem -LiteralPath $scratch -Recurse -File -EA SilentlyContinue).Count
             Get-ChildItem -LiteralPath $scratch -Force | Move-Item -Destination $sDest -Force
             Remove-Item -LiteralPath $scratch -Recurse -Force
-            Write-Run "NEWDAY`t暫存夾 $yyyy$pm 已歸檔 $sN 個檔 → Archive\$yyyy$pm\_暫存"
+            $null = Write-Run -Event NEWDAY -Detail "暫存夾 $yyyy$pm 已歸檔 $sN 個檔 → Archive\$yyyy$pm\_暫存"
         }
 
         # ── `_待整併` 的當日殘檔 → Archive\{YYYYMMDD}\_待整併\（2026-08-11 加）──
@@ -343,14 +423,14 @@ function New-ShiftState {
                 $pDest = Join-Path $dest "_待整併"
                 New-Item -ItemType Directory -Force -Path $pDest | Out-Null
                 $old | ForEach-Object { Move-Item $_.FullName -Destination $pDest -Force }
-                Write-Run "NEWDAY`t_待整併 $pm 殘檔已歸檔 $($old.Count) 個 → Archive\$yyyy$pm\_待整併"
+                $null = Write-Run -Event NEWDAY -Detail "_待整併 $pm 殘檔已歸檔 $($old.Count) 個 → Archive\$yyyy$pm\_待整併"
             }
         }
 
-        Write-Run "NEWDAY`t上一班 $pm 已歸檔 $moved 個檔 → Archive\$yyyy$pm"
+        $null = Write-Run -Event NEWDAY -Detail "上一班 $pm 已歸檔 $moved 個檔 → Archive\$yyyy$pm"
         Write-Host "NEWDAY $pm 已歸檔（$moved 個檔）"
     } else {
-        Write-Run "NEWDAY`t⚠️ 找不到上一班的狀態檔，沒有東西可歸檔——第一次啟用才正常"
+        $null = Write-Run -Event NEWDAY -Detail "⚠️ 找不到上一班的狀態檔，沒有東西可歸檔——第一次啟用才正常"
     }
 }
 
@@ -359,17 +439,25 @@ $lock = $null
 try {
     $lock = [System.IO.File]::Open(
         $LockFile, [System.IO.FileMode]::OpenOrCreate,
-        [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+        [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::Read)
 } catch [System.IO.IOException] {
     Write-Skip '上一輪還在跑（鎖被佔），本輪跳過——不排隊、不硬上'
     exit 0        # ← 排程器看到的是「正常結束」，不是失敗
 }
 
 try {
-    # 誰拿著鎖、什麼時候拿的（跑到一半當掉時查得出來）
-    $w = New-Object System.IO.StreamWriter($lock)
-    $w.WriteLine("pid=$PID checkpoint=$Checkpoint started=$stamp")
-    $w.Flush()
+    $startedAt = [datetimeoffset]::Now.ToString('yyyy-MM-ddTHH:mm:sszzz')
+    $lockPayload = ((@{
+        schema_version = 2
+        pid            = $PID
+        checkpoint     = $Checkpoint
+        run_id         = $RunId
+        started_at     = $startedAt
+    } | ConvertTo-Json -Compress) + "`n")
+    $lockBytes = [Text.UTF8Encoding]::new($false).GetBytes($lockPayload)
+    $lock.SetLength(0)
+    $lock.Write($lockBytes, 0, $lockBytes.Length)
+    $lock.Flush()
 
     # ── 開工前硬檢查：RT 嚴禁無頭（headless）跑（2026-09-15 訂案）──────────
     # RT／AP／NS／ENEX／ABC 共用同一個 s2_mcp.json 啟動的瀏覽器，沒有「只切 RT」
@@ -379,7 +467,8 @@ try {
     if (Test-Path $McpConfig) {
         $mcpRaw = Get-Content $McpConfig -Raw -Encoding UTF8
         if ($mcpRaw -match '--headless') {
-            Write-Run "ABORT`t偵測到 $McpConfig 含 --headless，RT 嚴禁無頭跑，本輪整個擋下不放行"
+            $terminalOk = Write-Run -Event ABORT -Detail "偵測到 $McpConfig 含 --headless，RT 嚴禁無頭跑，本輪整個擋下不放行"
+            if ($terminalOk) { $script:TerminalWritten = $true }
             throw "s2_mcp.json 含 --headless，違反『RT 嚴禁無頭跑』鐵律，請拿掉該旗標後再重跑"
         }
     }
@@ -503,7 +592,7 @@ try {
     # （後面永遠不會有對應的 DONE），還順手生一個 0 bytes 的 掃帶log-*.txt。
     # 手動清過兩次。驗測試設定時 DryRun 要跑很多次，這條不修就等於紀錄檔報廢。
     if ($DryRun) {
-        Write-Host "--- DryRun [$Checkpoint] provider=$EffectiveProvider model=$Model effort=$Effort NoToolBan=$NoToolBan NoBashGuard=$NoBashGuard NoMinBoot=$NoMinBoot cwd=$scratchCwd（不寫 _輪次紀錄）---"
+        Write-Host "--- DryRun [$Checkpoint] run_id=$RunId checkpoint_label=$CheckpointLabel provider=$EffectiveProvider model=$Model effort=$Effort NoToolBan=$NoToolBan NoBashGuard=$NoBashGuard NoMinBoot=$NoMinBoot cwd=$scratchCwd（不寫 _輪次紀錄）---"
         Write-Host "組出來的 claude 參數："
         Write-Host ($claudeArgs -join ' ')
         Write-Host "以下是會送出的 prompt 前 400 字："
@@ -511,8 +600,8 @@ try {
         exit 0
     }
 
-    Write-Run "START`tmodel=$Model`teffort=$Effort`tprovider=$EffectiveProvider$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
-    Write-Host "START [$Checkpoint] provider=$EffectiveProvider model=$Model effort=$Effort log=$runLog"
+    $null = Write-Run -Event START -Detail "model=$Model`teffort=$Effort`tprovider=$EffectiveProvider$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
+    Write-Host "START [$Checkpoint] run_id=$RunId provider=$EffectiveProvider model=$Model effort=$Effort log=$runLog"
 
     # Provider=gemini：dot-source 借值＋確保本機 proxy 在監聽，只設定這個
     # process scope 的 ANTHROPIC_* 四個環境變數。金鑰本身不在這支腳本裡，
@@ -524,7 +613,8 @@ try {
             . $GeminiEnvScript
             $geminiEnvSet = $true
         } catch {
-            Write-Run "Gemini 環境設定失敗，本輪中止：$($_.Exception.Message)"
+            $terminalOk = Write-Run -Event ABORT -Detail "Gemini 環境設定失敗，本輪中止：$($_.Exception.Message)"
+            if ($terminalOk) { $script:TerminalWritten = $true }
             throw
         }
     }
@@ -549,7 +639,7 @@ try {
         $OutputEncoding = [System.Text.Encoding]::UTF8
         $encodingChanged = $true
     } catch {
-        Write-Run "UTF-8 輸出編碼設定失敗，不影響本輪（log 可能又變亂碼）：$($_.Exception.Message)"
+        $null = Write-Run -Event DIAG -Detail "UTF-8 輸出編碼設定失敗，不影響本輪（log 可能又變亂碼）：$($_.Exception.Message)"
     }
     try {
         # R25 附帶（2026-09-07）：s2_state.py 的 tc_rejected／tc_calls 桶鍵優先讀這個，
@@ -574,7 +664,7 @@ try {
                 [Console]::OutputEncoding = $prevConsoleEncoding
                 $OutputEncoding = $prevOutputEncoding
             } catch {
-                Write-Run "還原主控台編碼失敗，不影響本輪：$($_.Exception.Message)"
+                $null = Write-Run -Event DIAG -Detail "還原主控台編碼失敗，不影響本輪：$($_.Exception.Message)"
             }
         }
     }
@@ -605,15 +695,15 @@ try {
                     }
                 }
                 $secsToFail = [Math]::Round(((Get-Date) - $t0).TotalSeconds, 1)
-                Write-Run "Gemini 撞429診斷：距開工 ${secsToFail}s、log內tool_result筆數=$readCallCount、粗估累積字元數=$readCharsTotal、原始log另存於 $failCopy"
+                $null = Write-Run -Event DIAG -Detail "Gemini 撞429診斷：距開工 ${secsToFail}s、log內tool_result筆數=$readCallCount、粗估累積字元數=$readCharsTotal、原始log另存於 $failCopy"
             } catch {
-                Write-Run "Gemini 撞429診斷紀錄失敗（不影響本輪）：$($_.Exception.Message)"
+                $null = Write-Run -Event DIAG -Detail "Gemini 撞429診斷紀錄失敗（不影響本輪）：$($_.Exception.Message)"
             }
             if ($NoAutoClaudeFallback) {
-                Write-Run "Gemini 執行中撞 429，離開碼=$code，已依 -NoAutoClaudeFallback 不自動改 Claude，交由外部處理（本輪不補跑）"
+                $null = Write-Run -Event DIAG -Detail "Gemini 執行中撞 429，離開碼=$code，已依 -NoAutoClaudeFallback 不自動改 Claude，交由外部處理（本輪不補跑）"
                 Write-Host "Gemini 撞 429，-NoAutoClaudeFallback 生效，不自動改 Claude——請外部（例如 claudeg3）接手本輪。"
             } else {
-                Write-Run "Gemini 執行中撞 429，離開碼=$code，改用 Claude 補跑本輪一次"
+                $null = Write-Run -Event DIAG -Detail "Gemini 執行中撞 429，離開碼=$code，改用 Claude 補跑本輪一次"
                 Write-Host "Gemini 撞 429，改用 Claude 重跑本輪..."
                 $EffectiveProvider = 'claude'
                 $Model = 'sonnet'
@@ -624,7 +714,7 @@ try {
                     claude @claudeArgs *> $runLog
                     $code = $LASTEXITCODE
                 } catch {
-                    Write-Run "Claude 補跑也失敗：$($_.Exception.Message)"
+                    $null = Write-Run -Event DIAG -Detail "Claude 補跑也失敗：$($_.Exception.Message)"
                 }
             }
         }
@@ -653,7 +743,8 @@ try {
                    Sort-Object LastWriteTime -Descending) {
         try {
             $j = Get-Content $f.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
-            $hasItems = @($j.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint }).Count -gt 0
+            $sel = Get-RunItems $j.items
+            $hasItems = @($sel.Items).Count -gt 0
             if ($j.checkpoint -eq $Checkpoint) { $statePath = $f.FullName; $st = $j; break }
             if ($hasItems) {
                 # 有本輪的素材、但頂層沒推進＝忘了 set-top。
@@ -664,9 +755,13 @@ try {
                 try {
                     python "$PSScriptRoot\s2_state.py" --file $statePath set-top checkpoint $Checkpoint
                     $st.checkpoint = $Checkpoint
+                    $srArgs = @('--file', $statePath, 'set-run', '--checkpoint', $Checkpoint, '--run-id', $RunId)
+                    if ($CheckpointLabel) { $srArgs += @('--checkpoint-label', $CheckpointLabel) }
+                    python "$PSScriptRoot\s2_state.py" @srArgs
+                    $st.run_id = $RunId
                     $topStaleAutoFixed = $true
                 } catch {
-                    Write-Run "自動補 set-top 失敗（$($_.Exception.Message)）——仍需人工補跑 ``s2_state.py set-top checkpoint $Checkpoint``"
+                    $null = Write-Run -Event DIAG -Detail "自動補 set-top／set-run 失敗（$($_.Exception.Message)）——仍需人工補跑 ``s2_state.py set-top checkpoint $Checkpoint``／``set-run``"
                 }
                 break
             }
@@ -674,11 +769,17 @@ try {
     }
     $added = -1
     $txtOk = $false
+    $runSel = $null
     if ($statePath) {
         $mmdd = [System.IO.Path]::GetFileName($statePath).Split('-')[0]
         $txtOk = Test-Path (Join-Path $StateDir "$mmdd`晚班交接.txt")
-        # 只算本輪新增的，不是整份總數——否則舊素材會把空輪次蓋過去
-        $added = @($st.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint }).Count
+        # 只算本輪 tuple 命中的，不是整份總數——否則舊素材會把空輪次蓋過去
+        $runSel = Get-RunItems $st.items
+        $added = @($runSel.Items).Count
+        $diagIds = @($runSel.Issues | ForEach-Object { $_.id } | Where-Object { $_ } | Select-Object -Unique)
+        if ($diagIds.Count -gt 0) {
+            $null = Write-Run -Event DIAG -Detail ("code=RUN_ITEM_TUPLE_MISMATCH ids=$($diagIds -join ',')")
+        }
     }
 
     # 對帳留痕檢查（2026-08-24 補）：s2_audit.py 有沒有跑過、寫進 reconcile_log。
@@ -729,8 +830,11 @@ try {
                 "若該站本輪整站進不去（登出／連不上）那是正常的，看 needs-review 即可；" +
                 "否則快照多半還在暫存夾，補跑 ``s2_audit.py --mmdd $mmdd --rt-list <快照> --ap-list <快照> --ns-list <快照>``"
     }
-    Write-Run ("DONE`t離開碼=$code`t耗時=${mins}分`t本輪新增=$added 則`ttxt=$txtOk" +
-               $(if ($bad) { "`t⚠️ $($bad -join '；')" } else { '' }))
+    $doneDetail = "離開碼=$code`t耗時=${mins}分`t本輪新增=$added 則`ttxt=$txtOk" +
+                  $(if ($bad) { "`t⚠️ $($bad -join '；')" } else { '' })
+    $terminalOk = Write-Run -Event DONE -Detail $doneDetail
+    if (-not $terminalOk) { throw "寫 DONE 失敗" }
+    $script:TerminalWritten = $true
 
     # ── Task 1 基線量測（2026-08-12）：讀剛跑完的 transcript 記 token/工具呼叫數 ──
     # 不帶 -session：剛跑完 claude，這一刻 transcript 目錄裡最新的檔案就是它。
@@ -745,7 +849,9 @@ try {
         # A1（2026-08-17）：把 launcher 旗標一起記進遙測。規則／旗標改了卻沒留痕，
         # 下一輪數字變好會被誤算成腳本的功勞（0817 的 13c §1a 澄清就差點如此）。
         $metricsArgs = @('--checkpoint', $Checkpoint,
+                         '--run-id', $RunId,
                          '--flags', "model=$Model;effort=$Effort;TestMode=$([bool]$TestMode);NoToolBan=$([bool]$NoToolBan);NoBashGuard=$([bool]$NoBashGuard);NoMinBoot=$([bool]$NoMinBoot)")
+        if ($CheckpointLabel) { $metricsArgs += @('--checkpoint-label', $CheckpointLabel) }
         if ($scratchCwd) {
             $sanitized = $scratchCwd -replace '[^a-zA-Z0-9]', '-'
             $metricsArgs += @('--transcript-dir', "$env:USERPROFILE\.claude\projects\$sanitized")
@@ -753,7 +859,7 @@ try {
         python "$PSScriptRoot\s2_token_metrics.py" @metricsArgs 2>&1 |
             Out-Null
     } catch {
-        Write-Run "量測失敗（不影響本輪）：$($_.Exception.Message)"
+        $null = Write-Run -Event DIAG -Detail "量測失敗（不影響本輪）：$($_.Exception.Message)"
     }
 
     # ── 收工推播（2026-08-09 使用者要求「每一輪掃完也通知」）──────────
@@ -766,7 +872,7 @@ try {
         . "$PSScriptRoot\s2_notify.ps1"
         $srcTxt, $missTxt = '', ''
         if ($statePath) {
-            $mine = @($st.items | Where-Object { $_.first_seen_checkpoint -eq $Checkpoint })
+            $mine = if ($runSel) { @($runSel.Items) } else { @((Get-RunItems $st.items).Items) }
             # ⚠️ 外層的 $_ 會被內層 Where-Object 蓋掉，一定要先接成變數
             $srcTxt = (@('NS', 'AP', 'RT') | ForEach-Object {
                 $s = $_
@@ -790,12 +896,11 @@ try {
             -Title "S2 $Checkpoint" `
             -Tags $(if ($bad) { 'warning' } else { 'white_check_mark' }) `
             -Priority $(if ($bad) { 'high' } else { 'low' })
-        if ($err) { Write-Run "推播失敗（不影響本輪）：$err" }
+        if ($err) { $null = Write-Run -Event DIAG -Detail "推播失敗（不影響本輪）：$err" }
     } catch {
-        Write-Run "推播例外（不影響本輪）：$($_.Exception.Message)"
+        $null = Write-Run -Event DIAG -Detail "推播例外（不影響本輪）：$($_.Exception.Message)"
     }
     if ($bad) {
-        Write-Line $skipLog "$stamp`t$Checkpoint`t異常：$($bad -join '；') 見 $runLog"
         Write-Host "*** 異常：$($bad -join '；') ***"
     }
     exit $code
@@ -804,7 +909,11 @@ catch {
     # ⚠️ 沒有這段的話，**外殼自己爆掉那一輪會完全無聲**——0808 20:49 手動測試就是
     # claude 跑完、狀態檔也寫了，但外殼在收工前死掉，事後只能靠比對檔案時間去猜。
     # 視窗藏起來之後更沒有第二個管道，所以例外一定要落檔再往外丟。
-    Write-Run "CRASH`t$($_.Exception.Message)"
+    # 收工異常寫 DONE.detail，不寫 _跳過紀錄.txt。CRASH 只在尚未寫過終態時補一筆。
+    if (-not $script:TerminalWritten) {
+        $crashOk = Write-Run -Event CRASH -Detail $($_.Exception.Message)
+        if ($crashOk) { $script:TerminalWritten = $true }
+    }
     throw
 }
 finally {

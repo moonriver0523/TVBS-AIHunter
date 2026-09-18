@@ -115,7 +115,8 @@ def _lookup_status(have, item_id):
 
 def _load_items(path):
     try:
-        items, _shell = _load_raw_any(path)
+        loaded = _load_raw_any(path)
+        items = loaded.items
     except ValueError as e:
         print(f"✗ 卸殼失敗：{e}", file=sys.stderr)
         sys.exit(1)

@@ -139,10 +139,10 @@ report("端到端：字幕版素材入庫後沒有 needs_review",
 report("端到端：字幕版不把 sb_count=0 寫進狀態檔（否則稽核③ 換個地方再報一次）",
        "sb_count" not in it, f"實得 {it.get('sb_count')!r}")
 
-items = run_batch([{"id": "AP123", "source": "AP", "checkpoint": "0809-0100",
+items = run_batch([{"id": "AP1234567", "source": "AP", "checkpoint": "0809-0100",
                     "status": "has_script", "entry": BITE_ENTRY,
                     "sb_count": 0, "src_text": AP_LIVE}])
-it = items["AP123"]
+it = items["AP1234567"]
 report("端到端：AP Live Choice 仍然被標 needs_review（防修過頭）",
        "needs_review" in it)
 report("端到端：AP Live Choice 的 sb_count=0 有存進狀態檔",

@@ -22,6 +22,7 @@ import s2_pending
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import s2_parse as sp  # noqa: E402  raw_entry → 結構化欄位（寫入時自動推導）
 import s2_pretag as pretag  # noqa: E402  機械 T/C 建議＋涉臺提醒＋lint，見 A31
+import s2_material_schema as schema  # noqa: E402  ID writer / lookup（scoped 1259）
 
 # ⚠️ 用 reconfigure 不用 TextIOWrapper：包第二層時（例如 s2_state 匯入 s2_validate）
 # 舊寫法會讓其中一個 wrapper 被回收時關掉底層 buffer，整支腳本以 "I/O operation on
@@ -203,8 +204,50 @@ def save(state, path, allow_create=False):
     os.replace(tmp, path)
 
 
+CHECKPOINT_RE = schema.CHECKPOINT_RE
+
+
+def lookup_id(value, state=None):
+    """Existing-key dispatcher. RTV→RT lookup alias; does not declare a legal new writer ID."""
+    existing = None
+    if isinstance(state, dict):
+        existing = state["items"] if "items" in state else state
+    return schema.canonicalize_id_for_lookup(value, existing)
+
+
+def lookup_ids(csv, state=None):
+    return [lookup_id(x, state) for x in str(csv).split(",") if str(x).strip()]
+
+
+def write_new_id(value, source):
+    """Strict writer. Returns (canonical, issue)."""
+    src_fam = schema.source_token_family(source)
+    id_fam = schema.detect_id_family(value, lookup_alias=False)
+    fam = id_fam or src_fam
+    if not fam:
+        return None, schema.ValidationIssue(
+            code="FAMILY_UNKNOWN", severity="blocking", owner="schema.id",
+            id=None if value is None else str(value),
+            message=f"無法判定 family：id={value!r} source={source!r}")
+    canon, issue = schema.validate_material_id_for_write(value, fam)
+    if issue:
+        return None, issue
+    issue = schema.validate_source_for_write(canon, source)
+    if issue:
+        return None, issue
+    return canon, None
+
+
+def _reject_issue(issue):
+    print(f"ERROR: {issue.code} {issue.message}")
+    sys.exit(2)
+
+
 def norm_id(s):
-    return s.strip().replace("RTV", "RT", 1) if s.strip().startswith("RTV") else s.strip()
+    """Deprecated shim. New code must use lookup_id / write_new_id."""
+    import warnings
+    warnings.warn("norm_id 已廢棄，請改 lookup_id / write_new_id", DeprecationWarning, 2)
+    return schema.canonicalize_id_for_lookup(s)
 
 
 def scratch_dir(mmdd, base_dir=None):
@@ -257,6 +300,12 @@ def cmd_resume(state, args):
     print(f"狀態檔:{os.path.basename(args.file)} 共{len(items)}則 pending:{len(pend)} "
           f"上次render後有變動:{len(todo)} 待人工:{len(review)}")
     print(f"最近檢查點:{cps[-1] if cps else '無'}｜上次render:{last_render or '（尚未）'}")
+    missing_src = [i for i, v in items.items()
+                   if v.get("src_text_missing") or (
+                       v.get("source") in schema.SRC_TEXT_POLICY
+                       and schema.src_text_missing(v.get("source"), v.get("src_text")))]
+    if missing_src:
+        print(f"原文待補:{len(missing_src)}")
     if pend:
         print("pending: " + ",".join(sorted(pend)))
     if review:
@@ -268,7 +317,7 @@ def cmd_resume(state, args):
 
 
 def cmd_diff(state, args):
-    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    ids = lookup_ids(args.ids, state)
     new, seen = [], []
     for i in ids:
         if i in state["items"]:
@@ -309,6 +358,42 @@ def read_entry(args):
             sys.exit(2)
     print("ERROR: 需要 --entry（行內短內容）或 --entry-file（長內容）")
     sys.exit(2)
+
+
+def _cli_src_text(args):
+    """解 --src-text／--src-text-file／--clear-src-text。回 (有給, 值)。UNSET＝沒給。"""
+    bits = []
+    if getattr(args, "clear_src_text", False):
+        bits.append("")
+    st = getattr(args, "src_text", schema.UNSET)
+    if st is not schema.UNSET:
+        bits.append("" if st is None else st)
+    path = getattr(args, "src_text_file", None)
+    if path:
+        try:
+            with open(path, encoding="utf-8-sig") as f:
+                bits.append(f.read().strip())
+        except FileNotFoundError:
+            print(f"ERROR: --src-text-file 找不到檔案：{path}（沒有 stdin 慣例，"
+                  f"要傳內容請用 --src-text 或先用 Write 落成實際檔案再指路徑）")
+            sys.exit(2)
+    if len(bits) > 1:
+        print("ERROR: --src-text／--src-text-file／--clear-src-text 擇一")
+        sys.exit(2)
+    if not bits:
+        return False, None
+    return True, bits[0]
+
+
+def _apply_src_only(it, src_text):
+    """只寫 src_text，不動 raw_entry／timestamps／needs_review／derive。
+    blocking 回 ValidationIssue；成功回 None（advisory 只設 flag）。"""
+    issue = schema.validate_src_text(it.get("source"), src_text)
+    if issue and issue.severity == "blocking":
+        return issue
+    it["src_text"] = src_text
+    schema.sync_src_text_missing(it)
+    return None
 
 
 # NS `footageType` → 有無訪問聲音（2026-08-04 依 0731–0804 全庫存交叉統計訂定，
@@ -444,6 +529,13 @@ def new_item(source, checkpoint, status, entry, sb_count=None, src_text=None,
         "compiled": None,
         "category": None,
     }
+    rid = (os.environ.get("S2_RUN_ID") or "").strip()
+    if schema.is_uuid_v4(rid):
+        it["first_seen_run_id"] = rid
+        it["last_checked_run_id"] = rid
+    lab = (os.environ.get("S2_CHECKPOINT_LABEL") or "").strip()
+    if lab:
+        it["first_seen_checkpoint_label"] = lab
     # sb_count 存進狀態檔（2026-08-09）：在此之前它只活在 batch 中間檔裡，
     # 而 batch **停在送出當下、事後不回寫**——素材由 pending 轉正、站方補上完整稿之後
     # sb_count 就過期了，稽核③ 會對同一則**永久重複誤報**假 BITE
@@ -454,7 +546,7 @@ def new_item(source, checkpoint, status, entry, sb_count=None, src_text=None,
     # src_text／footage_type 也要進狀態檔（2026-08-12 修，實錯：兩者原本只活在
     # batch 中間檔裡，new_item() 沒有對應參數，add-batch／add 送進來的值全被丟棄——
     # §2「每筆必帶 src_text／footage_type」形同虛設，離線查證與稽核③失去依據）。
-    if src_text:
+    if src_text is not None:
         it["src_text"] = src_text
     if footage_type:
         it["footage_type"] = footage_type
@@ -466,11 +558,14 @@ def new_item(source, checkpoint, status, entry, sb_count=None, src_text=None,
     # 結構化欄位由腳本推導（2026-08-04 新增，見 s2_parse）：agent 完全無感、
     # 不必多寫一份。解析失敗只標 parse_ok:false，**不擋入庫**。
     sp.derive(it)
+    schema.sync_src_text_missing(it)
     return it
 
 
 def cmd_add(state, args):
-    i = norm_id(args.id)
+    i, issue = write_new_id(args.id, args.source)
+    if issue:
+        _reject_issue(issue)
     if i in state["items"]:
         print(f"ERROR: {i} 已存在，要更新內容請用 update-entry")
         sys.exit(2)
@@ -565,19 +660,13 @@ def _tc_as_str(tc):
 GATED_SOURCES = ("RT", "NS", "AP")
 
 
-def _reject_bare_array(data, is_new_format, auto_register):
-    """P1b-2 硬上線：三站的 batch 一律要帶新格式外殼，純陣列當場退回。
-
-    ⚠️ 這個錯誤訊息是 04:30 那種無人看的輪次唯一的救生索，所以寫成**可以直接照抄
-    的做法**，不是「請參閱 13c2」。最小修法是把陣列包一層殼，不必回頭跑 `build`。
-    """
-    if is_new_format or auto_register:
-        return
-    hit = sorted({str(e.get("source") or "").upper() for e in data
-                  if isinstance(e, dict)} & set(GATED_SOURCES))
-    if not hit:
-        return
-    print("ERROR: " + "／".join(hit) + " 的 batch 不接受純陣列（P1b-2，2026-09-08）。")
+def _reject_bare_gated(gated_rows):
+    """P1b-2：bare array 只要三訊號任一命中 AP/RT/NS，整批 exit 2、零副作用。"""
+    print("ERROR: 純陣列含 AP／RT／NS 三訊號（P1b-2），整批未寫入。")
+    for pr in gated_rows:
+        print(f"  第{pr.index}筆 id={pr.raw_id} id_family={pr.id_family} "
+              f"incoming_source_family={pr.incoming_source_family} "
+              f"existing_item_family={pr.existing_item_family}")
     print("  原因：純陣列不過 A10 P1b 新題閘門，開了沒登記的中主題不會被擋，")
     print("        登記簿跟實際用的名稱會脫鉤（0908-0100 輪 48 題有 43 題未登記）。")
     print("  改法：把整個陣列包成下面這個形狀重送，其餘欄位一個字都不用動——")
@@ -588,6 +677,7 @@ def _reject_bare_array(data, is_new_format, auto_register):
     print("  送出後被閘門擋下的會印 🆕 清單：原檔補上那幾題的 charter 重送即可，")
     print("  已經入庫的不會重複新增，只補分類（救援路徑）。命名三判準見 13f。")
     print("  ⛔ 三站送 add-batch 的**任何**檔都要帶殼，補稿／改稿的小批次也一樣。")
+    print("  --auto-register 只解除這個 shape gate，不解除 SOURCE_ID_MISMATCH。")
     sys.exit(2)
 
 
@@ -618,7 +708,27 @@ def cmd_add_batch(state, args):
     if not isinstance(data, list):
         print("ERROR: --entries 需為 JSON 陣列（或含 entries 陣列的物件）")
         sys.exit(2)
-    _reject_bare_array(data, is_new_format, getattr(args, "auto_register", False))
+    # ── 階段 1：pure preflight（不得寫 state／registry／run ID）────────
+    auto_register = getattr(args, "auto_register", False)
+    pf_rows = []
+    for n, e in enumerate(data, 1):
+        if isinstance(e, dict):
+            pf_rows.append(schema.classify_preflight_row(n, e, state["items"]))
+    gated_rows = [pr for pr in pf_rows if schema.row_is_gated(pr)]
+    if not is_new_format and gated_rows and not auto_register:
+        _reject_bare_gated(gated_rows)
+    blocking = []
+    for pr, e in zip(
+            pf_rows,
+            [e for e in data if isinstance(e, dict)]):
+        for issue in schema.preflight_row_issues(pr, e, state["items"]):
+            blocking.append((pr, issue))
+    if blocking:
+        print("ERROR: add-batch preflight 擋下，整批未寫入。")
+        for pr, issue in blocking:
+            print(f"  第{pr.index}筆 {pr.raw_id}: {issue.code} {issue.message}")
+        sys.exit(2)
+    # ── 階段 2：apply ──────────────────────────────────────────────
     added, skipped, notes, flagged, fmt = [], [], [], [], []
     refilled = []  # P1b-2：已在庫但沒分類、這批帶了分類 → 只補分類（閘門救援路徑）
     no_src = []   # R11 防呆（2026-08-13）：漏帶 src_text 要當場喊，不能等稽核翻舊帳
@@ -708,8 +818,9 @@ def cmd_add_batch(state, args):
         if not isinstance(e["entry"], str):
             skipped.append(f"{e['id']}: entry 須為字串")
             continue
-        i = norm_id(str(e["id"]))
-        if i in state["items"]:
+        existing_key = lookup_id(str(e["id"]), state)
+        if existing_key in state["items"]:
+            i = existing_key
             # P1b-2 救援路徑（2026-09-07）：閘門把 category 留空的那批，agent 照 🆕
             # 提示補上 new_topics 重送時素材已在庫——若只回「已存在」，🆕 教的做法
             # 永遠做不到，agent 會在這裡打轉。已在庫且**沒有分類**、這筆又帶了
@@ -717,21 +828,25 @@ def cmd_add_batch(state, args):
             _cur = state["items"][i] or {}
             _cur_tc = _cur.get("tc") or {}
             if e.get("category") and not _cur.get("category"):
-                err = _set_one_category(state, i, _cat_as_str(e["category"]), strict=False,
-                                        quiet=True, registry=reg, topic_mode=topic_mode,
-                                        gated=gated, auto_registered=auto_registered)
+                _cid, err = _set_one_category(state, i, _cat_as_str(e["category"]), strict=False,
+                                              quiet=True, registry=reg, topic_mode=topic_mode,
+                                              gated=gated, auto_registered=auto_registered)
                 if err is GATED:
                     pass                      # 仍未登記：留給下方 🆕 彙整，⛔ 不算「補分類」
                 elif err:
                     tc_bad.append(err)
                 else:
-                    cat_done.append(i)
-                    refilled.append(i)        # 只有真的寫進 category 才算補到
+                    cat_done.append(_cid)
+                    refilled.append(_cid)        # 只有真的寫進 category 才算補到
                     if e.get("tc") and not (_cur_tc.get("T") or _cur_tc.get("C")):
-                        err = _set_one_tc(state, i, _tc_as_str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
-                        (tc_bad if err else tc_done).append(err or i)
+                        _tid, err = _set_one_tc(state, i, _tc_as_str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
+                        (tc_bad if err else tc_done).append(err or _tid)
             else:
                 skipped.append(f"{i}: 已存在（要更新請用 update-entry）")
+            continue
+        i, issue = write_new_id(str(e["id"]), e.get("source"))
+        if issue:
+            skipped.append(f"{e.get('id')}: {issue.code} {issue.message}")
             continue
         # 🎯 BITE 機械兜底：**照收，把疑慮寫進 needs_review**（2026-08-05 訂正，
         # 原本是 continue 拒收——那會靜默丟掉素材，理由見 bite_doubt()）。
@@ -775,16 +890,16 @@ def cmd_add_batch(state, args):
         # A10 P1b：新題閘門擋下（`GATED`）**不是**格式錯誤，不進 tc_bad
         # 那個「退回」桶——素材已入庫，只是分類欄暫時不寫，見 `gated` 彙整。
         if e.get("category"):
-            err = _set_one_category(state, i, _cat_as_str(e["category"]), strict=False, quiet=True,
-                                    registry=reg, topic_mode=topic_mode,
-                                    gated=gated, auto_registered=auto_registered)
+            _cid, err = _set_one_category(state, i, _cat_as_str(e["category"]), strict=False, quiet=True,
+                                          registry=reg, topic_mode=topic_mode,
+                                          gated=gated, auto_registered=auto_registered)
             if err is GATED:
                 pass
             else:
-                (tc_bad if err else cat_done).append(err or i)
+                (tc_bad if err else cat_done).append(err or _cid)
         if e.get("tc"):
-            err = _set_one_tc(state, i, _tc_as_str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
-            (tc_bad if err else tc_done).append(err or i)
+            _tid, err = _set_one_tc(state, i, _tc_as_str(e["tc"]), ok_t, ok_c, rewrites, _sp_names)
+            (tc_bad if err else tc_done).append(err or _tid)
         # A31：缺 tc 的印機械建議；涉臺詞表命中且沒有 🔴/🟡 的提醒至少標 🟡（13e）。
         # 純提示、不影響入庫，讀到 e["suggest"]（build 算好的）就直接用，沒有
         # 才現算——兩條路徑都要顧，因為 add-batch 也常被直接呼叫、跳過 build。
@@ -892,7 +1007,7 @@ def cmd_add_batch(state, args):
 
 
 def apply_update(state, i, entry, sb_count=None, status=None, checkpoint=None,
-                 footage_type=None, src_text=None):
+                 footage_type=None, src_text=schema.UNSET):
     """把一則的 raw_entry 覆寫掉。單筆與批次共用同一份邏輯，回傳 (doubt, fmt問題清單)。
 
     ⚠️ **不在這裡 save**：批次要的是「全部改完只寫一次檔」，寫檔次數等於
@@ -910,9 +1025,9 @@ def apply_update(state, i, entry, sb_count=None, status=None, checkpoint=None,
         it["sb_count"] = sb_count
     if status:
         it["script_status"] = status
-    if src_text:
-        # R9（2026-08-13）：站方補完整稿／整批漏帶的回補時機。沒帶就不動舊值，
-        # 跟 sb_count 同一套「None＝沒帶」約定。
+    if src_text is not schema.UNSET:
+        # R9（2026-08-13）：站方補完整稿／整批漏帶的回補時機。沒帶（UNSET）就不動舊值。
+        # 空字串是有給的 explicit empty，不能靠 truthiness 跳過。
         it["src_text"] = src_text
     it["entry_updated"] = checkpoint or it.get("last_checked_checkpoint", "")
     it["entry_updated_ts"] = now_ts()
@@ -921,6 +1036,7 @@ def apply_update(state, i, entry, sb_count=None, status=None, checkpoint=None,
         it["needs_review"] = doubt
     else:
         it.pop("needs_review", None)     # 改好了就自動結案，不用手動 done
+    schema.sync_src_text_missing(it)
     return doubt, [f"{i}: {r}" for r in fmt_issues(it.get("raw_entry") or "")]
 
 
@@ -928,26 +1044,46 @@ def cmd_update_entry(state, args):
     """單筆覆寫；帶 `--batch` 就走批次（見 cmd_update_batch 的說明）。"""
     if getattr(args, "batch", None):
         return cmd_update_batch(state, args)
-    # ⚠️ 順序不能顛倒：`norm_id(None)` 會炸。先確認有帶 id 再正規化。
+    # ⚠️ 順序不能顛倒：lookup 對 None 沒意義。先確認有帶 id 再正規化。
     if not args.id:
         print("ERROR: 需要 --id（單筆）或 --batch（批次）")
         sys.exit(2)
-    i = norm_id(args.id)
+    i = lookup_id(args.id, state)
     if i not in state["items"]:
         print(f"ERROR: {i} 不存在，請先 add")
         sys.exit(2)
-    src = getattr(args, "src_text", None)
-    if getattr(args, "src_text_file", None):
-        try:
-            with open(args.src_text_file, encoding="utf-8-sig") as f:
-                src = f.read().strip()
-        except FileNotFoundError:
-            print(f"ERROR: --src-text-file 找不到檔案：{args.src_text_file}（沒有 stdin 慣例，"
-                  f"要傳內容請用 --src-text 或先用 Write 落成實際檔案再指路徑）")
+    has_entry = args.entry is not None or bool(getattr(args, "entry_file", None))
+    src_given, src_val = _cli_src_text(args)
+    extra = any([
+        getattr(args, "status", None),
+        getattr(args, "checkpoint", None),
+        getattr(args, "sb_count", None) is not None,
+        getattr(args, "footage_type", None),
+    ])
+    if not has_entry and not src_given:
+        print("ERROR: 需要 --entry（行內短內容）或 --entry-file（長內容）"
+              "，或 --src-text／--src-text-file／--clear-src-text")
+        sys.exit(2)
+    if src_given and not has_entry:
+        if extra:
+            print("ERROR: src-only 不可夾帶 --status／--checkpoint／--sb-count／--footage-type")
+            sys.exit(2)
+        issue = _apply_src_only(state["items"][i], src_val)
+        if issue:
+            print(f"ERROR: {issue.code} {issue.message}")
+            sys.exit(2)
+        save(state, args.file)
+        print(f"OK 已覆寫 {i}（{state['items'][i]['script_status']}）")
+        return
+    src_kw = src_val if src_given else schema.UNSET
+    if src_given:
+        issue = schema.validate_src_text(state["items"][i].get("source"), src_val)
+        if issue and issue.severity == "blocking":
+            print(f"ERROR: {issue.code} {issue.message}")
             sys.exit(2)
     doubt, fmt = apply_update(state, i, read_entry(args), args.sb_count,
                               args.status, args.checkpoint,
-                              getattr(args, "footage_type", None), src_text=src)
+                              getattr(args, "footage_type", None), src_text=src_kw)
     save(state, args.file)
     print(f"OK 已覆寫 {i}（{state['items'][i]['script_status']}）")
     report_fmt(fmt)
@@ -980,25 +1116,36 @@ def cmd_update_batch(state, args):
         sys.exit(2)
     done, skipped, flagged, fmt = [], [], [], []
     for n, e in enumerate(data, 1):
+        has_src_key = isinstance(e, dict) and "src_text" in e
         if not isinstance(e, dict) or not e.get("id") or not (
-                isinstance(e.get("entry"), str) or e.get("src_text")):
+                isinstance(e.get("entry"), str) or has_src_key):
             skipped.append(f"第{n}筆({e.get('id','?') if isinstance(e, dict) else '?'}): "
                            f"需要 id 與字串 entry（或只帶 src_text 走回補）")
             continue
-        i = norm_id(str(e["id"]))
+        i = lookup_id(str(e["id"]), state)
         if i not in state["items"]:
             skipped.append(f"{i}: 不存在（要新增請用 add-batch）")
             continue
         if not isinstance(e.get("entry"), str):
             # 只回補 src_text、不動稿子本體——R11 整批漏帶的回補路徑（2026-08-13）。
             # 不走 apply_update：那條會覆寫 raw_entry＋重推結構化欄位，回補原文不該動這些。
-            state["items"][i]["src_text"] = e["src_text"]
+            # 鍵存在就算數（空字串＝explicit empty），不能靠 truthiness。
+            issue = _apply_src_only(state["items"][i], e["src_text"])
+            if issue:
+                skipped.append(f"{i}: {issue.code} {issue.message}")
+                continue
             done.append(i)
             continue
+        src_kw = e["src_text"] if has_src_key else schema.UNSET
+        if has_src_key:
+            issue = schema.validate_src_text(state["items"][i].get("source"), e["src_text"])
+            if issue and issue.severity == "blocking":
+                skipped.append(f"{i}: {issue.code} {issue.message}")
+                continue
         doubt, issues = apply_update(
             state, i, e["entry"].strip(), e.get("sb_count"), e.get("status"),
             e.get("checkpoint") or getattr(args, "checkpoint", None),
-            e.get("footage_type"), src_text=e.get("src_text"))
+            e.get("footage_type"), src_text=src_kw)
         if doubt:
             flagged.append(f"{i}: {doubt}")
         fmt += issues
@@ -1198,7 +1345,7 @@ def cmd_patch_entry(state, args):
         print("ERROR: 至少要帶 --alert 或 --bite（兩者可同時）")
         sys.exit(2)
     sv = load_validate()
-    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    ids = lookup_ids(args.ids, state)
     if not ids:
         print("ERROR: --ids 是空的")
         sys.exit(2)
@@ -1768,7 +1915,7 @@ def _auto_charter(state, raw_id, fallback=""):
     「草稿」——`auto:true` 留痕，事後用 `topic-register` 覆寫即可，
     見計畫 P1b Task 2。
     """
-    it = (state.get("items") or {}).get(norm_id(raw_id)) or {}
+    it = (state.get("items") or {}).get(lookup_id(raw_id, state)) or {}
     summ = ((it.get("fields") or {}).get("summary") or "").strip()
     if not summ:
         summ = (fallback or it.get("raw_entry") or "").strip()
@@ -2062,21 +2209,21 @@ T_MAX = 3
 
 
 def _set_one_tc(state, raw_id, spec, ok_t, ok_c, notes=None, special=()):
-    """設定單筆 T/C。回傳錯誤訊息字串，成功回 None。
+    """設定單筆 T/C。回傳 (canonical_id, error)；成功時 error 為 None。
 
     spec 格式：`T1,T2/C1,C2`（T 與 C 以 `/` 分隔，各自以 `,` 分隔多個）。
     T 或 C 任一側可留空（例：`/臺灣` 只設 C），但不能兩側都空。
     """
-    i = norm_id(raw_id)
+    i = lookup_id(raw_id, state)
     if i not in state["items"]:
-        return f"{i}: 不存在"
+        return i, f"{i}: 不存在"
     if "/" not in spec:
-        return f"{i}: tc 需為「T1,T2/C1,C2」（例：政治,社會/臺灣）"
+        return i, f"{i}: tc 需為「T1,T2/C1,C2」（例：政治,社會/臺灣）"
     tside, cside = spec.split("/", 1)
     T = [x.strip() for x in tside.split(",") if x.strip()]
     C = [x.strip() for x in cside.split(",") if x.strip()]
     if not T and not C:
-        return f"{i}: T 與 C 不能都是空的"
+        return i, f"{i}: T 與 C 不能都是空的"
     # 先正規化再驗字典：墨西哥／其他地區是**已刪的舊桶**，改寫比退件好——
     # 退件會逼 agent 多一次呼叫（≈$0.07），而正確答案是唯一的、沒有歧義。
     T, _tnotes = normalize_t(T)
@@ -2086,19 +2233,19 @@ def _set_one_tc(state, raw_id, spec, ok_t, ok_c, notes=None, special=()):
         notes.append(f"{i}: " + "、".join(_notes))
     bad = [x for x in T if x not in ok_t] + [x for x in C if x not in ok_c]
     if bad:
-        return f"{i}: 不在 TC-字典 裡的名稱 {'／'.join(bad)}"
+        return i, f"{i}: 不在 TC-字典 裡的名稱 {'／'.join(bad)}"
     fixed = [x for x in T if x not in set(special)]
     if len(fixed) > T_MAX:
-        return (f"{i}: T 掛了 {len(fixed)} 個（{'、'.join(fixed)}），上限 {T_MAX} 個"
-                f"（機動 T 不計）。挑掉次要的重下這一則——判準是"
-                f"**拿掉它這則就分類錯了**，答不出來就不該掛。")
+        return i, (f"{i}: T 掛了 {len(fixed)} 個（{'、'.join(fixed)}），上限 {T_MAX} 個"
+                   f"（機動 T 不計）。挑掉次要的重下這一則——判準是"
+                   f"**拿掉它這則就分類錯了**，答不出來就不該掛。")
     tc = dict(state["items"][i].get("tc") or {})
     if T:
         tc["T"] = T
     if C:
         tc["C"] = C
     state["items"][i]["tc"] = tc
-    return None
+    return i, None
 
 
 def cmd_set_tc(state, args):
@@ -2156,8 +2303,8 @@ def cmd_set_tc(state, args):
             skipped.append(f"「{tok}」: 缺 =（格式 id=T1,T2/C1,C2）")
             continue
         i, spec = tok.split("=", 1)
-        err = _set_one_tc(state, i, spec, ok_t, ok_c, rewrites, _sp_names)
-        (skipped if err else done).append(err or norm_id(i))
+        cid, err = _set_one_tc(state, i, spec, ok_t, ok_c, rewrites, _sp_names)
+        (skipped if err else done).append(err or cid)
 
     # 拒絕要留得下痕跡：遙測只記呼叫次數、不記離開碼，整份 jsonl 沒有欄位
     # 承載「這次失敗了」。落在狀態檔 needs_review（既有人工複核通道）。
@@ -2242,7 +2389,7 @@ def cmd_set_category(state, args):
             print("ERROR: 單筆需 --id 與 --cat；批次用 --pairs \"id=大分類/中主題;...\"")
             sys.exit(2)
         _set_one_category(state, args.id, args.cat, strict=True, registry=reg,
-                          topic_mode=topic_mode, auto_registered=auto_registered)
+                          topic_mode=topic_mode, auto_registered=auto_registered)  # noqa: returns (cid, err); strict exits on err
         save(state, args.file)
         if auto_registered:
             save_registry(reg, getattr(args, "registry", None))
@@ -2259,9 +2406,9 @@ def cmd_set_category(state, args):
             skipped.append(f"「{tok}」: 缺 =（格式 id=大分類/中主題）")
             continue
         i, cat = tok.split("=", 1)
-        err = _set_one_category(state, i, cat, strict=False, registry=reg,
-                                topic_mode=topic_mode, auto_registered=auto_registered)
-        (skipped if err else done).append(err or norm_id(i))
+        cid, err = _set_one_category(state, i, cat, strict=False, registry=reg,
+                                     topic_mode=topic_mode, auto_registered=auto_registered)
+        (skipped if err else done).append(err or cid)
     if done:
         save(state, args.file)
     if auto_registered:
@@ -2318,7 +2465,7 @@ def _set_one_category(state, raw_id, cat, strict, quiet=False, registry=None,
     `gated`／`auto_registered` 都是呼叫端傳進來的 list，這裡只 append，
     不在這支印訊息——彙整與去重是呼叫端的事。
     """
-    i = norm_id(raw_id)
+    i = lookup_id(raw_id, state)
     if i not in state["items"]:
         msg = f"{i}: 不存在"
     elif "/" not in cat:
@@ -2339,18 +2486,18 @@ def _set_one_category(state, raw_id, cat, strict, quiet=False, registry=None,
             else:  # "gate"
                 if gated is not None:
                     gated.append((i, mid))
-                return GATED
+                return i, GATED
         c = {"大分類": big, "中主題": mid}
         if sub:
             c["小分題"] = sub
         state["items"][i]["category"] = c
         if not quiet:
             print(f"OK {i} category={big}／{mid}" + (f"／{sub}" if sub else ""))
-        return None
+        return i, None
     if strict:
         print("ERROR: " + msg)
         sys.exit(2)
-    return msg
+    return i, msg
 
 
 def _remind_missing_tc(state):
@@ -2766,7 +2913,7 @@ def cmd_set_mark(state, args):
     撈回的是稍早該收而漏掉的素材，照 checkpoint 會標成 `◇`（07:00–09:00 新增），
     但它們實際屬 `▲` 那個時段。標記寫進該則的 `mark` 欄位，render 一律優先採用。
     """
-    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    ids = lookup_ids(args.ids, state)
     missing = [i for i in ids if i not in state["items"]]
     if missing:
         print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未變更，請修正後重跑）")
@@ -2778,9 +2925,6 @@ def cmd_set_mark(state, args):
             state["items"][i]["mark"] = args.mark
     save(state, args.file)
     print(f"OK {len(ids)} 則標記" + ("已清除（改回自動推算）" if args.clear else f"寫死為 {args.mark}"))
-
-
-CHECKPOINT_RE = re.compile(r"^\d{4}-\d{4}$")
 
 
 def cmd_fix_first_seen(state, args):
@@ -2795,7 +2939,7 @@ def cmd_fix_first_seen(state, args):
     if not CHECKPOINT_RE.match(args.checkpoint):
         print(f"ERROR: --checkpoint 格式錯誤（需為 {{MMDD}}-{{HHMM}}，如 0818-2000）：{args.checkpoint}")
         sys.exit(2)
-    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    ids = lookup_ids(args.ids, state)
     missing = [i for i in ids if i not in state["items"]]
     if missing:
         print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未變更，請修正後重跑）")
@@ -2814,7 +2958,7 @@ def cmd_set_aired(state, args):
     ⛔ 這是**人工判斷**：外電網站不會知道 TVBS 播過什麼，agent 不得自行推測，
     一律由使用者下令才標（同 `set-alert` 的性質）。
     """
-    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    ids = lookup_ids(args.ids, state)
     missing = [i for i in ids if i not in state["items"]]
     if missing:
         print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未變更，請修正後重跑）")
@@ -2940,6 +3084,27 @@ def cmd_set_alert(state, args):
     print("\n".join(f"  🔴 重大：{a}" for a in top["alerts"]) or "  (無)")
 
 
+def cmd_set_run(state, args):
+    """寫入本輪 checkpoint／run_id／checkpoint_label（扁平根欄位，不落 _top）。"""
+    ctx, issue = schema.resolve_run_context(
+        checkpoint=args.checkpoint, run_id=args.run_id,
+        checkpoint_label=getattr(args, "checkpoint_label", None),
+        generate_if_missing=False)
+    if issue:
+        print(f"ERROR: {issue.message}")
+        sys.exit(2)
+    top = state.setdefault("_top", {})
+    top["checkpoint"] = ctx.checkpoint
+    top["run_id"] = ctx.run_id
+    if ctx.checkpoint_label:
+        top["checkpoint_label"] = ctx.checkpoint_label
+    else:
+        top.pop("checkpoint_label", None)
+    save(state, args.file)
+    print(f"OK checkpoint={ctx.checkpoint} run_id={ctx.run_id}"
+          + (f" checkpoint_label={ctx.checkpoint_label}" if ctx.checkpoint_label else ""))
+
+
 def cmd_set_top(state, args):
     """設定頂層欄位（window_local／rt_status／ap_status／cnn_status／notes／checkpoint）。"""
     if args.field not in TOP_FIELDS:
@@ -2951,7 +3116,7 @@ def cmd_set_top(state, args):
 
 
 def cmd_get(state, args):
-    i = norm_id(args.id)
+    i = lookup_id(args.id, state)
     v = state["items"].get(i)
     if not v:
         print(f"ERROR: {i} 不存在")
@@ -3020,7 +3185,7 @@ def cmd_show(state, args):
     fields = [f.strip() for f in (args.fields or "").split(",") if f.strip()] or list(DEFAULT_SHOW)
 
     if args.ids:
-        want = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+        want = lookup_ids(args.ids, state)
         missing = [i for i in want if i not in state["items"]]
         rows = [(i, state["items"][i]) for i in want if i in state["items"]]
     else:
@@ -3057,7 +3222,7 @@ def cmd_remove(state, args):
     """整則刪除（誤收、排除白名單命中等）——與 needs-review 不同：這裡是真的不要，
     不是留著待人工。刪除後 render 那則就不會再出現，不留殼。
     """
-    ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+    ids = lookup_ids(args.ids, state)
     missing = [i for i in ids if i not in state["items"]]
     if missing:
         print(f"ERROR: 不存在的 id：{','.join(missing)}（其餘未刪除，請修正後重跑）")
@@ -3073,7 +3238,21 @@ def cmd_needs_review(state, args):
         if not args.id:
             print("ERROR: add 需要 --id")
             sys.exit(2)
-        i = norm_id(args.id)
+        raw = args.id
+        i = lookup_id(raw, state)
+        if i not in state["items"]:
+            if schema.is_illegal_ns_shape(raw):
+                print(f"ERROR: NS_ID_INVALID 備註殼不得用非法 NS 形狀：{raw!r}")
+                sys.exit(2)
+            fam = schema.detect_id_family(raw, lookup_alias=True)
+            if fam in schema.GATED_FAMILIES:
+                canon, issue = schema.validate_material_id_for_write(raw, fam)
+                if issue:
+                    print(f"ERROR: {issue.code} 不對非法 {fam} ID 開備註殼：{raw!r}")
+                    sys.exit(2)
+                i = canon
+            else:
+                i = (raw or "").strip()
         # 對不存在的 id（純備註，如「RT-r9-空白」）建 status="note" 的殼，
         # 不是 pending——0803 實錯：7 筆備註殼灌水 pending 計數（60 裡有 7 假的），
         # 且永遠不會被清掉。note 不計入 pending／待整併，只出現在 needs-review list。
@@ -3091,7 +3270,7 @@ def cmd_needs_review(state, args):
         if not args.ids:
             print("ERROR: done 需要 --ids（逗號分隔）")
             sys.exit(2)
-        ids = [norm_id(x) for x in args.ids.split(",") if x.strip()]
+        ids = lookup_ids(args.ids, state)
         missing = [i for i in ids if i not in state["items"]]
         if missing:
             print(f"ERROR: 不存在的 id：{','.join(missing)}（全部未處理，請修正後重跑）")
@@ -3178,8 +3357,11 @@ def main():
     u.add_argument("--entry-file", help="長內容檔案路徑（與 --entry 擇一）")
     # R9（2026-08-13）：回寫站方原文。批次檔每筆也可帶 src_text；只帶 {id, src_text}
     # 的批次筆＝純回補原文，不動 raw_entry（R11 整批漏帶的救援路徑）。
-    u.add_argument("--src-text", help="站方原文（行內；與 --src-text-file 擇一）")
+    u.add_argument("--src-text", default=schema.UNSET,
+                   help="站方原文（行內；與 --src-text-file／--clear-src-text 擇一）")
     u.add_argument("--src-text-file", help="站方原文檔案路徑")
+    u.add_argument("--clear-src-text", action="store_true",
+                   help="明確清空 src_text（AP/RT 寫 src_text_missing；NS blocking 拒收）")
     # ⚠️ default 由 0 改為 None（2026-08-09）：0 是**有意義的值**（真的沒有 SOUNDBITE），
     # 拿它當「沒帶參數」的預設，會讓每一次沒帶 --sb-count 的 update-entry 都撞上
     # bite_doubt 的反向判準（`(BITE)` 且 sb_count==0 → 假 BITE），憑空生出 needs_review
@@ -3306,6 +3488,10 @@ def main():
     r.add_argument("--id", help="add 用：要標記的素材代碼或備註代號")
     r.add_argument("--note", help="add 用：備註內容")
     r.add_argument("--ids", help="done 用：結案的 id，逗號分隔")
+    srn = sub.add_parser("set-run", help="寫入本輪 checkpoint／run_id／checkpoint_label")
+    srn.add_argument("--checkpoint", required=True)
+    srn.add_argument("--run-id", required=True)
+    srn.add_argument("--checkpoint-label", default=None)
 
     args = p.parse_args()
     state = load(args.file)
@@ -3327,6 +3513,7 @@ def main():
         "needs-review": cmd_needs_review, "set-top": cmd_set_top,
         "scratch-dir": cmd_scratch_dir, "list-topics": cmd_list_topics,
         "find-similar": cmd_find_similar,
+        "set-run": cmd_set_run,
     }[args.cmd](state, args)
 
 

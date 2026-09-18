@@ -99,9 +99,9 @@ def add_batch(state_path, registry_path, payload, extra_args=()):
 # 這一案改用 ENEX，驗的還是同一件事：off 模式不查登記簿、照寫。
 sp1, rp1 = new_dirs()
 new_state(sp1)
-out1 = add_batch(sp1, rp1, [item("OLD1", {"category": "體育/舊格式沒登記過"},
+out1 = add_batch(sp1, rp1, [item("ENEX1001", {"category": "體育/舊格式沒登記過"},
                                  source="ENEX")])
-v1 = get(sp1, rp1, "OLD1")
+v1 = get(sp1, rp1, "ENEX1001")
 report("① 舊格式（平台線純陣列）：未登記中主題照樣寫入 category",
        v1.get("category") == {"大分類": "體育", "中主題": "舊格式沒登記過"},
        f"實得 {v1.get('category')!r}")
@@ -111,8 +111,8 @@ report("① 舊格式：不印新題閘門訊息（走 off，不查登記簿）"
 # ── ② 新格式、無 new_topics、未登記中主題 → 素材入庫、category 不寫 ──────
 sp2, rp2 = new_dirs()
 new_state(sp2)
-out2 = add_batch(sp2, rp2, {"entries": [item("NEW1", {"category": "體育/全新主題"})]})
-v2 = get(sp2, rp2, "NEW1")
+out2 = add_batch(sp2, rp2, {"entries": [item("RT4101", {"category": "體育/全新主題"})]})
+v2 = get(sp2, rp2, "RT4101")
 report("② 新格式：素材照樣入庫", v2.get("script_status") == "has_script")
 report("② 新格式：category 不寫（未登記、沒有 new_topics）",
        not v2.get("category"), f"實得 {v2.get('category')!r}")
@@ -123,10 +123,10 @@ report("② stdout 印新題閘門訊息",
 sp3, rp3 = new_dirs()
 new_state(sp3)
 out3 = add_batch(sp3, rp3, {
-    "entries": [item("NEW2", {"category": "體育/全新主題二"})],
+    "entries": [item("RT4102", {"category": "體育/全新主題二"})],
     "new_topics": {"全新主題二": {"charter": "測試用 charter 二", "big": "體育"}},
 })
-v3 = get(sp3, rp3, "NEW2")
+v3 = get(sp3, rp3, "RT4102")
 report("③ new_topics 覆蓋：category 有寫",
        v3.get("category") == {"大分類": "體育", "中主題": "全新主題二"},
        f"實得 {v3.get('category')!r}")
@@ -141,8 +141,8 @@ report("③ new_topics 不是 auto（是 batch 明講的，不該標 auto:true�
 sp4, rp4 = new_dirs()
 new_state(sp4)
 run(sp4, rp4, "topic-register", "--name", "既有格", "--charter", "已經登記過了", "--big", "社會")
-out4 = add_batch(sp4, rp4, {"entries": [item("NEW3", {"category": "社會/既有格"})]})
-v4 = get(sp4, rp4, "NEW3")
+out4 = add_batch(sp4, rp4, {"entries": [item("RT4103", {"category": "社會/既有格"})]})
+v4 = get(sp4, rp4, "RT4103")
 report("④ 已登記過的中主題：新格式照寫，不用附 new_topics",
        v4.get("category") == {"大分類": "社會", "中主題": "既有格"},
        f"實得 {v4.get('category')!r}")
@@ -151,10 +151,10 @@ report("④ 不印未登記訊息", "未登記中主題" not in out4, out4.strip
 # ── ⑤ 新格式 + --auto-register：不擋、自動登記，stdout 有「待補 charter」──
 sp5, rp5 = new_dirs()
 new_state(sp5)
-out5 = add_batch(sp5, rp5, {"entries": [item("NEW4", {"category": "娛樂/自動登記格",
+out5 = add_batch(sp5, rp5, {"entries": [item("RT4104", {"category": "娛樂/自動登記格",
                                                        "src_text": "x" * 5})]},
                  extra_args=("--auto-register",))
-v5 = get(sp5, rp5, "NEW4")
+v5 = get(sp5, rp5, "RT4104")
 report("⑤ --auto-register：素材入庫且 category 有寫",
        v5.get("category") == {"大分類": "娛樂", "中主題": "自動登記格"},
        f"實得 {v5.get('category')!r}")
@@ -165,10 +165,10 @@ report("⑤ stdout 提到「待補 charter」", "待補 charter" in out5, out5.s
 
 # ── ⑥ set-category 預設（無 --auto-register）：未登記中主題照樣寫 ────────
 sp6, rp6 = new_dirs()
-run(sp6, rp6, "add", "--id", "SC1", "--source", "RT", "--checkpoint", "0999-1700",
-   "--status", "has_script", "--entry", "SC1 (測試) ▎摘要。▎畫面：測試。▎無BITE。")
-out6 = run(sp6, rp6, "set-category", "--id", "SC1", "--cat", "財經/沒登記過的中主題")
-v6 = get(sp6, rp6, "SC1")
+run(sp6, rp6, "add", "--id", "RT4105", "--source", "RT", "--checkpoint", "0999-1700",
+   "--status", "has_script", "--entry", "RT4105 (測試) ▎摘要。▎畫面：測試。▎無BITE。")
+out6 = run(sp6, rp6, "set-category", "--id", "RT4105", "--cat", "財經/沒登記過的中主題")
+v6 = get(sp6, rp6, "RT4105")
 report("⑥ set-category 預設：未登記中主題照樣寫（不查登記簿）",
        v6.get("category") == {"大分類": "財經", "中主題": "沒登記過的中主題"},
        f"實得 {v6.get('category')!r}")
@@ -177,11 +177,11 @@ report("⑥ 登記簿沒有多出這一筆（off 模式不碰登記簿）",
 
 # ── ⑦ set-category --auto-register：未登記中主題自動登記＋照寫 ──────────
 sp7, rp7 = new_dirs()
-run(sp7, rp7, "add", "--id", "SC2", "--source", "RT", "--checkpoint", "0999-1700",
-   "--status", "has_script", "--entry", "SC2 (測試) ▎摘要。▎畫面：測試。▎無BITE。")
-out7 = run(sp7, rp7, "set-category", "--id", "SC2", "--cat", "財經/自動登記格二",
+run(sp7, rp7, "add", "--id", "RT4106", "--source", "RT", "--checkpoint", "0999-1700",
+   "--status", "has_script", "--entry", "RT4106 (測試) ▎摘要。▎畫面：測試。▎無BITE。")
+out7 = run(sp7, rp7, "set-category", "--id", "RT4106", "--cat", "財經/自動登記格二",
           "--auto-register")
-v7 = get(sp7, rp7, "SC2")
+v7 = get(sp7, rp7, "RT4106")
 report("⑦ set-category --auto-register：category 有寫",
        v7.get("category") == {"大分類": "財經", "中主題": "自動登記格二"},
        f"實得 {v7.get('category')!r}")

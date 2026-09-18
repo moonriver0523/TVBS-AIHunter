@@ -19,6 +19,9 @@ for _s in (sys.stdout, sys.stderr):
     except AttributeError:
         pass
 
+if len(sys.argv) < 4:
+    print("SKIP: needs <state.json> <定版.txt> <render產物.txt>")
+    sys.exit(0)
 state_p, ref_p, out_p = sys.argv[1:4]
 ok = True
 

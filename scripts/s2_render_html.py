@@ -37,6 +37,7 @@ from datetime import datetime
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import s2_render as R  # noqa: E402
+import s2_material_schema as schema  # noqa: E402
 
 def hilite_of(text):
     """有沒有畫面亮點標記 🔖。有就回 `"🔖"`，沒有回空字串。
@@ -193,26 +194,20 @@ def collect(state, base_mmdd):
                     #   （0802 訂案：一段連線常切成十幾個 TC，計入會把則數灌爆）。
                     #   網頁版的筆數必須照同一套語意，否則同一份資料兩個數字，編輯會困惑。
                     item_id = it.get("id") or ""
-                    is_oth = item_id.startswith("OTH")
-                    kind = "side" if src.startswith("SIDE_") else ("url" if (src == "YT" or is_oth) else "wire")
-                    # 顯示用來源代碼：source=="YT" 在狀態檔裡是解析器用的統一標記
-                    # （見 s2_parse.py，跟 YNA/CNA 是不是網址素材無關），韓聯社／CNA
-                    # 都會落在這裡，要另外從 id 前綴分出來才能對到 SRC_LABEL 顯示成
-                    # 「韓聯社」「CNA」，否則全部顯示成籠統的「其他」。
-                    # OTH（common/17，2026-09-05）：source 欄位是實際平台名（X／QAB／IG…），
-                    # 五花八門不利篩選——一律併進同一個「其他」篩選鍵，不逐平台各開一個 chip。
-                    if src == "YT" and item_id.startswith("YNA"):
-                        display_src = "YNA"
-                    elif src == "YT" and item_id.startswith("CNA"):
-                        display_src = "CNA"
-                    elif src == "YT" or is_oth:
-                        display_src = "OTH"
-                    else:
-                        display_src = src
+                    # reader classifier：CNN／CNN_newsource→NS 只在讀側；OTH 篩選鍵仍是
+                    # 「OTH」一桶（display 是平台名，chip 不拆）。SIDE_* 先於 CNN alias。
+                    cls = schema.classify_source_for_read(item_id, src)
+                    kind = ("side" if cls.kind == "side"
+                            else ("url" if cls.kind == "url" else "wire"))
+                    display_src = "OTH" if cls.family == "OTH" else (cls.display or src)
+                    src_missing = bool(it.get("src_text_missing")) or (
+                        bool(schema.SRC_TEXT_POLICY.get(cls.family or src))
+                        and schema.src_text_missing(src or cls.family, it.get("src_text")))
                     rows.append({
                         "big": big or "", "mid": mid or "", "sub": sub or "",
                         "id": item_id,
                         "src": display_src, "kind": kind,
+                        "src_missing": 1 if src_missing else 0,
                         "mark": R.mark_for(it.get("first_seen_checkpoint") or "", base_mmdd) or "",
                         # 重大層級（2026-08-09 使用者要求可篩）：🔴＝檔頭重大、🟡＝重大未進檔頭、
                         # ⭐＝推薦（2026-08-19，三者互斥）。從**渲染後的成品**認，不從
@@ -689,6 +684,7 @@ function draw(){
           const full=u.rows.map(x=>x.text).join('\\n');
           const d=document.createElement('div');
           d.className='item'+(u.kind==='side'?' side':'')+(u.kind==='url'?' url':'');
+          if(first.src_missing) d.setAttribute('data-src-missing','1');
           const mk=document.createElement('span'); mk.className='mark'; mk.textContent=first.mark;
           // 底色調取代了原本的 border-left 色條，額外補一顆小標籤讓「這是側錄／網址
           // 素材」不必靠底色深淺猜——尤其淺色主題下兩種底色調本來就很接近。

@@ -107,6 +107,7 @@ batch 檔），實測發現三站清單原始檔各包一層不同的站方外�
     python s2_batch_prep.py dedup-check ap_list_2200.json --site ap --ids AP5467677,AP5467678 --fields title,headline
 """
 import argparse
+import copy
 import datetime
 import json
 import os
@@ -117,6 +118,13 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import s2_state  # noqa: E402  from-raw 讀狀態檔（唯讀，D12 已在庫標記）
 import s2_pretag as pretag  # noqa: E402  機械 T/C 建議＋(BITE)建議，見 A31
+from s2_material_schema import (  # noqa: E402
+    RawLoadResult,
+    merge_concat_metadata,
+    select_payload_key,
+    serialize_raw_result,
+    validate_src_text,
+)
 
 # Windows 主控台常是 cp950，print() 中文欄位（entry／script 原文）會直接炸掉。
 # 這不影響 --out 落檔（那條路本來就明寫 UTF-8），只補救不帶 --out 直接印到終端機的情境。
@@ -1054,11 +1062,46 @@ def _is_offload_shell(data):
         for it in data)
 
 
+_BARE_RAW_SHAPES = frozenset({'bare_list', 'offload_bare_list', 'ns_pipe_text'})
+_DICT_RAW_SHAPES = frozenset({'dict_envelope', 'offload_dict_envelope'})
+
+
+def _raw_from_payload(path, data, *, offload=False):
+    """Classify a parsed JSON payload into RawLoadResult (no I/O)."""
+    if isinstance(data, list):
+        shape = 'offload_bare_list' if offload else 'bare_list'
+        desc = (
+            f'Claude Code offload 殼（### Result 內為裸陣列），{len(data)} 筆'
+            if offload else
+            f'裸陣列（無殼），{len(data)} 筆'
+        )
+        return RawLoadResult(
+            items=data, shell_desc=desc, root_shape=shape,
+            payload_key=None, envelope=None)
+    if isinstance(data, dict):
+        key, val = select_payload_key(data)
+        if key is None:
+            raise ValueError(
+                f'{path} {val.message}。實際頂層鍵：{list(data.keys())}')
+        shape = 'offload_dict_envelope' if offload else 'dict_envelope'
+        desc = (
+            f'Claude Code offload 殼＋dict 殼，陣列在 "{key}" 鍵下，{len(val)} 筆'
+            if offload else
+            f'dict 殼，陣列在 "{key}" 鍵下，{len(val)} 筆'
+        )
+        return RawLoadResult(
+            items=val, shell_desc=desc, root_shape=shape,
+            payload_key=key, envelope=data)
+    where = 'offload 殼內解出的內容' if offload else '頂層'
+    raise ValueError(f'{path} {where}既非 list 也非 dict：{type(data)}')
+
+
 def _load_raw_any(path):
-    """讀 raw 檔，回傳 (items, shell_desc)。
+    """讀 raw 檔，回傳 RawLoadResult。
 
     items：規範化後的裸陣列（list of dict）。
     shell_desc：人看得懂的殼型描述，供 unwrap/inspect 回報用；
+    envelope：直接 dict 殼＝完整原始 root；offload dict 殼＝內層 dict。
     偵測不出已知殼型時丟 ValueError，附上實際看到的型別／鍵，不猜、不吞錯。
     """
     # 檔案打不開也要走 ValueError 這條路：呼叫端全都只接 ValueError，
@@ -1081,7 +1124,10 @@ def _load_raw_any(path):
                 parts = ln.split('|', 1)
                 items.append({'id': parts[0].strip(),
                               'created': parts[1].strip() if len(parts) > 1 else ''})
-            return items, f'非 JSON，NS 純文字清單（id|日期），共 {len(items)} 行'
+            return RawLoadResult(
+                items=items,
+                shell_desc=f'非 JSON，NS 純文字清單（id|日期），共 {len(items)} 行',
+                root_shape='ns_pipe_text', payload_key=None, envelope=None)
         raise ValueError(
             f'{path} 不是合法 JSON，也不像 NS 的 id|日期 純文字清單。'
             f'原始錯誤：{e}；前 200 字元：{text[:200]!r}'
@@ -1100,41 +1146,22 @@ def _load_raw_any(path):
             raise ValueError(
                 f'{path} 是 offload 殼，"### Result" 段落解不出合法 JSON：{e}；'
                 f'片段：{payload_str[:200]!r}')
-        if isinstance(inner, list):
-            return inner, f'Claude Code offload 殼（### Result 內為裸陣列），{len(inner)} 筆'
-        if isinstance(inner, dict):
-            for key in KNOWN_WRAPPER_KEYS:
-                val = inner.get(key)
-                if isinstance(val, list) and val:
-                    return val, f'Claude Code offload 殼＋dict 殼，陣列在 "{key}" 鍵下，{len(val)} 筆'
-            raise ValueError(
-                f'{path} offload 殼內是 dict，但已知殼鍵 {KNOWN_WRAPPER_KEYS} '
-                f'都沒有非空陣列。實際頂層鍵：{list(inner.keys())}')
-        raise ValueError(
-            f'{path} offload 殼內解出的內容既非 list 也非 dict：{type(inner)}')
+        return _raw_from_payload(path, inner, offload=True)
 
-    if isinstance(data, list):
-        return data, f'裸陣列（無殼），{len(data)} 筆'
-
-    if isinstance(data, dict):
-        for key in KNOWN_WRAPPER_KEYS:
-            val = data.get(key)
-            if isinstance(val, list) and val:
-                return val, f'dict 殼，陣列在 "{key}" 鍵下，{len(val)} 筆'
-        raise ValueError(
-            f'{path} 頂層是 dict，但已知殼鍵 {KNOWN_WRAPPER_KEYS} 都沒有非空陣列。'
-            f'實際頂層鍵：{list(data.keys())}'
-        )
-
-    raise ValueError(f'{path} 頂層既非 list 也非 dict：{type(data)}')
+    return _raw_from_payload(path, data, offload=False)
 
 
 def cmd_unwrap(args):
     try:
-        items, shell_desc = _load_raw_any(args.raw)
+        loaded = _load_raw_any(args.raw)
     except ValueError as e:
         print(f'✗ 卸殼失敗：{e}', file=sys.stderr)
         sys.exit(1)
+    items, shell_desc = loaded.items, loaded.shell_desc
+    meta_keys = [k for k in loaded.envelope_meta]
+    if meta_keys:
+        print(f'unwrap 將移除 root metadata：{", ".join(meta_keys)}',
+              file=sys.stderr)
 
     if shell_desc.startswith('裸陣列'):
         note = '無殼，原樣複製'
@@ -1309,10 +1336,11 @@ def _plan_full_detail(shown, fields, site):
 
 def cmd_inspect(args):
     try:
-        items, shell_desc = _load_raw_any(args.raw)
+        loaded = _load_raw_any(args.raw)
     except ValueError as e:
         print(f'✗ 讀取失敗：{e}', file=sys.stderr)
         sys.exit(1)
+    items, shell_desc = loaded.items, loaded.shell_desc
     print(f'# {args.raw}：{shell_desc}', file=sys.stderr)
 
     site = getattr(args, 'site', None)
@@ -1410,10 +1438,11 @@ def cmd_inspect(args):
 
 def cmd_search(args):
     try:
-        items, shell_desc = _load_raw_any(args.raw)
+        loaded = _load_raw_any(args.raw)
     except ValueError as e:
         print(f'✗ 讀取失敗：{e}', file=sys.stderr)
         sys.exit(1)
+    items, shell_desc = loaded.items, loaded.shell_desc
     print(f'# {args.raw}：{shell_desc}', file=sys.stderr)
 
     if args.field == 'all':
@@ -1499,10 +1528,17 @@ def cmd_snapshot(args):
     用途是稽核留痕：這一輪站方清單「當時長什麼樣」。之後對帳有爭議時
     可以直接比兩份快照，不必重開瀏覽器重抓。"""
     try:
-        items, shell_desc = _load_raw_any(args.raw)
+        loaded = _load_raw_any(args.raw)
     except ValueError as e:
         print(f'✗ 讀取失敗：{e}', file=sys.stderr)
         sys.exit(1)
+    items, shell_desc = loaded.items, loaded.shell_desc
+    env_cp = loaded.envelope_meta.get('checkpoint')
+    cli_cp = getattr(args, 'checkpoint', None)
+    if env_cp not in (None, '') and cli_cp not in (None, '') and str(env_cp) != str(cli_cp):
+        print(f'✗ snapshot checkpoint 衝突：檔內 {env_cp} vs CLI {cli_cp}',
+              file=sys.stderr)
+        sys.exit(2)
 
     out = args.out
     if not out:
@@ -1596,10 +1632,19 @@ def cmd_timeline(args):
     銜接落差）用。取代 0730 那種自寫 `_mk_*_snapshot.py` 逐站算時區的臨時腳本——
     三站欄位名與是否要 +8h 全部寫死在 TIMELINE_SPEC，不必每輪重寫換算邏輯。"""
     try:
-        items, shell_desc = _load_raw_any(args.raw)
+        loaded = _load_raw_any(args.raw)
     except ValueError as e:
         print(f'✗ 讀取失敗：{e}', file=sys.stderr)
         sys.exit(1)
+    items, shell_desc = loaded.items, loaded.shell_desc
+    meta = loaded.envelope_meta
+    ctx_cp = meta.get('checkpoint') or getattr(args, 'checkpoint', None)
+    ctx_lab = meta.get('checkpoint_label') or getattr(args, 'checkpoint_label', None)
+    ctx_rid = meta.get('run_id') or getattr(args, 'run_id', None)
+    if ctx_cp or ctx_lab or ctx_rid:
+        print(f'# checkpoint: {ctx_cp or ""}')
+        print(f'# checkpoint_label: {ctx_lab or ""}')
+        print(f'# run_id: {ctx_rid or ""}')
 
     spec = TIMELINE_SPEC[args.site]
     rows = []
@@ -1647,19 +1692,17 @@ def cmd_fill_src_text(args):
     貼過去）。**只填空的**，不覆寫 batch 裡已經有內容的 `src_text`（避免蓋掉手動修過
     的原文）。"""
     try:
-        raw_items, raw_shell = _load_raw_any(args.raw)
+        raw_loaded = _load_raw_any(args.raw)
     except ValueError as e:
         print(f'✗ raw 讀取失敗：{e}', file=sys.stderr)
         sys.exit(1)
+    raw_items, raw_shell = raw_loaded.items, raw_loaded.shell_desc
     try:
-        with open(args.batch, encoding='utf-8') as f:
-            batch = json.load(f)
-    except OSError as e:
+        batch_loaded = _load_raw_any(args.batch)
+    except ValueError as e:
         print(f'✗ batch 讀不到：{e}', file=sys.stderr)
         sys.exit(1)
-    shell = None   # P1b-2 新格式 {"entries":[…],"new_topics":{…}}：就地改 entries、殼原樣寫回
-    if isinstance(batch, dict) and isinstance(batch.get('entries'), list):
-        shell, batch = batch, batch['entries']
+    batch = batch_loaded.items
     if not isinstance(batch, list):
         print(f'✗ {args.batch} 頂層不是陣列，不像 add-batch 用的 batch.json', file=sys.stderr)
         sys.exit(1)
@@ -1700,10 +1743,12 @@ def cmd_fill_src_text(args):
         filled.append(iid)
 
     out = args.out or args.batch
+    written = batch_loaded.with_items(batch)
+    payload = serialize_raw_result(written)
     with open(out, 'w', encoding='utf-8') as f:
         # indent=2 對齊 build 的輸出格式（2026-08-31 review 修正：原本 indent=1，
         # 就地覆寫時會把整份 batch.json 的排版跟 build 的產物不一致）。
-        json.dump(shell if shell is not None else batch, f, ensure_ascii=False, indent=2)
+        json.dump(payload, f, ensure_ascii=False, indent=2)
 
     print(f'已寫入 {out}（raw：{raw_shell}）', file=sys.stderr)
     print(f'填入 {len(filled)} 則：{", ".join(filled) if filled else "（無）"}')
@@ -1761,6 +1806,14 @@ def cmd_collate_category(args):
               f'{", ".join(str(s) for s in skipped)}', file=sys.stderr)
 
 
+def _concat_shape_group(shape):
+    if shape in _BARE_RAW_SHAPES:
+        return 'bare'
+    if shape in _DICT_RAW_SHAPES:
+        return 'dict'
+    return None
+
+
 def cmd_concat(args):
     """把兩份以上的 json 陣列檔案（分頁清單、多來源分批的 batch 等）合併成一份。
     取代 0813／0814／0820／0821／0825／0827／0829／0831 反覆出現的
@@ -1770,30 +1823,45 @@ def cmd_concat(args):
     per-site 時區假設要猜（那次猜錯過一次，這支刻意不猜任何語意）。
 
     給 `--site` 才會去重（保留第一次出現的 id，其餘丟棄並警告）；不給就是
-    純合併、保留全部（例如合併 batch.json 這種本來就不該去重的用途）。"""
-    all_items = []
-    shells = []
-    # P1b-2 硬上線（2026-09-08）：合併三站的 batch 時**不能把外殼弄丟**，
-    # 否則合併結果變成純陣列、下游 add-batch 直接退回。任一來源是
-    # `{"entries":[…],"new_topics":{…}}` 就把結果包回同一個殼，new_topics 取聯集。
-    keep_shell, merged_topics = False, {}
+    純合併、保留全部（例如合併 batch.json 這種本來就不該去重的用途）。
+
+    dict 殼必須同 payload_key、同形狀組；未知 metadata 型別敏感 deep-equal，
+    衝突 exit 2 且不寫檔。"""
+    loaded_list = []
     for path in args.files:
         try:
-            items, shell_desc = _load_raw_any(path)
+            loaded = _load_raw_any(path)
         except ValueError as e:
             print(f'✗ 讀取失敗 {path}：{e}', file=sys.stderr)
             sys.exit(1)
-        try:
-            with open(path, encoding='utf-8') as f:
-                _raw = json.load(f)
-        except (OSError, ValueError):
-            _raw = None
-        if isinstance(_raw, dict) and isinstance(_raw.get('entries'), list):
-            keep_shell = True
-            if isinstance(_raw.get('new_topics'), dict):
-                merged_topics.update(_raw['new_topics'])
-        shells.append(f'{os.path.basename(path)}（{shell_desc}）')
-        all_items.extend(items)
+        loaded_list.append((path, loaded))
+
+    groups = [_concat_shape_group(ld.root_shape) for _, ld in loaded_list]
+    if any(g is None for g in groups) or len(set(groups)) > 1:
+        print('✗ concat root_shape 不相容：'
+              + '、'.join(f'{os.path.basename(p)}={ld.root_shape}'
+                          for p, ld in loaded_list),
+              file=sys.stderr)
+        sys.exit(2)
+    keys = {ld.payload_key for _, ld in loaded_list}
+    if len(keys) > 1:
+        print('✗ concat payload_key 不相容：'
+              + '、'.join(f'{os.path.basename(p)}={ld.payload_key!r}'
+                          for p, ld in loaded_list),
+              file=sys.stderr)
+        sys.exit(2)
+
+    merged, err = merge_concat_metadata(
+        [(path, loaded.envelope_meta) for path, loaded in loaded_list])
+    if err:
+        print(err, file=sys.stderr)
+        sys.exit(2)
+
+    all_items = []
+    shells = []
+    for path, loaded in loaded_list:
+        shells.append(f'{os.path.basename(path)}（{loaded.shell_desc}）')
+        all_items.extend(loaded.items)
 
     dup_ids = []
     if args.site:
@@ -1809,9 +1877,24 @@ def cmd_concat(args):
             kept.append(it)
         all_items = kept
 
-    payload = ({'entries': all_items, 'new_topics': merged_topics}
-               if keep_shell else all_items)
-    _note = '，新格式外殼保留' if keep_shell else ''
+    keep_shell = groups[0] == 'dict'
+    if keep_shell:
+        first = next(ld for _, ld in loaded_list if ld.envelope is not None)
+        env = copy.deepcopy(first.envelope)
+        payload_key = first.payload_key
+        payload = {}
+        for k in env:
+            if k == payload_key:
+                payload[k] = all_items
+            elif k in merged:
+                payload[k] = merged[k]
+        for k, v in merged.items():
+            if k not in payload:
+                payload[k] = v
+        _note = '，新格式外殼保留'
+    else:
+        payload = all_items
+        _note = ''
     out = args.out
     if out:
         with open(out, 'w', encoding='utf-8') as f:
@@ -1831,19 +1914,59 @@ def cmd_concat(args):
 DEFAULT_REQUIRED = ('id', 'source', 'checkpoint', 'status', 'entry', 'src_text')
 
 
+def _atomic_write_json(path, obj):
+    """Atomic tmp+replace. Prefix `.s2json_tmp_` so compare --json-result
+    never leaves a half-written destination."""
+    out_dir = os.path.dirname(os.path.abspath(path)) or '.'
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=out_dir, prefix='.s2json_tmp_', suffix='.json')
+    try:
+        with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _compare_side_block(loaded):
+    return {
+        'shell': loaded.shell_desc,
+        'root_shape': loaded.root_shape,
+        'payload_key': loaded.payload_key,
+        'metadata': loaded.envelope_meta,
+    }
+
+
+def _advisory_key(item):
+    if isinstance(item, dict):
+        return (item.get('code'), item.get('site'),
+                item.get('id'), item.get('message'))
+    return (None, None, None, repr(item))
+
+
 def cmd_compare(args):
     """raw 與 batch 對照，**只印差異**：raw 有 batch 沒有的 id、batch 有 raw
-    沒有的 id、batch 缺欄位的則。乾淨就一行「無差異」，不印整批。"""
+    沒有的 id、batch 缺欄位的則。乾淨就一行「無差異」，不印整批。
+
+    AP/RT 缺 src_text：預設 advisory（`--require` 未給時）；明確
+    `--require src_text` 升 blocking。NS 缺／型別錯／污染一律 blocking。
+    有 `--json-result` 時原子寫 schema_version=1 文件。"""
     try:
-        raw_items, raw_shell = _load_raw_any(args.raw)
+        raw_loaded = _load_raw_any(args.raw)
     except ValueError as e:
         print(f'✗ raw 讀取失敗：{e}', file=sys.stderr)
         sys.exit(1)
     try:
-        batch_items, batch_shell = _load_raw_any(args.batch)
+        batch_loaded = _load_raw_any(args.batch)
     except ValueError as e:
         print(f'✗ batch 讀取失敗：{e}', file=sys.stderr)
         sys.exit(1)
+    raw_items, raw_shell = raw_loaded.items, raw_loaded.shell_desc
+    batch_items, batch_shell = batch_loaded.items, batch_loaded.shell_desc
 
     print(f'# raw  ：{os.path.basename(args.raw)}（{raw_shell}）', file=sys.stderr)
     print(f'# batch：{os.path.basename(args.batch)}（{batch_shell}）', file=sys.stderr)
@@ -1854,19 +1977,64 @@ def cmd_compare(args):
 
     required = ([f.strip() for f in args.require.split(',') if f.strip()]
                 if args.require else list(DEFAULT_REQUIRED))
+    explicit_require = args.require is not None
 
     missing = [i for i in raw_ids if i not in batch_set]
     extra = [i for i in batch_ids if i not in raw_set]
 
+    issues = []
     gaps = []
+    advisory_human = []
+    new_advisory = []
     for i, it in enumerate(batch_items):
+        if not isinstance(it, dict):
+            continue
         item_id = it.get('id') or _id_of_any(it, i)
-        lack = [f for f in required
-                if it.get(f) in (None, '', [], {})]
+        lack = []
+        for f in required:
+            if f == 'src_text':
+                source = (it.get('source')
+                          or (args.site.upper() if args.site else '')
+                          or '')
+                issue = validate_src_text(source, it.get('src_text'))
+                if issue is None:
+                    continue
+                d = issue.to_dict()
+                d['id'] = item_id
+                if (issue.code == 'SRC_TEXT_MISSING'
+                        and issue.severity == 'advisory'
+                        and not explicit_require):
+                    new_advisory.append(d)
+                    advisory_human.append(item_id)
+                    continue
+                if issue.code == 'SRC_TEXT_MISSING':
+                    lack.append('src_text')
+                    issues.append({
+                        'kind': 'missing_field', 'id': item_id,
+                        'field': 'src_text',
+                    })
+                else:
+                    issues.append({
+                        'kind': 'src_text', 'id': item_id,
+                        'code': issue.code, 'field': 'src_text',
+                    })
+                    lack.append('src_text')
+                continue
+            if it.get(f) in (None, '', [], {}):
+                lack.append(f)
+                issues.append({
+                    'kind': 'missing_field', 'id': item_id, 'field': f,
+                })
         if lack:
             gaps.append((item_id, lack))
 
     dup_batch = sorted({i for i in batch_ids if batch_ids.count(i) > 1})
+    for i in missing:
+        issues.append({'kind': 'missing_in_batch', 'id': i})
+    for i in extra:
+        issues.append({'kind': 'extra_in_batch', 'id': i})
+    for i in dup_batch:
+        issues.append({'kind': 'dup_id', 'id': i})
 
     found = False
     if missing:
@@ -1888,10 +2056,48 @@ def cmd_compare(args):
         print(f'batch 缺欄位（{len(gaps)} 則，查的是 {"/".join(required)}）：')
         for item_id, lack in gaps:
             print(f'  - {item_id}：缺 {", ".join(lack)}')
+    if advisory_human:
+        print(f'advisory（{len(advisory_human)} 則，不擋）：')
+        for item_id in advisory_human:
+            print(f'  - {item_id}：缺 src_text')
 
     if not found:
         print(f'無差異（raw {len(raw_items)} 筆、batch {len(batch_items)} 筆，'
               f'id 全對得上，{"/".join(required)} 都有）')
+
+    json_path = getattr(args, 'json_result', None)
+    if json_path:
+        batch_adv = batch_loaded.envelope_meta.get('advisory_issues')
+        combined = []
+        seen_adv = set()
+        if isinstance(batch_adv, list):
+            for item in batch_adv:
+                k = _advisory_key(item)
+                if k in seen_adv:
+                    continue
+                seen_adv.add(k)
+                combined.append(item)
+        for item in new_advisory:
+            k = _advisory_key(item)
+            if k in seen_adv:
+                continue
+            seen_adv.add(k)
+            combined.append(item)
+        doc = {
+            'schema_version': 1,
+            'raw': _compare_side_block(raw_loaded),
+            'batch': _compare_side_block(batch_loaded),
+            'issues': issues,
+            'advisory_issues': combined,
+        }
+        try:
+            _atomic_write_json(json_path, doc)
+        except OSError as e:
+            print(f'✗ --json-result 寫入失敗：{e}', file=sys.stderr)
+            sys.exit(1)
+
+    if found:
+        sys.exit(2)
 
 
 DEDUP_FIELDS = ('script', 'desc', 'head', 'headline', 'story', 'cap', 'title')
@@ -1955,10 +2161,11 @@ def cmd_dedup_check(args):
     **只回答機械問題（逐字是否相同、差在哪）；要不要當成重複、留哪一則，
     是編輯判斷，這裡不做也不建議。**"""
     try:
-        items, shell_desc = _load_raw_any(args.raw)
+        loaded = _load_raw_any(args.raw)
     except ValueError as e:
         print(f'✗ 讀取失敗：{e}', file=sys.stderr)
         sys.exit(1)
+    items, shell_desc = loaded.items, loaded.shell_desc
     print(f'# {os.path.basename(args.raw)}：{shell_desc}', file=sys.stderr)
 
     ids = [i.strip() for i in args.ids.split(',') if i.strip()]
@@ -2081,7 +2288,14 @@ def cmd_dedup_check(args):
 #   flatmap  {"ID1": {...}, "ID2": {...}, "_new_topics": {...}}（build --skeleton
 #            吃的 entries.json；`_new_topics`／`new_topics` 是保留鍵，原樣不動）
 
-_RENAME_RESERVED_KEYS = ('_new_topics', 'new_topics')
+_RENAME_RESERVED_KEYS = (
+    '_new_topics', 'new_topics', 'checkpoint', 'checkpoint_label',
+    'run_id', 'advisory_issues', 'window_start', 'window_end',
+)
+
+
+def _is_rename_reserved(k):
+    return k in _RENAME_RESERVED_KEYS or str(k).startswith('window_')
 
 # 生產狀態檔命名慣例：`{MMDD}-s2-state.json`（見 s2_state.default_file()／
 # _yesterday_state_path()），不管落在哪個目錄都拒絕——工作 batch 不會湊巧
@@ -2097,23 +2311,33 @@ _STATE_FILE_RE = re.compile(r'^\d{4}-[A-Za-z0-9]+-state\.json$', re.IGNORECASE)
 
 
 def _load_batch_any(path):
-    """讀『工作 batch JSON』，辨識三種既有形狀，回傳 `(kind, payload)`。
+    """讀『工作 batch JSON』，辨識四種形狀，回傳 `(kind, payload)`。
 
-    辨識不出來（頂層既非陣列、也不是含 `entries` 陣列的物件、也不是扁平
-    map）一律丟 `ValueError`，不猜、不假裝成功。"""
+    1. 頂層 list → list
+    2. dict 且 entries 是 list → wrapper
+    3. dict 且 entries 是 dict → entries_map_envelope（空 map 仍是此形，
+       不是 flatmap）
+    4. dict 沒有 entries、且有非保留鍵 → flatmap
+    其餘丟 ValueError，不猜、不假裝成功。"""
     with open(path, encoding='utf-8') as f:
         data = json.load(f)
     if isinstance(data, list):
         return 'list', data
     if isinstance(data, dict):
-        if isinstance(data.get('entries'), list):
-            return 'wrapper', data
+        if 'entries' in data:
+            ent = data['entries']
+            if isinstance(ent, list):
+                return 'wrapper', data
+            if isinstance(ent, dict):
+                return 'entries_map_envelope', data
+            raise ValueError(
+                f'{path} entries 存在但不是 list 也不是 dict：{type(ent)}')
         # 扁平 map：至少要有一個非保留鍵，否則跟「空物件」／「只有 new_topics
         # 的殼」分不出來——那種情況直接留給下面「找不到可改的項目」去擋。
-        if any(k not in _RENAME_RESERVED_KEYS for k in data):
+        if any(not _is_rename_reserved(k) for k in data):
             return 'flatmap', data
     raise ValueError(
-        f'{path} 頂層形狀認不出來（不是陣列、不是含 entries 陣列的物件，'
+        f'{path} 頂層形狀認不出來（不是陣列、不是含 entries 陣列／map 的物件，'
         f'也不是扁平 {{id: {{...}}}} map）')
 
 
@@ -2121,16 +2345,20 @@ def _iter_rename_entries(kind, payload):
     """回傳 `[(標籤, entry_dict)]`，entry_dict 是可以直接原地改的物件參照。
 
     非 dict 的項目（例如舊格式 entries.json 裡的純字串 entry）沒有鍵可改，
-    直接跳過——不算錯，只是這一則沒有可改名的目標。"""
+    直接跳過——不算錯，只是這一則沒有可改名的目標。
+    entries_map_envelope 只掃 `payload['entries'].items()` 的 dict 值。"""
     if kind == 'list':
         return [(it.get('id', f'#{i}') if isinstance(it, dict) else f'#{i}', it)
                 for i, it in enumerate(payload) if isinstance(it, dict)]
-    if kind == 'wrapper':
+    if kind in ('wrapper', 'wrapper_list'):
         return [(it.get('id', f'#{i}') if isinstance(it, dict) else f'#{i}', it)
                 for i, it in enumerate(payload['entries']) if isinstance(it, dict)]
+    if kind == 'entries_map_envelope':
+        entries = payload.get('entries') or {}
+        return [(k, v) for k, v in entries.items() if isinstance(v, dict)]
     if kind == 'flatmap':
         return [(k, v) for k, v in payload.items()
-                if k not in _RENAME_RESERVED_KEYS and isinstance(v, dict)]
+                if not _is_rename_reserved(k) and isinstance(v, dict)]
     return []
 
 
@@ -2258,7 +2486,7 @@ def cmd_rename_field(args):
 
     entries = _iter_rename_entries(kind, payload)
     if not entries:
-        print(f'✗ {args.batch} 裡找不到任何可改名的物件項（辨識出的形狀是 '
+        print(f'✗ {args.batch} 裡沒有可改項目（辨識出的形狀是 '
               f'{kind}，但沒有 dict 型的 entry）', file=sys.stderr)
         sys.exit(2)
 
@@ -2431,6 +2659,8 @@ def main():
     p_cmp.add_argument('--batch', required=True)
     p_cmp.add_argument('--site', choices=['ns', 'ap', 'rt'])
     p_cmp.add_argument('--require', help=f'要檢查的欄位，逗號分隔。預設 {",".join(DEFAULT_REQUIRED)}')
+    p_cmp.add_argument('--json-result', dest='json_result',
+                       help='把對照結果寫成 schema_version=1 JSON（原子 tmp+replace）')
 
     p_dc = sub.add_parser('dedup-check', help='兩則以上的指定欄位逐字比對，判斷是不是同一則的不同版本')
     p_dc.add_argument('raw')

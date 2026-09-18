@@ -198,3 +198,205 @@ Remove-Item $wd4 -ErrorAction SilentlyContinue
 & pwsh -NoProfile -Command "`$env:USERPROFILE='$home2'; & '$WD' -FlagFile '$flag' -RunsLog '$runs2' -MetricsFile 'Z:\nope.jsonl' -WatchdogLog '$wd4' -Slots '00:01' -LockFile 'Z:\no-such.lock' -LogDir '$tmp' -NoDeadCheck" 2>&1 | Out-Null
 $pOk = -not (Test-Path $wd4) -or -not (Select-String -Path $wd4 -Pattern '中途死亡' -Quiet)
 "{0}  P -NoDeadCheck 可關掉 A5" -f $(if ($pOk) { 'PASS' } else { 'FAIL' })
+# ══ schema v2 + supervisor extras ════════════════════════════════════
+$ridA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+$ridB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+$ridC = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+function V2([int]$Ago, [string]$Cp, [string]$Rid, [string]$Ev, [string]$Detail = '') {
+    "$(T $Ago)`t$Cp`t$Rid`t$Ev`t`t$Detail"
+}
+function New-LockJson {
+    param([int]$PidVal, [string]$Cp, [string]$Rid, [string]$StartedAt)
+    $p = Join-Path $tmp "v2-$Rid-$PidVal.lock"
+    $obj = @{ schema_version = 2; pid = $PidVal; checkpoint = $Cp; run_id = $Rid; started_at = $StartedAt }
+    $json = ($obj | ConvertTo-Json -Compress) + "`n"
+    [IO.File]::WriteAllBytes($p, [Text.UTF8Encoding]::new($false).GetBytes($json))
+    return $p
+}
+function IsoFromProcess([datetime]$t) {
+    return ([datetimeoffset]$t).ToString('yyyy-MM-ddTHH:mm:sszzz')
+}
+
+# V6-1 兩輪同 checkpoint：A 的 DONE 不能關 B
+Run-Case 'V6-1 A的DONE不能關B' (New-RunsLog 'v2_ab' @(
+    (V2 200 '0918-1300' $ridA 'START' 'model=sonnet')
+    (V2 180 '0918-1300' $ridA 'DONE' '離開碼=0')
+    (V2 100 '0918-1300' $ridB 'START' 'model=sonnet')
+)) 'run_id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+
+# V6-2 DONE_BACKFILL 關同 tuple
+Run-Case 'V6-2 DONE_BACKFILL關同tuple' (New-RunsLog 'v2_bf' @(
+    (V2 120 '0918-1400' $ridA 'START')
+    (V2 90 '0918-1400' $ridA 'DONE_BACKFILL' 'reason=補記')
+)) '沒有可疑輪次'
+
+# V6-3 ABORT 關同 tuple
+Run-Case 'V6-3 ABORT關同tuple' (New-RunsLog 'v2_abrt' @(
+    (V2 120 '0918-1500' $ridA 'START')
+    (V2 118 '0918-1500' $ridA 'ABORT' 'headless')
+)) '沒有可疑輪次'
+
+# V6-4 CRASH 關同 tuple
+Run-Case 'V6-4 CRASH關同tuple' (New-RunsLog 'v2_cr' @(
+    (V2 120 '0918-1600' $ridA 'START')
+    (V2 110 '0918-1600' $ridA 'CRASH' 'boom')
+)) '沒有可疑輪次'
+
+# V6-5 v1 DONE 不能關 v2 START
+Run-Case 'V6-5 v1 DONE不能關v2' (New-RunsLog 'v2_v1mix' @(
+    "$(T 120)`t0918-1700`tSTART`tmodel=sonnet"
+    "$(T 110)`t0918-1700`tDONE`t離開碼=0"
+    (V2 100 '0918-1700' $ridA 'START')
+)) 'run_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+
+# V6-6 未完成 v2 START 要抓到
+Run-Case 'V6-6 未完成v2 START要抓到' (New-RunsLog 'v2_open' @(
+    (V2 100 '0918-1800' $ridC 'START')
+)) 'run_id=cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+
+# SKIP/DIAG/NEWDAY 不關
+Run-Case 'V2-SKIP不關' (New-RunsLog 'v2_skip' @(
+    (V2 120 '0918-1900' $ridA 'START')
+    (V2 110 '0918-1900' $ridA 'SKIP' '撞鎖')
+)) 'run_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+Run-Case 'V2-DIAG不關' (New-RunsLog 'v2_diag' @(
+    (V2 120 '0918-1910' $ridA 'START')
+    (V2 110 '0918-1910' $ridA 'DIAG' 'code=METRICS_WRITE_FAILED x')
+)) 'run_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+Run-Case 'V2-NEWDAY不關' (New-RunsLog 'v2_nd' @(
+    (V2 120 '0918-1920' $ridA 'START')
+    (V2 110 '0918-1920' $ridA 'NEWDAY' '建檔')
+)) 'run_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+
+# 未知 v2 event 不得落入 legacy
+Run-Case 'V2-未知event忽略不落入legacy' (New-RunsLog 'v2_unk' @(
+    (V2 120 '0918-1930' $ridA 'START')
+    (V2 110 '0918-1930' $ridA 'WAT' '??')
+)) 'run_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+
+# 量測/警報 de-dup 不可壓另一個 run
+$mp2 = Join-Path $tmp 'metrics_v2.jsonl'
+Set-Content -LiteralPath $mp2 -Encoding UTF8 -Value '{"schema_version": 2, "checkpoint": "0918-2000", "run_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}'
+Run-Case 'V2-量測A不可壓B' (New-RunsLog 'v2_mx' @(
+    (V2 100 '0918-2000' $ridB 'START')
+)) '有量測紀錄=False' $mp2
+
+$wdDup = Join-Path $tmp 'wd_dup.txt'
+Set-Content -LiteralPath $wdDup -Encoding UTF8 -Value "2026-09-18 00:00:00`t中途死亡警報 [0918-2100/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa]"
+$runsDup = New-RunsLog 'v2_al' @((V2 100 '0918-2100' $ridB 'START'))
+$outDup = & pwsh -NoProfile -File $WD -DeadCheckDryRun -RunsLog $runsDup -MetricsFile 'Z:\nope.jsonl' -LockFile 'Z:\no.lock' -LogDir (Join-Path $tmp 'logdir') -WatchdogLog $wdDup 2>&1 | Out-String
+$okDup = $outDup -match '已警報過=False' -and $outDup -match 'run_id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+"{0}  V2-警報A不可壓B" -f $(if ($okDup) { 'PASS' } else { 'FAIL' })
+if (-not $okDup) { "      輸出：$($outDup.Trim())" }
+
+# ── v2 lock 判活 ──
+$me = Get-Process -Id $PID
+$isoNow = IsoFromProcess $me.StartTime
+$runsLock = New-RunsLog 'v2_lock' @((V2 100 '0918-2200' $ridA 'START'))
+$aliveLock = New-LockJson -PidVal $PID -Cp '0918-2200' -Rid $ridA -StartedAt $isoNow
+Run-Case 'V2-lock PID+tuple+窗內判活' $runsLock '掃帶行程在跑=True' 'Z:\no-metrics.jsonl' $aliveLock
+
+$missLock = New-LockJson -PidVal 9999999 -Cp '0918-2200' -Rid $ridA -StartedAt $isoNow
+Run-Case 'V2-PID missing 不判活' $runsLock '掃帶行程在跑=False' 'Z:\no-metrics.jsonl' $missLock
+
+$np = $null
+try {
+    $wrongCands = @()
+    $pyCmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($pyCmd -and $pyCmd.Source) { $wrongCands += $pyCmd.Source }
+    $wrongCands += "$env:SystemRoot\System32\cmd.exe"
+    $wrongExe = $wrongCands | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
+    if (-not $wrongExe) { throw '找不到非 pwsh 的測試行程' }
+    $wrongArgs = if ($wrongExe -match 'cmd\.exe$') { @('/c', 'timeout', '/t', '40', '/nobreak') } else { @('-c', 'import time; time.sleep(40)') }
+    $np = Start-Process -FilePath $wrongExe -ArgumentList $wrongArgs -PassThru -WindowStyle Hidden
+    Start-Sleep -Milliseconds 400
+    $npIso = IsoFromProcess $np.StartTime
+    $wrongLock = New-LockJson -PidVal $np.Id -Cp '0918-2200' -Rid $ridA -StartedAt $npIso
+    Run-Case 'V2-錯誤行程名不判活' $runsLock '掃帶行程在跑=False' 'Z:\no-metrics.jsonl' $wrongLock
+} catch {
+    "FAIL  V2-錯誤行程名不判活 — $($_.Exception.Message)"
+} finally {
+    if ($np) { Stop-Process -Id $np.Id -Force -ErrorAction SilentlyContinue }
+}
+
+$noAt = Join-Path $tmp 'noat.lock'
+[IO.File]::WriteAllBytes($noAt, [Text.UTF8Encoding]::new($false).GetBytes((@{schema_version=2;pid=$PID;checkpoint='0918-2200';run_id=$ridA} | ConvertTo-Json -Compress) + "`n"))
+Run-Case 'V2-started_at缺失不判活' $runsLock '掃帶行程在跑=False' 'Z:\no-metrics.jsonl' $noAt
+
+$badAt = New-LockJson -PidVal $PID -Cp '0918-2200' -Rid $ridA -StartedAt 'not-a-date'
+Run-Case 'V2-started_at壞值不判活' $runsLock '掃帶行程在跑=False' 'Z:\no-metrics.jsonl' $badAt
+
+# StartTime 讀不到：用 lock 指向一個存在但 StartTime 可能為空的系統行程；找不到就略過
+$stSkip = $true
+foreach ($candPid in @(0, 4)) {
+    try {
+        $sp = Get-Process -Id $candPid -ErrorAction Stop
+        $null = $sp.StartTime
+    } catch {
+        if ($sp) {
+            $stLock = New-LockJson -PidVal $candPid -Cp '0918-2200' -Rid $ridA -StartedAt $isoNow
+            Run-Case 'V2-StartTime不可讀不判活' $runsLock '掃帶行程在跑=False' 'Z:\no-metrics.jsonl' $stLock
+            $stSkip = $false
+            break
+        }
+    }
+}
+if ($stSkip) { "SKIP  V2-StartTime不可讀（本機找不到可重現行程）" }
+
+# 容差窗：StartTime ∈ [started_at-5min, started_at+15s]
+$insideMinus = ([datetimeoffset]$me.StartTime).AddMinutes(4)
+$inLock = New-LockJson -PidVal $PID -Cp '0918-2200' -Rid $ridA -StartedAt ($insideMinus.ToString('yyyy-MM-ddTHH:mm:sszzz'))
+Run-Case 'V2-窗內-5min判活' $runsLock '掃帶行程在跑=True' 'Z:\no-metrics.jsonl' $inLock
+
+$outsideMinus = ([datetimeoffset]$me.StartTime).AddMinutes(6)
+$outLock = New-LockJson -PidVal $PID -Cp '0918-2200' -Rid $ridA -StartedAt ($outsideMinus.ToString('yyyy-MM-ddTHH:mm:sszzz'))
+Run-Case 'V2-窗外-5min不判活' $runsLock '掃帶行程在跑=False' 'Z:\no-metrics.jsonl' $outLock
+
+$insidePlus = ([datetimeoffset]$me.StartTime).AddSeconds(-10)
+$inP = New-LockJson -PidVal $PID -Cp '0918-2200' -Rid $ridA -StartedAt ($insidePlus.ToString('yyyy-MM-ddTHH:mm:sszzz'))
+Run-Case 'V2-窗內+15s判活' $runsLock '掃帶行程在跑=True' 'Z:\no-metrics.jsonl' $inP
+
+$outsidePlus = ([datetimeoffset]$me.StartTime).AddSeconds(-20)
+$outP = New-LockJson -PidVal $PID -Cp '0918-2200' -Rid $ridA -StartedAt ($outsidePlus.ToString('yyyy-MM-ddTHH:mm:sszzz'))
+Run-Case 'V2-窗外+15s不判活' $runsLock '掃帶行程在跑=False' 'Z:\no-metrics.jsonl' $outP
+
+# 精確 v2 log 成長（不得靠舊檔名）
+$v2logDir = Join-Path $tmp 'logdir'
+New-Item -ItemType Directory -Force -Path $v2logDir | Out-Null
+Set-Content -LiteralPath (Join-Path $v2logDir "掃帶log-0918-2200-$ridA.txt") -Value 'x' -Encoding UTF8
+Run-Case 'V2-精確run log成長判活' $runsLock '掃帶行程在跑=True'
+Remove-Item (Join-Path $v2logDir "掃帶log-0918-2200-$ridA.txt") -Force -ErrorAction SilentlyContinue
+Set-Content -LiteralPath (Join-Path $v2logDir '掃帶log-0918-2200.txt') -Value 'legacy' -Encoding UTF8
+Run-Case 'V2-舊checkpoint log不可替v2判活' $runsLock '掃帶行程在跑=False'
+Remove-Item (Join-Path $v2logDir '掃帶log-0918-2200.txt') -Force -ErrorAction SilentlyContinue
+
+# ── 排程「從未開始／代打」：已有 v2 log 或 v2 START 不得當沒跑再代打 ──
+$home3 = Join-Path $tmp 'fakehome2'
+New-Item -ItemType Directory -Force -Path $home3 | Out-Null
+$flag3 = Join-Path $home3 '.s2-watchdog-enabled'
+Set-Content -LiteralPath $flag3 -Value '' -Encoding UTF8
+$fakeRepo = Join-Path $tmp 'fakerepo'
+New-Item -ItemType Directory -Force -Path (Join-Path $fakeRepo 'scripts') | Out-Null
+$slot = (Get-Date).AddMinutes(-40)
+$slotHHmm = $slot.ToString('HH:mm')
+$slotCp = $slot.ToString('MMdd-HHmm')
+$schedLogDir = Join-Path $tmp 'schedlog'
+New-Item -ItemType Directory -Force -Path $schedLogDir | Out-Null
+Set-Content -LiteralPath (Join-Path $schedLogDir "掃帶log-$slotCp-$ridA.txt") -Value 'started' -Encoding UTF8
+$wdSched = Join-Path $tmp 'wd_sched.txt'
+Remove-Item $wdSched -ErrorAction SilentlyContinue
+$runsEmpty = New-RunsLog 'sched_empty' @()
+& pwsh -NoProfile -Command "`$env:USERPROFILE='$home3'; & '$WD' -FlagFile '$flag3' -RunsLog '$runsEmpty' -MetricsFile 'Z:\nope.jsonl' -WatchdogLog '$wdSched' -Slots '$slotHHmm' -GraceMinutes 1 -MaxLatenessMinutes 90 -LockFile 'Z:\no.lock' -LogDir '$schedLogDir' -Repo '$fakeRepo' -NoDeadCheck" 2>&1 | Out-Null
+$hitSched = (Test-Path $wdSched) -and (Select-String -Path $wdSched -Pattern '接手' -Quiet)
+"{0}  V2-排程已有run-log不得代打" -f $(if (-not $hitSched) { 'PASS' } else { 'FAIL' })
+if ($hitSched) { Get-Content $wdSched | ForEach-Object { "      $_" } }
+
+$wdSched2 = Join-Path $tmp 'wd_sched2.txt'
+Remove-Item $wdSched2 -ErrorAction SilentlyContinue
+$schedLogDir2 = Join-Path $tmp 'schedlog2'
+New-Item -ItemType Directory -Force -Path $schedLogDir2 | Out-Null
+$runsStart = New-RunsLog 'sched_start' @((V2 40 $slotCp $ridA 'START'), (V2 10 $slotCp $ridA 'DONE' '離開碼=0'))
+& pwsh -NoProfile -Command "`$env:USERPROFILE='$home3'; & '$WD' -FlagFile '$flag3' -RunsLog '$runsStart' -MetricsFile 'Z:\nope.jsonl' -WatchdogLog '$wdSched2' -Slots '$slotHHmm' -GraceMinutes 1 -MaxLatenessMinutes 90 -LockFile 'Z:\no.lock' -LogDir '$schedLogDir2' -Repo '$fakeRepo' -NoDeadCheck" 2>&1 | Out-Null
+$hitSched2 = (Test-Path $wdSched2) -and (Select-String -Path $wdSched2 -Pattern '接手' -Quiet)
+"{0}  V2-排程已有v2 START不得把收工輪當沒跑" -f $(if (-not $hitSched2) { 'PASS' } else { 'FAIL' })
+if ($hitSched2) { Get-Content $wdSched2 | ForEach-Object { "      $_" } }
