@@ -129,87 +129,139 @@ function Get-UnfinishedRound {
     param([string]$Path, [datetime]$Now, [int]$MinMinutes)
 
     if (-not (Test-Path $Path)) { return $null }
-    # 讀不到（Drive 正在鎖檔）就這輪不判，10 分鐘後看門狗還會再來
     try { $lines = Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction Stop }
     catch { return $null }
 
+    $uuidRe = '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    $v2Close = @('DONE', 'DONE_BACKFILL', 'CRASH', 'ABORT')
     $starts = @{}
     $ended = @{}
     foreach ($line in $lines) {
-        $f = $line -split "`t"
-        # 紀錄檔裡真的有裸的 `000` 這種雜訊行（2026-08-14），欄位不足一律略過
+        # 最多切 6 欄：ts / checkpoint / run_id或event / event / label / detail
+        $f = $line -split "`t", 6
         if ($f.Count -lt 3) { continue }
         $cp = $f[1].Trim()
-        # `0811-1800-補漏` 這種後綴要認得，所以不錨結尾
         if ($cp -notmatch '^\d{4}-\d{4}') { continue }
-        $kind = $f[2].Trim()
-        if ($kind -eq 'START') {
-            $t = [datetime]::MinValue
-            if ([datetime]::TryParseExact($f[0].Trim(), 'yyyy-MM-dd HH:mm:ss',
-                    [Globalization.CultureInfo]::InvariantCulture,
-                    [Globalization.DateTimeStyles]::None, [ref]$t)) {
-                $starts[$cp] = $t      # 同 checkpoint 重跑過就取最後一次
+        $t = [datetime]::MinValue
+        if (-not [datetime]::TryParseExact($f[0].Trim(), 'yyyy-MM-dd HH:mm:ss',
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::None, [ref]$t)) { continue }
+
+        $col2 = $f[2].Trim()
+        if ($col2 -cmatch $uuidRe) {
+            # v2：第 3 欄是 run_id。未知 event 只略過，不准落入 v1。
+            if ($f.Count -lt 4) { continue }
+            $kind = $f[3].Trim()
+            $key = "$cp|$col2"
+            if ($kind -eq 'START') {
+                $starts[$key] = $t
+            } elseif ($v2Close -contains $kind) {
+                $ended[$key] = $t
             }
-        } elseif ($kind -like 'DONE*' -or $kind -eq 'CRASH') {
-            # `DONE（事後補記）` 也算收工，所以用前綴比對
-            $t = [datetime]::MinValue
-            if ([datetime]::TryParseExact($f[0].Trim(), 'yyyy-MM-dd HH:mm:ss',
-                    [Globalization.CultureInfo]::InvariantCulture,
-                    [Globalization.DateTimeStyles]::None, [ref]$t)) {
-                $ended[$cp] = $t
+        } else {
+            $kind = $col2
+            $key = $cp
+            if ($kind -eq 'START') {
+                $starts[$key] = $t
+            } elseif ($kind -like 'DONE*' -or $kind -eq 'CRASH') {
+                $ended[$key] = $t
             }
         }
     }
 
-    # ⚠️ 比的是**時間先後**，不是「有沒有出現過 DONE」。同一個 checkpoint 被重跑
-    #    （前一次收工、這一次死掉）時，只看有無 DONE 會把後面那次的死亡吃掉。
-    $cands = foreach ($cp in $starts.Keys) {
-        if ($ended.ContainsKey($cp) -and $ended[$cp] -ge $starts[$cp]) { continue }
-        $age = ($Now - $starts[$cp]).TotalMinutes
+    $cands = foreach ($key in $starts.Keys) {
+        if ($ended.ContainsKey($key) -and $ended[$key] -ge $starts[$key]) { continue }
+        $age = ($Now - $starts[$key]).TotalMinutes
         if ($age -lt $MinMinutes) { continue }
-        # 超過一天的舊帳不追：啟用首日不要把歷史翻出來吵一輪
         if ($age -gt 1440) { continue }
+        $cp = $key
+        $rid = ''
+        if ($key.Contains('|')) {
+            $parts = $key.Split('|', 2)
+            $cp = $parts[0]
+            $rid = $parts[1]
+        }
         [pscustomobject]@{
             Checkpoint = $cp
-            Start      = $starts[$cp]
+            RunId      = $rid
+            Start      = $starts[$key]
             AgeMinutes = [Math]::Round($age, 1)
         }
     }
-    # 回傳**全部**候選（新到舊）。只回最新一筆的話，同一天死兩輪時，
-    # 舊的那一輪會永遠被新的擋在前面、而新的已經警報過＝舊的永不出聲。
     $cands | Sort-Object Start -Descending
 }
 
-function Test-ScanRunning {
-    <#
-      三個獨立訊號，**任何一個說「還活著」就當作還活著**（寧可漏報，
-      也不要對正在跑的輪次發假警報）。全部都是唯讀，都不碰鎖檔握把。
-    #>
-    param([string]$Checkpoint, [datetime]$Start)
+function Read-LockJson {
+    if (-not $LockFile -or -not (Test-Path $LockFile)) { return $null }
+    $fs = $null
+    try {
+        $fs = [IO.File]::Open($LockFile, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+        $sr = New-Object IO.StreamReader($fs, [Text.UTF8Encoding]::new($false), $false, 1024, $true)
+        try { $txt = $sr.ReadToEnd() } finally { $sr.Dispose() }
+        if ([string]::IsNullOrWhiteSpace($txt)) { return $null }
+        return $txt | ConvertFrom-Json
+    } catch {
+        return $null
+    } finally {
+        if ($fs) { $fs.Dispose() }
+    }
+}
 
-    # 1) 鎖檔。Test-Path／Get-Item 只看檔案系統 metadata，**不會開檔**，
-    #    所以不會搶到 s2_scan.ps1 的 FileShare::None 獨佔握把。
-    #
-    # 🔴 **不可以「鎖檔在＝還活著」就了事**——那會讓 A5 在最該作用的情境下失效：
-    #    s2_scan.ps1 是在 finally 裡刪鎖檔的，**被硬砍就不會走到 finally**
-    #    （排程的 ExecutionTimeLimit 是 PT1H，0811-0430 跑了 56.7 分已經很接近；
-    #    0811-2200 的 LastResult=0x8007042B 正是逾時終止碼）。於是死掉的那一輪
-    #    留下自己的鎖檔，反而把針對它的警報壓掉，要等下一輪跑起來才會被清掉。
-    #
-    #    判別方式不必開檔：鎖檔內容只在取得時寫一次，所以 LastWriteTime ≈ 那一輪的
-    #    START。**比 START 新**＝是後來的輪次握著（真的有人在跑）；
-    #    **不比 START 新**＝這就是死掉那一輪自己的殘檔，不算活著。
+function Test-ScanRunning {
+    param([string]$Checkpoint, [datetime]$Start, [string]$RunId = '')
+
+    $isV2 = -not [string]::IsNullOrWhiteSpace($RunId)
+    if ($isV2) {
+        $lockObj = Read-LockJson
+        if ($lockObj -and $lockObj.schema_version -eq 2) {
+            $lockCp = [string]$lockObj.checkpoint
+            $lockRid = [string]$lockObj.run_id
+            if ($lockCp -eq $Checkpoint -and $lockRid -eq $RunId) {
+                $pidVal = 0
+                if ([int]::TryParse([string]$lockObj.pid, [ref]$pidVal) -and $pidVal -gt 0) {
+                    $proc = $null
+                    try { $proc = Get-Process -Id $pidVal -ErrorAction Stop } catch { $proc = $null }
+                    if ($proc) {
+                        $pname = $proc.ProcessName
+                        $okName = $pname -match '^(?i)(pwsh|powershell)$'
+                        $stOk = $false
+                        $st = $null
+                        if ($okName) {
+                            try { $st = $proc.StartTime; $stOk = $true } catch { $stOk = $false }
+                        }
+                        $atRaw = [string]$lockObj.started_at
+                        $at = [datetimeoffset]::MinValue
+                        $atOk = -not [string]::IsNullOrWhiteSpace($atRaw) -and
+                                [datetimeoffset]::TryParse($atRaw, [ref]$at)
+                        if ($okName -and $stOk -and $atOk -and $st) {
+                            $stOff = [datetimeoffset]$st
+                            $lo = $at.AddMinutes(-5)
+                            $hi = $at.AddSeconds(15)
+                            if ($stOff -ge $lo -and $stOff -le $hi) { return $true }
+                        }
+                    }
+                }
+            }
+        }
+        if ($Checkpoint -and $RunId) {
+            $lg = Join-Path $LogDir "掃帶log-$Checkpoint-$RunId.txt"
+            if (Test-Path $lg) {
+                $idle = ((Get-Date) - (Get-Item $lg).LastWriteTime).TotalMinutes
+                if ($idle -lt $LogIdleMinutes) { return $true }
+            }
+        }
+        return $false
+    }
+
     if (Test-Path $LockFile) {
         try {
             $lockTime = (Get-Item -LiteralPath $LockFile -ErrorAction Stop).LastWriteTime
         } catch {
-            return $true      # 看不出來就當作有人在跑（寧可漏報）
+            return $true
         }
         if (-not $Start -or $lockTime -gt $Start) { return $true }
     }
 
-    # 2) 那一輪自己的 log 還在長。最精準的訊號：認的是**這個 checkpoint**，
-    #    不是「有沒有人在跑什麼」。
     if ($Checkpoint) {
         $lg = Join-Path $LogDir "掃帶log-$Checkpoint.txt"
         if (Test-Path $lg) {
@@ -218,12 +270,6 @@ function Test-ScanRunning {
         }
     }
 
-    # 3) 行程命令列。查不到（CIM 壞掉／權限不足）一律當作「有在跑」。
-    # ⚠️ 只認 `-File …s2_scan.ps1` 這種**直接啟動**的形式，並排除帶 `-Command`
-    #    的處理程序：排程與代打都是用 -File 叫起來的（見 S2掃帶 工作定義與
-    #    下方 $scanArgs），而 `-Command` 那種多半是別人（人、agent、CI）在指令
-    #    字串裡「提到」這個檔名而已。2026-08-17 實測踩到：一個命令列裡含
-    #    s2_scan.ps1 字樣的互動 shell，讓整個中途死亡警報靜音。
     try {
         $procs = Get-CimInstance Win32_Process `
             -Filter "Name='pwsh.exe' OR Name='powershell.exe'" -ErrorAction Stop
@@ -238,25 +284,59 @@ function Test-ScanRunning {
 }
 
 function Test-MetricsRecorded {
-    param([string]$Path, [string]$Checkpoint)
+    param([string]$Path, [string]$Checkpoint, [string]$RunId = '')
     if (-not (Test-Path $Path)) { return $false }
     try { $lines = Get-Content -LiteralPath $Path -Encoding UTF8 -ErrorAction Stop }
     catch { return $false }
     foreach ($ln in $lines) {
-        if ($ln -match '"checkpoint"\s*:\s*"([^"]+)"' -and $Matches[1] -eq $Checkpoint) {
-            return $true
+        if ([string]::IsNullOrWhiteSpace($ln)) { continue }
+        if ($RunId) {
+            try { $obj = $ln | ConvertFrom-Json } catch { continue }
+            if ($obj.schema_version -eq 2 -and $obj.checkpoint -eq $Checkpoint -and $obj.run_id -eq $RunId) {
+                return $true
+            }
+        } else {
+            if ($ln -match '"checkpoint"\s*:\s*"([^"]+)"' -and $Matches[1] -eq $Checkpoint) {
+                return $true
+            }
         }
     }
     return $false
 }
 
 function Test-AlreadyAlerted {
-    param([string]$Path, [string]$Checkpoint)
+    param([string]$Path, [string]$Checkpoint, [string]$RunId = '')
     if (-not (Test-Path $Path)) { return $false }
-    # 讀不到就當作「已經吵過」——寧可晚 10 分鐘再吵，也不要因為驗不了冪等而連環轟炸
     try { $c = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 -ErrorAction Stop }
     catch { return $true }
+    if ($RunId) {
+        return ($c -match [regex]::Escape("中途死亡警報 [$Checkpoint/$RunId]"))
+    }
     return ($c -match [regex]::Escape("中途死亡警報 [$Checkpoint]"))
+}
+
+function Test-RoundHasStarted {
+    param([string]$Checkpoint)
+    if (-not $Checkpoint) { return $false }
+    $legacy = Join-Path $LogDir "掃帶log-$Checkpoint.txt"
+    if (Test-Path -LiteralPath $legacy) { return $true }
+    if (Test-Path -LiteralPath $LogDir) {
+        $hits = @(Get-ChildItem -LiteralPath $LogDir -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "掃帶log-$Checkpoint-*" })
+        if ($hits.Count -gt 0) { return $true }
+    }
+    if ($RunsLog -and (Test-Path -LiteralPath $RunsLog)) {
+        try { $lines = Get-Content -LiteralPath $RunsLog -Encoding UTF8 -ErrorAction Stop }
+        catch { $lines = @() }
+        $uuidRe = '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        foreach ($line in $lines) {
+            $f = $line -split "`t", 6
+            if ($f.Count -lt 4) { continue }
+            if ($f[1].Trim() -ne $Checkpoint) { continue }
+            if ($f[2].Trim() -cmatch $uuidRe -and $f[3].Trim() -eq 'START') { return $true }
+        }
+    }
+    return $false
 }
 
 if (-not $NoDeadCheck) {
@@ -264,7 +344,7 @@ if (-not $NoDeadCheck) {
     # 已經吵過的先濾掉，再取最新一筆——不然同一天死兩輪時，舊的會永遠被
     # 已警報過的新的擋住而不出聲
     $dead = $cands | Where-Object {
-        -not (Test-AlreadyAlerted -Path $WatchdogLog -Checkpoint $_.Checkpoint)
+        -not (Test-AlreadyAlerted -Path $WatchdogLog -Checkpoint $_.Checkpoint -RunId $_.RunId)
     } | Select-Object -First 1
 
     if ($DeadCheckDryRun) {
@@ -273,32 +353,34 @@ if (-not $NoDeadCheck) {
             Write-Host "DeadCheck：沒有可疑輪次（門檻 $DeadRoundMinutes 分）"
         } else {
             Write-Host ("DeadCheck：checkpoint=$($show.Checkpoint) " +
+                        "run_id=$($show.RunId) " +
                         "start=$($show.Start.ToString('yyyy-MM-dd HH:mm:ss')) " +
                         "age=$($show.AgeMinutes)分 " +
                         "候選數=$($cands.Count) " +
-                        "掃帶行程在跑=$(Test-ScanRunning -Checkpoint $show.Checkpoint -Start $show.Start) " +
-                        "有量測紀錄=$(Test-MetricsRecorded -Path $MetricsFile -Checkpoint $show.Checkpoint) " +
-                        "已警報過=$(Test-AlreadyAlerted -Path $WatchdogLog -Checkpoint $show.Checkpoint)")
+                        "掃帶行程在跑=$(Test-ScanRunning -Checkpoint $show.Checkpoint -Start $show.Start -RunId $show.RunId) " +
+                        "有量測紀錄=$(Test-MetricsRecorded -Path $MetricsFile -Checkpoint $show.Checkpoint -RunId $show.RunId) " +
+                        "已警報過=$(Test-AlreadyAlerted -Path $WatchdogLog -Checkpoint $show.Checkpoint -RunId $show.RunId)")
         }
         exit 0
     }
     if ($dead -and
-        -not (Test-ScanRunning -Checkpoint $dead.Checkpoint -Start $dead.Start) -and
-        -not (Test-MetricsRecorded -Path $MetricsFile -Checkpoint $dead.Checkpoint)) {
+        -not (Test-ScanRunning -Checkpoint $dead.Checkpoint -Start $dead.Start -RunId $dead.RunId) -and
+        -not (Test-MetricsRecorded -Path $MetricsFile -Checkpoint $dead.Checkpoint -RunId $dead.RunId)) {
 
-        $body = "[$($dead.Checkpoint)] 在 $($dead.Start.ToString('HH:mm')) START，" +
+        $tag = $dead.Checkpoint
+        if ($dead.RunId) { $tag = "$($dead.Checkpoint)/$($dead.RunId)" }
+        $body = "[$tag] 在 $($dead.Start.ToString('HH:mm')) START，" +
                 "已 $($dead.AgeMinutes) 分鐘沒有 DONE／CRASH，且目前沒有掃帶行程在跑、" +
                 "也沒有量測紀錄。`n研判該輪中途死亡。看門狗**不代打**，" +
                 "請人工確認狀態檔與頂層 checkpoint 要不要補。"
         $err = $null
         try {
             . "$Repo\scripts\s2_notify.ps1"
-            $err = Send-Ntfy -Body $body -Title "S2 中途死亡？$($dead.Checkpoint)" `
+            $err = Send-Ntfy -Body $body -Title "S2 中途死亡？$tag" `
                              -Tags 'skull' -Priority 'high'
         } catch { $err = $_.Exception.Message }
 
-        # 留痕就是冪等的依據，所以推播成敗都要寫——推播掛了也不能每 10 分鐘重吵
-        Write-Log ("中途死亡警報 [$($dead.Checkpoint)]（START 後 $($dead.AgeMinutes) 分" +
+        Write-Log ("中途死亡警報 [$tag]（START 後 $($dead.AgeMinutes) 分" +
                    "無 DONE／CRASH，無掃帶行程、無量測紀錄）" +
                    $(if ($err) { "；推播失敗：$err" } else { '' }))
     }
@@ -319,10 +401,7 @@ if ($minutesSince -lt $GraceMinutes) { exit 0 }          # 還沒到代打門檻
 if ($minutesSince -gt $MaxLatenessMinutes) { exit 0 }    # 太舊了，不追（避免跟下一輪打架）
 
 $checkpoint = $targetSlot.ToString('MMdd-HHmm')
-$expectedLog = Join-Path $LogDir "掃帶log-$checkpoint.txt"
-
-if (Test-Path $expectedLog) {
-    # log 檔在＝那一輪主排程有被叫到（不管跑完沒有），不是本支負責的情況
+if (Test-RoundHasStarted -Checkpoint $checkpoint) {
     exit 0
 }
 

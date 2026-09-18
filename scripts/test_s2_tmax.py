@@ -46,7 +46,7 @@ OK_T_ALL = list(OK_T) + list(SPECIAL)
 
 def try_set(spec, special=SPECIAL):
     state = {"items": {"X1": {}}}
-    err = st._set_one_tc(state, "X1", spec, OK_T_ALL, OK_C, None, special)
+    _i, err = st._set_one_tc(state, "X1", spec, OK_T_ALL, OK_C, None, special)
     return err, (state["items"]["X1"].get("tc") or {})
 
 

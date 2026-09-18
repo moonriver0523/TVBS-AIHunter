@@ -480,16 +480,35 @@ def measure(session_path):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--checkpoint', required=True, help='輪次代號，例如 0812-1200')
+    ap.add_argument('--run-id', required=True, help='lowercase UUID v4')
+    ap.add_argument('--checkpoint-label', default=None, help='nullable 1–80 Unicode label')
     ap.add_argument('--session', help='session id（不帶副檔名）。不帶則自動抓最新修改的 transcript')
     ap.add_argument('--transcript-dir', help='transcript 目錄（D7 之後 launcher 每輪帶入；不帶用舊預設）')
     ap.add_argument('--dry-run', action='store_true', help='只印結果，不寫入 _token_metrics.jsonl')
     ap.add_argument('--flags', help='launcher 旗標，格式 `model=sonnet;effort=medium;NoToolBan=False`')
     args = ap.parse_args()
 
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import s2_material_schema as schema  # noqa: E402
+    ctx, issue = schema.resolve_run_context(
+        checkpoint=args.checkpoint, run_id=args.run_id,
+        checkpoint_label=args.checkpoint_label, generate_if_missing=False)
+    if issue:
+        print(f'✗ {issue.message}', file=sys.stderr)
+        sys.exit(2)
+
+    from datetime import datetime, timezone, timedelta
+    recorded_at = datetime.now(timezone(timedelta(hours=8))).strftime(
+        '%Y-%m-%dT%H:%M:%S+08:00')
+
     session_path = resolve_session_path(args.session, args.transcript_dir)
     result = measure(session_path)
     result = {
-        'checkpoint': args.checkpoint,
+        'schema_version': 2,
+        'recorded_at': recorded_at,
+        'checkpoint': ctx.checkpoint,
+        'run_id': ctx.run_id,
+        'checkpoint_label': ctx.checkpoint_label,
         **result,
         # A1：這一輪照的是哪一版規則、launcher 帶了什麼旗標。
         # 沒有這兩欄，規則改動的效果會被誤算到腳本頭上。

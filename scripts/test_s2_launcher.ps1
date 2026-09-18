@@ -98,9 +98,17 @@ $configs = [ordered]@{
     A3 = @('--strict-mcp-config', '--disable-slash-commands', '--setting-sources', 'project')
 }
 
+$seenRunIds = @{}
 foreach ($step in $OnlySteps) {
     $flags = $configs[$step]
-    $checkpoint = "TASK2-$step-$(Get-Date -Format 'HHmmss')"
+    $runId = [guid]::NewGuid().ToString()
+    if ($runId -cnotmatch '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$') {
+        throw "generated run_id is not lowercase UUID v4: $runId"
+    }
+    if ($seenRunIds.ContainsKey($runId)) { throw "A0-A3 run_id collided: $runId" }
+    $seenRunIds[$runId] = $step
+    $checkpoint = Get-Date -Format 'MMdd-HHmm'
+    $checkpointLabel = "TASK2-$step-$(Get-Date -Format 'HHmmss')"
     $args = @(
         '-p', $verifyPrompt,
         '--permission-mode', 'bypassPermissions',
@@ -112,6 +120,7 @@ foreach ($step in $OnlySteps) {
     ) + $flags
 
     Write-Host "=== $step ===" -ForegroundColor Cyan
+    Write-Host "run_id=$runId checkpoint=$checkpoint checkpoint_label=$checkpointLabel"
     Write-Host "claude $($args -join ' ')"
 
     if (-not $Live) {
@@ -123,7 +132,8 @@ foreach ($step in $OnlySteps) {
         Write-Host "A3：--setting-sources project（OAuth 憑證 always read，見檔頭安全閘門查證，可以測）" -ForegroundColor DarkGray
     }
 
-    $logPath = Join-Path $outDir "$checkpoint.jsonl"
+    $shortRid = $runId.Substring(0, 8)
+    $logPath = Join-Path $outDir "$step-$shortRid.jsonl"
     $t0 = Get-Date
     & claude @args *> $logPath
     $code = $LASTEXITCODE
@@ -135,8 +145,9 @@ foreach ($step in $OnlySteps) {
     # --dry-run 只印不寫（TASK2-* 不是生產輪，不進 _token_metrics.jsonl）。
     try {
         python "$PSScriptRoot\s2_token_metrics.py" --checkpoint $checkpoint `
+            --run-id $runId --checkpoint-label $checkpointLabel `
             --transcript-dir $transcriptDir --dry-run `
-            --flags "task2=$step" 2>&1 | Tee-Object -FilePath (Join-Path $outDir "$checkpoint.metrics.txt")
+            --flags "task2=$step" 2>&1 | Tee-Object -FilePath (Join-Path $outDir "$step-$shortRid.metrics.txt")
     } catch {
         Write-Warning "量測失敗：$($_.Exception.Message)"
     }

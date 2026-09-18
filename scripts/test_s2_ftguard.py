@@ -68,41 +68,41 @@ def e(i, ft=None, sb=None, nobite=True):
 
 # ── 核心：必有BITE 類標無BITE → **入庫**＋標記，絕不丟棄 ────────────────
 for n, ft in enumerate(("SOT", "BUTTED SOTS", "SOT RAW", "ISO", "DONUT", "INTERVIEW", "RAW")):
-    code = f"AA-{n + 10}ZZ"
+    code = f"AA-{n + 10}MO"
     out, items = run_batch([e(code, ft=ft)])
     report(f"{ft} 標無BITE → **入庫**（不是丟棄）", code in items)
     report(f"{ft} → 疑慮寫進 needs_review",
            bool(items.get(code, {}).get("needs_review")),
            str(items.get(code, {}).get("needs_review"))[:40])
 
-out, items = run_batch([e("AA-20ZZ", sb=4)])
+out, items = run_batch([e("AA-20MO", sb=4)])
 report("sb_count>0 標無BITE → 入庫＋標記",
-       "AA-20ZZ" in items and "4 個 SOUNDBITE" in str(items["AA-20ZZ"].get("needs_review")))
+       "AA-20MO" in items and "4 個 SOUNDBITE" in str(items["AA-20MO"].get("needs_review")))
 
 # ── 不該標的別亂標 ───────────────────────────────────────────────────
-out, items = run_batch([e("AA-21ZZ", ft="INTERVIEW", nobite=False)])
-report("有寫 BITE → 不標疑慮", not items["AA-21ZZ"].get("needs_review"))
+out, items = run_batch([e("AA-21MO", ft="INTERVIEW", nobite=False)])
+report("有寫 BITE → 不標疑慮", not items["AA-21MO"].get("needs_review"))
 for ft in ("VO/NAT", "VO/SIL", "LOOK LIVE", "CLIP-VIDEO"):
-    out, items = run_batch([e("AA-22ZZ", ft=ft)])
+    out, items = run_batch([e("AA-22MO", ft=ft)])
     report(f"{ft} 標無BITE → 入庫且不標疑慮",
-           "AA-22ZZ" in items and not items["AA-22ZZ"].get("needs_review"))
-out, items = run_batch([e("AA-23ZZ", ft="PKG")])
+           "AA-22MO" in items and not items["AA-22MO"].get("needs_review"))
+out, items = run_batch([e("AA-23MO", ft="PKG")])
 report("PKG 灰區 → 入庫、只印提醒、不寫 needs_review",
-       "AA-23ZZ" in items and not items["AA-23ZZ"].get("needs_review") and "提醒" in out)
-out, items = run_batch([e("AA-24ZZ")])
+       "AA-23MO" in items and not items["AA-23MO"].get("needs_review") and "提醒" in out)
+out, items = run_batch([e("AA-24MO")])
 report("沒帶 footage_type/sb_count → 入庫不標（向下相容）",
-       "AA-24ZZ" in items and not items["AA-24ZZ"].get("needs_review"))
+       "AA-24MO" in items and not items["AA-24MO"].get("needs_review"))
 
 # ── 混合批次：一則都不能少 ───────────────────────────────────────────
-out, items = run_batch([e("AA-30ZZ", ft="RAW"), e("AA-31ZZ", ft="VO/SIL"),
-                        e("AA-32ZZ", ft="PKG"), e("AA-33ZZ", sb=2),
-                        e("AA-34ZZ", ft="SOT", nobite=False)])
+out, items = run_batch([e("AA-30MO", ft="RAW"), e("AA-31MO", ft="VO/SIL"),
+                        e("AA-32MO", ft="PKG"), e("AA-33MO", sb=2),
+                        e("AA-34MO", ft="SOT", nobite=False)])
 report("混合批次 5 則全數入庫（零丟棄）", len(items) == 5, sorted(items))
 report("混合批次只有該標的被標",
-       {k for k, v in items.items() if v.get("needs_review")} == {"AA-30ZZ", "AA-33ZZ"})
+       {k for k, v in items.items() if v.get("needs_review")} == {"AA-30MO", "AA-33MO"})
 
 # ── 反向：標了 (BITE) 卻沒有 SOUNDBITE（2026-08-06 AP 實錯 7 則）──────
-FAKE = ("AA-50ZZ (直播) (BITE) ▎摘要。▎畫面：畫面。"
+FAKE = ("AA-50MO (直播) (BITE) ▎摘要。▎畫面：畫面。"
         "▎BITE：現場原音「逐字稿未附」▎01:00")
 report("(BITE) 但 sb_count=0 → 判為疑慮",
        S.bite_doubt(FAKE, 0, None) is not None, str(S.bite_doubt(FAKE, 0, None))[:40])
@@ -111,13 +111,13 @@ report("(BITE) 且 sb_count>0 → 不判疑慮",
 report("沒帶 sb_count 時不誤判（NS 走 footageType，不帶 sb_count）",
        S.bite_doubt(FAKE, None, "SOT") is None)
 report("標無BITE 的不會被反向規則誤觸",
-       S.bite_doubt("AA-51ZZ (x) ▎a。▎畫面：b。▎無BITE。▎01:00", 0, None) is None)
+       S.bite_doubt("AA-51MO (x) ▎a。▎畫面：b。▎無BITE。▎01:00", 0, None) is None)
 
-out, items = run_batch([{"id": "AA-52ZZ", "source": "AP", "checkpoint": "0818-2000",
+out, items = run_batch([{"id": "AP1234567", "source": "AP", "checkpoint": "0818-2000",
                          "status": "has_script", "sb_count": 0,
-                         "entry": FAKE.replace("AA-50ZZ", "AA-52ZZ")}])
+                         "entry": FAKE.replace("AA-50MO", "AP1234567")}])
 report("假 BITE 照樣入庫（不擋）＋寫進 needs_review",
-       "AA-52ZZ" in items and bool(items["AA-52ZZ"].get("needs_review")))
+       "AP1234567" in items and bool(items["AP1234567"].get("needs_review")))
 
 # ── bite_doubt 單元 ─────────────────────────────────────────────────
 report("bite_doubt：有 BITE 的一律不判疑慮",
@@ -132,18 +132,18 @@ d = tempfile.mkdtemp()
 sp_ = os.path.join(d, "s.json")
 with open(sp_, "w", encoding="utf-8") as f:
     json.dump({"date": "0101", "items": []}, f)
-subprocess.run([sys.executable, SCRIPT, "--file", sp_, "add", "--id", "AA-40ZZ",
+subprocess.run([sys.executable, SCRIPT, "--file", sp_, "add", "--id", "AA-40MO",
                 "--source", "NS", "--checkpoint", "0818-2000", "--status", "has_script",
                 "--footage-type", "RAW",
-                "--entry", "AA-40ZZ (測試) ▎摘要。▎畫面：畫面。▎無BITE。▎01:00"],
+                "--entry", "AA-40MO (測試) ▎摘要。▎畫面：畫面。▎無BITE。▎01:00"],
                capture_output=True, text=True, encoding="utf-8")
 with open(sp_, encoding="utf-8-sig") as f:
     it = json.load(f)["items"][0]
 report("add 單筆也會標疑慮（不再是後門）", bool(it.get("needs_review")), str(it.get("needs_review"))[:40])
 
-subprocess.run([sys.executable, SCRIPT, "--file", sp_, "update-entry", "--id", "AA-40ZZ",
+subprocess.run([sys.executable, SCRIPT, "--file", sp_, "update-entry", "--id", "AA-40MO",
                 "--sb-count", "1", "--checkpoint", "0818-2000",
-                "--entry", "AA-40ZZ (測試) (BITE) ▎摘要。▎畫面：畫面。▎BITE：某人「話」。▎01:00"],
+                "--entry", "AA-40MO (測試) (BITE) ▎摘要。▎畫面：畫面。▎BITE：某人「話」。▎01:00"],
                capture_output=True, text=True, encoding="utf-8")
 with open(sp_, encoding="utf-8-sig") as f:
     it = json.load(f)["items"][0]

@@ -61,8 +61,51 @@ def load(path=None):
     sys.exit(2)
 
 
-def pick(rows, checkpoint):
-    """同一個 checkpoint 可能被量測多次（補跑、事後重記），取最後一筆。"""
+def parse_selector(spec):
+    """CHECKPOINT 或 CHECKPOINT/RUN_ID。run_id 含連字號不含斜線。"""
+    if spec is None:
+        return None, None
+    s = str(spec).strip()
+    if '/' in s:
+        cp, rid = s.split('/', 1)
+        return cp, rid
+    return s, None
+
+
+def pick(rows, checkpoint, run_id=None):
+    """有 run_id：只找 schema v2 且兩欄精確相等。
+
+    checkpoint-only：命中 ≥2 個不同 v2 run_id → exit 2，禁止 hits[-1]。
+    只有一個 v2 run → 取該 tuple 最後一筆。完全沒有 v2 才走 legacy last。
+    """
+    if run_id:
+        hits = [r for r in rows
+                if r.get('schema_version') == 2
+                and r.get('checkpoint') == checkpoint
+                and r.get('run_id') == run_id]
+        if not hits:
+            print(f'✗ 找不到輪次 {checkpoint}/{run_id}', file=sys.stderr)
+            sys.exit(2)
+        if len(hits) > 1:
+            print(f'同 tuple {checkpoint}/{run_id} 共 {len(hits)} 筆、取最後一筆',
+                  file=sys.stderr)
+        return hits[-1]
+
+    v2 = [r for r in rows
+          if r.get('schema_version') == 2 and r.get('checkpoint') == checkpoint]
+    rids = []
+    for r in v2:
+        rid = r.get('run_id')
+        if rid and rid not in rids:
+            rids.append(rid)
+    if len(rids) >= 2:
+        listed = ', '.join(rids)
+        print(f'✗ checkpoint {checkpoint} 命中 {len(rids)} 個 v2 run_id：{listed}。'
+              f'請改用 CHECKPOINT/RUN_ID', file=sys.stderr)
+        sys.exit(2)
+    if len(rids) == 1:
+        hits = [r for r in v2 if r.get('run_id') == rids[0]]
+        return hits[-1]
     hits = [r for r in rows if r.get('checkpoint') == checkpoint]
     if not hits:
         avail = ', '.join(r.get('checkpoint', '?') for r in rows[-12:])
@@ -89,7 +132,10 @@ def cmd_table(rows, args):
     for r in rows:
         ph = r.get('phases') or {}
         phtxt = ' '.join(f'{k}{v["minutes"]:g}' for k, v in ph.items()) or '（無分段）'
-        print(f'{r.get("checkpoint", "?"):<14}'
+        label = r.get("checkpoint", "?")
+        if r.get("schema_version") == 2 and r.get("run_id"):
+            label = f'{label}/{r["run_id"][:8]}'
+        print(f'{label:<14}'
               f'{r.get("tool_calls", 0):>5}'
               f'{r.get("requests", 0):>5}'
               f'{fmt_k(r.get("cache_read_input_tokens")):>8}'
@@ -108,7 +154,9 @@ def cmd_table(rows, args):
 
 
 def cmd_diff(rows, args):
-    a, b = pick(rows, args.diff[0]), pick(rows, args.diff[1])
+    cp_a, rid_a = parse_selector(args.diff[0])
+    cp_b, rid_b = parse_selector(args.diff[1])
+    a, b = pick(rows, cp_a, rid_a), pick(rows, cp_b, rid_b)
     print(f'{args.diff[0]} → {args.diff[1]}（正數＝後者比較多）')
     print('=' * 60)
     for key, label in (('tool_calls', '工具呼叫'), ('requests', '請求'),

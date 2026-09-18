@@ -32,6 +32,7 @@ import s2_state as S      # noqa: E402
 import s2_render as R     # noqa: E402
 import s2_validate as sv  # noqa: E402
 import s2_parse as sp     # noqa: E402
+import s2_material_schema as schema  # noqa: E402
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -625,6 +626,23 @@ def audit(mmdd, state_path, txt_path, scratch):
         yel(f"只有 {len(lists)} 份清單快照，輪次卻有 {len(rounds)} 個——多數輪次沒留證據")
     else:
         ok(f"{len(lists)} 份清單快照")
+
+    # ── 原文待補（AP/RT advisory；不升紅、不併入待人工）────────────
+    sec("原文待補（advisory）")
+    miss = []
+    for i, v in items.items():
+        src = v.get("source") or ""
+        if v.get("src_text_missing") or (
+                src in schema.SRC_TEXT_POLICY
+                and schema.src_text_missing(src, v.get("src_text"))):
+            miss.append(i)
+    miss.sort()
+    if miss:
+        yel(f"原文待補 {len(miss)} 則：" + "／".join(miss[:12])
+            + more_note(len(miss), 12)
+            + "——AP/RT 缺原文不擋 round；用 update-entry --src-text-file 回補")
+    else:
+        ok("無原文待補")
 
     # ── ⑥ 結構化欄位與 pending ───────────────────────────────────
     sec("⑥ 結構化欄位／pending／待人工")
