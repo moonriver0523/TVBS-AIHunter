@@ -1714,23 +1714,29 @@ def cmd_snapshot(args):
 # `created: it.createdDate`）；AP `ts`＝ISO 秒 UTC（13c §2：`ts: s.firstcreated`）；
 # RT `at`＝DOM 直接擷取的 `MM/DD/YYYY HH:MM`。
 #
-# 🔴 **2026-08-31 訂正（獨立 review 抓到、已用真實落檔覆核）**：原本這裡寫
-# 「RT `at` 已經是台北當地時間，不要再 +8h」——13c2 §1b 那句「判窗內外用」
-# 只是講這個欄位的**用途**，不是講它的**時區**，是我自己誤讀成當地時間，
-# 不是規則文件寫錯。實測反證（`20260830/_rt_list_1600.json`，檔案落地時間
-# 台北 16:08）：40 筆 `at` 最大值 `08/30/2026 07:57`——比擷取當下早 8 小時
-# 11 分。同一輪 AP `ap_list_1600.json`（落地 16:31）`ts` 最大值換算 UTC+8
-# 後是 16:27，跟擷取時間吻合。兩站抓的都是「最新 N 筆」，時間窗理應重疊：
-# 把 RT 當 UTC 轉換，兩站窗口幾乎完全重合；當成當地時間則整整差 8 小時、
-# 等於路透在擷取前連續 8 小時零產出，不合理。**RT `at` 其實也是 UTC**，
-# 跟 NS／AP 同一套規則，不要再假設它免轉。
+# 🔴 **2026-09-19 再訂正（0919-1700 輪現場覆核，推翻 0831 那次訂正）**：0831
+# 那次改成 `utc: True` 的證據只查了 08/30 單一輪，且落地時間差（16:08 vs
+# 07:57 的 8h11m）跟 AP 交叉比對的 19 分鐘落差本身就不精確。這次拉了
+# 2026-08-11～09-18 全部歷史 `rt_list_*.json`（近 40 輪）逐輪核對：RT `at`
+# 從有記錄以來**從未是 UTC**，每一輪的最大值都直接吻合擷取當下的台北時鐘
+# （誤差幾分鐘內，屬清單截圖延遲，不是時區差）。0831 訂正上線後
+# `timeline --site rt` 已經連續約 20 天輸出錯誤（多加 8 小時），但因為
+# `timeline` 是純唯讀診斷指令、沒有被 `build`/`audit`/硬閘門等自動化流程
+# 呼叫，沒有造成實際漏收——是未爆彈，不是已引爆的資料錯誤。**改回 RT `at`
+# 免轉**，並在 `cmd_timeline` 加自我檢查：換算後若最大值離現在太遠就示警，
+# 不要再靠人工翻歷史檔才發現。
 TIMELINE_SPEC = {
     'ns': {'fields': ('created', 'createdDate'), 'utc': True,
            'fmt': '%Y-%m-%dT%H:%M:%S.%fZ'},
     'ap': {'fields': ('ts', 'firstcreated'), 'utc': True,
            'fmt': '%Y-%m-%dT%H:%M:%SZ'},
-    'rt': {'fields': ('at',), 'utc': True, 'fmt': '%m/%d/%Y %H:%M'},
+    'rt': {'fields': ('at',), 'utc': False, 'fmt': '%m/%d/%Y %H:%M'},
 }
+
+# `cmd_timeline` 自我檢查用：換算後最大值若比現在早/晚超過這麼多小時，代表
+# `utc` 假設很可能又猜錯了（RT 0831→0919 那次錯了 20 天沒人發現，就是因為
+# 沒有這道警告）。只示警不擋，因為 timeline 本來就是唯讀診斷工具。
+TIMELINE_SANITY_HOURS = 3
 
 
 def _parse_ts(raw_ts, spec):
@@ -1796,6 +1802,21 @@ def cmd_timeline(args):
     if no_ts:
         print(f'⚠️ {len(no_ts)} 筆解不出時間（欄位缺或格式不符，見 {spec["fields"]}）：'
               f'{", ".join(no_ts[:20])}', file=sys.stderr)
+
+    parsed_ts = [ts for _, ts in rows if ts]
+    if parsed_ts:
+        try:
+            max_dt = max(datetime.datetime.strptime(ts, '%m/%d/%Y %H:%M') for ts in parsed_ts)
+        except ValueError:
+            max_dt = None
+        if max_dt is not None:
+            delta_h = (max_dt - datetime.datetime.now()).total_seconds() / 3600
+            if abs(delta_h) > TIMELINE_SANITY_HOURS:
+                direction = '未來' if delta_h > 0 else '過去'
+                print(f'⚠️ 換算後最新一筆時間 {max_dt.strftime("%m/%d %H:%M")} '
+                      f'比現在偏{direction} {abs(delta_h):.1f} 小時，'
+                      f'TIMELINE_SPEC 對 {args.site} 的 utc 假設可能猜錯，先別當真、回頭核對 raw 值。',
+                      file=sys.stderr)
 
 
 # 各站原始 detail 檔裡，正文欄位的名字（依序嘗試，第一個有內容的勝出）——

@@ -465,20 +465,24 @@ o, c = run(bp.cmd_timeline, Args(raw=TL_AP, site='ap', out=None))
 check('timeline AP：ts 是 ISO 秒 UTC，要 +8h 轉台北',
       c == 0 and '08/30/2026 22:20' in o and '08/30/2026 21:00' in o)
 
-# 2026-08-31 訂正：RT 的 at 其實也是 UTC，不是台北當地時間（獨立 review 用
-# 20260830/_rt_list_1600.json vs ap_list_1600.json 的實測窗口交叉比對抓到，
-# 原本這條測試把「免轉」的錯誤假設原樣抄成斷言，通過不代表行為對——現在
-# 改成斷言正確的 +8h 轉換，並用真實案例的量級當 fixture（0730 輪 21:50 UTC
-# 上站，換算台北該是隔天 05:50）。
+# 2026-09-19 二次訂正：拉了 2026-08-11～09-18 全部歷史 rt_list_*.json（近 40
+# 輪）逐輪核對，RT `at` 從有記錄以來從未是 UTC——0831 那次訂正本身才是錯的
+# （單輪證據、19 分鐘落差就判定吻合，不夠紮實）。改回免轉，並斷言不再 +8h。
 TL_RT = write_json('tl_rt.json', [
     {'code': 'RT8928', 'at': '08/30/2026 21:50'},
     {'code': 'RT8927', 'at': ''},
 ])
 o, c = run(bp.cmd_timeline, Args(raw=TL_RT, site='rt', out=None))
-check('timeline RT：at 其實也是 UTC，要 +8h 轉台北（2026-08-31 訂正，見 TIMELINE_SPEC 註解）',
-      c == 0 and '08/31/2026 05:50' in o and '21:50' not in o)
+check('timeline RT：at 已經是台北當地時間，不轉（2026-09-19 二次訂正，見 TIMELINE_SPEC 註解）',
+      c == 0 and '08/30/2026 21:50' in o and '05:50' not in o)
 check('timeline 缺時間的筆數印警告到 stderr，不吞不猜',
       'RT8927' in o and '解不出時間' in o)
+
+# cmd_timeline 自我檢查：換算後最大值離現在太遠就示警（RT 那次錯了 20 天沒人
+# 發現，就是因為沒有這道警告）——用 NS（有 utc 轉換）的舊日期 fixture 觸發。
+o, c = run(bp.cmd_timeline, Args(raw=TL_NS, site='ns', out=None))
+check('timeline 換算後時間離現在太遠會示警（TIMELINE_SANITY_HOURS）',
+      c == 0 and ('可能猜錯' in o or '偏' in o))
 
 tl_out = os.path.join(TMP, 'tl_ns_out.txt')
 o, c = run(bp.cmd_timeline, Args(raw=TL_NS, site='ns', out=tl_out))
