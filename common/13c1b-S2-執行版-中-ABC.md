@@ -250,7 +250,9 @@ ABC 一輪可能上百則，**幾乎一定會被卸載**。⛔ 這不是錯誤�
 ⛔ **不要逐則 `inspect` 翻頁湊 entries**：先跑
 `python scripts/s2_platform_bridge.py from-raw --site abc --raw <raw> --detail <detail> --checkpoint {CHECKPOINT} --out <skeleton>`
 （Detail全文／`detailId` 已機械帶入；Detail 頁務必抓 `#script_smry`，抓到父層 container
-會混進客服導覽雜訊），骨架每列只填 `entry`／`category`／`tc`／`skip` 四格，填完
+會混進客服導覽雜訊），骨架每列只填 `entry`／`category`／`tc`／`skip` 四格。⛔ **全部候選項判斷完再一次
+`Write` 整份骨架，不要逐則 `Edit`**（2026-09-19，同 R43 精神：逐筆 Edit 是同一批判斷拆成 N 次工具
+回合，思考量不變但耗時倍增；先在心裡／草稿走完全部 18 則左右的判斷，一次寫齊）。填完
 `python scripts/s2_platform_bridge.py build --skeleton <skeleton> --out <entries>`
 轉成下面 `check-entries` 吃的格式，再接原本 extract→lint→merge。`--help` 有完整範例。
 

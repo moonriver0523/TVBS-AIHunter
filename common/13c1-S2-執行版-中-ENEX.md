@@ -168,7 +168,9 @@ python scripts/s2_batch_prep.py search  "<scratch>/enex_raw_{HHMM}.json" --conta
 
 ⛔ **不要自己逐則讀 `desc` 湊 entries**：先跑
 `python scripts/s2_platform_bridge.py from-raw --site enex --raw <raw> --checkpoint {CHECKPOINT} --out <skeleton>`
-（`src_text` 已機械帶好），骨架每列只填 `entry`／`category`／`tc`／`skip` 四格，填完
+（`src_text` 已機械帶好），骨架每列只填 `entry`／`category`／`tc`／`skip` 四格。⛔ **全部候選項判斷完再一次
+`Write` 整份骨架，不要逐則 `Edit`**（2026-09-19，同 R43 精神：逐筆 Edit 是同一批判斷拆成 N 次工具回合，
+思考量不變但耗時倍增，先走完全部候選判斷再一次寫齊）。填完
 `python scripts/s2_platform_bridge.py build --skeleton <skeleton> --out <entries>`
 一次轉成下面 platform 吃的格式，再接 `s2_platform_extract.py enex`。`--help` 有完整範例；
 出錯不要自己重寫邏輯，直接照訊息處理或回報。
