@@ -382,6 +382,44 @@ def pkg_donut_needs_sot(footage_type, duration_ms):
     return ft in {"PKG", "DONUT"} and (_duration_seconds(duration_ms) or 0) > 60
 
 
+def sot_marker_patchable(entry, footage_type, duration_ms):
+    """R43「層1治本」機械自動修補（2026-09-19）：判斷能不能機械把 SOT 字樣插進
+    第一備註括號。回傳 (可以嗎, 原因)。
+
+    跟 `s2_state.bite_tag_patchable()` 同一套哲學——**只補「有錨點可插」的
+    情況，不猜**：門檻不成立（非 PKG/DONUT 或未超過1分鐘）、已經有 SOT、或
+    第一備註根本沒有括號可插，一律拒絕不動，交回 agent 自己判斷／重寫。
+    """
+    line = entry or ""
+    if not pkg_donut_needs_sot(footage_type, duration_ms):
+        return False, "不符合 PKG/DONUT 且時長>1分鐘門檻，不需要補 SOT"
+    if _first_bracket_has_sot(line):
+        return False, "第一備註已含 SOT，不需補"
+    head = line.split("▎", 1)[0]
+    if "(" not in head or ")" not in head:
+        return False, "摘要前沒有備註括號可接，不猜插入位置（請自行補上完整第一備註後重試）"
+    return True, ""
+
+
+def insert_sot_marker(entry):
+    """在第一個備註括號**內容最前面**插入 `SOT `——跟既有 13e:409 範例
+    `(地方 海灘 SOT)`／`(第三方 睡眠危機 SOT)` 那種「SOT 跟其他描述詞並排在
+    同一個括號」的慣例對齊（0919-0430 輪實測：agent 自己手動補的也是同一種
+    插法：`(愛荷華州 暖心故事)` → `(SOT 愛荷華州 暖心故事)`）。插最前面
+    純粹是實作最簡單、不用去猜該插在描述詞前面還是後面才通順；語意判讀
+    不受插入位置影響（`_first_bracket_has_sot()` 只認括號裡有沒有 SOT 字樣，
+    不管位置）。呼叫前務必先用 `sot_marker_patchable()` 確認可以插，這支
+    函式本身不做防呆（同 `s2_state.insert_bite_tag()` 的分工方式）。"""
+    line = entry or ""
+    head, sep, tail = line.partition("▎")
+    idx_open = head.find("(")
+    idx_close = head.find(")")
+    inner = head[idx_open + 1:idx_close]
+    new_inner = ("SOT " + inner) if inner.strip() else "SOT"
+    new_head = head[:idx_open + 1] + new_inner + head[idx_close:]
+    return new_head + sep + tail
+
+
 def lint(entry, sb_count=None, has_sot=None, footage_type=None, tc=None,
          duration_ms=None, src_text=None, source=None):
     """對已寫好的素材行做機械檢查，只警告不修，回傳訊息 list（可能是空的）。

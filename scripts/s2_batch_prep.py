@@ -686,6 +686,125 @@ def _report_raw_entry_conversions(converted_ids):
           file=sys.stderr)
 
 
+def _autofix_skeleton_lookup(skeleton_path):
+    """讀 `from-raw` 產的骨架 json，回傳 {id: {'footage_type':…, 'duration_ms':…}}。
+    只有 NS 站的 SOT 自動修補需要這個（判斷 PKG/DONUT 且時長>1分鐘要查
+    `s2_pretag.pkg_donut_needs_sot()`，這兩個欄位不在 entries.json 草稿裡，
+    只在骨架／raw 才有）。"""
+    rows = load_json(skeleton_path)
+    return {
+        r.get('id'): {
+            'footage_type': r.get('footage_type', ''),
+            'duration_ms': r.get('duration_ms', ''),
+        }
+        for r in rows if isinstance(r, dict) and r.get('id')
+    }
+
+
+def cmd_autofix_tags(args):
+    """R43「層1治本」機械自動修補（2026-09-19，方向1/2的額外補強，非取代）。
+
+    背景：0919-0430輪transcript查證確認，機械提示表標記（⚠️SOT／⚠️疑似BITE，
+    見 `cmd_from_raw`）即使正確顯示給 agent，草稿階段仍會被漏套用——NS站
+    5個PKG/DONUT>1分鐘項目的⚠️SOT標記100%有顯示，仍100%沒補SOT；同輪NS站
+    另有26則`▎BITE：`段寫了卻漏`(BITE)`括號。**內容判斷本身是對的**（真的
+    找到引言、寫進了▎BITE：段），漏的是機械標記這個動作本身——這正是「有
+    錨點可插、純機械補、不需要編輯判斷」的情況，比照`s2_state.insert_bite_tag()`
+    的既有哲學（R43方向1已由gate lock把「改用Write整批重寫」的合規行為逼出
+    來，這支工具進一步把「重寫」的第一步做成機械可靠，不必agent從頭手key）。
+
+    ⛔ 這不是萬能修補——只做兩種**有錨點、不用猜內容**的機械修補：
+      1. 有 `▎BITE：` 段但缺 `(BITE)` 第二括號 → 插入（沿用
+         `s2_state.bite_tag_patchable()`/`insert_bite_tag()`，同一套判準
+         不重寫第二份）。
+      2. NS 站 PKG/DONUT 且時長>1分鐘但第一備註缺 SOT 字樣 → 插入（沿用
+         `pretag.sot_marker_patchable()`/`insert_sot_marker()`，跟硬閘
+         `pkg_donut_needs_sot()` 同一個判準函式，不會漂移）。
+    FMT_FIRST_NOTE_BITE（`(BITE)` 是唯一/第一個括號、沒有描述性第一備註）
+    **刻意不自動修**——沒有資料可以機械生出「這則的地點/主題描述」該寫什麼，
+    硬塞會比不修更糟；這類仍列在報告裡，交回 agent 自己補一個詞。
+    """
+    entries = load_json(args.entries)
+    if not isinstance(entries, dict):
+        print(f'✗ {args.entries} 頂層不是 dict（entries.json 草稿應為 '
+              f'{{id: 值}} 或含 _new_topics 的物件），無法自動修補。', file=sys.stderr)
+        sys.exit(2)
+
+    skel_lookup = {}
+    if args.skeleton:
+        skel_lookup = _autofix_skeleton_lookup(args.skeleton)
+    elif args.site == 'ns':
+        print('ℹ️ NS 站未帶 --skeleton，SOT 自動修補這關略過（缺 footage_type／'
+              'duration_ms 資料來源），只做 (BITE) 括號修補。', file=sys.stderr)
+
+    fixed_bite, fixed_sot, remaining = [], [], []
+    for item_id, draft_payload in entries.items():
+        if item_id == '_new_topics':
+            continue
+        entry_text, category, tc, status_override, was_converted = parse_draft_entry(
+            item_id, draft_payload)
+        if not entry_text:
+            continue
+
+        notes = []
+        ok, _why = s2_state.bite_tag_patchable(entry_text)
+        if ok:
+            entry_text = s2_state.insert_bite_tag(entry_text)
+            notes.append('補(BITE)')
+            fixed_bite.append(item_id)
+
+        if args.site == 'ns':
+            skel_info = skel_lookup.get(item_id)
+            if skel_info:
+                ok2, _why2 = pretag.sot_marker_patchable(
+                    entry_text, skel_info.get('footage_type'), skel_info.get('duration_ms'))
+                if ok2:
+                    entry_text = pretag.insert_sot_marker(entry_text)
+                    notes.append('補SOT')
+                    fixed_sot.append(item_id)
+
+        if notes:
+            field = 'raw_entry' if was_converted else 'entry'
+            if isinstance(draft_payload, dict):
+                draft_payload[field] = entry_text
+            else:
+                entries[item_id] = entry_text
+
+        # 修完（或本來就沒得修）都再檢一次，把「白名單機械格式類、仍過不了」
+        # 的項目報出來——這些是刻意不自動修的（FMT_FIRST_NOTE_BITE 之類）。
+        remaining_msgs = list(s2_state.fmt_issues(entry_text))
+        skel_info = skel_lookup.get(item_id)
+        if args.site == 'ns' and skel_info:
+            remaining_msgs += list(pretag.lint(
+                entry_text, footage_type=skel_info.get('footage_type'),
+                duration_ms=skel_info.get('duration_ms'), source='NS'))
+        for msg in remaining_msgs:
+            code, is_hard_gate, name = classify_warning_reason(msg)
+            if is_hard_gate:
+                remaining.append(f'{item_id}: {name}（{code}，需人工判斷，未自動修）')
+
+    out = args.out or args.entries
+    with open(out, 'w', encoding='utf-8') as f:
+        json.dump(entries, f, ensure_ascii=False, indent=2)
+
+    print(f'✅ 自動修補完成，已寫入 {out}：補(BITE) {len(fixed_bite)} 則'
+          + (f'、補SOT {len(fixed_sot)} 則' if args.site == 'ns' else ''),
+          file=sys.stderr)
+    if fixed_bite:
+        print(f'  補(BITE)：{", ".join(fixed_bite[:20])}'
+              + ('…' if len(fixed_bite) > 20 else ''), file=sys.stderr)
+    if fixed_sot:
+        print(f'  補SOT：{", ".join(fixed_sot[:20])}'
+              + ('…' if len(fixed_sot) > 20 else ''), file=sys.stderr)
+    if remaining:
+        print(f'⚠️ 仍有 {len(remaining)} 項機械格式問題無法自動修（需要編輯判斷，'
+              f'請自行確認後用 Write 整批重寫，不要逐筆 Edit）：', file=sys.stderr)
+        for line in remaining[:30]:
+            print(f'  {line}', file=sys.stderr)
+        if len(remaining) > 30:
+            print(f'  …另 {len(remaining) - 30} 項略', file=sys.stderr)
+
+
 def cmd_build(args):
     entries = load_json(args.entries)
 
@@ -986,6 +1105,10 @@ def cmd_from_raw(args):
         '工作草稿內容鍵一律用 entry，不是 raw_entry（raw_entry是狀態檔專用欄位，草稿階段不要用）。'
         '有BITE時第一備註別漏：CODE (地點/主題備註)(BITE) ▎摘要…▎畫面：…▎BITE：…（不是 CODE (BITE) ▎…，'
         '(BITE) 前面一定要有描述括號）；下表 ⚠️疑似BITE／⚠️SOT 是機械算好的提醒，不是判定，仍要自己確認內容。'
+        '寫完entries.json、build --dry-run之前，建議先跑一次 '
+        '`s2_batch_prep.py autofix-tags --site <站> --entries <路徑>'
+        '[--skeleton <骨架路徑>（NS站SOT修補要帶）]`——機械補上「漏(BITE)括號／漏SOT字樣」這兩種'
+        '有錨點可插的缺口（不猜內容），剩下真的需要判斷的（例如(BITE)是唯一括號、缺描述）會列出來讓你確認。'
     )
     contract_overhead = len(FROM_RAW_SCHEMA_CONTRACT) + 1
     page_budget = max(INSPECT_TEXT_BUDGET - contract_overhead, 200)
@@ -2689,6 +2812,15 @@ def main():
     p_gc.add_argument('--site', required=True, choices=['ns', 'ap', 'rt'])
     p_gc.add_argument('--entries', required=True, help='entries.json 路徑，用來定位同目錄下的 gate lock 檔')
     p_gc.set_defaults(func=cmd_gate_clear)
+
+    p_af = sub.add_parser('autofix-tags', help='R43層1治本：機械修補entries.json草稿裡「有錨點可插」的'
+                          '(BITE)/SOT標記缺口（build --dry-run前建議先跑一次；不猜內容，修不了的列出來）')
+    p_af.add_argument('--site', required=True, choices=['ns', 'ap', 'rt'])
+    p_af.add_argument('--entries', required=True, help='要修補的 entries.json 草稿路徑')
+    p_af.add_argument('--skeleton', help='NS站SOT修補需要（footage_type/duration_ms來源）；'
+                       'AP/RT的(BITE)修補不需要')
+    p_af.add_argument('--out', help='輸出路徑；不給就地覆寫 --entries')
+    p_af.set_defaults(func=cmd_autofix_tags)
 
     args = ap.parse_args()
     args.func(args)

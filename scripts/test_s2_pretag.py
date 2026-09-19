@@ -207,4 +207,34 @@ check("R42 60 秒整不警告",
       not any("PKG/DONUT且時長>1分鐘" in msg for msg in pretag.lint(
           ENTRY_R42, footage_type="PKG", source="NS", duration_ms=60000)))
 
+# ── R43層1治本（2026-09-19）：insert_sot_marker()／sot_marker_patchable() ──
+# 0919-0430輪transcript實證：MW-017FR原稿 "MW-017FR (愛荷華州 暖心故事) ▎…"
+# （DONUT 108秒），agent手動補成 "MW-017FR (SOT 愛荷華州 暖心故事) (BITE) ▎…"
+# ——這支測試直接拿同一則真實案例當回歸樣本，確認機械修補產出跟agent手動
+# 修的結果完全一致（不是巧合對上，逐字比對）。
+MW017_ORIG = "MW-017FR (愛荷華州 暖心故事) ▎98歲保羅利…▎畫面：安養中心。▎BITE：保羅利「很榮幸」▎1:48"
+ok_sot, why_sot = pretag.sot_marker_patchable(MW017_ORIG, "DONUT", 108000)
+check("sot_marker_patchable：DONUT 108秒、第一備註無SOT、有括號可插 → 可補",
+      ok_sot is True, why_sot)
+MW017_FIXED = pretag.insert_sot_marker(MW017_ORIG)
+check("insert_sot_marker：插入結果跟agent 0919-0430輪真實手動修法逐字相同",
+      MW017_FIXED == "MW-017FR (SOT 愛荷華州 暖心故事) ▎98歲保羅利…▎畫面：安養中心。▎BITE：保羅利「很榮幸」▎1:48",
+      MW017_FIXED)
+
+check("sot_marker_patchable：已有 SOT 字樣 → 不可補（避免重複插入）",
+      pretag.sot_marker_patchable("X (SOT 地方) ▎摘要。▎畫面：x。▎無BITE。", "PKG", 120000)[0] is False)
+check("sot_marker_patchable：不符合 PKG/DONUT>1分鐘門檻 → 不可補",
+      pretag.sot_marker_patchable(MW017_ORIG, "VO/SIL", 120000)[0] is False)
+check("sot_marker_patchable：時長剛好60秒（邊界，非>60）→ 不可補",
+      pretag.sot_marker_patchable(MW017_ORIG, "PKG", 60000)[0] is False)
+check("sot_marker_patchable：第一備註沒有括號可接 → 不可補（不猜插入位置）",
+      pretag.sot_marker_patchable("X ▎摘要。▎畫面：x。▎無BITE。", "PKG", 120000)[0] is False)
+
+# 修補後應該讓硬閘判準（同一個 pkg_donut_needs_sot + _first_bracket_has_sot
+# 組合）確認 SOT 已存在、lint() 不再報這條——回歸驗證「修完真的解決問題」，
+# 不是只驗證字串長得像。
+msgs_after_fix = pretag.lint(MW017_FIXED, footage_type="DONUT", source="NS", duration_ms=108000)
+check("insert_sot_marker 修完後，lint() 不再報 PKG/DONUT且時長>1分鐘",
+      not any("PKG/DONUT且時長>1分鐘" in m for m in msgs_after_fix), str(msgs_after_fix))
+
 finish()
