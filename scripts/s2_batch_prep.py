@@ -2607,8 +2607,9 @@ def main():
     p_inspect.add_argument('--fields', help='逗號分隔的欄位名清單')
     p_inspect.add_argument('--limit', type=int, help='最多顯示幾筆，預設 100')
     p_inspect.add_argument('--index', type=int, help='只看第 i 筆（0-based）')
-    p_inspect.add_argument('--site', choices=['ns', 'ap', 'rt'],
-                           help='per-site id 規則（RT 是 code；AP 清單檔自動看穿 _source）')
+    p_inspect.add_argument('--site', choices=['ns', 'ap', 'rt', 'enex', 'abc'],
+                           help='per-site id 規則（RT 是 code；AP 清單檔自動看穿 _source；'
+                                'enex/abc 走 PLATFORM_ID_OF）')
     p_inspect.add_argument('--lengths', action='store_true',
                            help='只印各欄位字數不印內容（檢查摘要 150 字上限這類需求）')
     p_inspect.set_defaults(func=cmd_inspect)

@@ -259,6 +259,24 @@ o, c = run(bp.cmd_inspect, Args(raw=AP_ES, ids='AP5467681', fields='script',
                                 limit=None, index=None, site='ap', lengths=True))
 check('inspect --lengths 可指定欄位', c == 0 and 'script=len:41' in o)
 
+# ── inspect --site 補 enex/abc 選項（2026-09-19，D9 步驟②同源缺口：
+# argparse choices 漏了這兩個，即使 PLATFORM_ID_OF 早就支援，CLI 直接
+# invalid choice 擋掉，agent 只能猜著換掉 --site 硬試）──
+ABC_RAW = write_json('abc_raw.json', [
+    {'News Story': '643399600', 'Headline': 'oil prices'},
+])
+ENEX_RAW = write_json('enex_raw.json', [
+    {'id': '931565', 'title': 'wildfire update'},
+])
+o, c = run(bp.cmd_inspect, Args(raw=ABC_RAW, ids='ABC643399600', fields=None,
+                                limit=None, index=None, site='abc', lengths=False))
+check('inspect --site abc 用 PLATFORM_ID_OF 找得到（不再 invalid choice）',
+      c == 0 and 'ABC643399600' in o and '找不到' not in o)
+o, c = run(bp.cmd_inspect, Args(raw=ENEX_RAW, ids='ENEX931565', fields=None,
+                                limit=None, index=None, site='enex', lengths=False))
+check('inspect --site enex 用 PLATFORM_ID_OF 找得到',
+      c == 0 and 'ENEX931565' in o and '找不到' not in o)
+
 o, c = run(bp.cmd_search, Args(raw=AP_ES, contains='digging', field='all',
                                limit=None, site='ap'))
 check('search 看穿 _source（AP 清單檔不再永遠空手）',

@@ -133,6 +133,10 @@ function Get-UnfinishedRound {
     catch { return $null }
 
     $uuidRe = '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    # DONE_BACKFILL 目前沒有任何 s2_scan.ps1 的 Write-Run 呼叫會寫入這個 event
+    # （2026-09-19 review 確認：純加法、不影響既有 DONE/CRASH 判斷）——是留給
+    # 「run log 遺失、事後由人工補記本輪其實已完成」這種情境用的識別支援，
+    # v2 schema 預留但尚未有任何寫入端，超前部署，不是死代碼可以刪掉。
     $v2Close = @('DONE', 'DONE_BACKFILL', 'CRASH', 'ABORT')
     $starts = @{}
     $ended = @{}
