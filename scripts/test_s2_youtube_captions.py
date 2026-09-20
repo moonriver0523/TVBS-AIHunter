@@ -95,6 +95,79 @@ def test_bot_blocked_caption_is_distinct_manifest_deferred_reason():
     assert result["deferred"] == [{"video_id": "AbCd_ef-123", "reason": "caption-fetch-blocked", "id": "CNA-AbCd_ef-123"}]
 
 
+def test_fetcher_rate_limit_raises_distinct_error_not_missing():
+    """2026-09-20 real-batch incident: yt-dlp 遇 HTTP 429 只印 WARNING、
+    returncode 仍是 0，若不特別偵測就會被誤判成「這部影片真的沒字幕」。"""
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(
+            command, 0, "",
+            "WARNING: Unable to download video subtitles for 'zh-Hant': "
+            "HTTP Error 429: Too Many Requests"
+        )
+
+    try:
+        bridge.YtDlpCaptionFetcher(runner=fake_run, min_interval_seconds=0).get_captions(
+            "video", "zh-Hant", "auto-translated"
+        )
+    except bridge.CaptionFetchBlockedError as exc:
+        assert "429" in str(exc) or "限流" in str(exc)
+    else:
+        raise AssertionError("rate limiting must not look like missing captions")
+
+
+def test_rate_limited_caption_is_deferred_not_treated_as_missing():
+    class RateLimitedClient:
+        def list_playlist_items(self, channel_id, page_token=None, max_results=50):
+            return {"items": [{
+                "contentDetails": {"videoId": "AbCd_ef-123", "videoPublishedAt": "2026-09-20T14:00:00Z"},
+                "snippet": {"channelId": channel_id, "resourceId": {"videoId": "AbCd_ef-123"}},
+            }]}
+
+        def list_videos(self, video_ids):
+            channel = bridge.SITE_SPECS["CNA"]["channel_id"]
+            return {"AbCd_ef-123": {"snippet": {"channelId": channel, "publishedAt": "2026-09-20T14:00:00Z", "liveBroadcastContent": "none"}, "contentDetails": {"duration": "PT1M"}, "status": {"privacyStatus": "public", "uploadStatus": "processed"}}}
+
+        def get_captions(self, video_id, language, kind):
+            raise bridge.CaptionFetchBlockedError("yt-dlp 字幕下載被 YouTube 限流（HTTP 429），應稍後重試")
+
+        def is_short(self, video_id):
+            return False
+
+    result = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430",
+        cursor_data={"revision": 1, "sites": {"CNA": {"last_complete_end_utc": "2026-09-20T12:00:00Z"}}},
+        state_data={"items": []}, client=RateLimitedClient(),
+        collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert result["deferred"] == [{"video_id": "AbCd_ef-123", "reason": "caption-fetch-blocked", "id": "CNA-AbCd_ef-123"}]
+
+
+def test_fetcher_throttles_successive_calls_to_avoid_rate_limiting():
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    sleeps = []
+    fetcher = bridge.YtDlpCaptionFetcher(runner=fake_run, min_interval_seconds=100,
+                                          sleeper=sleeps.append)
+    fetcher.get_captions("video1", "en", "auto")
+    assert sleeps == []  # first call never waits, nothing to space out from
+    fetcher.get_captions("video2", "en", "auto")
+    assert len(sleeps) == 1
+    assert 0 < sleeps[0] <= 100
+
+
+def test_fetcher_does_not_throttle_when_interval_already_elapsed():
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    sleeps = []
+    fetcher = bridge.YtDlpCaptionFetcher(runner=fake_run, min_interval_seconds=0,
+                                          sleeper=sleeps.append)
+    fetcher.get_captions("video1", "en", "auto")
+    fetcher.get_captions("video2", "en", "auto")
+    assert sleeps == []
+
+
 def test_caption_language_and_kind_match_site_specs():
     calls = []
 

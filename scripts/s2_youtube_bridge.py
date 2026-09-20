@@ -20,6 +20,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -119,10 +120,21 @@ class YtDlpCaptionFetcher:
     BOT_BLOCK_MARKERS = (
         "sign in to confirm", "not a bot", "bot detection", "automated",
     )
+    # HTTP 429 from yt-dlp is a WARNING, not a nonzero exit code — yt-dlp still
+    # reports success for the surrounding metadata fetch. Left undetected, a
+    # rate-limited request silently looks identical to "this video really has
+    # no captions in this language" (2026-09-20 real-batch incident: most of a
+    # 23-item YNA window was mis-deferred as caption-missing when the videos
+    # had captions and were simply rate-limited by rapid back-to-back calls).
+    RATE_LIMIT_MARKERS = ("429", "too many requests")
 
-    def __init__(self, executable: str = "yt-dlp", *, runner: Any = None):
+    def __init__(self, executable: str = "yt-dlp", *, runner: Any = None,
+                 min_interval_seconds: float = 2.0, sleeper: Any = None):
         self._executable = executable
         self._runner = runner or subprocess.run
+        self._min_interval_seconds = min_interval_seconds
+        self._sleep = sleeper or time.sleep
+        self._last_call_monotonic: Optional[float] = None
 
     @staticmethod
     def _segments_from_vtt(path: Path) -> list[dict[str, str]]:
@@ -156,7 +168,17 @@ class YtDlpCaptionFetcher:
                 segments.append({"text": text})
         return segments
 
+    def _throttle(self) -> None:
+        if self._last_call_monotonic is None:
+            return
+        elapsed = time.monotonic() - self._last_call_monotonic
+        remaining = self._min_interval_seconds - elapsed
+        if remaining > 0:
+            self._sleep(remaining)
+
     def get_captions(self, video_id: str, language: str, kind: str) -> Optional[dict[str, Any]]:
+        self._throttle()
+        self._last_call_monotonic = time.monotonic()
         with tempfile.TemporaryDirectory(prefix="d23-ytdlp-") as directory:
             template = str(Path(directory) / "%(id)s.%(ext)s")
             command = [
@@ -171,9 +193,14 @@ class YtDlpCaptionFetcher:
             stdout = _trim(getattr(result, "stdout", ""))
             stderr = _trim(getattr(result, "stderr", ""))
             diagnostic = f"{stdout}\n{stderr}".lower()
+            # Checked before the exit-code gate: HTTP 429 leaves yt-dlp's
+            # returncode at 0 (it only warns), so a returncode-only check would
+            # never see it — see RATE_LIMIT_MARKERS docstring above.
+            if any(marker in diagnostic for marker in self.BOT_BLOCK_MARKERS):
+                raise CaptionFetchBlockedError("yt-dlp 被 YouTube bot 偵測阻擋，應稍後重試")
+            if any(marker in diagnostic for marker in self.RATE_LIMIT_MARKERS):
+                raise CaptionFetchBlockedError("yt-dlp 字幕下載被 YouTube 限流（HTTP 429），應稍後重試")
             if getattr(result, "returncode", 0) != 0:
-                if any(marker in diagnostic for marker in self.BOT_BLOCK_MARKERS):
-                    raise CaptionFetchBlockedError("yt-dlp 被 YouTube bot 偵測阻擋，應稍後重試")
                 raise BridgeError(f"yt-dlp 取得字幕失敗（exit code {result.returncode}）")
             vtt_files = sorted(Path(directory).glob("*.vtt"))
             if not vtt_files:
