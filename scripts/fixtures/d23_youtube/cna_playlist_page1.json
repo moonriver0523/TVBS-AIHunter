@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "contentDetails": {
+        "videoId": "AbCd_ef-123",
+        "videoPublishedAt": "2026-09-20T14:55:00Z"
+      },
+      "snippet": {
+        "channelId": "UC83jt4dlz1Gjl58fzQrrKZg",
+        "resourceId": {"videoId": "AbCd_ef-123"},
+        "title": "CNA fixture headline",
+        "description": "fixture description"
+      }
+    },
+    {
+      "contentDetails": {
+        "videoId": "CnaVid_00-1",
+        "videoPublishedAt": "2026-09-20T14:20:00Z"
+      },
+      "snippet": {
+        "channelId": "UC83jt4dlz1Gjl58fzQrrKZg",
+        "resourceId": {"videoId": "CnaVid_00-1"},
+        "title": "Private fixture video",
+        "description": "not available yet"
+      }
+    }
+  ],
+  "nextPageToken": "page-2"
+}

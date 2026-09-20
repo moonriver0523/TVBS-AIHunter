@@ -14,7 +14,9 @@ from typing import Any, Mapping, Optional
 NS_ID_RE = re.compile(r"^[A-Z]{2,6}-\d{1,4}(?:MO|TU|WE|TH|FR|SA|SU)$")
 NS_SHAPE_RE = re.compile(r"^[A-Z]{2,6}-\d{1,4}[A-Z]{2}$", re.IGNORECASE)
 CHECKPOINT_RE = re.compile(r"^\d{4}-\d{4}$")
-URL_ID_RE = re.compile(r"^(?:YNA|CNA|OTH)(?:0[1-9]|[1-9]\d)$")
+URL_ID_RE = re.compile(
+    r"^(?:(?:YNA|CNA|OTH)(?:0[1-9]|[1-9]\d)|(?:YNA|CNA)-[A-Za-z0-9_-]{11})$"
+)
 UUID_V4_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
@@ -28,6 +30,14 @@ ENEX_ID_RE = re.compile(r"^ENEX\d{4,8}$")
 ABC_ID_RE = re.compile(r"^ABC\d{6,16}$")
 SIDE_ID_RE = re.compile(r"^(?:CNN|NHK)(?: \d{2}-\d{2})? \d{6}$")
 YT_ID_RE = re.compile(r"^YT:.+$")
+YOUTUBE_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+SCHEDULED_YOUTUBE_ID_RE = re.compile(
+    r"^(?P<site>YNA|CNA)-(?P<video_id>[A-Za-z0-9_-]{11})$", re.IGNORECASE
+)
+# Descriptive aliases for callers that need to name the source-specific shape.
+YOUTUBE_SCHEDULED_ID_RE = SCHEDULED_YOUTUBE_ID_RE
+YNA_YOUTUBE_ID_RE = re.compile(r"^YNA-[A-Za-z0-9_-]{11}$")
+CNA_YOUTUBE_ID_RE = re.compile(r"^CNA-[A-Za-z0-9_-]{11}$")
 YNA_ID_RE = re.compile(r"^YNA(?:0[1-9]|[1-9]\d)$")
 CNA_ID_RE = re.compile(r"^CNA(?:0[1-9]|[1-9]\d)$")
 OTH_ID_RE = re.compile(r"^OTH(?:0[1-9]|[1-9]\d)$")
@@ -136,6 +146,9 @@ def detect_id_family(value: Any, *, lookup_alias: bool = True) -> Optional[str]:
             # only claim NS if the upper form is legal (week suffix)
             if NS_ID_RE.fullmatch(s.upper()):
                 return "NS"
+    scheduled = SCHEDULED_YOUTUBE_ID_RE.fullmatch(s)
+    if scheduled:
+        return scheduled.group("site").upper()
     if YNA_ID_RE.fullmatch(s.upper()):
         return "YNA"
     if CNA_ID_RE.fullmatch(s.upper()):
@@ -172,6 +185,9 @@ def canonicalize_id_for_lookup(value: Any, existing_ids: Optional[Mapping] = Non
         return s
     if ENEX_ID_RE.fullmatch(s) or ABC_ID_RE.fullmatch(s) or SIDE_ID_RE.fullmatch(s):
         return s
+    scheduled = SCHEDULED_YOUTUBE_ID_RE.fullmatch(s)
+    if scheduled:
+        return f"{scheduled.group('site').upper()}-{scheduled.group('video_id')}"
     if RTV_ID_RE.fullmatch(s):
         # RTV#### → RT####, keep digits
         digits = re.sub(r"(?i)^RTV", "", s)
@@ -204,6 +220,10 @@ def validate_material_id_for_write(value: Any, expected_family: str):
             site="NS", id=raw, message=f"NS ID 不合法：{raw!r}")
 
     if fam in ("YNA", "CNA", "OTH"):
+        if fam in ("YNA", "CNA"):
+            scheduled = SCHEDULED_YOUTUBE_ID_RE.fullmatch(raw)
+            if scheduled and scheduled.group("site").upper() == fam:
+                return f"{fam}-{scheduled.group('video_id')}", None
         canon = raw.upper()
         rx = {"YNA": YNA_ID_RE, "CNA": CNA_ID_RE, "OTH": OTH_ID_RE}[fam]
         if rx.fullmatch(canon) and canon.startswith(fam):

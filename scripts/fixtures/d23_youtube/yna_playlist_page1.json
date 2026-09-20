@@ -1,0 +1,40 @@
+{
+  "items": [
+    {
+      "contentDetails": {
+        "videoId": "YnaVid_ko-1",
+        "videoPublishedAt": "2026-09-20T14:59:00Z"
+      },
+      "snippet": {
+        "channelId": "UCTHCOPwqNfZ0uiKOvFyhGwg",
+        "resourceId": {"videoId": "YnaVid_ko-1"},
+        "title": "YNA fixture headline",
+        "description": "fixture Korean context"
+      }
+    },
+    {
+      "contentDetails": {
+        "videoId": "ZyX321_ko-a",
+        "videoPublishedAt": "2026-09-20T12:05:00+00:00"
+      },
+      "snippet": {
+        "channelId": "UCTHCOPwqNfZ0uiKOvFyhGwg",
+        "resourceId": {"videoId": "ZyX321_ko-a"},
+        "title": "YNA second fixture",
+        "description": "fixture description"
+      }
+    },
+    {
+      "contentDetails": {
+        "videoId": "OldYna_00-1",
+        "videoPublishedAt": "2026-09-20T11:49:00Z"
+      },
+      "snippet": {
+        "channelId": "UCTHCOPwqNfZ0uiKOvFyhGwg",
+        "resourceId": {"videoId": "OldYna_00-1"},
+        "title": "YNA boundary fixture",
+        "description": "outside lower bound"
+      }
+    }
+  ]
+}

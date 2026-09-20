@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "contentDetails": {
+        "videoId": "XyZ987_ab-c",
+        "videoPublishedAt": "2026-09-20T12:00:00Z"
+      },
+      "snippet": {
+        "channelId": "UC83jt4dlz1Gjl58fzQrrKZg",
+        "resourceId": {"videoId": "XyZ987_ab-c"},
+        "title": "Live fixture video",
+        "description": "live placeholder"
+      }
+    },
+    {
+      "contentDetails": {
+        "videoId": "AbCd_ef-123",
+        "videoPublishedAt": "2026-09-20T13:00:00Z"
+      },
+      "snippet": {
+        "channelId": "UC83jt4dlz1Gjl58fzQrrKZg",
+        "resourceId": {"videoId": "AbCd_ef-123"},
+        "title": "Duplicate playlist snapshot",
+        "description": "duplicate fixture row"
+      }
+    }
+  ],
+  "nextPageToken": "page-3"
+}

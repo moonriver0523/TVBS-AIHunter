@@ -40,6 +40,10 @@
 - **掃描順序固定 NS → AP → RT → ENEX → ABC**（不可調換，理由見 `13c` V5-1／V7-1 兩小節）。
 - 本輪是否掃 ENEX／ABC，對照 `{CHECKPOINT}` 查 `13c` V5-1／V7-1 的輪次表；
   不掃就回報一行「本輪不掃 ENEX（V5-1）」／「本輪不掃 ABC（V7-1）」。
+- **D23 YouTube 尾端**：五站瀏覽器收工硬步驟後才看 D23；Phase 5 只准執行
+  `python scripts/s2_youtube_launcher.py --checkpoint {CHECKPOINT} --state <state> --cursor <cursor> --out-dir <scratch> --dry-run`。
+  dry-run 只列 CNA → YNA 的命令計畫，不呼叫 bridge、不碰 state／cursor、不連外；不改 `s2_scan.ps1` 或另建 Windows 排程。
+- 若 `{CHECKPOINT}` 是 01:00／20:00，D23 只回報「本輪不掃 CNA／YNA（D23）」；其他五輪按 CNA → YNA 順序列出各站結果，單站失敗各自留警告，不中止五站收工。
 - 若是當天第一輪（狀態檔不存在）：先確認真的是建檔輪（只有 17:00），
   照 `13c3` §5a 建檔輪七項做，`window_start`／機動格兩項最容易錯，細節看該節。
 
@@ -61,7 +65,7 @@
 
 ## 回報（簡短）
 
-- 各站收錄則數、清單對帳結果（窗內未收幾則）——**ENEX 與 ABC 各單獨列一行**
+- 各站收錄則數、清單對帳結果（窗內未收幾則）——**ENEX、ABC、CNA、YNA 各單獨列一行**
   （本輪不掃就分別寫「本輪不掃 ENEX（V5-1）」／「本輪不掃 ABC（V7-1）」；
   ABC 有掃卻進不去，要寫明是靠哪個訊號判定登出）
 - 稽核**嚴重／次要**各幾項、怎麼處理

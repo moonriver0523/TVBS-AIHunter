@@ -1,0 +1,25 @@
+{
+  "CNA:AbCd_ef-123": {
+    "language": "en",
+    "kind": "auto",
+    "segments": [
+      {"start": 0.0, "text": "Leaders met today"},
+      {"start": 1.2, "text": "Leaders met today"},
+      {"start": 2.8, "text": "to discuss the plan."}
+    ]
+  },
+  "YNA:YnaVid_ko-1": {
+    "language": "zh-Hant",
+    "kind": "auto-translated",
+    "segments": [
+      {"start": 0.0, "text": "南韓政府今天表示"},
+      {"start": 1.0, "text": "南韓政府今天表示"},
+      {"start": 2.2, "text": "將持續觀察局勢。"}
+    ]
+  },
+  "YNA:ZyX321_ko-a": {
+    "language": "zh-Hant",
+    "kind": "auto-translated",
+    "segments": []
+  }
+}
