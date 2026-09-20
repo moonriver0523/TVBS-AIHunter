@@ -407,6 +407,7 @@ python scripts/s2_youtube_bridge.py finalize `
 | YNA 高頻超過預估 | 單輪頁數、字幕時間、人工作業量暴增 | 分頁到邊界、不截尾；記錄量與耗時；必要時調整「收錄判準」須另案裁決，不能暗中丟資料 |
 | API quota／429／暫時失敗 | 當輪不完整 | exponential backoff 有上限；失敗不前進游標；下一輪 catch-up |
 | 字幕 track 改名／缺失 | 無法形成可靠 `src_text` | deferred queue；description 不冒充字幕；YNA 可另取 ko 作精判 |
+| `yt-dlp` 被 YouTube bot 偵測擋下（`Sign in to confirm you're not a bot`，`common/17-網址素材整併.md` 記過的既有坑，抓文稿說明欄時曾發生；本次 D23 查證階段抓字幕當下未觸發，但正式環境高頻率／不同 IP 下風險未知） | 字幕階段整批失敗，`collect` 卡住或大量 deferred | 短期：字幕抓取失敗率超過閾值時整站降級為只出清單（無 `src_text`）、留 needs-review，不得整輪 abort；中期備援：改走已登入瀏覽器同源存取（比照 17 的 `fetch('/watch?v=…')` 手法），可用 claude-in-chrome 或既有 Playwright profile 執行，但**這是 bridge 從無瀏覽器依賴退化成有瀏覽器依賴的架構變動，需另案評估與使用者裁決，不在本次 Phase 0-5 範圍內先做**|
 | auto-translate 誤譯 | TC／摘要誤判 | 明標 triage-only；重大／語意可疑項回 ko 精翻；保留 video URL/provenance |
 | 發布時間欄位混用 | 窗口漏收或舊片混入 | 固定 precedence；timezone-aware；fixture 覆蓋 DST 無關但跨日／跨班必測 |
 | 只用全域 checkpoint | 跳過輪或失敗輪被截斷 | 每站成功游標；成功後才前進 |
