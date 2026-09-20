@@ -433,6 +433,31 @@ def format_duration(seconds: Optional[int]) -> Optional[str]:
     return f"{minutes:02d}:{remainder:02d}"
 
 
+# 頻道慣用的訂閱／連結樣板行——純網址行或以 ▣（YNA 常見）開頭的行都是
+# 這類樣板，不算實質內容；不窮舉每個頻道的樣板符號，只認「這一行本身
+# 就是網址」與「▣ 開頭的導引行」這兩種形狀，維持通用、不綁死特定頻道。
+_DESCRIPTION_BOILERPLATE_LINE_RE = re.compile(r"^(https?://\S+|▣.*|#\S+(\s+#\S+)*)$")
+DESCRIPTION_SUFFICIENT_MIN_CHARS = 60
+
+
+def _clean_description(raw: Any) -> str:
+    lines: list[str] = []
+    for line in _trim(raw).splitlines():
+        stripped = line.strip()
+        if not stripped or _DESCRIPTION_BOILERPLATE_LINE_RE.match(stripped):
+            continue
+        lines.append(stripped)
+    return "\n".join(lines)
+
+
+def _description_is_sufficient(cleaned: str) -> bool:
+    # D23 裁決（2026-09-20）：description 夠完整（去掉純網址／▣ 導引行後仍有
+    # 實質內容）就直接當 src_text 用，不必等字幕；字幕只在 description 太薄
+    # （例如只剩標題重複或一兩句宣傳文案）時才當備援。閾值是保守估計，太短
+    # 的清單常常只是重複標題或口號，不足以支撐摘要。
+    return len(cleaned) >= DESCRIPTION_SUFFICIENT_MIN_CHARS
+
+
 def normalize_caption(payload: Any) -> Optional[str]:
     """Collapse timestamped segments and consecutive rolling-caption duplicates."""
     if isinstance(payload, str):
@@ -816,23 +841,31 @@ def collect_manifest(*, site: str, checkpoint: str, cursor_data: Mapping[str, An
             (metadata.get("contentDetails") or {}).get("duration")
             if isinstance(metadata.get("contentDetails"), Mapping) else None
         )
-        try:
-            caption_payload = client.get_captions(
-                video_id, spec["caption_language"], spec["caption_kind"]
-            )
-        except CaptionFetchBlockedError:
-            base["deferred"].append(_deferred(
-                video_id, "caption-fetch-blocked", id=mid
-            ))
-            continue
-        caption_text = normalize_caption(caption_payload)
-        caption_meta = _caption_meta(caption_payload, spec)
-        if not caption_text or caption_meta is None:
-            base["deferred"].append(_deferred(
-                video_id, "caption-missing-or-wrong-track", id=mid,
-                expected_language=spec["caption_language"], expected_kind=spec["caption_kind"],
-            ))
-            continue
+        # D23 裁決（2026-09-20）：description 是 videos.list metadata 的一部分，
+        # 不吃 yt-dlp 配額也不受字幕限流影響；description 夠完整時直接當
+        # src_text 用，字幕留給 description 太薄的情況再抓。
+        cleaned_description = _clean_description(snippet.get("description"))
+        if _description_is_sufficient(cleaned_description):
+            src_text = cleaned_description
+            caption_meta = {"source": "description", "kind": "description", "precision": "source-text"}
+        else:
+            try:
+                caption_payload = client.get_captions(
+                    video_id, spec["caption_language"], spec["caption_kind"]
+                )
+            except CaptionFetchBlockedError:
+                base["deferred"].append(_deferred(
+                    video_id, "caption-fetch-blocked", id=mid
+                ))
+                continue
+            src_text = normalize_caption(caption_payload)
+            caption_meta = _caption_meta(caption_payload, spec)
+            if not src_text or caption_meta is None:
+                base["deferred"].append(_deferred(
+                    video_id, "caption-missing-or-wrong-track", id=mid,
+                    expected_language=spec["caption_language"], expected_kind=spec["caption_kind"],
+                ))
+                continue
         platform = {
             "site": site,
             "provider": "YouTube",
@@ -852,7 +885,7 @@ def collect_manifest(*, site: str, checkpoint: str, cursor_data: Mapping[str, An
             "description": _trim(snippet.get("description")),
             "duration_seconds": duration_seconds,
             "duration": format_duration(duration_seconds),
-            "src_text": caption_text,
+            "src_text": src_text,
             "platform": platform,
             "status": "ready",
         }

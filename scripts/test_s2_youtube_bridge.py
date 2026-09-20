@@ -60,7 +60,8 @@ class FakeClient:
 
 
 def video(video_id, channel_id, published, duration="PT1M35S", privacy="public",
-          live="none", region_restriction=None, actual_start_time=None):
+          live="none", region_restriction=None, actual_start_time=None,
+          description="metadata description"):
     content_details = {"duration": duration}
     if region_restriction is not None:
         content_details["regionRestriction"] = region_restriction
@@ -70,7 +71,7 @@ def video(video_id, channel_id, published, duration="PT1M35S", privacy="public",
             "channelId": channel_id,
             "publishedAt": published,
             "title": f"{video_id} metadata title",
-            "description": "metadata description",
+            "description": description,
             "liveBroadcastContent": live,
         },
         "contentDetails": content_details,
@@ -368,6 +369,67 @@ def test_shorts_check_failure_is_non_blocking_warning():
     assert any("shorts-check-failed" in w["reason"] for w in manifest["warnings"])
 
 
+def test_sufficient_description_is_used_directly_without_fetching_captions():
+    """D23 裁決（2026-09-20）：description 夠完整就直接當 src_text，不必等字幕
+    ——省 yt-dlp 呼叫，也不受字幕限流影響。"""
+    client = cna_client()
+    channel = bridge.SITE_SPECS["CNA"]["channel_id"]
+    rich_description = (
+        "南韓官方今天證實，一架軍機在例行訓練中於外海墜毀，兩名機組員已獲救送醫。"
+        "國防部表示將成立調查小組釐清事故原因，並暫停同型機隊飛行任務直到調查完成。"
+    )
+    assert len(rich_description) >= bridge.DESCRIPTION_SUFFICIENT_MIN_CHARS
+    client.videos["AbCd_ef-123"] = video(
+        "AbCd_ef-123", channel, "2026-09-20T14:55:02Z", description=rich_description
+    )
+    manifest = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert len(manifest["items"]) == 1
+    row = manifest["items"][0]
+    assert row["src_text"] == rich_description
+    assert row["platform"]["caption"] == {
+        "source": "description", "kind": "description", "precision": "source-text"
+    }
+    assert "AbCd_ef-123" not in client.caption_calls  # never called get_captions
+
+
+def test_thin_description_falls_back_to_captions():
+    client = cna_client()
+    channel = bridge.SITE_SPECS["CNA"]["channel_id"]
+    client.videos["AbCd_ef-123"] = video(
+        "AbCd_ef-123", channel, "2026-09-20T14:55:02Z", description="太短了"
+    )
+    manifest = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert len(manifest["items"]) == 1
+    row = manifest["items"][0]
+    assert row["src_text"] == "Leaders met today\nto discuss the plan."
+    assert row["platform"]["caption"]["kind"] == "auto"
+    assert ("AbCd_ef-123", "en", "auto") in client.caption_calls
+
+
+def test_description_boilerplate_lines_are_stripped_before_sufficiency_check():
+    channel_footer_only = (
+        "▣ 연합뉴스TV 경제정보 '머니뭅' 구독하기\n"
+        "https://www.youtube.com/@moneymove_TV\n\n"
+        "▣ 연합뉴스TV 유튜브 채널 구독\n"
+        "https://www.youtube.com/@yonhapnewstv23\n"
+    )
+    cleaned = bridge._clean_description(channel_footer_only)
+    assert cleaned == ""
+    assert bridge._description_is_sufficient(cleaned) is False
+
+    mixed = channel_footer_only + "北韓今天下午發射了一枚彈道飛彈，飛行約450公里，是今年第14次挑釁。"
+    cleaned_mixed = bridge._clean_description(mixed)
+    assert "youtube.com" not in cleaned_mixed
+    assert "▣" not in cleaned_mixed
+    assert "北韓今天下午發射了一枚彈道飛彈" in cleaned_mixed
+
+
 def test_missing_join_is_deferred_and_fifty_ids_are_batched():
     channel = bridge.SITE_SPECS["CNA"]["channel_id"]
     rows = [item(f"A{i:010d}", f"2026-09-20T14:{i // 60:02d}:{i % 60:02d}Z", channel)
@@ -627,6 +689,9 @@ def main():
              test_past_livestream_recording_is_excluded_even_after_ending,
              test_short_video_is_excluded,
              test_shorts_check_failure_is_non_blocking_warning,
+             test_sufficient_description_is_used_directly_without_fetching_captions,
+             test_thin_description_falls_back_to_captions,
+             test_description_boilerplate_lines_are_stripped_before_sufficiency_check,
              test_missing_join_is_deferred_and_fifty_ids_are_batched,
              test_playlist_fallback_and_mismatch_are_explicit,
              test_invalid_primary_published_at_is_deferred_instead_of_silently_falling_back,
