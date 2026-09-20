@@ -54,7 +54,10 @@ class FakeClient:
 
 
 def video(video_id, channel_id, published, duration="PT1M35S", privacy="public",
-          live="none"):
+          live="none", region_restriction=None):
+    content_details = {"duration": duration}
+    if region_restriction is not None:
+        content_details["regionRestriction"] = region_restriction
     return {
         "id": video_id,
         "snippet": {
@@ -64,7 +67,7 @@ def video(video_id, channel_id, published, duration="PT1M35S", privacy="public",
             "description": "metadata description",
             "liveBroadcastContent": live,
         },
-        "contentDetails": {"duration": duration},
+        "contentDetails": content_details,
         "status": {"privacyStatus": privacy, "uploadStatus": "processed"},
     }
 
@@ -238,6 +241,64 @@ def test_channel_mismatch_is_blocking():
         assert "channel" in str(exc).lower()
     else:
         raise AssertionError("channel mismatch must block collection")
+
+
+def test_region_restricted_outside_taiwan_is_skipped_not_deferred():
+    """D23 裁決：regionRestriction 排除 TW 屬永久狀態，直接歸 skipped（不再重試），
+    不可跟 caption-missing 等可能恢復的狀況一樣進 deferred 佇列每輪重打。"""
+    client = cna_client()
+    channel = bridge.SITE_SPECS["CNA"]["channel_id"]
+    client.videos["AbCd_ef-123"] = video(
+        "AbCd_ef-123", channel, "2026-09-20T14:55:02Z",
+        region_restriction={"allowed": ["SG"]},
+    )
+    manifest = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert [row["video_id"] for row in manifest["items"]].count("AbCd_ef-123") == 0
+    assert [row["video_id"] for row in manifest["deferred"]].count("AbCd_ef-123") == 0
+    skipped_ids = {row["video_id"]: row for row in manifest["skipped"]}
+    assert skipped_ids["AbCd_ef-123"]["reason"] == "region-restricted"
+    assert skipped_ids["AbCd_ef-123"]["region_restriction"] == {"allowed": ["SG"]}
+    assert manifest["counts"]["skipped"] == 1
+
+    # Skipped video IDs are recorded in cursor.recent_video_ids so a permanently
+    # region-blocked video is never re-fetched and re-classified every round.
+    next_cursor = bridge.advance_cursor(cursor(), manifest)
+    assert "AbCd_ef-123" in next_cursor["sites"]["CNA"]["recent_video_ids"]
+    assert "AbCd_ef-123" not in next_cursor["sites"]["CNA"]["deferred_video_ids"]
+
+
+def test_region_restricted_blocked_list_containing_taiwan_is_skipped():
+    client = cna_client()
+    channel = bridge.SITE_SPECS["CNA"]["channel_id"]
+    client.videos["AbCd_ef-123"] = video(
+        "AbCd_ef-123", channel, "2026-09-20T14:55:02Z",
+        region_restriction={"blocked": ["TW", "CN"]},
+    )
+    manifest = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert manifest["items"] == []
+    skipped_ids = {row["video_id"] for row in manifest["skipped"]}
+    assert "AbCd_ef-123" in skipped_ids
+
+
+def test_region_restriction_allowing_taiwan_still_proceeds_to_ready():
+    client = cna_client()
+    channel = bridge.SITE_SPECS["CNA"]["channel_id"]
+    client.videos["AbCd_ef-123"] = video(
+        "AbCd_ef-123", channel, "2026-09-20T14:55:02Z",
+        region_restriction={"allowed": ["TW", "SG"]},
+    )
+    manifest = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert len(manifest["items"]) == 1
+    assert manifest["items"][0]["video_id"] == "AbCd_ef-123"
 
 
 def test_missing_join_is_deferred_and_fifty_ids_are_batched():
@@ -493,6 +554,9 @@ def main():
              test_skipped_checkpoint_makes_no_external_calls,
              test_yna_uses_zh_hant_and_marks_triage_only,
              test_channel_mismatch_is_blocking,
+             test_region_restricted_outside_taiwan_is_skipped_not_deferred,
+             test_region_restricted_blocked_list_containing_taiwan_is_skipped,
+             test_region_restriction_allowing_taiwan_still_proceeds_to_ready,
              test_missing_join_is_deferred_and_fifty_ids_are_batched,
              test_playlist_fallback_and_mismatch_are_explicit,
              test_invalid_primary_published_at_is_deferred_instead_of_silently_falling_back,

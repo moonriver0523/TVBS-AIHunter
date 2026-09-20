@@ -56,6 +56,7 @@ SITE_SPECS = {
 }
 
 SKIPPED_HHMM = frozenset({"0100", "2000"})
+TAIWAN_REGION = "TW"
 ISO_DURATION_RE = re.compile(
     r"^P(?:(?P<days>\d+(?:\.\d+)?)D)?"
     r"(?:T(?:(?P<hours>\d+(?:\.\d+)?)H)?"
@@ -450,6 +451,21 @@ def _deferred(video_id: str, reason: str, **extra: Any) -> dict[str, Any]:
     return out
 
 
+def _is_blocked_in_taiwan(content_details: Mapping[str, Any]) -> bool:
+    """regionRestriction never resolves itself; treat it as a permanent exclusion,
+    not a retry-able deferral (D23 裁決：台灣看不到 = 直接排除，不進 deferred 佇列重打)."""
+    restriction = content_details.get("regionRestriction")
+    if not isinstance(restriction, Mapping):
+        return False
+    allowed = restriction.get("allowed")
+    if isinstance(allowed, list) and TAIWAN_REGION not in allowed:
+        return True
+    blocked = restriction.get("blocked")
+    if isinstance(blocked, list) and TAIWAN_REGION in blocked:
+        return True
+    return False
+
+
 def collect_manifest(*, site: str, checkpoint: str, cursor_data: Mapping[str, Any],
                      state_data: Mapping[str, Any], client: YouTubeClient,
                      collect_started_at_utc: Optional[str] = None,
@@ -610,6 +626,13 @@ def collect_manifest(*, site: str, checkpoint: str, cursor_data: Mapping[str, An
                 video_id, "video-not-public-or-processed", id=mid,
                 privacy_status=privacy, upload_status=upload_status,
             ))
+            continue
+        content_details = metadata.get("contentDetails") if isinstance(metadata.get("contentDetails"), Mapping) else {}
+        if _is_blocked_in_taiwan(content_details):
+            base["skipped"].append({
+                "video_id": video_id, "id": mid, "reason": "region-restricted",
+                "region_restriction": dict(content_details.get("regionRestriction") or {}),
+            })
             continue
         live_content = _trim(snippet.get("liveBroadcastContent")) or "none"
         if live_content != "none":
