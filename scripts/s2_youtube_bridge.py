@@ -129,7 +129,7 @@ class YtDlpCaptionFetcher:
     RATE_LIMIT_MARKERS = ("429", "too many requests")
 
     def __init__(self, executable: str = "yt-dlp", *, runner: Any = None,
-                 min_interval_seconds: float = 2.0, sleeper: Any = None):
+                 min_interval_seconds: float = 8.0, sleeper: Any = None):
         self._executable = executable
         self._runner = runner or subprocess.run
         self._min_interval_seconds = min_interval_seconds
