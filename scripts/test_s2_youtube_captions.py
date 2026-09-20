@@ -83,6 +83,9 @@ def test_bot_blocked_caption_is_distinct_manifest_deferred_reason():
         def get_captions(self, video_id, language, kind):
             raise bridge.CaptionFetchBlockedError("Sign in to confirm you're not a bot")
 
+        def is_short(self, video_id):
+            return False
+
     result = bridge.collect_manifest(
         site="CNA", checkpoint="0920-0430",
         cursor_data={"revision": 1, "sites": {"CNA": {"last_complete_end_utc": "2026-09-20T12:00:00Z"}}},

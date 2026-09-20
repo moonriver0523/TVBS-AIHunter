@@ -31,13 +31,15 @@ def item(video_id, published, channel_id, title=None):
 
 
 class FakeClient:
-    def __init__(self, playlist_pages, videos, captions):
+    def __init__(self, playlist_pages, videos, captions, shorts=None):
         self.playlist_pages = playlist_pages
         self.videos = videos
         self.captions = captions
+        self.shorts = set(shorts or ())
         self.playlist_calls = []
         self.video_calls = []
         self.caption_calls = []
+        self.shorts_calls = []
 
     def list_playlist_items(self, channel_id, page_token=None, max_results=50):
         self.playlist_calls.append((channel_id, page_token, max_results))
@@ -52,13 +54,17 @@ class FakeClient:
         self.caption_calls.append((video_id, language, kind))
         return self.captions.get(video_id)
 
+    def is_short(self, video_id):
+        self.shorts_calls.append(video_id)
+        return video_id in self.shorts
+
 
 def video(video_id, channel_id, published, duration="PT1M35S", privacy="public",
-          live="none", region_restriction=None):
+          live="none", region_restriction=None, actual_start_time=None):
     content_details = {"duration": duration}
     if region_restriction is not None:
         content_details["regionRestriction"] = region_restriction
-    return {
+    row = {
         "id": video_id,
         "snippet": {
             "channelId": channel_id,
@@ -70,6 +76,9 @@ def video(video_id, channel_id, published, duration="PT1M35S", privacy="public",
         "contentDetails": content_details,
         "status": {"privacyStatus": privacy, "uploadStatus": "processed"},
     }
+    if actual_start_time is not None:
+        row["liveStreamingDetails"] = {"actualStartTime": actual_start_time}
+    return row
 
 
 def cna_client():
@@ -137,8 +146,11 @@ def test_collect_paginates_and_accounts():
     assert client.video_calls == [["AbCd_ef-123", "CnaVid_00-1", "XyZ987_ab-c"]]
     assert client.caption_calls == [("AbCd_ef-123", "en", "auto")]
     assert manifest["counts"]["ready"] == 1
-    assert manifest["counts"]["deferred"] == 2
-    assert manifest["counts"]["skipped"] == 0
+    assert manifest["counts"]["deferred"] == 1
+    assert manifest["counts"]["skipped"] == 1
+    assert {row["video_id"]: row["reason"] for row in manifest["skipped"]} == {
+        "XyZ987_ab-c": "livestream-excluded"
+    }
     assert manifest["counts"]["window_total"] == 3
     assert manifest["counts"]["accounted"] == 3
     assert manifest["items"][0]["src_text"] == "Leaders met today\nto discuss the plan."
@@ -261,7 +273,10 @@ def test_region_restricted_outside_taiwan_is_skipped_not_deferred():
     skipped_ids = {row["video_id"]: row for row in manifest["skipped"]}
     assert skipped_ids["AbCd_ef-123"]["reason"] == "region-restricted"
     assert skipped_ids["AbCd_ef-123"]["region_restriction"] == {"allowed": ["SG"]}
-    assert manifest["counts"]["skipped"] == 1
+    # cna_client()'s own fixture also has a "live" video (XyZ987_ab-c), which
+    # now lands in skipped too (livestream-excluded), not deferred.
+    assert skipped_ids["XyZ987_ab-c"]["reason"] == "livestream-excluded"
+    assert manifest["counts"]["skipped"] == 2
 
     # Skipped video IDs are recorded in cursor.recent_video_ids so a permanently
     # region-blocked video is never re-fetched and re-classified every round.
@@ -299,6 +314,58 @@ def test_region_restriction_allowing_taiwan_still_proceeds_to_ready():
     )
     assert len(manifest["items"]) == 1
     assert manifest["items"][0]["video_id"] == "AbCd_ef-123"
+
+
+def test_past_livestream_recording_is_excluded_even_after_ending():
+    """D23 裁決：直播一律不收，含已結束、liveBroadcastContent 已變回 none 的
+    往日直播錄影（用 liveStreamingDetails.actualStartTime 判斷曾經直播過）。"""
+    client = cna_client()
+    channel = bridge.SITE_SPECS["CNA"]["channel_id"]
+    client.videos["AbCd_ef-123"] = video(
+        "AbCd_ef-123", channel, "2026-09-20T14:55:02Z",
+        actual_start_time="2026-09-20T14:00:00Z",  # ended; liveBroadcastContent already "none"
+    )
+    manifest = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert manifest["items"] == []
+    skipped = {row["video_id"]: row for row in manifest["skipped"]}
+    assert skipped["AbCd_ef-123"]["reason"] == "livestream-excluded"
+    assert skipped["AbCd_ef-123"]["was_ever_live"] is True
+
+
+def test_short_video_is_excluded():
+    client = cna_client()
+    client.shorts.add("AbCd_ef-123")
+    manifest = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert manifest["items"] == []
+    skipped = {row["video_id"]: row for row in manifest["skipped"]}
+    assert skipped["AbCd_ef-123"]["reason"] == "short-excluded"
+    assert "AbCd_ef-123" in client.shorts_calls
+
+
+def test_shorts_check_failure_is_non_blocking_warning():
+    """Shorts 判定是額外的最佳努力檢查；查不到時不可讓整批 collect 失敗，
+    只留 warning、當作不是 Shorts 繼續走正常分類。"""
+    client = cna_client()
+    original_is_short = client.is_short
+
+    def failing_is_short(video_id):
+        if video_id == "AbCd_ef-123":
+            raise bridge.BridgeError("shorts 頁面檢查逾時（模擬）")
+        return original_is_short(video_id)
+
+    client.is_short = failing_is_short
+    manifest = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert [row["id"] for row in manifest["items"]] == ["CNA-AbCd_ef-123"]
+    assert any("shorts-check-failed" in w["reason"] for w in manifest["warnings"])
 
 
 def test_missing_join_is_deferred_and_fifty_ids_are_batched():
@@ -557,6 +624,9 @@ def main():
              test_region_restricted_outside_taiwan_is_skipped_not_deferred,
              test_region_restricted_blocked_list_containing_taiwan_is_skipped,
              test_region_restriction_allowing_taiwan_still_proceeds_to_ready,
+             test_past_livestream_recording_is_excluded_even_after_ending,
+             test_short_video_is_excluded,
+             test_shorts_check_failure_is_non_blocking_warning,
              test_missing_join_is_deferred_and_fifty_ids_are_batched,
              test_playlist_fallback_and_mismatch_are_explicit,
              test_invalid_primary_published_at_is_deferred_instead_of_silently_falling_back,

@@ -104,6 +104,9 @@ class YouTubeClient:
     def get_captions(self, video_id: str, language: str, kind: str) -> Any:
         raise NotImplementedError
 
+    def is_short(self, video_id: str) -> bool:
+        raise NotImplementedError
+
 
 class YtDlpCaptionFetcher:
     """Local yt-dlp adapter which returns the bridge's existing caption shape.
@@ -255,7 +258,7 @@ class ProductionYouTubeClient(YouTubeClient):
         if not video_ids:
             return {}
         payload = self._request_json("videos", {
-            "part": "snippet,contentDetails,status",
+            "part": "snippet,contentDetails,status,liveStreamingDetails",
             "id": ",".join(video_ids),
         })
         rows = payload.get("items")
@@ -270,6 +273,26 @@ class ProductionYouTubeClient(YouTubeClient):
     def get_captions(self, video_id, language, kind):
         return self._caption_fetcher.get_captions(video_id, language, kind)
 
+    SHORTS_URL_ROOT = "https://www.youtube.com/shorts/"
+
+    def is_short(self, video_id):
+        # YouTube Data API v3 has no isShort field. Ask youtube.com/shorts/<id>
+        # directly: a real Short serves that URL as-is, a normal video 302s to
+        # /watch. Best-effort only — network failure here must not block an
+        # otherwise-valid item, so the caller treats BridgeError as "unknown".
+        url = f"{self.SHORTS_URL_ROOT}{video_id}"
+        try:
+            with urlopen(Request(url, headers={"User-Agent": "Mozilla/5.0"}),
+                         timeout=self._timeout_seconds) as response:
+                final_url = response.geturl()
+        except HTTPError as exc:
+            if exc.code == 404:
+                return False
+            raise BridgeError(f"YouTube shorts 頁面檢查失敗：HTTP {exc.code}") from exc
+        except (URLError, OSError) as exc:
+            raise BridgeError("YouTube shorts 頁面檢查失敗（網路）") from exc
+        return "/shorts/" in final_url
+
 
 class FixtureYouTubeClient(YouTubeClient):
     """Offline adapter for the sanitized Phase 0 JSON fixtures."""
@@ -279,6 +302,7 @@ class FixtureYouTubeClient(YouTubeClient):
         self.site = site.upper()
         self._videos = self._load_json("videos_join.json")
         self._captions = self._load_json("captions.json")
+        self._shorts = self._load_json_optional("shorts.json") or []
 
     def _load_json(self, name: str) -> Any:
         try:
@@ -286,6 +310,15 @@ class FixtureYouTubeClient(YouTubeClient):
                 return json.load(f)
         except (OSError, json.JSONDecodeError) as exc:
             raise BridgeError(f"fixture 讀取失敗：{self.root / name}（{exc}）") from exc
+
+    def _load_json_optional(self, name: str) -> Any:
+        # Older Phase 0 fixture directories predate the Shorts exclusion and
+        # simply don't have this file; treat that as "no known shorts", not
+        # an error.
+        path = self.root / name
+        if not path.exists():
+            return None
+        return self._load_json(name)
 
     def _playlist_file(self, page_token: Optional[str]) -> Path:
         if self.site == "CNA":
@@ -308,6 +341,9 @@ class FixtureYouTubeClient(YouTubeClient):
 
     def get_captions(self, video_id, language, kind):
         return self._captions.get(f"{self.site}:{video_id}")
+
+    def is_short(self, video_id):
+        return video_id in self._shorts
 
 
 def _trim(value: Any) -> str:
@@ -728,10 +764,26 @@ def collect_manifest(*, site: str, checkpoint: str, cursor_data: Mapping[str, An
             })
             continue
         live_content = _trim(snippet.get("liveBroadcastContent")) or "none"
-        if live_content != "none":
-            base["deferred"].append(_deferred(
-                video_id, "live-or-upcoming", id=mid, live_broadcast_content=live_content
-            ))
+        live_streaming_details = metadata.get("liveStreamingDetails")
+        was_ever_live = isinstance(live_streaming_details, Mapping) and bool(
+            _trim(live_streaming_details.get("actualStartTime"))
+        )
+        if live_content != "none" or was_ever_live:
+            # D23 裁決：直播（含已結束、事後變成一般 VOD 的往日直播錄影）一律不收，
+            # 這是永久狀態不會靠重試改變，所以歸 skipped 而非 deferred。
+            base["skipped"].append({
+                "video_id": video_id, "id": mid, "reason": "livestream-excluded",
+                "live_broadcast_content": live_content, "was_ever_live": was_ever_live,
+            })
+            continue
+        try:
+            is_short = client.is_short(video_id)
+        except BridgeError as exc:
+            base["warnings"].append({"video_id": video_id, "reason": f"shorts-check-failed: {exc}"})
+            is_short = False
+        if is_short:
+            # D23 裁決：Shorts 一律不收；跟直播一樣是永久狀態，歸 skipped 不進 deferred 重試佇列。
+            base["skipped"].append({"video_id": video_id, "id": mid, "reason": "short-excluded"})
             continue
         duration_seconds = parse_duration(
             (metadata.get("contentDetails") or {}).get("duration")
