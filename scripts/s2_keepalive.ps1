@@ -39,7 +39,12 @@ param(
     # chromium 的 cookie 資料庫。**保活前後各量一次**（2026-08-09 蒐證用）：
     # 使用者與我都懷疑「AP 掉線＝關閉時 cookie 沒寫回磁碟」，而這件事**可以直接量**，
     # 不必猜——關乾淨的話這個檔的修改時間會往前走，沒動就是沒寫回去。
-    [string]$CookieDb = "$env:USERPROFILE\.playwright-s2-profile-v4\Default\Network\Cookies"
+    [string]$CookieDb = "$env:USERPROFILE\.playwright-s2-profile-v4\Default\Network\Cookies",
+
+    # 2026-09-17 加：偵測到登出時自動串接重登腳本，同一個 v4 profile。
+    # 只打一次，不重試——重登本身失敗就照樣推播交給人工，不要用迴圈硬撐。
+    [string]$ReloginScript = "$PSScriptRoot\s2_relogin_s2.js",
+    [int]$ReloginTimeoutSec = 120
 )
 
 $ErrorActionPreference = 'Stop'
@@ -172,6 +177,52 @@ function Skip-Run([string]$why) {
     exit 0
 }
 
+function Invoke-AutoRelogin([string[]]$Sites) {
+    <#
+      偵測到登出時自動打一次重登腳本（同一 v4 profile，channel:'chrome'）。
+      只跑一次不重試——失敗就照樣算失敗，交給下面的通知邏輯報給人工，
+      不要在這裡包重試迴圈（見 [[feedback_api_call_budget_hard_cap]]：呼叫次數要寫死上限）。
+      回傳 hashtable：站名 -> OK / FAIL / ERR，供覆寫 $now 用。
+    #>
+    $result = @{}
+    if (-not (Test-Path $ReloginScript)) {
+        Log "WARN 自動重登腳本找不到：$ReloginScript（略過，交給人工）"
+        return $result
+    }
+    $siteArg = ($Sites -join ',')
+    Log "AUTO 偵測到登出，嘗試自動重登：$siteArg"
+    try {
+        $psi = [System.Diagnostics.ProcessStartInfo]::new()
+        $psi.FileName = 'node'
+        $psi.Arguments = "`"$ReloginScript`" --site $siteArg"
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        $timedOut = -not $proc.WaitForExit($ReloginTimeoutSec * 1000)
+        if ($timedOut) {
+            try { $proc.Kill($true) } catch { Log "WARN 自動重登逾時強殺失敗：$($_.Exception.Message)" }
+            Log "AUTO 自動重登逾時（${ReloginTimeoutSec}秒），交給人工"
+            foreach ($s in $Sites) { $result[$s] = 'ERR' }
+            return $result
+        }
+        $rOut = ($proc.StandardOutput.ReadToEnd() + "`n" + $proc.StandardError.ReadToEnd()).Trim()
+        $rCode = $proc.ExitCode
+        Log "AUTO 自動重登結果（離開碼=$rCode）：$rOut"
+        foreach ($m in [regex]::Matches($rOut, '\b(NS|AP|RT|ABC|ENEX)=(OK)(?:\(|$)')) {
+            $result[$m.Groups[1].Value] = 'OK'
+        }
+        foreach ($m in [regex]::Matches($rOut, '\b(NS|AP|RT|ABC|ENEX)=(FAIL|ERR)')) {
+            if (-not $result.ContainsKey($m.Groups[1].Value)) { $result[$m.Groups[1].Value] = 'FAIL' }
+        }
+    } catch {
+        Log "WARN 自動重登呼叫失敗：$($_.Exception.Message)"
+        foreach ($s in $Sites) { $result[$s] = 'ERR' }
+    }
+    return $result
+}
+
 $lock = $null
 try {
     $lock = [System.IO.File]::Open(
@@ -247,9 +298,23 @@ try {
             # ⚠️ 這行原本寫死「NS 已登出」，但掛的是 AP／RT 時也照印 NS——
             # 讀 log 的人會判斷錯站別（0808 一整晚的 `*** NS 已登出 *** AP=LOGGED_OUT`
             # 就是這樣來的）。改成印**真正掛掉的那幾站**。
-            $down = ($now.Keys | Where-Object { $now[$_] -eq 'LOGGED_OUT' } | Sort-Object) -join '／'
-            if (-not $down) { $down = '（解析不出站別）' }
+            $downSites = @($now.Keys | Where-Object { $now[$_] -eq 'LOGGED_OUT' } | Sort-Object)
+            $down = if ($downSites.Count) { $downSites -join '／' } else { '（解析不出站別）' }
             Log "*** $down 已登出，需要人工重新登入 *** $out"
+
+            if ($downSites.Count) {
+                $relogin = Invoke-AutoRelogin -Sites $downSites
+                foreach ($s in $downSites) {
+                    if ($relogin[$s] -eq 'OK') {
+                        Log "AUTO $s 自動重登成功，狀態改回 OK"
+                        $now[$s] = 'OK'
+                    } else {
+                        Log "AUTO $s 自動重登未成功（$($relogin[$s])），仍算 LOGGED_OUT，交給人工"
+                    }
+                }
+                # 全部自動救回來了就不用再當失敗離開碼回報
+                if (-not ($now.Values -contains 'LOGGED_OUT')) { $code = 0 }
+            }
         }
         default { Log "ERR  離開碼=$code $out" }
     }
