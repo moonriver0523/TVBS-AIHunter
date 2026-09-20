@@ -405,6 +405,13 @@ def test_production_api_uses_mock_http_and_never_leaks_key_to_artifacts():
     assert len(calls) == 4
     assert all(secret in url for url, _ in calls)
     assert all(timeout == 30 for _, timeout in calls)
+    playlist_calls = [url for url, _ in calls if "/playlistItems?" in url]
+    assert playlist_calls, "expected at least one playlistItems.list call"
+    for url in playlist_calls:
+        # playlistItems.list has no channelId parameter; it must be called with
+        # the derived uploads playlistId (UC... -> UU...).
+        assert "channelId=" not in url, url
+        assert "playlistId=UU83jt4dlz1Gjl58fzQrrKZg" in url, url
     batch = bridge.finalize_manifest({
         "schema_version": 1, "status": "complete", "site": "CNA", "checkpoint": "0920-0430",
         "collect_started_at_utc": "2026-09-20T15:00:00Z", "items": [], "skipped": [],

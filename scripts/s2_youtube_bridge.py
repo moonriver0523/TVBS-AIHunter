@@ -134,10 +134,21 @@ class ProductionYouTubeClient(YouTubeClient):
             raise BridgeError(f"YouTube Data API {resource} 回應不是 JSON 物件")
         return payload
 
+    @staticmethod
+    def _uploads_playlist_id(channel_id: str) -> str:
+        # playlistItems.list takes a playlistId, not a channelId. The channel's
+        # uploads playlist follows YouTube's documented convention of swapping
+        # the "UC" channel-ID prefix for "UU"; there is no separate API call
+        # needed to look this up.
+        trimmed = _trim(channel_id)
+        if not trimmed.startswith("UC"):
+            raise BridgeError(f"channel_id 不是預期的 UC 前綴，無法推導上傳播放清單：{channel_id!r}")
+        return "UU" + trimmed[2:]
+
     def list_playlist_items(self, channel_id, page_token=None, max_results=50):
         params: dict[str, Any] = {
             "part": "snippet,contentDetails",
-            "channelId": channel_id,
+            "playlistId": self._uploads_playlist_id(channel_id),
             "maxResults": max_results,
         }
         if page_token:
