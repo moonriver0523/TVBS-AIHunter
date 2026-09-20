@@ -277,35 +277,40 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 
 輸出一律是 `{"entries": [...], "new_topics": {...}}`。`finalize` 在任何副作用前，先用 `s2_material_schema` 的 pure validation、素材行 lint 與全量對帳完成 preflight；不得等 `add-batch` 逐筆 skip 後才發現整批 schema 不相容。
 
-### 3.7 獨立於五站之外的手動觸發機制（使用者 2026-09-20 新增需求）
+### 3.7 獨立於五站之外的手動觸發機制（使用者 2026-09-20 提出，2026-09-20 二次訂正）
 
 **設計目標**：CNA／YNA 除了掛在既有五站輪次尾端（3.1／Phase 5）之外，要能**不必等下一個排定輪次、也不必等整個五站輪跑完**，隨時單獨補開一次 CNA／YNA 掃描。
 
-**核心結論：這個需求不必另開一支新腳本，`collect`／`finalize` 這兩個 CLI entry point 本來就已經是獨立可手動呼叫的介面**（見 3.1）——差別只在於帶不帶 `--in-round`：
+**⚠️ 本節初版設計錯誤，已訂正**：初版讓手動觸發直接對正式 `{MMDD}-s2-state.json` 呼叫 `finalize --apply`（只是省略 `--in-round`），使用者指出這違反 repo 既有慣例、有資料靜默遺失風險，已採用者建議的做法改寫。
+
+**根因（跟現行 `_待整併/` 機制是同一個坑）**：`common/17-網址素材整併.md` §1 講得很明白——**「不要改狀態檔，那個檔沒有檔案鎖，寫入的當下若掃帶輪正在寫回，那幾則會靜靜消失且不會報錯」**。手動觸發跟排定輪次是兩個獨立行程，沒有共用鎖（bridge 本來就刻意不搶 `.s2-scan.lock`），若手動觸發直接 `add-batch` 進正式 state，跟排定輪次同時寫入時就是這個坑本身，光靠一把新的按站別鎖檔只能防「兩次手動觸發互撞」，防不了「手動觸發撞上正在跑的排定輪次」——排定輪次執行期間完全不會去讀／尊重這把新鎖檔。
+
+**修正設計：手動觸發只做到 `collect`＋`finalize`（不帶 `--apply`），輸出一份候選 batch 檔放進既有 `_待整併/` 目錄，實際寫入 state 的動作交給下一個排定輪次在它自己持有 `.s2-scan.lock` 的單一寫入窗口內代勞**——跟韓聯社／CNA 網址素材（人工整理）用同一套現行整併機制，只是候選檔內容從「人工手打的素材行文字」換成「bridge 產出的結構化 batch JSON」：
 
 ```powershell
-# 手動補掃 CNA，從上次成功游標抓到現在，不帶 --in-round
+# 手動補掃 CNA：只到 collect + finalize（不 --apply），輸出候選檔
 python scripts/s2_youtube_bridge.py collect --site cna `
   --state "...\0920-s2-state.json" `
   --cursor "...\s2-youtube-cursors.json" `
-  --out "...\cna_youtube_manifest_manual.json"
+  --out "...\_待整併\0920-YNA_CNA候選-cna.json"      # manifest／raw
 
 python scripts/s2_youtube_bridge.py finalize `
-  --manifest "...\cna_youtube_manifest_manual.json" `
+  --manifest "...\_待整併\0920-YNA_CNA候選-cna.json" `
   --entries "...\cna_youtube_entries_manual.json" `
-  --out "...\cna_youtube_batch_manual.json" `
-  --apply --file "...\0920-s2-state.json"
-  # 不帶 --in-round：finalize 只看 .s2-scan.lock 是否存在（見 2.4／3.1），
-  # 若五站正在跑會直接拒絕而非等待或搶鎖，避免手動流程誤撞正在進行的瀏覽器輪次
+  --out "...\_待整併\0920-YNA_CNA候選batch.json"      # ready-to-apply batch，不 --apply
+  # 不帶 --apply、不帶 --in-round：finalize 在手動模式下只產檔，
+  # 完成 3.6 講的全量對帳／preflight，確保候選檔本身就是「乾淨、可直接套用」的狀態，
+  # 但實際套用動作留給下一個排定輪次
 ```
 
-**不需要 `.s2-scan.lock`**：bridge 完全不碰 Playwright／瀏覽器，設計上就不需要跟五站共用那把鎖；`--in-round` 只是「確認呼叫方是排定輪次本身、可跳過額外保護檢查」的旗標，手動呼叫時本來就該省略。
+**排定輪次多一個檢查點**：CNA／YNA 站在收工步驟（Phase 5）除了做自己那份正常 `collect`／`finalize --apply --in-round` 之外，**開工時先檢查 `_待整併/` 底下有沒有待套用的 YNA/CNA 候選 batch**，有的話在同一個鎖session、同一次 `add-batch` 呼叫脈絡內先套用（`finalize --apply --file <state> --in-round` 指向候選檔），套用成功後把候選檔搬進 `_待整併/已整併/` 或直接刪除（比照既有 `_待整併/` 資料夾用完即清的慣例），失敗則保留候選檔、留到下一輪重試——這一步邏輯上等同 `13c3` §4b「整併 `_待整併/` 的批次」，只是候選內容從人工文字改成本 bridge 產的結構化 batch。
 
-**窗口與去重天然對齊、不必特別處理**：手動觸發用的仍是同一份 `s2-youtube-cursors.json`，窗口一樣是「上次成功終點 → 觸發當下」，跟排定輪次共用同一套永久 ID（`YNA-<videoId>`／`CNA-<videoId>`）去重機制。手動觸發等於幫該站多一次「提早把游標往前推」的機會，不會因為多跑一次而重複入庫或漏收下一個排定輪次的窗口。
+**這樣設計後**：
+- 手動觸發**不需要**額外的按站別鎖檔（3.6 初版提的 `s2-youtube-<site>.lock` 可以拿掉）——候選檔寫入用一般的「檔案已存在就開新編號」規則即可（比照 `17-網址素材整併.md` §2「檔案已存在就 append，要另存才開新檔」），不會有跟排定輪次搶寫同一份正式 state 的風險，因為手動觸發**從不直接碰 state**。
+- 游標（`s2-youtube-cursors.json`）**只在候選檔被排定輪次真的套用成功後才前進**，不在手動觸發的 `collect`／`finalize` 階段前進——避免手動觸發抓了窗口、候選檔卻遲遲沒被排定輪次撿起來套用（例如人工忘記觸發下一輪、或候選檔一直沒通過 preflight）時，游標卻已經往前跳、造成該段窗口實質上永久漏收又查不出來。
+- 兩次手動觸發前後腳跑，可能各自產生一份候選檔、內容有重疊——**不需要特別防呆**，因為套用階段仍然是靠永久 ID（`YNA-<videoId>`／`CNA-<videoId>`）去重，重疊項目套用第二次會被 `add-batch` 正常跳過，不會造成重複入庫，只是白跑一次 API／字幕成本，此風險等級遠低於直接寫壞 state。
 
-**唯一需要新增的保護**：兩份呼叫（人工手動 vs. 排定輪次的 `--in-round` 呼叫）理論上可能同時對同一站呼叫 `finalize --apply`，游標檔的 `os.replace` 原子寫入＋revision 比對（3.3）可以防止檔案寫壞，但無法防止兩邊各自根據同一個舊游標起點各抓一次窗口、各自呼叫 `add-batch`（結果不會產生重複素材，但游標會被其中較晚完成的一方覆蓋，較早完成那次抓到的窗口尾端可能被誤判成還沒收）。**修正**：比照 `.s2-scan.lock` 的排他鎖模式，但另開一把**輕量、獨立、按站別區分**的鎖檔（例如 `s2-youtube-<site>.lock`），只在同一站的 `collect`→`finalize --apply` 期間握住，跟五站的 `.s2-scan.lock` 互不阻擋；第二個呼叫撞到鎖時直接報錯退出（不等待、不重試），比照保活腳本「寧可拒絕一次、不要卡死」的既有設計原則。
-
-**不在本次計畫書實作範圍內，留待未來排程整合階段裁決**：是否要額外幫「獨立手動觸發」建一支排程（例如另一個 Windows 工作排程器項目，讓 CNA／YNA 可以用跟五站不同的頻率獨立跑），或純粹作為人工/agent 臨時補跑用的 CLI 介面即可、不建排程。這是使用範圍的決定，不影響上面的技術設計。
+**不在本次計畫書實作範圍內，留待未來排程整合階段裁決**：是否要額外幫「獨立手動觸發」建一支排程（例如另一個 Windows 工作排程器項目，讓 CNA／YNA 可以用跟五站不同的頻率獨立跑 `collect`／`finalize`），或純粹作為人工/agent 臨時補跑用的 CLI 介面即可、不建排程。這是使用範圍的決定，不影響上面的技術設計。
 
 ## 四、分階段實作步驟
 
@@ -354,7 +359,7 @@ python scripts/s2_youtube_bridge.py finalize `
 - [ ] 模擬 22:00 失敗：04:30 從 17:00 的最後成功終點續抓，不得從名義 22:00 截斷。
 - [ ] 模擬 17:00 新日狀態檔：固定游標仍延續，10 分鐘重疊不造成跨班重複素材。
 - [ ] 模擬字幕 deferred：時間游標可在完整清單抓取後前進，但 deferred ID 留在重試佇列，下一輪先重試；未成功／未明確排除前不可消失。
-- [ ] 模擬手動觸發與排定輪次同站撞鎖（3.7）：第二個 `finalize --apply` 呼叫在 `s2-youtube-<site>.lock` 存在時應立即報錯退出，不等待、不覆寫先到者的游標；另一站不受影響。
+- [ ] 模擬手動觸發候選檔（3.7）：`finalize`（不帶 `--apply`）產出的候選 batch 放進 `_待整併/`，下一個排定輪次的 `--in-round` 呼叫要能讀到並正確套用、套用後游標才前進；套用失敗時候選檔原樣保留供下一輪重試。
 
 ### Phase 5：規則與 launcher 接線（只在規則空窗）
 
@@ -364,6 +369,7 @@ python scripts/s2_youtube_bridge.py finalize `
 - [ ] 13c 的 URL ID 說明拆成 legacy 人工網址 ID 與 scheduled YouTube ID；不得覆寫 legacy 規則。
 - [ ] 在五站瀏覽器收工硬步驟之後、render／通知統計之前插入 CNA→YNA；兩站失敗各自留警告，不能中止既有五站收工。
 - [ ] 01:00／20:00 只回報「本輪不掃 CNA／YNA（D23）」；不呼叫 bridge。
+- [ ] 應掃輪在自己 `collect`／`finalize --apply --in-round` 之前，先檢查 `_待整併/` 有沒有待套用的 YNA/CNA 候選 batch（3.7），有就在同一鎖窗口內先套用、成功後歸檔或刪除候選檔，失敗則保留供下一輪重試。
 - [ ] 更新通知／本輪則數統計，從只列 NS/AP/RT 擴成能顯示 YNA/CNA；若 ENEX/ABC 統計另有既有規格，依現行格式統一處理，不另造第二套數字。
 - [ ] `python scripts/s2_rules_check.py` 與 launcher dry-run 全過；dry-run 不准呼叫外網、不准建游標、不准動 state。
 
@@ -388,7 +394,7 @@ python scripts/s2_youtube_bridge.py finalize `
 | 可能最小修改 | `scripts/s2_scan.ps1`、通知統計相關程式 | 同輪串接、跳過、統計；須以測試證明五站不變 |
 | 修改 active 規則 | `common/v9/13c-...` 與必要 prompt 指路 | 輪次、站序、ID、失敗處理 |
 | 新增 runtime state | `s2-youtube-cursors.json`（repo 外正式狀態目錄） | 每站成功游標與 deferred queue |
-| 新增 runtime lock | `s2-youtube-<site>.lock`（repo 外正式狀態目錄，按站別各一把） | 保護手動觸發（3.7）與排定輪次同站同時 `finalize --apply` 的游標競態；與 `.s2-scan.lock` 互不阻擋 |
+| 新增候選檔慣例 | `_待整併/{MMDD}-YNA_CNA候選*.json`（bridge `finalize` 不帶 `--apply` 時的輸出位置） | 手動觸發（3.7）的結構化候選 batch，沿用現行 `17-網址素材整併.md` 的 `_待整併/` 慣例，由下一個排定輪次的 `--in-round` 呼叫代為套用；不新增鎖檔 |
 
 明確不改：`s2_batch_prep.py` 的 `SITE_SPEC`、`s2_platform_extract.py`、`s2_platform_lint.py`、`s2_platform_merge.py`。除非實作時出現本文未涵蓋且有測試證明的硬相依，否則不得為「共用看起來比較整齊」而擴大改動面。
 
@@ -401,6 +407,7 @@ python scripts/s2_youtube_bridge.py finalize `
 | YNA 高頻超過預估 | 單輪頁數、字幕時間、人工作業量暴增 | 分頁到邊界、不截尾；記錄量與耗時；必要時調整「收錄判準」須另案裁決，不能暗中丟資料 |
 | API quota／429／暫時失敗 | 當輪不完整 | exponential backoff 有上限；失敗不前進游標；下一輪 catch-up |
 | 字幕 track 改名／缺失 | 無法形成可靠 `src_text` | deferred queue；description 不冒充字幕；YNA 可另取 ko 作精判 |
+| `yt-dlp` 被 YouTube bot 偵測擋下（`Sign in to confirm you're not a bot`，`common/17-網址素材整併.md` 記過的既有坑，抓文稿說明欄時曾發生；本次 D23 查證階段抓字幕當下未觸發，但正式環境高頻率／不同 IP 下風險未知） | 字幕階段整批失敗，`collect` 卡住或大量 deferred | 短期：字幕抓取失敗率超過閾值時整站降級為只出清單（無 `src_text`）、留 needs-review，不得整輪 abort；中期備援：改走已登入瀏覽器同源存取（比照 17 的 `fetch('/watch?v=…')` 手法），可用 claude-in-chrome 或既有 Playwright profile 執行，但**這是 bridge 從無瀏覽器依賴退化成有瀏覽器依賴的架構變動，需另案評估與使用者裁決，不在本次 Phase 0-5 範圍內先做**|
 | auto-translate 誤譯 | TC／摘要誤判 | 明標 triage-only；重大／語意可疑項回 ko 精翻；保留 video URL/provenance |
 | 發布時間欄位混用 | 窗口漏收或舊片混入 | 固定 precedence；timezone-aware；fixture 覆蓋 DST 無關但跨日／跨班必測 |
 | 只用全域 checkpoint | 跳過輪或失敗輪被截斷 | 每站成功游標；成功後才前進 |
@@ -408,7 +415,8 @@ python scripts/s2_youtube_bridge.py finalize `
 | add-batch 部分 skip 仍 rc=0 | 以為成功而錯推游標 | finalize 在呼叫前完成 blocking preflight；apply 後解析 receipt／核對 added+already-existing 等於預期數，再准推游標 |
 | 跨兩檔非原子交易 | state 已寫、cursor 未寫或反之 | 嚴禁 cursor-first；state-first 後 cursor 原子寫；失敗重跑靠 ID 去重 |
 | 與掃帶鎖競爭 | 狀態檔互蓋或輪內自擋 | 同一輪、同一 lock owner；人工 apply 不帶 `--in-round`；只看鎖存在不 open |
-| 手動觸發與排定輪次同站同時 `finalize --apply`（3.7） | 游標被較晚完成者覆蓋，較早完成那次的窗口尾端可能被誤判成未收 | 按站別各一把獨立輕量鎖 `s2-youtube-<site>.lock`（與 `.s2-scan.lock` 互不阻擋）；撞鎖直接報錯退出，不等待不重試 |
+| 手動觸發直接寫正式 state（初版設計錯誤，已訂正見 3.7） | 跟排定輪次同時寫、state 無檔案鎖，資料靜默消失，同 `17-網址素材整併.md §1` 的坑 | 手動觸發只到 `finalize`（不 `--apply`），輸出候選檔到 `_待整併/`；實際套用交給排定輪次在自己的鎖窗口內代勞 |
+| 候選 batch 一直沒被排定輪次撿起來套用 | 游標卡在舊點、窗口實質漏收但查不出來 | 游標只在候選檔真的套用成功後才前進，不在 `collect`／`finalize` 產檔階段前進 |
 | YouTube 失敗拖累五站 | 既有交接延誤 | 排最後且瀏覽器先收工；站別失敗隔離、留警告、五站成果照常 render |
 | 新來源未進統計／品質掃 | 看似入庫但報表漏算 | ID／render／通知／mark-ingested e2e 為上線必驗，不只測 add-batch |
 
