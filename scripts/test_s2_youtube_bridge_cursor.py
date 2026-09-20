@@ -64,21 +64,56 @@ def test_cursor_save_is_atomic_and_rejects_stale_revision():
         assert bridge.load_cursor(path)["revision"] == 1
 
 
-def test_site_locks_are_exclusive_per_site_and_release_on_exit():
-    with tempfile.TemporaryDirectory(prefix="d23-lock-") as td:
-        cna_lock = os.path.join(td, "s2-youtube-CNA.lock")
-        yna_lock = os.path.join(td, "s2-youtube-YNA.lock")
-        with bridge.site_lock(cna_lock, "CNA"):
-            assert os.path.exists(cna_lock)
-            try:
-                with bridge.site_lock(cna_lock, "CNA"):
-                    raise AssertionError("unreachable")
-            except bridge.LockBusy:
-                pass
-            with bridge.site_lock(yna_lock, "YNA"):
-                assert os.path.exists(yna_lock)
-        assert not os.path.exists(cna_lock)
-        assert not os.path.exists(yna_lock)
+def test_manual_apply_without_in_round_is_rejected():
+    """3.7（訂正版）：手動觸發一律不得 --apply，不論掃帶鎖是否存在。"""
+    with tempfile.TemporaryDirectory(prefix="d23-manual-apply-") as td:
+        manifest_path = os.path.join(td, "manifest.json")
+        decision_path = os.path.join(td, "decisions.json")
+        out_path = os.path.join(td, "batch.json")
+        state_path = os.path.join(td, "0920-s2-state.json")
+        cursor_path = os.path.join(td, "s2-youtube-cursors.json")
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest(), f, ensure_ascii=False)
+        with open(decision_path, "w", encoding="utf-8") as f:
+            json.dump(decisions(), f, ensure_ascii=False)
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump({"date": "0920", "checkpoint": "0920-0430", "items": []}, f)
+        bridge.save_cursor_atomic(cursor_path, cursor(revision=0), expected_revision=0)
+        result = subprocess.run([
+            sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "finalize",
+            "--manifest", manifest_path, "--entries", decision_path, "--out", out_path,
+            "--apply", "--file", state_path, "--cursor", cursor_path,
+            # 刻意不帶 --in-round
+        ], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        assert result.returncode != 0
+        assert not os.path.exists(out_path)
+        with open(state_path, encoding="utf-8-sig") as f:
+            state = json.load(f)
+        assert state["items"] == []
+
+
+def test_manual_mode_without_apply_only_produces_candidate_file():
+    """手動觸發省略 --apply：只產候選 batch，不碰 state、不前進游標。"""
+    with tempfile.TemporaryDirectory(prefix="d23-manual-candidate-") as td:
+        manifest_path = os.path.join(td, "manifest.json")
+        decision_path = os.path.join(td, "decisions.json")
+        pending_dir = os.path.join(td, "_待整併")
+        os.makedirs(pending_dir, exist_ok=True)
+        out_path = os.path.join(pending_dir, "0920-YNA_CNA候選-CNA.json")
+        cursor_path = os.path.join(td, "s2-youtube-cursors.json")
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest(), f, ensure_ascii=False)
+        with open(decision_path, "w", encoding="utf-8") as f:
+            json.dump(decisions(), f, ensure_ascii=False)
+        bridge.save_cursor_atomic(cursor_path, cursor(revision=0), expected_revision=0)
+        before = bridge.load_cursor(cursor_path)
+        result = subprocess.run([
+            sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "finalize",
+            "--manifest", manifest_path, "--entries", decision_path, "--out", out_path,
+        ], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        assert os.path.exists(out_path)
+        assert bridge.load_cursor(cursor_path) == before
 
 
 def test_add_batch_failure_does_not_advance_cursor():
@@ -99,7 +134,7 @@ def test_add_batch_failure_does_not_advance_cursor():
             sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "finalize",
             "--manifest", manifest_path, "--entries", decision_path, "--out", out_path,
             "--apply", "--file", bad_state_path, "--cursor", cursor_path,
-            "--in-round", "--youtube-lock", os.path.join(td, "s2-youtube-YNA.lock"),
+            "--in-round",
         ], capture_output=True, text=True, encoding="utf-8", errors="replace")
         assert result.returncode != 0
         assert bridge.load_cursor(cursor_path) == before
@@ -132,7 +167,7 @@ def test_cursor_write_failure_is_recoverable_by_idempotent_retry():
             "finalize", "--manifest", manifest_path, "--entries", decision_path,
             "--out", first_out, "--apply", "--file", state_path,
             "--registry", registry_path, "--cursor", cursor_path,
-            "--in-round", "--youtube-lock", lock_path,
+            "--in-round",
         ])
         original_save = bridge.save_cursor_atomic
         bridge.save_cursor_atomic = lambda *a, **k: (_ for _ in ()).throw(
@@ -157,7 +192,7 @@ def test_cursor_write_failure_is_recoverable_by_idempotent_retry():
             sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "finalize",
             "--manifest", manifest_path, "--entries", decision_path, "--out", retry_out,
             "--apply", "--file", state_path, "--registry", registry_path,
-            "--cursor", cursor_path, "--in-round", "--youtube-lock", lock_path,
+            "--cursor", cursor_path, "--in-round",
         ], capture_output=True, text=True, encoding="utf-8", errors="replace")
         assert retried.returncode == 0, (retried.stdout, retried.stderr)
         assert bridge.load_cursor(cursor_path)["revision"] == before["revision"] + 1
@@ -166,15 +201,32 @@ def test_cursor_write_failure_is_recoverable_by_idempotent_retry():
         assert sum(row.get("id") == READY["id"] for row in state["items"]) == 1
 
 
-def test_cli_apply_rejects_existing_site_lock_immediately():
-    with tempfile.TemporaryDirectory(prefix="d23-lock-cli-") as td:
+def test_in_round_apply_picks_up_pending_candidate_and_archives_it():
+    """3.7：排定輪次 --in-round --apply 時，先掃 --pending-dir 把候選 batch 一併套用、
+    成功後搬進 已整併/ 子目錄；候選檔內容單獨也要能通過去重（同 ID 不重複入庫）。
+    """
+    with tempfile.TemporaryDirectory(prefix="d23-pending-") as td:
         manifest_path = os.path.join(td, "manifest.json")
         decision_path = os.path.join(td, "decisions.json")
         out_path = os.path.join(td, "batch.json")
         state_path = os.path.join(td, "0920-s2-state.json")
         registry_path = os.path.join(td, "registry.json")
         cursor_path = os.path.join(td, "s2-youtube-cursors.json")
-        lock_path = os.path.join(td, "s2-youtube-YNA.lock")
+        pending_dir = os.path.join(td, "_待整併")
+        os.makedirs(pending_dir, exist_ok=True)
+        pending_path = os.path.join(pending_dir, "0920-YNA_CNA候選-CNA.json")
+
+        pending_item = dict(READY, id="CNA-PendingVid1", site="CNA", video_id="PendingVid1",
+                             platform=dict(READY["platform"], site="CNA", video_id="PendingVid1"))
+        pending_manifest = manifest(site="CNA", items=[pending_item],
+                                     counts={"window_total": 1, "ready": 1, "skipped": 0,
+                                             "dropped": 0, "deferred": 0, "accounted": 1})
+        pending_decisions = decisions(entry="CNA-PendingVid1 (韓聯社) ▎摘要。▎畫面：無。▎無BITE。▎01:35")
+        pending_decisions["CNA-PendingVid1"] = pending_decisions.pop(READY["id"])
+        pending_wrapper = bridge.finalize_manifest(pending_manifest, pending_decisions)
+        with open(pending_path, "w", encoding="utf-8") as f:
+            json.dump(pending_wrapper, f, ensure_ascii=False)
+
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest(), f, ensure_ascii=False)
         with open(decision_path, "w", encoding="utf-8") as f:
@@ -185,28 +237,74 @@ def test_cli_apply_rejects_existing_site_lock_immediately():
             json.dump({"topics": [{"name": "韓聯測試", "big": "國際", "charter": "既有"}]}, f,
                       ensure_ascii=False)
         bridge.save_cursor_atomic(cursor_path, cursor(revision=0), expected_revision=0)
-        before = bridge.load_cursor(cursor_path)
-        with open(lock_path, "w", encoding="ascii") as f:
-            f.write("owner=first\n")
+
         result = subprocess.run([
             sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "finalize",
             "--manifest", manifest_path, "--entries", decision_path, "--out", out_path,
             "--apply", "--file", state_path, "--registry", registry_path,
-            "--cursor", cursor_path, "--in-round", "--youtube-lock", lock_path,
+            "--cursor", cursor_path, "--in-round", "--pending-dir", pending_dir,
+        ], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        assert result.returncode == 0, (result.stdout, result.stderr)
+
+        with open(state_path, encoding="utf-8-sig") as f:
+            state = json.load(f)
+        ids = {row.get("id") for row in state["items"]}
+        assert READY["id"] in ids
+        assert "CNA-PendingVid1" in ids
+
+        assert not os.path.exists(pending_path)
+        archived = os.path.join(pending_dir, "已整併", "0920-YNA_CNA候選-CNA.json")
+        assert os.path.exists(archived)
+
+
+def test_in_round_apply_failure_keeps_pending_candidate_for_retry():
+    """套用失敗時候選檔原樣保留，不歸檔、不清空，供下一輪重試。"""
+    with tempfile.TemporaryDirectory(prefix="d23-pending-fail-") as td:
+        manifest_path = os.path.join(td, "manifest.json")
+        decision_path = os.path.join(td, "decisions.json")
+        out_path = os.path.join(td, "batch.json")
+        bad_state_path = os.path.join(td, "state-directory")
+        os.mkdir(bad_state_path)
+        cursor_path = os.path.join(td, "s2-youtube-cursors.json")
+        pending_dir = os.path.join(td, "_待整併")
+        os.makedirs(pending_dir, exist_ok=True)
+        pending_path = os.path.join(pending_dir, "0920-YNA_CNA候選-CNA.json")
+        pending_item = dict(READY, id="CNA-PendingVid2", site="CNA", video_id="PendingVid2",
+                             platform=dict(READY["platform"], site="CNA", video_id="PendingVid2"))
+        pending_manifest = manifest(site="CNA", items=[pending_item],
+                                     counts={"window_total": 1, "ready": 1, "skipped": 0,
+                                             "dropped": 0, "deferred": 0, "accounted": 1})
+        pending_decisions = decisions(entry="CNA-PendingVid2 (韓聯社) ▎摘要。▎畫面：無。▎無BITE。▎01:35")
+        pending_decisions["CNA-PendingVid2"] = pending_decisions.pop(READY["id"])
+        pending_wrapper = bridge.finalize_manifest(pending_manifest, pending_decisions)
+        with open(pending_path, "w", encoding="utf-8") as f:
+            json.dump(pending_wrapper, f, ensure_ascii=False)
+        with open(manifest_path, "w", encoding="utf-8") as f:
+            json.dump(manifest(cursor_revision=1), f, ensure_ascii=False)
+        with open(decision_path, "w", encoding="utf-8") as f:
+            json.dump(decisions(), f, ensure_ascii=False)
+        bridge.save_cursor_atomic(cursor_path, cursor(revision=0), expected_revision=0)
+        before = bridge.load_cursor(cursor_path)
+        result = subprocess.run([
+            sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "finalize",
+            "--manifest", manifest_path, "--entries", decision_path, "--out", out_path,
+            "--apply", "--file", bad_state_path, "--cursor", cursor_path,
+            "--in-round", "--pending-dir", pending_dir,
         ], capture_output=True, text=True, encoding="utf-8", errors="replace")
         assert result.returncode != 0
-        assert not os.path.exists(out_path)
-        assert os.path.exists(lock_path)
         assert bridge.load_cursor(cursor_path) == before
+        assert os.path.exists(pending_path)
 
 
 def main():
     tests = [test_advance_cursor_keeps_deferred_and_moves_only_after_complete_manifest,
              test_cursor_save_is_atomic_and_rejects_stale_revision,
-             test_site_locks_are_exclusive_per_site_and_release_on_exit,
+             test_manual_apply_without_in_round_is_rejected,
+             test_manual_mode_without_apply_only_produces_candidate_file,
              test_add_batch_failure_does_not_advance_cursor,
              test_cursor_write_failure_is_recoverable_by_idempotent_retry,
-             test_cli_apply_rejects_existing_site_lock_immediately]
+             test_in_round_apply_picks_up_pending_candidate_and_archives_it,
+             test_in_round_apply_failure_keeps_pending_candidate_for_retry]
     ok = True
     for test in tests:
         try:

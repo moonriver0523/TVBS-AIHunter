@@ -18,7 +18,6 @@ import json
 import os
 import re
 import sys
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -76,10 +75,6 @@ class FinalizeError(BridgeError):
 
 class CursorConflict(BridgeError):
     """Raised when an old manifest would overwrite a newer cursor revision."""
-
-
-class LockBusy(BridgeError):
-    """Raised immediately when the same site's bridge lock already exists."""
 
 
 class YouTubeClient:
@@ -748,28 +743,12 @@ def finalize_manifest(manifest: Mapping[str, Any], decisions: Mapping[str, Any])
     }
 
 
-def _scan_lock_path(path: Optional[str] = None) -> str:
-    if path:
-        return path
-    profile = os.environ.get("USERPROFILE") or os.path.expanduser("~")
-    return os.path.join(profile, ".s2-scan.lock")
-
-
 def _cursor_path(args: argparse.Namespace) -> str:
     if args.cursor:
         return args.cursor
     if not args.file:
         raise FinalizeError("apply 必須明帶 --cursor，或提供 --file 讓 bridge 推導游標路徑")
     return os.path.join(os.path.dirname(os.path.abspath(args.file)), "s2-youtube-cursors.json")
-
-
-def _youtube_lock_path(args: argparse.Namespace, cursor_path: str, site: str) -> str:
-    if args.youtube_lock:
-        return args.youtube_lock
-    return os.path.join(
-        os.path.dirname(os.path.abspath(cursor_path)),
-        f"s2-youtube-{site.upper()}.lock",
-    )
 
 
 def _verify_applied_state(state_path: str, entries: list[Mapping[str, Any]]) -> None:
@@ -796,48 +775,94 @@ def _finalize_command(args: argparse.Namespace) -> int:
     manifest = read_json(args.manifest)
     decisions = read_json(args.entries)
     wrapper = finalize_manifest(manifest, decisions)
+    # 3.7（訂正版）：手動觸發（未帶 --in-round）一律禁止 --apply，不論掃帶鎖是否存在——
+    # state 沒有檔案鎖，只有排定輪次自己持有 .s2-scan.lock 時的單一寫入窗口才准直接套用。
+    # 手動觸發只能產候選 batch（見下方 not args.apply 分支），交排定輪次的 --in-round 呼叫代套用。
+    if args.apply and not args.in_round:
+        raise FinalizeError(
+            "--apply 只能由排定輪次的 --in-round 呼叫使用；手動觸發請省略 --apply，"
+            "產出的候選 batch 檔另存到 _待整併/ 目錄，由下一個排定輪次代為套用（計畫書 3.7）"
+        )
     if args.apply and not args.file:
         raise FinalizeError("--apply 必須明帶 --file，禁止猜正式 state 路徑")
-    if args.apply and not args.in_round and os.path.exists(_scan_lock_path(args.scan_lock)):
-        raise FinalizeError(
-            f"偵測到掃帶鎖檔 {_scan_lock_path(args.scan_lock)}；人工 apply 拒絕與五站同時寫 state"
-        )
     if not args.apply:
         write_json_no_overwrite(args.out, wrapper)
         print(json.dumps(wrapper["receipt"], ensure_ascii=False))
         return 0
+
+    # --in-round：排定輪次自己的鎖窗口內執行，單一寫入者，不需要另外的按站鎖檔。
     cursor_path = _cursor_path(args)
-    lock_path = _youtube_lock_path(args, cursor_path, manifest["site"])
-    with site_lock(lock_path, manifest["site"]):
-        # Validate the current revision and the manifest's complete-accounting contract
-        # before add-batch.  The actual cursor write remains after state success.
-        current_cursor = load_cursor(cursor_path)
-        next_cursor = None
-        if manifest.get("status") != "skipped":
-            next_cursor = advance_cursor(current_cursor, manifest)
-        write_json_no_overwrite(args.out, wrapper)
-        if wrapper["entries"]:
-            cmd = [sys.executable, os.path.join(HERE, "s2_state.py"), "--file", args.file]
-            if args.registry:
-                cmd += ["--registry", args.registry]
-            cmd += ["add-batch", "--entries", args.out]
-            env = dict(os.environ, PYTHONIOENCODING="utf-8")
-            result = __import__("subprocess").run(cmd, capture_output=True, env=env)
-            stdout = (result.stdout or b"").decode("utf-8", errors="replace")
-            stderr = (result.stderr or b"").decode("utf-8", errors="replace")
-            if stdout:
-                print(stdout, end="")
-            if stderr:
-                print(stderr, end="", file=sys.stderr)
-            if result.returncode != 0:
-                raise BridgeError(f"s2_state.py add-batch 失敗，游標不得前進（rc={result.returncode}）")
-            _verify_applied_state(args.file, wrapper["entries"])
-        if manifest.get("status") != "skipped":
-            save_cursor_atomic(
-                cursor_path, next_cursor, expected_revision=current_cursor["revision"]
-            )
-        print(json.dumps(wrapper["receipt"], ensure_ascii=False))
-        return 0
+    pending = _collect_pending_candidates(args.pending_dir, manifest["site"]) if args.pending_dir else []
+    combined_entries = list(wrapper["entries"])
+    for cand in pending:
+        combined_entries.extend(cand["wrapper"].get("entries", []))
+    current_cursor = load_cursor(cursor_path)
+    next_cursor = None
+    if manifest.get("status") != "skipped":
+        next_cursor = advance_cursor(current_cursor, manifest)
+    write_json_no_overwrite(args.out, wrapper)
+    if combined_entries:
+        combined_path = args.out + ".combined.json"
+        write_json_no_overwrite(combined_path, {"entries": combined_entries, "new_topics": wrapper.get("new_topics", {})})
+        cmd = [sys.executable, os.path.join(HERE, "s2_state.py"), "--file", args.file]
+        if args.registry:
+            cmd += ["--registry", args.registry]
+        cmd += ["add-batch", "--entries", combined_path]
+        env = dict(os.environ, PYTHONIOENCODING="utf-8")
+        result = __import__("subprocess").run(cmd, capture_output=True, env=env)
+        stdout = (result.stdout or b"").decode("utf-8", errors="replace")
+        stderr = (result.stderr or b"").decode("utf-8", errors="replace")
+        if stdout:
+            print(stdout, end="")
+        if stderr:
+            print(stderr, end="", file=sys.stderr)
+        if result.returncode != 0:
+            raise BridgeError(f"s2_state.py add-batch 失敗，游標不得前進（rc={result.returncode}）")
+        _verify_applied_state(args.file, combined_entries)
+    # 候選檔只在整批 add-batch 成功後才歸檔；套用失敗的候選檔原樣保留，下一輪重試。
+    for cand in pending:
+        _archive_pending_candidate(cand["path"])
+    if manifest.get("status") != "skipped":
+        save_cursor_atomic(
+            cursor_path, next_cursor, expected_revision=current_cursor["revision"]
+        )
+    print(json.dumps(wrapper["receipt"], ensure_ascii=False))
+    return 0
+
+
+def _collect_pending_candidates(pending_dir: str, site: str) -> list[dict[str, Any]]:
+    """掃 `_待整併/` 找這一站尚未套用的候選 batch（3.7）。檔名慣例：
+    `{MMDD}-YNA_CNA候選*-{site}*.json`；讀不到／非本 bridge 產出格式的檔案直接跳過，
+    不得讓別人放在同一目錄的其他候選檔（如 17-網址素材整併.md 的人工 .txt）誤觸發。
+    """
+    if not os.path.isdir(pending_dir):
+        return []
+    found: list[dict[str, Any]] = []
+    for name in sorted(os.listdir(pending_dir)):
+        if not name.lower().endswith(".json"):
+            continue
+        if site.upper() not in name.upper():
+            continue
+        path = os.path.join(pending_dir, name)
+        try:
+            data = read_json(path)
+        except BridgeError:
+            continue
+        if not isinstance(data, Mapping) or "entries" not in data:
+            continue
+        found.append({"path": path, "wrapper": data})
+    return found
+
+
+def _archive_pending_candidate(path: str) -> None:
+    parent = os.path.dirname(path)
+    archive_dir = os.path.join(parent, "已整併")
+    os.makedirs(archive_dir, exist_ok=True)
+    dest = os.path.join(archive_dir, os.path.basename(path))
+    try:
+        os.replace(path, dest)
+    except OSError:
+        pass
 
 
 def read_json(path: str) -> Any:
@@ -983,28 +1008,6 @@ def advance_cursor(cursor_data: Mapping[str, Any], manifest: Mapping[str, Any]) 
     return next_cursor
 
 
-@contextmanager
-def site_lock(path: str, site: str):
-    """Create a lightweight per-site lock without opening an existing lock."""
-    parent = os.path.dirname(os.path.abspath(path))
-    os.makedirs(parent, exist_ok=True)
-    fd = None
-    try:
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError as exc:
-            raise LockBusy(f"{site} bridge 鎖已存在：{path}") from exc
-        os.write(fd, f"site={site} pid={os.getpid()}\n".encode("ascii"))
-        yield
-    finally:
-        if fd is not None:
-            os.close(fd)
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-
-
 def _collect_command(args: argparse.Namespace) -> int:
     cursor_data = load_cursor(args.cursor)
     state_data = read_json(args.state)
@@ -1046,10 +1049,12 @@ def build_parser() -> argparse.ArgumentParser:
     finalize.add_argument("--file", help="add-batch 目標 state；僅 --apply 必填")
     finalize.add_argument("--registry", help="測試／沙箱用 topic registry")
     finalize.add_argument("--cursor", help="apply 用每站 YouTube cursor；省略時取 state 同目錄")
-    finalize.add_argument("--youtube-lock", help="測試用按站 bridge lock 路徑")
     finalize.add_argument("--in-round", action="store_true",
-                          help="排定輪次已持有掃帶鎖時略過人工鎖檢查")
-    finalize.add_argument("--scan-lock", help="測試用 .s2-scan.lock 路徑")
+                          help="只有排定輪次在自己的 .s2-scan.lock 鎖窗口內才可帶此旗標並 --apply；"
+                               "手動觸發不得帶此旗標、也不得 --apply（計畫書 3.7）")
+    finalize.add_argument("--pending-dir",
+                          help="--in-round --apply 時掃這個目錄裡待套用的 YNA/CNA 候選 batch"
+                               "（3.7；通常是 _待整併/），套用成功一併歸檔到其 已整併/ 子目錄")
     return parser
 
 

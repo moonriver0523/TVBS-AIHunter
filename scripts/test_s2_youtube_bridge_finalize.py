@@ -121,14 +121,16 @@ def test_manifest_preflight_blocks_dropped_bad_checkpoint_and_source_mismatch():
     ), "source")
 
 
-def test_cli_apply_e2e_and_manual_scan_lock():
+def test_cli_apply_e2e_requires_in_round():
+    """3.7（訂正版）：--apply 沒帶 --in-round 一律拒絕（不論有沒有掃帶鎖），
+    手動模式只能省略 --apply 產候選檔；--in-round --apply 才能真的寫進 state。
+    """
     with tempfile.TemporaryDirectory(prefix="d23-finalize-") as td:
         manifest_path = os.path.join(td, "manifest.json")
         decision_path = os.path.join(td, "decisions.json")
         out_path = os.path.join(td, "batch.json")
         state_path = os.path.join(td, "0920-s2-state.json")
         registry_path = os.path.join(td, "registry.json")
-        scan_lock = os.path.join(td, ".s2-scan.lock")
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest(), f, ensure_ascii=False)
         with open(decision_path, "w", encoding="utf-8") as f:
@@ -138,16 +140,13 @@ def test_cli_apply_e2e_and_manual_scan_lock():
         with open(registry_path, "w", encoding="utf-8") as f:
             json.dump({"topics": [{"name": "韓聯測試", "big": "國際", "charter": "既有"}]}, f,
                       ensure_ascii=False)
-        with open(scan_lock, "w", encoding="utf-8") as f:
-            f.write("busy")
 
-        locked = subprocess.run([
+        manual_apply = subprocess.run([
             sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "finalize",
             "--manifest", manifest_path, "--entries", decision_path, "--out", out_path,
             "--apply", "--file", state_path, "--registry", registry_path,
-            "--scan-lock", scan_lock,
         ], capture_output=True, text=True, encoding="utf-8")
-        assert locked.returncode != 0
+        assert manual_apply.returncode != 0
         assert not os.path.exists(out_path)
 
         dry = subprocess.run([
@@ -162,7 +161,6 @@ def test_cli_apply_e2e_and_manual_scan_lock():
             sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "finalize",
             "--manifest", manifest_path, "--entries", decision_path, "--out", out_path,
             "--apply", "--file", state_path, "--in-round", "--registry", registry_path,
-            "--scan-lock", scan_lock,
         ], capture_output=True, text=True, encoding="utf-8")
         assert applied.returncode == 0, (applied.stdout, applied.stderr)
         with open(state_path, encoding="utf-8-sig") as f:
@@ -179,7 +177,7 @@ def main():
              test_skip_and_new_topics_are_accounted,
              test_missing_or_unknown_decision_is_blocking,
              test_manifest_preflight_blocks_dropped_bad_checkpoint_and_source_mismatch,
-             test_cli_apply_e2e_and_manual_scan_lock]
+             test_cli_apply_e2e_requires_in_round]
     ok = True
     for test in tests:
         try:
