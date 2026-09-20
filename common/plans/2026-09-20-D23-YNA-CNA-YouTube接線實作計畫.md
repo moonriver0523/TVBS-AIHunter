@@ -464,3 +464,25 @@ python scripts/s2_youtube_bridge.py finalize `
 D23 的站序與五輪安排可以採用；`playlistItems.list`＋`videos.list`＋字幕也能明確映射到 `add-batch`。但前案「另開 bridge、直接接 batch、其餘不動」少算了兩個 production 級相容問題：現有兩位數 URL ID 不適合高頻且無法穩定去重，以及全域 checkpoint 無法表示 YouTube 特有跳過輪與前輪失敗。
 
 建議核准的版本是：**獨立 `s2_youtube_bridge.py`，不進 `SITE_SPEC`、不擴充 ENEX／ABC 三件套；先補永久 video ID seam，再以每站成功游標實作 at-least-once 窗口，最後輸出現行 add-batch wrapper。**這個方案讓 YouTube 特有複雜度集中在單一 adapter，既有五站只需在收工尾端多一個隔離呼叫點，回滾面最小。
+
+## 十、正式上線開關（2026-09-20 使用者裁定）
+
+> ⛔ **D23 排定輪次（CNA／YNA 隨五站排程自動掃）預設關閉，使用者下令才啟動。**
+
+- 這不是新的技術限制，是既有現況的明文化：Phase 5 本來就只做 `s2_youtube_launcher.py --dry-run`，未接 `s2_scan.ps1`、未接 Windows 排程，本節只是把「之後要接的時候，預設值是 OFF」寫死，避免日後有人以為 Phase 6 測試完就等於可以自動接上。
+- 開關生效範圍：**只管「排定五站輪次尾端自動觸發 D23」這件事**。人工手動觸發（`collect`＋`finalize`，不帶 `--apply`，輸出候選檔到 `_待整併/`）不受此開關限制，本來就是獨立於排程之外的路徑（見 3.7）；但候選檔要真的套進正式 state，仍要等一個排定輪次的 `--in-round --apply` 撿起來，而只要 D23 排定輪次本身是 OFF，就沒有任何排定輪次會執行那個撿取動作。
+- 換句話說：在使用者明確下令開啟之前，**即使 `_待整併/` 裡放著候選 JSON，也不會被任何自動流程套用**——這是本開關與 3.7 候選檔機制疊加後的實際效果，不需要另外加鎖或旗標。
+- 日後要開啟，需要使用者明確下令，且仍受本文件既有前提條件（`八、回滾與停手條件` 最後一段：版權裁示、API key 安全配置、新 ID 全套 parser/render 測試）約束，缺一不可。
+
+## 十一、2026-09-20 Phase 6 實測記錄（腳手架階段，未授權正式上線）
+
+以下是 Phase 6 腳手架完成後的三輪真實測試記錄，供之後接續工作參考；**全部發生在 worktree `feat/d23-youtube-bridge`，未 merge、未 push、未接排程**：
+
+1. **`playlistItems.list` 修正**：Codex 腳手架誤用 `channelId` 參數（該端點無此參數），改用官方慣例推導 `playlistId`（`UC`→`UU`）。
+2. **regionRestriction 排除**：`allowed` 不含 `TW` 或 `blocked` 含 `TW` 一律歸 `skipped`（reason=`region-restricted`），不進 `deferred` 重試佇列。真實測試中 CNA 頻道抓到多筆僅開放 `SG` 的影片，已正確排除。
+3. **直播／Shorts 排除**（使用者 2026-09-20 裁定：只收一般影片）：
+   - 直播（含已結束、`liveBroadcastContent` 已變回 `none` 的往日直播錄影，用 `liveStreamingDetails.actualStartTime` 判斷）一律 `skipped`（reason=`livestream-excluded`）。
+   - Shorts 用 `youtube.com/shorts/<id>` 可達性判斷，一律 `skipped`（reason=`short-excluded`）；查不到時 fail-open（留 warning，當作不是 Shorts），不中斷整批。
+4. **yt-dlp 字幕真實接通**：本機已裝 yt-dlp（`2026.08.18.122307`），CNA 用 `en/auto`、YNA 用 `zh-Hant/auto-translated`，VTT 解析與去重驗證正常，暫存字幕檔用畢即刪。
+5. **端到端真實測試**（2026-09-20 18:30–20:30 台北時間窗，`--max-pages 3`）：CNA 0 筆 ready（3 筆全被地區限制／Shorts 排除）；YNA 3 筆 ready，字幕正常取得，人工依 `13e` 規則寫分類（大分類／中主題／T-C）後產生候選 JSON，存入 `_待整併/0920-YNA_CNA候選-{CNA,YNA}.json`（因本節開關 OFF，不會被任何排程套用）。
+6. **已知缺口**：ready 項目的「畫面：」段目前只能寫「未看影片，僅依字幕文字稿判讀」佔位——D23 YouTube 素材沒有 AP／RT 那種 shotlist 可抄，要真的看畫面才能補齊，尚未決定要不要在 finalize 前一律插入 video_analyze 步驟。
