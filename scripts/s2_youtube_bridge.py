@@ -17,7 +17,9 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
@@ -81,6 +83,14 @@ class CursorConflict(BridgeError):
     """Raised when an old manifest would overwrite a newer cursor revision."""
 
 
+class YtDlpNotFoundError(BridgeError):
+    """Raised when the local yt-dlp executable cannot be started."""
+
+
+class CaptionFetchBlockedError(BridgeError):
+    """Raised when YouTube rejects yt-dlp as automated traffic."""
+
+
 class YouTubeClient:
     """Small external boundary used by collect; tests inject a fake implementation."""
 
@@ -95,20 +105,104 @@ class YouTubeClient:
         raise NotImplementedError
 
 
+class YtDlpCaptionFetcher:
+    """Local yt-dlp adapter which returns the bridge's existing caption shape.
+
+    ``runner`` is injectable so this boundary is fully testable without starting
+    a process.  ``zh-Hant`` is deliberately passed through unchanged: it is the
+    established YNA translated-caption language code in ``SITE_SPECS``.
+    """
+
+    BOT_BLOCK_MARKERS = (
+        "sign in to confirm", "not a bot", "bot detection", "automated",
+    )
+
+    def __init__(self, executable: str = "yt-dlp", *, runner: Any = None):
+        self._executable = executable
+        self._runner = runner or subprocess.run
+
+    @staticmethod
+    def _segments_from_vtt(path: Path) -> list[dict[str, str]]:
+        try:
+            content = path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError as exc:
+            raise BridgeError(f"yt-dlp 字幕檔讀取失敗：{path.name}") from exc
+
+        segments: list[dict[str, str]] = []
+        previous_cue = ""
+        for block in re.split(r"\r?\n\s*\r?\n", content):
+            lines = [line.strip() for line in block.splitlines()]
+            if not lines or lines[0].upper() == "WEBVTT" or lines[0].startswith(("NOTE", "STYLE", "REGION")):
+                continue
+            timing_index = next((index for index, line in enumerate(lines) if "-->" in line), None)
+            if timing_index is None:
+                continue
+            cue_lines = lines[timing_index + 1:]
+            text = re.sub(r"<[^>]+>", "", " ".join(cue_lines))
+            text = re.sub(r"\s+", " ", text).strip()
+            if not text:
+                continue
+            # yt-dlp VTT frequently emits rolling cues ("Hello", then
+            # "Hello world"). Keep only the newly revealed suffix.
+            if previous_cue and text.startswith(previous_cue + " "):
+                text = text[len(previous_cue):].strip()
+            elif previous_cue and previous_cue.startswith(text):
+                continue
+            previous_cue = re.sub(r"\s+", " ", " ".join(cue_lines)).strip()
+            if text and (not segments or text != segments[-1]["text"]):
+                segments.append({"text": text})
+        return segments
+
+    def get_captions(self, video_id: str, language: str, kind: str) -> Optional[dict[str, Any]]:
+        with tempfile.TemporaryDirectory(prefix="d23-ytdlp-") as directory:
+            template = str(Path(directory) / "%(id)s.%(ext)s")
+            command = [
+                self._executable, "--skip-download", "--write-auto-sub", "--sub-lang", language,
+                "--sub-format", "vtt", "--convert-subs", "vtt", "-o", template,
+                f"https://www.youtube.com/watch?v={video_id}",
+            ]
+            try:
+                result = self._runner(command, capture_output=True, text=True, check=False)
+            except (FileNotFoundError, PermissionError) as exc:
+                raise YtDlpNotFoundError("找不到或無法執行本機 yt-dlp；這不是字幕缺失") from exc
+            stdout = _trim(getattr(result, "stdout", ""))
+            stderr = _trim(getattr(result, "stderr", ""))
+            diagnostic = f"{stdout}\n{stderr}".lower()
+            if getattr(result, "returncode", 0) != 0:
+                if any(marker in diagnostic for marker in self.BOT_BLOCK_MARKERS):
+                    raise CaptionFetchBlockedError("yt-dlp 被 YouTube bot 偵測阻擋，應稍後重試")
+                raise BridgeError(f"yt-dlp 取得字幕失敗（exit code {result.returncode}）")
+            vtt_files = sorted(Path(directory).glob("*.vtt"))
+            if not vtt_files:
+                return None
+            segments: list[dict[str, str]] = []
+            for vtt_file in vtt_files:
+                try:
+                    segments.extend(self._segments_from_vtt(vtt_file))
+                finally:
+                    # Do not retain raw subtitle files beyond this one fetch.
+                    try:
+                        vtt_file.unlink()
+                    except FileNotFoundError:
+                        pass
+            if not segments:
+                return None
+            return {"language": language, "kind": kind, "segments": segments}
+
+
 class ProductionYouTubeClient(YouTubeClient):
     """YouTube Data API v3 boundary for the Phase 6 manual sandbox.
 
     The key is intentionally held only in memory and is never copied into a
-    manifest, batch, log, or exception.  Subtitle download is a separate,
-    authenticated ``yt-dlp`` concern and remains outside this API-key-only
-    adapter; returning ``None`` lets the existing deferred accounting report
-    that condition explicitly.
+    manifest, batch, log, or exception.  Subtitle download is delegated to the
+    local ``yt-dlp`` adapter because the API key can only access metadata.
     """
 
     API_ROOT = "https://www.googleapis.com/youtube/v3"
     API_KEY_ENV = "YOUTUBE_API_KEY"
 
-    def __init__(self, api_key: Optional[str] = None, *, timeout_seconds: int = 30):
+    def __init__(self, api_key: Optional[str] = None, *, timeout_seconds: int = 30,
+                 caption_fetcher: Optional[YtDlpCaptionFetcher] = None):
         self._api_key = _trim(api_key if api_key is not None else os.environ.get(self.API_KEY_ENV))
         if not self._api_key:
             raise BridgeError(
@@ -116,6 +210,7 @@ class ProductionYouTubeClient(YouTubeClient):
                 "未設定時請改用 --fixture-dir，且不會自動降級。"
             )
         self._timeout_seconds = timeout_seconds
+        self._caption_fetcher = caption_fetcher or YtDlpCaptionFetcher()
 
     def _request_json(self, resource: str, params: Mapping[str, Any]) -> Mapping[str, Any]:
         query = dict(params)
@@ -173,9 +268,7 @@ class ProductionYouTubeClient(YouTubeClient):
         }
 
     def get_captions(self, video_id, language, kind):
-        # Data API v3 captions download requires OAuth, not an API key.  Do not
-        # pretend an API key can fetch it or silently invoke another network tool.
-        return None
+        return self._caption_fetcher.get_captions(video_id, language, kind)
 
 
 class FixtureYouTubeClient(YouTubeClient):
@@ -644,7 +737,15 @@ def collect_manifest(*, site: str, checkpoint: str, cursor_data: Mapping[str, An
             (metadata.get("contentDetails") or {}).get("duration")
             if isinstance(metadata.get("contentDetails"), Mapping) else None
         )
-        caption_payload = client.get_captions(video_id, spec["caption_language"], spec["caption_kind"])
+        try:
+            caption_payload = client.get_captions(
+                video_id, spec["caption_language"], spec["caption_kind"]
+            )
+        except CaptionFetchBlockedError:
+            base["deferred"].append(_deferred(
+                video_id, "caption-fetch-blocked", id=mid
+            ))
+            continue
         caption_text = normalize_caption(caption_payload)
         caption_meta = _caption_meta(caption_payload, spec)
         if not caption_text or caption_meta is None:
