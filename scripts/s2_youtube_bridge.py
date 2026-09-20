@@ -8,8 +8,8 @@
 * ``finalize``：將 manifest 與人工 decisions 組成 add-batch wrapper；``--apply``
   時以按站鎖保護 add-batch，只有 state 成功後才原子推進 cursor。
 
-Phase 0–5 不連真 YouTube。未來真實 API／yt-dlp adapter 必須另經 Phase 6 hard gate；
-目前 production client 會明確拒絕，避免測試或 dry-run 意外對外發請求。
+Phase 0–5 僅使用 fixture。Phase 6 的人工沙箱可透過環境變數 API key 使用
+YouTube Data API v3；字幕下載仍是獨立的授權／工具決策，不會由本模組暗中執行。
 """
 from __future__ import annotations
 
@@ -21,6 +21,9 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 import s2_material_schema as schema
 
@@ -66,7 +69,7 @@ class BridgeError(RuntimeError):
 
 
 class Phase6ExternalAccessBlocked(BridgeError):
-    """Raised instead of touching a real API or subtitle service in this phase."""
+    """Kept for callers which deliberately block an external integration."""
 
 
 class FinalizeError(BridgeError):
@@ -92,21 +95,75 @@ class YouTubeClient:
 
 
 class ProductionYouTubeClient(YouTubeClient):
-    """Reserved Phase 6 adapter. It deliberately performs no network access yet."""
+    """YouTube Data API v3 boundary for the Phase 6 manual sandbox.
 
-    def _blocked(self) -> None:
-        raise Phase6ExternalAccessBlocked(
-            "D23 Phase 6 尚未開放真實 YouTube Data API／yt-dlp；請使用 fixture client。"
-        )
+    The key is intentionally held only in memory and is never copied into a
+    manifest, batch, log, or exception.  Subtitle download is a separate,
+    authenticated ``yt-dlp`` concern and remains outside this API-key-only
+    adapter; returning ``None`` lets the existing deferred accounting report
+    that condition explicitly.
+    """
+
+    API_ROOT = "https://www.googleapis.com/youtube/v3"
+    API_KEY_ENV = "YOUTUBE_API_KEY"
+
+    def __init__(self, api_key: Optional[str] = None, *, timeout_seconds: int = 30):
+        self._api_key = _trim(api_key if api_key is not None else os.environ.get(self.API_KEY_ENV))
+        if not self._api_key:
+            raise BridgeError(
+                f"真實 YouTube collect 需要環境變數 {self.API_KEY_ENV}；"
+                "未設定時請改用 --fixture-dir，且不會自動降級。"
+            )
+        self._timeout_seconds = timeout_seconds
+
+    def _request_json(self, resource: str, params: Mapping[str, Any]) -> Mapping[str, Any]:
+        query = dict(params)
+        query["key"] = self._api_key
+        url = f"{self.API_ROOT}/{resource}?{urlencode(query)}"
+        try:
+            with urlopen(Request(url, headers={"Accept": "application/json"}),
+                         timeout=self._timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise BridgeError(f"YouTube Data API {resource} 請求失敗：HTTP {exc.code}") from exc
+        except (URLError, OSError, ValueError, json.JSONDecodeError) as exc:
+            # Do not expose ``exc``: urllib errors can include the request URL,
+            # which contains the API key query parameter.
+            raise BridgeError(f"YouTube Data API {resource} 請求失敗（網路或回應格式）") from exc
+        if not isinstance(payload, Mapping):
+            raise BridgeError(f"YouTube Data API {resource} 回應不是 JSON 物件")
+        return payload
 
     def list_playlist_items(self, channel_id, page_token=None, max_results=50):
-        self._blocked()
+        params: dict[str, Any] = {
+            "part": "snippet,contentDetails",
+            "channelId": channel_id,
+            "maxResults": max_results,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        return self._request_json("playlistItems", params)
 
     def list_videos(self, video_ids):
-        self._blocked()
+        if not video_ids:
+            return {}
+        payload = self._request_json("videos", {
+            "part": "snippet,contentDetails,status",
+            "id": ",".join(video_ids),
+        })
+        rows = payload.get("items")
+        if not isinstance(rows, list):
+            raise BridgeError("YouTube Data API videos 回應缺少 items")
+        return {
+            _trim(row.get("id")): row
+            for row in rows
+            if isinstance(row, Mapping) and _trim(row.get("id"))
+        }
 
     def get_captions(self, video_id, language, kind):
-        self._blocked()
+        # Data API v3 captions download requires OAuth, not an API key.  Do not
+        # pretend an API key can fetch it or silently invoke another network tool.
+        return None
 
 
 class FixtureYouTubeClient(YouTubeClient):
@@ -1029,15 +1086,15 @@ def _collect_command(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="D23 YNA/CNA YouTube bridge（Phase 0–5 offline）")
+    parser = argparse.ArgumentParser(description="D23 YNA/CNA YouTube bridge（Phase 6 API sandbox）")
     sub = parser.add_subparsers(dest="command", required=True)
-    collect = sub.add_parser("collect", help="fixture collect；不寫 state／cursor")
+    collect = sub.add_parser("collect", help="collect；不寫 state／cursor")
     collect.add_argument("--site", required=True, choices=["cna", "yna"])
     collect.add_argument("--checkpoint")
     collect.add_argument("--state", required=True)
     collect.add_argument("--cursor", required=True)
     collect.add_argument("--out", required=True)
-    collect.add_argument("--fixture-dir", help="offline fixture directory（Phase 0–5 only）")
+    collect.add_argument("--fixture-dir", help="offline fixture directory；省略時需設 YOUTUBE_API_KEY")
     collect.add_argument("--started-at-utc")
     collect.add_argument("--bootstrap-start-utc")
     collect.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PLAYLIST_PAGES)

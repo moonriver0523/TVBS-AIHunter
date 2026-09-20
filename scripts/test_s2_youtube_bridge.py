@@ -7,7 +7,10 @@ Phase 3／4 再在同一個 public CLI seam 追加 finalize、游標與鎖測試
 import json
 import os
 import sys
+import tempfile
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
+from io import StringIO
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -336,6 +339,146 @@ def test_fixture_adapter_is_offline_and_no_output_overwrite():
             raise AssertionError("existing output must not be overwritten")
 
 
+class FakeHttpResponse:
+    def __init__(self, payload):
+        self.payload = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        return False
+
+    def read(self):
+        return self.payload
+
+
+def test_production_api_uses_mock_http_and_never_leaks_key_to_artifacts():
+    secret = "AIza-phase6-test-secret-do-not-log"
+    calls = []
+
+    def fake_urlopen(request, timeout):
+        calls.append((request.full_url, timeout))
+        if "/playlistItems?" in request.full_url:
+            return FakeHttpResponse({"items": []})
+        if "/videos?" in request.full_url:
+            return FakeHttpResponse({"items": []})
+        raise AssertionError(request.full_url)
+
+    original_urlopen = bridge.urlopen
+    old_key = os.environ.get("YOUTUBE_API_KEY")
+    bridge.urlopen = fake_urlopen
+    os.environ["YOUTUBE_API_KEY"] = secret
+    try:
+        client = bridge.ProductionYouTubeClient(secret)
+        playlist = client.list_playlist_items(bridge.SITE_SPECS["CNA"]["channel_id"], "next-page")
+        videos = client.list_videos(["AbCd_ef-123"])
+        manifest = bridge.collect_manifest(
+            site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+            client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+        )
+        with tempfile.TemporaryDirectory(prefix="d23-api-key-output-") as td:
+            state_path = os.path.join(td, "state.json")
+            cursor_path = os.path.join(td, "cursor.json")
+            out_path = os.path.join(td, "manifest.json")
+            with open(state_path, "w", encoding="utf-8") as f:
+                json.dump({"items": []}, f)
+            with open(cursor_path, "w", encoding="utf-8") as f:
+                json.dump(cursor(), f)
+            stdout, stderr = StringIO(), StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                rc = bridge.main(["collect", "--site", "cna", "--checkpoint", "0920-0430",
+                                  "--state", state_path, "--cursor", cursor_path, "--out", out_path])
+            assert rc == 0
+            assert not stderr.getvalue()
+            assert secret not in stdout.getvalue()
+            assert secret not in open(out_path, encoding="utf-8").read()
+    finally:
+        bridge.urlopen = original_urlopen
+        if old_key is None:
+            os.environ.pop("YOUTUBE_API_KEY", None)
+        else:
+            os.environ["YOUTUBE_API_KEY"] = old_key
+
+    assert playlist == {"items": []}
+    assert videos == {}
+    assert len(calls) == 4
+    assert all(secret in url for url, _ in calls)
+    assert all(timeout == 30 for _, timeout in calls)
+    batch = bridge.finalize_manifest({
+        "schema_version": 1, "status": "complete", "site": "CNA", "checkpoint": "0920-0430",
+        "collect_started_at_utc": "2026-09-20T15:00:00Z", "items": [], "skipped": [],
+        "dropped": [], "deferred": [],
+        "counts": {"window_total": 0, "ready": 0, "skipped": 0, "dropped": 0,
+                   "deferred": 0, "accounted": 0},
+    }, {"_new_topics": {}})
+    assert secret not in json.dumps(manifest)
+    assert secret not in json.dumps(batch)
+    with tempfile.TemporaryDirectory(prefix="d23-api-key-batch-") as td:
+        batch_path = os.path.join(td, "batch.json")
+        bridge.write_json_no_overwrite(batch_path, batch)
+        assert secret not in open(batch_path, encoding="utf-8").read()
+
+
+def test_real_collect_missing_key_reports_error_without_output_or_leak():
+    secret = "AIza-phase6-test-secret-do-not-log"
+    old = os.environ.pop("YOUTUBE_API_KEY", None)
+    try:
+        with tempfile.TemporaryDirectory(prefix="d23-missing-key-") as td:
+            state_path = os.path.join(td, "state.json")
+            cursor_path = os.path.join(td, "cursor.json")
+            out_path = os.path.join(td, "manifest.json")
+            with open(state_path, "w", encoding="utf-8") as f:
+                json.dump({"items": []}, f)
+            with open(cursor_path, "w", encoding="utf-8") as f:
+                json.dump(cursor(), f)
+            stdout, stderr = StringIO(), StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                rc = bridge.main(["collect", "--site", "cna", "--checkpoint", "0920-0430",
+                                  "--state", state_path, "--cursor", cursor_path, "--out", out_path])
+            assert rc == 2
+            assert "YOUTUBE_API_KEY" in stderr.getvalue()
+            assert secret not in stderr.getvalue()
+            assert secret not in stdout.getvalue()
+            assert not os.path.exists(out_path)
+    finally:
+        if old is not None:
+            os.environ["YOUTUBE_API_KEY"] = old
+
+
+def test_api_http_error_redacts_key_from_stderr():
+    secret = "AIza-phase6-test-secret-do-not-log"
+
+    def failing_urlopen(request, timeout):
+        raise bridge.URLError(f"request URL included key={secret}")
+
+    old_key, original_urlopen = os.environ.get("YOUTUBE_API_KEY"), bridge.urlopen
+    os.environ["YOUTUBE_API_KEY"] = secret
+    bridge.urlopen = failing_urlopen
+    try:
+        with tempfile.TemporaryDirectory(prefix="d23-api-error-") as td:
+            state_path = os.path.join(td, "state.json")
+            cursor_path = os.path.join(td, "cursor.json")
+            out_path = os.path.join(td, "manifest.json")
+            for path, value in ((state_path, {"items": []}), (cursor_path, cursor())):
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(value, f)
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                rc = bridge.main(["collect", "--site", "cna", "--checkpoint", "0920-0430",
+                                  "--state", state_path, "--cursor", cursor_path, "--out", out_path])
+            assert rc == 2
+            assert "YouTube Data API playlistItems 請求失敗" in stderr.getvalue()
+            assert secret not in stderr.getvalue()
+            assert not os.path.exists(out_path)
+    finally:
+        bridge.urlopen = original_urlopen
+        if old_key is None:
+            os.environ.pop("YOUTUBE_API_KEY", None)
+        else:
+            os.environ["YOUTUBE_API_KEY"] = old_key
+
+
 def main():
     tests = [test_collect_paginates_and_accounts,
              test_existing_state_does_not_redownload_caption,
@@ -346,7 +489,10 @@ def main():
              test_missing_join_is_deferred_and_fifty_ids_are_batched,
              test_playlist_fallback_and_mismatch_are_explicit,
              test_invalid_primary_published_at_is_deferred_instead_of_silently_falling_back,
-             test_fixture_adapter_is_offline_and_no_output_overwrite]
+             test_fixture_adapter_is_offline_and_no_output_overwrite,
+             test_production_api_uses_mock_http_and_never_leaks_key_to_artifacts,
+             test_real_collect_missing_key_reports_error_without_output_or_leak,
+             test_api_http_error_redacts_key_from_stderr]
     ok = True
     for test in tests:
         try:
