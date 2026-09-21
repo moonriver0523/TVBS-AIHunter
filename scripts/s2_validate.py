@@ -38,7 +38,7 @@ for _s in (sys.stdout, sys.stderr):
 # bitcentralId 原樣就是 4 位數）被 `\d{1,3}` 擋掉，症狀與上面那次一模一樣——txt 印得出來、
 # 檔頭卻只算 4 則（實收 5 則）。已放寬成 1–4 碼。**這兩處是同一種靜默漏算，
 # 看到「txt 行數與檔頭則數對不上」就先回來檢查這條正則。**
-CODE = (r"(?:RT\d{4}|APcctv\d{6}|AP\d{7}|[A-Z]{2,6}-\d{1,4}[A-Z]{2}"
+CODE = (r"(?:RT\d{4}|APcctv\d{6}|APcns\d{6}|AP\d{7}|[A-Z]{2,6}-\d{1,4}[A-Z]{2}"
         r"|(?:YNA|CNA)-[A-Za-z0-9_-]{11}"            # scheduled YouTube 素材
         r"|(?:YNA|CNA)\d{2,3}"                     # 韓聯社／CNA 網址素材（2026-08-09）
         r"|OTH\d{2,3}"                             # OTH 其他網址來源（2026-09-05，common/17 §3）

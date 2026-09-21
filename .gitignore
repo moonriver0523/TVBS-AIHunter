@@ -53,3 +53,11 @@ scripts/_s2_scan_prompt_v4.bak.md
 # 一次性的 scratch／暫存腳本，跑完就丟，不進版控。
 .scratch/
 scripts/_tmp/
+
+# Ruflo local secrets and runtime data
+.env
+.env.local
+.env.*.local
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
