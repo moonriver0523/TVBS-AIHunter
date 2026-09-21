@@ -50,7 +50,7 @@ def manifest(**extra):
 def decisions(entry=None, **extra):
     value = {"_new_topics": {}, READY["id"]: {
         "entry": entry or f"{READY['id']} (南韓) ▎摘要。▎畫面：無。▎無BITE。▎01:35",
-        "category": {"大分類": "國際", "中主題": "韓聯測試"},
+        "category": {"大分類": "國際", "中主題": "韓聯測試", "小分題": "測試小題"},
         "tc": {"T": ["社會"], "C": ["美國"]},
         "src_text": "人工不可信來源，不可覆寫 manifest",
         "platform": {"tampered": True},
@@ -84,7 +84,7 @@ def test_final_wrapper_uses_trusted_manifest_fields():
     assert row["status"] == "has_script"
     assert row["src_text"] == READY["src_text"]
     assert row["platform"] == READY["platform"]
-    assert row["category"] == {"大分類": "國際", "中主題": "韓聯測試"}
+    assert row["category"] == {"大分類": "國際", "中主題": "韓聯測試", "小分題": "測試小題"}
     assert row["tc"] == {"T": ["社會"], "C": ["美國"]}
     assert "suggest" not in row
     assert wrapper["receipt"]["accounted"] == 1
@@ -105,6 +105,50 @@ def test_missing_or_unknown_decision_is_blocking():
     expect_error(lambda: bridge.finalize_manifest(
         manifest(), decisions(**{"CNA-XyZ987_ab-c": {"skip": "錯 ID"}})
     ), "不在 manifest")
+
+
+def test_final_batch_requires_object_category_tc_and_preserves_candidate_envelope():
+    """3.5/3.6：人工簡寫在出口轉物件；候選保留可重播窗口資料。"""
+    compact = decisions()
+    compact[READY["id"]]["category"] = "國際/韓聯測試/小分題"
+    compact[READY["id"]]["tc"] = "社會/美國"
+    m = manifest(
+        cursor_revision=4,
+        window={"lower_exclusive": "2026-09-20T00:50:00Z",
+                "upper_inclusive": "2026-09-20T15:00:00Z"},
+        deferred_video_ids=["LaterVideo1"],
+    )
+    wrapper = bridge.finalize_manifest(m, compact)
+    row = wrapper["entries"][0]
+    assert row["category"] == {"大分類": "國際", "中主題": "韓聯測試", "小分題": "小分題"}
+    assert row["tc"] == {"T": ["社會"], "C": ["美國"]}
+    assert wrapper["site"] == "YNA"
+    assert wrapper["checkpoint"] == "0920-0430"
+    assert wrapper["cursor"]["revision"] == 4
+    assert wrapper["window"] == m["window"]
+    assert wrapper["deferred_video_ids"] == ["LaterVideo1"]
+    expect_error(lambda: bridge.finalize_manifest(
+        manifest(), {"_new_topics": {}, READY["id"]: {"entry": "YNA-AbCd_ef-123 x"}}
+    ), "category")
+    expect_error(lambda: bridge.finalize_manifest(
+        manifest(), {"_new_topics": {}, READY["id"]: {
+            "entry": "YNA-AbCd_ef-123 x", "category": {}, "tc": {}}}
+    ), "category")
+
+
+def test_decision_entry_skip_xor_is_explicitly_blocking():
+    both = decisions()
+    both[READY["id"]]["skip"] = "重複"
+    expect_error(lambda: bridge.finalize_manifest(manifest(), both), "恰有")
+
+
+def test_duplicate_skip_reference_must_be_ready_entry_or_existing_state():
+    skipped = {"_new_topics": {}, READY["id"]: {"skip": "重複主題，已收於 YNA-Missing_123"}}
+    expect_error(lambda: bridge.finalize_manifest(manifest(), skipped), "引用")
+    accepted = bridge.finalize_manifest(
+        manifest(state_item_ids=["YNA-Missing_123"]), skipped
+    )
+    assert accepted["entries"] == []
 
 
 def test_manifest_preflight_blocks_dropped_bad_checkpoint_and_source_mismatch():
@@ -169,13 +213,16 @@ def test_cli_apply_e2e_requires_in_round():
         assert stored["source"] == "YNA"
         assert stored["src_text"] == READY["src_text"]
         assert stored["platform"] == READY["platform"]
-        assert stored["category"] == {"大分類": "國際", "中主題": "韓聯測試"}
+        assert stored["category"] == {"大分類": "國際", "中主題": "韓聯測試", "小分題": "測試小題"}
 
 
 def main():
     tests = [test_final_wrapper_uses_trusted_manifest_fields,
              test_skip_and_new_topics_are_accounted,
              test_missing_or_unknown_decision_is_blocking,
+             test_final_batch_requires_object_category_tc_and_preserves_candidate_envelope,
+             test_decision_entry_skip_xor_is_explicitly_blocking,
+             test_duplicate_skip_reference_must_be_ready_entry_or_existing_state,
              test_manifest_preflight_blocks_dropped_bad_checkpoint_and_source_mismatch,
              test_cli_apply_e2e_requires_in_round]
     ok = True

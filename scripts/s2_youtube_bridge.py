@@ -14,6 +14,7 @@ YouTube Data API v3；字幕下載仍是獨立的授權／工具決策，不會�
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -668,6 +669,8 @@ def collect_manifest(*, site: str, checkpoint: str, cursor_data: Mapping[str, An
         "checkpoint": checkpoint,
         "collect_started_at_utc": iso_utc(started),
         "cursor_revision": revision,
+        "cursor_last_complete_end_utc": _trim(site_cursor.get("last_complete_end_utc")) or None,
+        "state_item_ids": sorted(_state_item_ids(state_data)),
         "items": [],
         "skipped": [],
         "dropped": [],
@@ -820,6 +823,13 @@ def collect_manifest(*, site: str, checkpoint: str, cursor_data: Mapping[str, An
         was_ever_live = isinstance(live_streaming_details, Mapping) and bool(
             _trim(live_streaming_details.get("actualStartTime"))
         )
+        if live_content == "upcoming":
+            # Phase 0 hard gate：預告尚未成片，保留在 deferred queue 供下一輪重試。
+            base["deferred"].append(_deferred(
+                video_id, "upcoming-live-broadcast", id=mid,
+                live_broadcast_content=live_content,
+            ))
+            continue
         if live_content != "none" or was_ever_live:
             # D23 裁決：直播（含已結束、事後變成一般 VOD 的往日直播錄影）一律不收，
             # 這是永久狀態不會靠重試改變，所以歸 skipped 而非 deferred。
@@ -941,6 +951,46 @@ def _manifest_counts(manifest: Mapping[str, Any]) -> dict[str, int]:
             ("window_total", "ready", "skipped", "dropped", "deferred", "accounted")}
 
 
+def _normalize_category(value: Any, material_id_value: str) -> dict[str, str]:
+    if isinstance(value, str):
+        parts = [part.strip() for part in re.split(r"[／/]", value) if part.strip()]
+        if len(parts) == 3:
+            value = {"大分類": parts[0], "中主題": parts[1], "小分題": parts[2]}
+    if not isinstance(value, Mapping):
+        raise FinalizeError(f"{material_id_value} category 必須是三層物件或 大分類/中主題/小分題 簡寫")
+    result = {key: _trim(value.get(key)) for key in ("大分類", "中主題", "小分題")}
+    if not all(result.values()) or set(value) != set(result):
+        raise FinalizeError(f"{material_id_value} category 必須是含大分類、中主題、小分題的非空物件")
+    return result
+
+
+def _normalize_tc(value: Any, material_id_value: str) -> dict[str, list[str]]:
+    if isinstance(value, str):
+        halves = re.split(r"[／/]", value, maxsplit=1)
+        if len(halves) == 2:
+            value = {"T": halves[0], "C": halves[1]}
+    if not isinstance(value, Mapping):
+        raise FinalizeError(f"{material_id_value} tc 必須是 T/C 物件或 T1,T2/C1,C2 簡寫")
+    result: dict[str, list[str]] = {}
+    for key in ("T", "C"):
+        raw = value.get(key)
+        if isinstance(raw, str):
+            values = [x.strip() for x in re.split(r"[,，]", raw) if x.strip()]
+        elif isinstance(raw, list) and all(isinstance(x, str) and x.strip() for x in raw):
+            values = [x.strip() for x in raw]
+        else:
+            values = []
+        result[key] = values
+    if set(value) != {"T", "C"} or not result["T"] or not result["C"]:
+        raise FinalizeError(f"{material_id_value} tc 必須是含非空 T/C 陣列的物件")
+    return result
+
+
+def _manifest_checksum(manifest: Mapping[str, Any]) -> str:
+    encoded = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
 def finalize_manifest(manifest: Mapping[str, Any], decisions: Mapping[str, Any]) -> dict[str, Any]:
     """Pure manifest + decisions preflight returning an add-batch wrapper."""
     if not isinstance(manifest, Mapping):
@@ -991,6 +1041,11 @@ def finalize_manifest(manifest: Mapping[str, Any], decisions: Mapping[str, Any])
     if unknown:
         raise FinalizeError(f"decisions 有不在 manifest 的 ID：{', '.join(unknown)}")
     topics = _decision_topics(decisions)
+    entry_ids = {
+        item_id for item_id in by_id
+        if item_id in decisions and _validate_decision_shape(item_id, decisions[item_id])[0] == "entry"
+    }
+    state_item_ids = {_trim(x) for x in manifest.get("state_item_ids") or [] if _trim(x)}
     batch_entries: list[dict[str, Any]] = []
     decision_skips: list[dict[str, str]] = []
     for item_id, item in by_id.items():
@@ -998,6 +1053,11 @@ def finalize_manifest(manifest: Mapping[str, Any], decisions: Mapping[str, Any])
             raise FinalizeError(f"ready item 未有 decisions：{item_id}")
         kind, value = _validate_decision_shape(item_id, decisions[item_id])
         if kind == "skip":
+            duplicate_ref = re.search(r"已收於\s*([A-Za-z][A-Za-z0-9]*-[A-Za-z0-9_-]+)", value)
+            if duplicate_ref and duplicate_ref.group(1) not in entry_ids | state_item_ids:
+                raise FinalizeError(
+                    f"{item_id} skip 引用的保留 ID 不存在或不可套用：{duplicate_ref.group(1)}"
+                )
             decision_skips.append({"id": item_id, "reason": value})
             continue
         decision = decisions[item_id]
@@ -1010,9 +1070,12 @@ def finalize_manifest(manifest: Mapping[str, Any], decisions: Mapping[str, Any])
             "src_text": item["src_text"],
             "platform": dict(item["platform"]),
         }
-        for key in ("category", "tc"):
-            if key in decision and decision[key] is not None:
-                row[key] = decision[key]
+        if "category" not in decision or decision["category"] is None:
+            raise FinalizeError(f"{item_id} entry 必須帶 category")
+        if "tc" not in decision or decision["tc"] is None:
+            raise FinalizeError(f"{item_id} entry 必須帶 tc")
+        row["category"] = _normalize_category(decision["category"], item_id)
+        row["tc"] = _normalize_tc(decision["tc"], item_id)
         if isinstance(item.get("sb_count"), int):
             row["sb_count"] = item["sb_count"]
         batch_entries.append(row)
@@ -1029,9 +1092,21 @@ def finalize_manifest(manifest: Mapping[str, Any], decisions: Mapping[str, Any])
         )
     if accounted != expected:
         raise FinalizeError(f"finalize 對帳失敗：accounted={accounted} expected={expected}")
+    window = manifest.get("window")
+    if not isinstance(window, Mapping) or not _trim(window.get("lower_exclusive")) or not _trim(window.get("upper_inclusive")):
+        # 早期 fixture 相容：collect 產物一定有 window，舊離線 fixture 才補此值。
+        window = {"lower_exclusive": None, "upper_inclusive": _trim(manifest.get("collect_started_at_utc"))}
     return {
         "entries": batch_entries,
         "new_topics": topics,
+        "site": site,
+        "checkpoint": checkpoint,
+        "cursor": {"revision": manifest.get("cursor_revision"),
+                   "last_complete_end_utc": manifest.get("cursor_last_complete_end_utc")},
+        "window": dict(window),
+        "manifest_checksum": _manifest_checksum(manifest),
+        "deferred_video_ids": list(manifest.get("deferred_video_ids") or [
+            row.get("video_id") for row in deferred if isinstance(row, Mapping) and row.get("video_id")]),
         "receipt": {
             "schema_version": 1,
             "site": site,
@@ -1090,7 +1165,9 @@ def _finalize_command(args: argparse.Namespace) -> int:
     if args.apply and not args.file:
         raise FinalizeError("--apply 必須明帶 --file，禁止猜正式 state 路徑")
     if not args.apply:
-        write_json_no_overwrite(args.out, wrapper)
+        written = write_candidate_json_new_numbered(args.out, wrapper)
+        if written != args.out:
+            print(f"候選檔同名已存在，另存：{written}")
         print(json.dumps(wrapper["receipt"], ensure_ascii=False))
         return 0
 
@@ -1143,7 +1220,7 @@ def _collect_pending_candidates(pending_dir: str, site: str) -> list[dict[str, A
         return []
     found: list[dict[str, Any]] = []
     for name in sorted(os.listdir(pending_dir)):
-        if not name.lower().endswith(".json"):
+        if not name.lower().endswith(".apply-batch.json"):
             continue
         if site.upper() not in name.upper():
             continue
@@ -1152,7 +1229,7 @@ def _collect_pending_candidates(pending_dir: str, site: str) -> list[dict[str, A
             data = read_json(path)
         except BridgeError:
             continue
-        if not isinstance(data, Mapping) or "entries" not in data:
+        if not isinstance(data, Mapping) or "entries" not in data or "window" not in data:
             continue
         found.append({"path": path, "wrapper": data})
     return found
@@ -1188,6 +1265,41 @@ def write_json_no_overwrite(path: str, data: Any) -> None:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
     os.replace(tmp, path)
+
+
+def write_candidate_json_new_numbered(path: str, data: Any) -> str:
+    """Atomically reserve a new `*.apply-batch.json` name; never replace a candidate."""
+    suffix = ".apply-batch.json"
+    if not path.lower().endswith(suffix):
+        write_json_no_overwrite(path, data)
+        return path
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    stem = path[:-len(suffix)]
+    number = 0
+    while True:
+        target = path if number == 0 else f"{stem}-{number}{suffix}"
+        try:
+            with open(target, "x", encoding="utf-8"):
+                pass
+            break
+        except FileExistsError:
+            number += 1
+    tmp = f"{target}.tmp-{os.getpid()}"
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp, target)
+    except OSError as exc:
+        try:
+            os.remove(tmp)
+            os.remove(target)
+        except OSError:
+            pass
+        raise BridgeError(f"候選檔原子寫入失敗：{target}（{exc}）") from exc
+    return target
 
 
 def empty_cursor() -> dict[str, Any]:
@@ -1312,10 +1424,103 @@ def advance_cursor(cursor_data: Mapping[str, Any], manifest: Mapping[str, Any]) 
     return next_cursor
 
 
+def validate_candidate_envelope(candidate: Mapping[str, Any]) -> tuple[str, datetime, datetime]:
+    """Pure envelope validation (site/window), no I/O and no cursor dependency.
+
+    Must be called — and must raise on failure — **before** any state-mutating call
+    (`_run_add_batch`), so a malformed envelope never writes to state before being caught.
+    A previous version only validated this inside `advance_cursor_for_candidate`, which the
+    caller invoked *after* `_run_add_batch` already wrote state (2026-09-21 稽核抓到).
+    """
+    site = _trim(candidate.get("site")).upper()
+    window = candidate.get("window")
+    if site not in SITE_SPECS or not isinstance(window, Mapping):
+        raise CursorConflict("apply-batch candidate 缺合法 site/window")
+    lower = _trim(window.get("lower_exclusive"))
+    upper = _trim(window.get("upper_inclusive"))
+    if not lower or not upper:
+        raise CursorConflict("apply-batch candidate window 缺上下界")
+    lower_at, upper_at = parse_utc(lower, "candidate window lower"), parse_utc(upper, "candidate window upper")
+    if upper_at <= lower_at:
+        raise CursorConflict("apply-batch candidate window 上界必須晚於下界")
+    return site, lower_at, upper_at
+
+
+def advance_cursor_for_candidate(cursor_data: Mapping[str, Any], candidate: Mapping[str, Any]) -> dict[str, Any]:
+    """Advance only a contiguous candidate window; stale/gapped batches remain applyable.
+
+    The caller must call `validate_candidate_envelope()` first (before any state write);
+    this function re-derives the same values and additionally needs the current cursor
+    state, but no longer performs the first-line-of-defense validation itself.
+    Returning the original cursor means this particular candidate must not move the
+    high-water mark.
+    """
+    site, lower_at, upper_at = validate_candidate_envelope(candidate)
+    old = (cursor_data.get("sites") or {}).get(site) or {}
+    current_end = _trim(old.get("last_complete_end_utc"))
+    if current_end:
+        current_at = parse_utc(current_end, f"{site}.last_complete_end_utc")
+        # A window ending at/before current is stale; a lower boundary after current is a gap.
+        if upper_at <= current_at or lower_at > current_at:
+            return dict(cursor_data)
+    # 2026-09-21 修正：該站首次還沒有任何成功游標時（bootstrap），不能回傳「不變」——
+    # 那會讓第一份成功套用的候選永遠無法建立游標基準，下一輪 collect 只能一直要求
+    # 人工重帶 --bootstrap-start-utc、永遠停在原地。第一份候選的窗口本身就是新基準，
+    # 直接採用其 upper_inclusive 當作該站第一個 last_complete_end_utc。
+    next_cursor = json.loads(json.dumps(cursor_data, ensure_ascii=False))
+    next_cursor.setdefault("sites", {})
+    next_site = dict(next_cursor["sites"].get(site) or {})
+    deferred = [_trim(x) for x in next_site.get("deferred_video_ids", []) if _trim(x)]
+    for video_id in candidate.get("deferred_video_ids") or []:
+        video_id = _trim(video_id)
+        if video_id and video_id not in deferred:
+            deferred.append(video_id)
+    next_site["last_complete_end_utc"] = iso_utc(upper_at)
+    next_site["last_success_checkpoint"] = _trim(candidate.get("checkpoint")) or next_site.get("last_success_checkpoint")
+    next_site["deferred_video_ids"] = deferred
+    next_cursor["sites"][site] = next_site
+    return next_cursor
+
+
+def _run_add_batch(state_path: str, wrapper_path: str, registry: Optional[str] = None) -> None:
+    cmd = [sys.executable, os.path.join(HERE, "s2_state.py"), "--file", state_path]
+    if registry:
+        cmd += ["--registry", registry]
+    cmd += ["add-batch", "--entries", wrapper_path]
+    result = subprocess.run(cmd, capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    stdout, stderr = (result.stdout or b"").decode("utf-8", errors="replace"), (result.stderr or b"").decode("utf-8", errors="replace")
+    if stdout:
+        print(stdout, end="")
+    if stderr:
+        print(stderr, end="", file=sys.stderr)
+    if result.returncode != 0:
+        raise BridgeError(f"s2_state.py add-batch 失敗（rc={result.returncode}）")
+
+
+def _apply_batch_command(args: argparse.Namespace) -> int:
+    if not args.in_round:
+        raise FinalizeError("apply-batch 只能由排定輪次的 --in-round 呼叫使用")
+    if not args.batch.lower().endswith(".apply-batch.json"):
+        raise FinalizeError("apply-batch 只接受 *.apply-batch.json 候選檔")
+    candidate = read_json(args.batch)
+    if not isinstance(candidate, Mapping) or not isinstance(candidate.get("entries"), list):
+        raise FinalizeError("apply-batch candidate 必須是 bridge envelope")
+    validate_candidate_envelope(candidate)  # 2026-09-21：寫 state 前先擋畸形 envelope
+    current = load_cursor(args.cursor)
+    # The original candidate is already a wrapper acceptable to s2_state add-batch.
+    _run_add_batch(args.file, args.batch, args.registry)
+    _verify_applied_state(args.file, candidate["entries"])
+    next_cursor = advance_cursor_for_candidate(current, candidate)
+    if next_cursor != current:
+        save_cursor_atomic(args.cursor, next_cursor, expected_revision=current["revision"])
+    print(json.dumps(candidate.get("receipt", {}), ensure_ascii=False))
+    return 0
+
+
 def _collect_command(args: argparse.Namespace) -> int:
     cursor_data = load_cursor(args.cursor)
     state_data = read_json(args.state)
-    checkpoint = args.checkpoint or datetime.now().astimezone().strftime("%m%d-%H%M")
+    checkpoint = args.checkpoint
     client: YouTubeClient = (
         FixtureYouTubeClient(args.fixture_dir, args.site.upper())
         if args.fixture_dir else ProductionYouTubeClient()
@@ -1337,7 +1542,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     collect = sub.add_parser("collect", help="collect；不寫 state／cursor")
     collect.add_argument("--site", required=True, choices=["cna", "yna"])
-    collect.add_argument("--checkpoint")
+    collect.add_argument("--checkpoint", required=True)
     collect.add_argument("--state", required=True)
     collect.add_argument("--cursor", required=True)
     collect.add_argument("--out", required=True)
@@ -1359,6 +1564,12 @@ def build_parser() -> argparse.ArgumentParser:
     finalize.add_argument("--pending-dir",
                           help="--in-round --apply 時掃這個目錄裡待套用的 YNA/CNA 候選 batch"
                                "（3.7；通常是 _待整併/），套用成功一併歸檔到其 已整併/ 子目錄")
+    apply_batch = sub.add_parser("apply-batch", help="在排定輪次鎖窗口套用既成候選 envelope")
+    apply_batch.add_argument("--batch", required=True, help="*.apply-batch.json 候選檔")
+    apply_batch.add_argument("--file", required=True, help="目標 state 路徑")
+    apply_batch.add_argument("--cursor", required=True, help="YouTube cursor 路徑")
+    apply_batch.add_argument("--registry", help="測試／沙箱用 topic registry")
+    apply_batch.add_argument("--in-round", action="store_true", help="排定輪次自己的鎖窗口")
     return parser
 
 
@@ -1367,6 +1578,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         if args.command == "collect":
             return _collect_command(args)
+        if args.command == "apply-batch":
+            return _apply_batch_command(args)
         return _finalize_command(args)
     except BridgeError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

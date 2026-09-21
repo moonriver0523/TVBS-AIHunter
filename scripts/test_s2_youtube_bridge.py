@@ -336,6 +336,31 @@ def test_past_livestream_recording_is_excluded_even_after_ending():
     assert skipped["AbCd_ef-123"]["was_ever_live"] is True
 
 
+def test_upcoming_video_is_deferred_for_later_retry():
+    client = cna_client()
+    channel = bridge.SITE_SPECS["CNA"]["channel_id"]
+    client.videos["AbCd_ef-123"] = video(
+        "AbCd_ef-123", channel, "2026-09-20T14:55:02Z", live="upcoming"
+    )
+    result = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert result["items"] == []
+    assert result["deferred"][0]["reason"] == "upcoming-live-broadcast"
+
+
+def test_collect_cli_requires_explicit_checkpoint():
+    try:
+        bridge.build_parser().parse_args([
+            "collect", "--site", "cna", "--state", "state.json", "--cursor", "cursor.json", "--out", "x.manifest.json"
+        ])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("manual collect must require --checkpoint")
+
+
 def test_short_video_is_excluded():
     client = cna_client()
     client.shorts.add("AbCd_ef-123")
@@ -687,6 +712,8 @@ def main():
              test_region_restricted_blocked_list_containing_taiwan_is_skipped,
              test_region_restriction_allowing_taiwan_still_proceeds_to_ready,
              test_past_livestream_recording_is_excluded_even_after_ending,
+             test_upcoming_video_is_deferred_for_later_retry,
+             test_collect_cli_requires_explicit_checkpoint,
              test_short_video_is_excluded,
              test_shorts_check_failure_is_non_blocking_warning,
              test_sufficient_description_is_used_directly_without_fetching_captions,

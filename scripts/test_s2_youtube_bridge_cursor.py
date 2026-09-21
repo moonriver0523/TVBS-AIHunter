@@ -64,6 +64,116 @@ def test_cursor_save_is_atomic_and_rejects_stale_revision():
         assert bridge.load_cursor(path)["revision"] == 1
 
 
+def test_candidate_cursor_only_moves_for_contiguous_or_overlapping_window():
+    current = cursor()
+    base = {
+        "site": "CNA", "checkpoint": "0920-0430", "entries": [], "new_topics": {},
+        "deferred_video_ids": ["deferred-1"], "cursor": {"revision": 4},
+    }
+    contiguous = dict(base, window={"lower_exclusive": "2026-09-20T01:00:00Z",
+                                    "upper_inclusive": "2026-09-20T02:00:00Z"})
+    moved = bridge.advance_cursor_for_candidate(current, contiguous)
+    assert moved["sites"]["CNA"]["last_complete_end_utc"] == "2026-09-20T02:00:00Z"
+    assert "deferred-1" in moved["sites"]["CNA"]["deferred_video_ids"]
+    gap = dict(base, window={"lower_exclusive": "2026-09-20T02:01:00Z",
+                             "upper_inclusive": "2026-09-20T03:00:00Z"})
+    assert bridge.advance_cursor_for_candidate(current, gap) == current
+    expired = dict(base, window={"lower_exclusive": "2026-09-20T00:00:00Z",
+                                 "upper_inclusive": "2026-09-20T00:30:00Z"})
+    assert bridge.advance_cursor_for_candidate(current, expired) == current
+
+
+def test_candidate_cursor_bootstraps_when_site_has_no_prior_success():
+    """2026-09-21 稽核抓到：某站第一次還沒有 last_complete_end_utc 時，
+    原本會回傳「不變」，導致第一份成功套用的候選永遠無法建立游標基準。
+    首次應直接採用候選 window 的 upper_inclusive 當新基準。
+    """
+    empty = bridge.empty_cursor()
+    candidate = {
+        "site": "YNA", "checkpoint": "0920-0430", "entries": [], "new_topics": {},
+        "deferred_video_ids": ["deferred-first"], "cursor": {"revision": 0},
+        "window": {"lower_exclusive": "2026-09-20T00:00:00Z",
+                   "upper_inclusive": "2026-09-20T01:00:00Z"},
+    }
+    moved = bridge.advance_cursor_for_candidate(empty, candidate)
+    assert moved["sites"]["YNA"]["last_complete_end_utc"] == "2026-09-20T01:00:00Z"
+    assert moved["sites"]["YNA"]["last_success_checkpoint"] == "0920-0430"
+    assert moved["sites"]["YNA"]["deferred_video_ids"] == ["deferred-first"]
+
+
+def test_apply_batch_cli_applies_entries_but_leaves_gapped_cursor_unchanged():
+    with tempfile.TemporaryDirectory(prefix="d23-apply-batch-") as td:
+        state_path = os.path.join(td, "0920-s2-state.json")
+        cursor_path = os.path.join(td, "s2-youtube-cursors.json")
+        registry_path = os.path.join(td, "registry.json")
+        batch_path = os.path.join(td, "0920-1234-YNA_CNA候選-yna.apply-batch.json")
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump({"date": "0920", "checkpoint": "0920-0430", "items": []}, f)
+        with open(registry_path, "w", encoding="utf-8") as f:
+            json.dump({"topics": [{"name": "韓聯測試", "big": "國際", "charter": "既有"}]}, f,
+                      ensure_ascii=False)
+        bridge.save_cursor_atomic(cursor_path, cursor(revision=0), expected_revision=0)
+        candidate = bridge.finalize_manifest(manifest(
+            cursor_revision=1,
+            window={"lower_exclusive": "2026-09-20T02:00:00Z",
+                    "upper_inclusive": "2026-09-20T03:00:00Z"},
+        ), decisions())
+        with open(batch_path, "w", encoding="utf-8") as f:
+            json.dump(candidate, f, ensure_ascii=False)
+        before = bridge.load_cursor(cursor_path)
+        result = subprocess.run([
+            sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "apply-batch",
+            "--batch", batch_path, "--file", state_path, "--cursor", cursor_path,
+            "--registry", registry_path, "--in-round",
+        ], capture_output=True, text=True, encoding="utf-8")
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        with open(state_path, encoding="utf-8-sig") as f:
+            assert any(row["id"] == READY["id"] for row in json.load(f)["items"])
+        assert bridge.load_cursor(cursor_path) == before
+
+
+def test_apply_batch_rejects_malformed_envelope_before_writing_state():
+    """2026-09-21 稽核抓到：envelope 驗證曾晚於 add-batch 寫入 state。
+
+    此測試確認畸形 envelope（缺 window）在任何 state 寫入**之前**就被拒絕——
+    不是「寫入後才因游標推進失敗」，state 必須維持原樣（0 筆）。
+    """
+    with tempfile.TemporaryDirectory(prefix="d23-apply-batch-malformed-") as td:
+        state_path = os.path.join(td, "0920-s2-state.json")
+        cursor_path = os.path.join(td, "s2-youtube-cursors.json")
+        registry_path = os.path.join(td, "registry.json")
+        batch_path = os.path.join(td, "0920-1234-YNA_CNA候選-yna.apply-batch.json")
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump({"date": "0920", "checkpoint": "0920-0430", "items": []}, f)
+        with open(registry_path, "w", encoding="utf-8") as f:
+            json.dump({"topics": [{"name": "韓聯測試", "big": "國際", "charter": "既有"}]}, f,
+                      ensure_ascii=False)
+        bridge.save_cursor_atomic(cursor_path, cursor(revision=0), expected_revision=0)
+        candidate = bridge.finalize_manifest(manifest(cursor_revision=1), decisions())
+        candidate.pop("window", None)  # 畸形 envelope：缺 window
+        with open(batch_path, "w", encoding="utf-8") as f:
+            json.dump(candidate, f, ensure_ascii=False)
+        result = subprocess.run([
+            sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "apply-batch",
+            "--batch", batch_path, "--file", state_path, "--cursor", cursor_path,
+            "--registry", registry_path, "--in-round",
+        ], capture_output=True, text=True, encoding="utf-8")
+        assert result.returncode != 0, (result.stdout, result.stderr)
+        with open(state_path, encoding="utf-8-sig") as f:
+            assert json.load(f)["items"] == []
+
+
+def test_candidate_write_uses_next_available_number_without_overwrite():
+    with tempfile.TemporaryDirectory(prefix="d23-candidate-name-") as td:
+        desired = os.path.join(td, "0920-1234-YNA_CNA候選-cna.apply-batch.json")
+        with open(desired, "w", encoding="utf-8") as f:
+            f.write('{"old": true}')
+        actual = bridge.write_candidate_json_new_numbered(desired, {"new": True})
+        assert actual.endswith("-1.apply-batch.json")
+        with open(desired, encoding="utf-8") as f:
+            assert json.load(f) == {"old": True}
+
+
 def test_manual_apply_without_in_round_is_rejected():
     """3.7（訂正版）：手動觸發一律不得 --apply，不論掃帶鎖是否存在。"""
     with tempfile.TemporaryDirectory(prefix="d23-manual-apply-") as td:
@@ -214,7 +324,7 @@ def test_in_round_apply_picks_up_pending_candidate_and_archives_it():
         cursor_path = os.path.join(td, "s2-youtube-cursors.json")
         pending_dir = os.path.join(td, "_待整併")
         os.makedirs(pending_dir, exist_ok=True)
-        pending_path = os.path.join(pending_dir, "0920-YNA_CNA候選-CNA.json")
+        pending_path = os.path.join(pending_dir, "0920-YNA_CNA候選-CNA.apply-batch.json")
 
         pending_item = dict(READY, id="CNA-PendingVid1", site="CNA", video_id="PendingVid1",
                              platform=dict(READY["platform"], site="CNA", video_id="PendingVid1"))
@@ -253,7 +363,7 @@ def test_in_round_apply_picks_up_pending_candidate_and_archives_it():
         assert "CNA-PendingVid1" in ids
 
         assert not os.path.exists(pending_path)
-        archived = os.path.join(pending_dir, "已整併", "0920-YNA_CNA候選-CNA.json")
+        archived = os.path.join(pending_dir, "已整併", "0920-YNA_CNA候選-CNA.apply-batch.json")
         assert os.path.exists(archived)
 
 
@@ -268,7 +378,7 @@ def test_in_round_apply_failure_keeps_pending_candidate_for_retry():
         cursor_path = os.path.join(td, "s2-youtube-cursors.json")
         pending_dir = os.path.join(td, "_待整併")
         os.makedirs(pending_dir, exist_ok=True)
-        pending_path = os.path.join(pending_dir, "0920-YNA_CNA候選-CNA.json")
+        pending_path = os.path.join(pending_dir, "0920-YNA_CNA候選-CNA.apply-batch.json")
         pending_item = dict(READY, id="CNA-PendingVid2", site="CNA", video_id="PendingVid2",
                              platform=dict(READY["platform"], site="CNA", video_id="PendingVid2"))
         pending_manifest = manifest(site="CNA", items=[pending_item],
@@ -299,6 +409,11 @@ def test_in_round_apply_failure_keeps_pending_candidate_for_retry():
 def main():
     tests = [test_advance_cursor_keeps_deferred_and_moves_only_after_complete_manifest,
              test_cursor_save_is_atomic_and_rejects_stale_revision,
+             test_candidate_cursor_only_moves_for_contiguous_or_overlapping_window,
+             test_candidate_cursor_bootstraps_when_site_has_no_prior_success,
+             test_apply_batch_cli_applies_entries_but_leaves_gapped_cursor_unchanged,
+             test_apply_batch_rejects_malformed_envelope_before_writing_state,
+             test_candidate_write_uses_next_available_number_without_overwrite,
              test_manual_apply_without_in_round_is_rejected,
              test_manual_mode_without_apply_only_produces_candidate_file,
              test_add_batch_failure_does_not_advance_cursor,

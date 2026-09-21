@@ -249,13 +249,45 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 {
   "_new_topics": {},
   "YNA-AbCd_ef-123": {
-    "entry": "YNA-AbCd_ef-123 (南韓／主題) ▎摘要…▎畫面：…▎無BITE▎01:35",
-    "category": {"大分類": "國際", "中主題": "...", "小分題": "..."},
-    "tc": {"T": ["..."], "C": ["南韓"]}
+    "entry": "YNA-AbCd_ef-123 (韓聯社 記者報導) (BITE) ▎摘要句，150字內，不得省略號代摘要。▎畫面：具體鏡頭描述、具體鏡頭描述、具體鏡頭描述。▎BITE：主播 OS 全程可用▎01:35\n▎URL：https://www.youtube.com/watch?v=AbCd_ef-123",
+    "category": {"大分類": "政治", "中主題": "...", "小分題": "新聞標題式短句，不得超譯原文"},
+    "tc": {"T": ["政治"], "C": ["南韓"]}
   },
-  "YNA-XyZ987_ab-c": {"skip": "明確排除理由"}
+  "YNA-XyZ987_ab-c": {"skip": "具體排除理由（不得只寫片長；要講跨議題無單一主軸、與既有稿重複等實質理由）"}
 }
 ```
+
+**2026-09-21 使用者裁決訂正（第一輪沙箱候選實測 + Codex(gpt-5.6-sol) 稽核 + 使用者現場糾正後回填，取代舊版含糊範例）：**
+
+- **entry 標頭**：`{id} ({媒體中文名，YNA=韓聯社／CNA=CNA} 主播讀稿／記者報導／專題) (BITE)`；「專題」用於長篇單一主題節目（見下方「長篇不因片長排除」）。
+- **摘要句**：完整句子、句號結尾，**不得用省略號帶過**；**150 字硬上限**（13c2 既有規則對 D23 同樣適用），超過要分句或把細節移到畫面段，不因為是長專題就破例。
+- **畫面段**：至少 2-3 項具體鏡頭描述（如「國會質詢畫面、朝野立委發言、記者會畫面」）；**禁止寫「無」**這種空泛占位——YouTube 來源沒有自己補拍的畫面，也要依內容合理推想可用鏡頭，不能空著。
+- **BITE 段**：
+  - 稿內有明確可掐引言（`src_text` 標出講者與引號內容）時，**BITE 欄只寫中文翻譯，不得夾帶韓文／英文原文**；格式為「講者（身分）：『中文譯文』」。
+  - 沒有明確可掐引言、通篇是主播／記者旁白時，寫「主播 OS 全程可用」或「記者 OS 全程可用」。
+  - 不得無中生有／超譯來源沒有明講的細節（如把「有貢獻」寫成「助攻」、把「香港政要」寫成「多國政要」）——內容必須可回查 `src_text`。
+- **結尾**：`▎{時長 MM:SS}\n▎URL：{platform.url 原樣}` 必加，時長與 URL 一律取自 manifest 的 `platform`／`duration`，不得人工重算或省略。
+- **category**：三層 `{"大分類","中主題","小分題"}`；**大分類用實際編輯分類**（政治／社會／財經／科技醫藥／娛樂藝文／體育／話題等，比照 `common/plans/a10-p0-data/TC-字典.md` 的 T 軸 12 類精神），**不得用「國際」當萬用分類**；小分題是新聞標題式短句，內容不得超出摘要與 `src_text`。
+- **tc.T／tc.C**：**唯一依據 `common/plans/a10-p0-data/TC-字典.md`**，不得自造名稱（例：影劇類新聞要標 `娛樂藝文` 不是 `影劇`；「話題」不准收硬新聞；地緣 C 依字典專項規則，例如港澳併入「中國大陸」、賽事實際發生地是歐洲時南韓球員新聞要加掛「歐洲」）。字典若有更新，這條規則自動跟著字典走，不在本文件重複列舉。
+- **長篇不因片長排除，但棚訪／座談節目不收（雙判準，2026-09-21 Codex(gpt-5.6-sol) 稽核＋使用者裁決細化）**：
+  1. **內容門檻**：必須是單一事件／單一主題，有可查證的完整來源文字。
+  2. **形式門檻**：以採訪、旁白、素材畫面編排構成的**敘事型**新聞專題可收（例如地方發展、產業現象等單一主題專題），收錄為「(媒體 專題)」，摘要／畫面／BITE 規則同上（含 150 字摘要上限，細節移畫面段）；以**棚內主持人與來賓來回對話為主體**構成的節目（如「여의도1번지」政論節目、「이슈ZIP」深度追蹤特輯這類節目式長片）**一律 skip**，不論是否單一主題——判準是形式（棚內對話 vs 敘事編排），不是主題數量；專題裡嵌入受訪 BITE 不算棚訪節目，只有整支片以棚內對話推進才算。`skip` 理由要寫實質原因（如「政論棚訪節目，橫跨N個議題無單一主軸」），不能只寫片長；skip 前先看是否已有其他更短則覆蓋了同一事件的核心事實，若有就在理由中註記「核心事實已由 {id} 收錄」。
+- **同主題重複只收一則（本規則限 YNA 站；CNA 更新頻率低、重複情況少見，暫不套用，之後若觀察到 CNA 也有同題重複再另行裁決是否比照）**：同一時間窗內、同一新聞事件若被切成多支 YNA 影片（跟播、後續反應、[속보]先行快報、[앵커리포트]短評等），**先做「實質新增資訊」測試**——若某一則比其他則多了新事實、新官方回應、新當事人說法、新可用 BITE 或不同關鍵畫面，視為**互補內容**，兩則都收，不算重複；只有核心事實與可用素材**實質相同**的才算真重複。判定為重複時，保留規則依序：①先排除字幕不完整或不具收錄資格的候選；②在剩餘候選裡選**核心事實最完整、可用畫面／BITE 最充分**的一則；③完整度相當才比 `published_at_utc` 較晚者；④**不得只用片長本身推定完整度**。其餘標 `skip`，理由寫「重複主題，已收於 {保留的id}」。**保留稿必須確定會形成可套用的 entry（或已存在 state）才能 skip 其餘**；若保留稿本身因字幕失敗等原因進了 `deferred`，其餘同事件候選**不得**因此被 skip 掉——改收次佳、但確定可用的一則，避免整個事件當輪零收錄。不同事件即使關鍵字重疊（如同人物、同機構的不同新聞）不算重複，仍要各自收錄。
+- **TC 字典缺值時**：不得自造新名稱，也不得為了通過驗證硬塞明顯不合的類別；先在現有 `TC-字典.md` 條目中選**最接近的既有值**填入完成 decisions，並在交接／回報時明確標註「此則暫用最接近值 X，需人工校正」，待使用者裁決後再回頭修正該筆與（必要時）更新字典本身。
+- **category／tc 必填、且 final batch 只接受物件形式**：只要 decisions 該筆是 `entry`（非 `skip`），`category`／`tc` 都是必填欄位；`finalize` 產出的 final batch 一律把兩者正規化為本節開頭範例的三層物件／`{"T":[...],"C":[...]}` 物件，3.6 表格所稱「可用路徑字串／字串」只能是人工輸入時的簡寫，`finalize` 必須解析、驗證後轉成物件寫入 final batch，不得原樣輸出字串。
+- **entry 與 skip 互斥（XOR）**：同一 ready item 的 decisions 必須恰有 `entry` 或 `skip` 其中之一，兩者同時出現或都缺，`finalize` 一律 blocking exit 2。重複 skip 理由裡引用的保留 id，`finalize` preflight 必須驗證其存在於同一批的 ready entries、或已存在於正式 state，否則同樣 blocking——不得引用被排除、deferred 或不存在的 id。
+
+**entry 唯一 canonical 模板（逐字標明分隔符位置，避免各自理解換行／空格）**：
+
+```
+{id} ({媒體標籤}) (BITE) ▎{摘要句，句號結尾}。▎畫面：{鏡頭1}、{鏡頭2}、{鏡頭3}。▎BITE：{BITE內容}▎{MM:SS}
+▎URL：{watch URL}
+```
+
+- `{id}` 後恰一個半形空白接 `({媒體標籤})`，媒體標籤與 `(BITE)` 之間恰一個半形空白。
+- `▎摘要`／`▎畫面：`／`▎BITE：` 三段依序出現，`▎` 前後不加空白；`▎畫面：` 段以「、」分隔各鏡頭、句號收尾。
+- `▎{BITE內容}` 後直接接 `▎{MM:SS}`，同一行不換行；`{MM:SS}` 後才換行（`\n`）接 `▎URL：`。
+- 全形標點只用在中文敘述本身（，。「」）；`▎`、URL、`MM:SS` 一律半形字元。
 
 `finalize` 必做全量對帳：manifest 內每個 ready item 都必須在 decisions 中有 `entry` 或非空 `skip`；缺判斷列為 `dropped` 並 exit 2，不產可 apply 的 batch。`skip` 不進 batch，但要留在 receipt／counts，證明不是漏判。
 
@@ -267,10 +299,10 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 | `source` | CLI `--site` 設定 | 只可 `YNA` 或 `CNA`；不可寫 `YT` |
 | `checkpoint` | 本輪 run context | 嚴格 `MMDD-HHMM`；不把 `-YNA`／`-補掃` 接在此欄 |
 | `status` | 字幕可用性 | ready 固定 `has_script`；字幕暫時失敗不入此批，改列 deferred |
-| `entry` | 人工 decisions | 非空字串；首碼必須與 `id` 完全一致；不得自帶時段標記 |
+| `entry` | 人工 decisions | 非空字串；首碼必須與 `id` 完全一致；不得自帶時段標記；撰寫細則見上方 3.5「2026-09-21 使用者裁決訂正」（畫面/BITE不得空泛、BITE不得夾原文、150字摘要上限、URL 必加、category/tc 依字典） |
 | `src_text` | 正規化字幕 | CNA 英文 ASR；YNA `zh-Hant` 初判字幕；不可缺、不可用 description 代替 |
-| `category` | 人工 decisions | 接受既有物件或路徑字串；建議物件型式 |
-| `tc` | 人工 decisions | 接受既有物件或字串；YNA／CNA 來源預設仍由現行 pretag 輔助，不代替人工確認 |
+| `category` | 人工 decisions | entry 存在時必填；人工可簡寫字串，`finalize` 必須解析驗證後正規化為三層物件寫入，不得原樣輸出字串 |
+| `tc` | 人工 decisions | entry 存在時必填；人工可簡寫字串，`finalize` 必須解析驗證後正規化為 `{"T":[...],"C":[...]}` 物件寫入；YNA／CNA 來源預設仍由現行 pretag 輔助，不代替人工確認 |
 | `sb_count` | 字幕機械分析（若可靠）或省略 | 不可把未知硬填 0；若字幕格式不足以可靠計數就省略 |
 | `platform` | collect manifest | 保存影片 provenance、發布時間、時長與字幕精度 |
 | `suggest` | bridge 呼叫既有 pretag（可選） | 純提示，`add-batch` 不保存；失敗不得影響入庫 |
@@ -278,6 +310,10 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 輸出一律是 `{"entries": [...], "new_topics": {...}}`。`finalize` 在任何副作用前，先用 `s2_material_schema` 的 pure validation、素材行 lint 與全量對帳完成 preflight；不得等 `add-batch` 逐筆 skip 後才發現整批 schema 不相容。
 
 ### 3.7 獨立於五站之外的手動觸發機制（使用者 2026-09-20 提出，2026-09-20 二次訂正）
+
+> **⛔ 2026-09-21 使用者裁決（訂正）：只拿掉「五站自動排程去觸發 CNA／YNA 收錄」這一段，「排定輪次順手整併 `_待整併/` 候選入庫」這段維持原設計、照舊要接。** 兩件事分開講：
+> 1. **不接**：Phase 5／3.1 講的「排定輪次自動呼叫 `s2_youtube_bridge.py collect`／`finalize --apply --in-round` 去主動掃 CNA／YNA」——這部分維持 `scripts/s2_scan_prompt.md` 既有的 Phase 5 dry-run 限制（只列印命令計畫，不呼叫 bridge、不碰 state／cursor、不連外、不改 `s2_scan.ps1`），**不放寬**。D23 目前仍只能靠人工／agent 手動呼叫 `collect`／`finalize` 產生候選檔（見下方命令），排定輪次不會自己主動去抓新的 YNA／CNA 資料。
+> 2. **照舊要接**：下面「排定輪次多一個檢查點」段落講的「排定輪次在自己收工／整併步驟裡，檢查 `_待整併/` 底下有沒有 `*.apply-batch.json` 候選，有就在同一鎖窗口內套用入庫、成功後歸檔」——這個**維持原設計，不拿掉**，就跟現行排定輪次整併人工 URL 素材候選（`_待整併/` 已有的機制）用同一套邏輯，YNA／CNA 候選檔只是內容換成 bridge 產出的結構化 batch，入庫路徑不變。
 
 **設計目標**：CNA／YNA 除了掛在既有五站輪次尾端（3.1／Phase 5）之外，要能**不必等下一個排定輪次、也不必等整個五站輪跑完**，隨時單獨補開一次 CNA／YNA 掃描。
 
@@ -290,25 +326,41 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 ```powershell
 # 手動補掃 CNA：只到 collect + finalize（不 --apply），輸出候選檔
 python scripts/s2_youtube_bridge.py collect --site cna `
+  --checkpoint 0920-1234 `   # 嚴格 MMDD-HHMM，手動觸發用實際觸發時刻，不得用「-manual」等後綴（2026-09-21 訂正：程式已強制此格式，舊範例的 0920-manual 會被拒絕）
   --state "...\0920-s2-state.json" `
   --cursor "...\s2-youtube-cursors.json" `
-  --out "...\_待整併\0920-YNA_CNA候選-cna.json"      # manifest／raw
+  --out "...\_待整併\0920-1234-YNA_CNA候選-cna.manifest.json"      # 原始 manifest／raw
 
 python scripts/s2_youtube_bridge.py finalize `
-  --manifest "...\_待整併\0920-YNA_CNA候選-cna.json" `
+  --manifest "...\_待整併\0920-1234-YNA_CNA候選-cna.manifest.json" `
   --entries "...\cna_youtube_entries_manual.json" `
-  --out "...\_待整併\0920-YNA_CNA候選batch.json"      # ready-to-apply batch，不 --apply
+  --out "...\_待整併\0920-1234-YNA_CNA候選-cna.apply-batch.json"   # ready-to-apply batch，不 --apply
   # 不帶 --apply、不帶 --in-round：finalize 在手動模式下只產檔，
   # 完成 3.6 講的全量對帳／preflight，確保候選檔本身就是「乾淨、可直接套用」的狀態，
   # 但實際套用動作留給下一個排定輪次
 ```
 
-**排定輪次多一個檢查點**：CNA／YNA 站在收工步驟（Phase 5）除了做自己那份正常 `collect`／`finalize --apply --in-round` 之外，**開工時先檢查 `_待整併/` 底下有沒有待套用的 YNA/CNA 候選 batch**，有的話在同一個鎖session、同一次 `add-batch` 呼叫脈絡內先套用（`finalize --apply --file <state> --in-round` 指向候選檔），套用成功後把候選檔搬進 `_待整併/已整併/` 或直接刪除（比照既有 `_待整併/` 資料夾用完即清的慣例），失敗則保留候選檔、留到下一輪重試——這一步邏輯上等同 `13c3` §4b「整併 `_待整併/` 的批次」，只是候選內容從人工文字改成本 bridge 產的結構化 batch。
+**2026-09-21 補（Codex(gpt-5.6-sol) 稽核＋使用者裁決「B 類全做」）：**
+
+- **手動 `collect` 必帶 `--checkpoint`**：值封存進 manifest 後不得被套用階段改寫；跨日候選套用到新一天的 state 時，`checkpoint` 仍沿用產出當下的值（代表實際收錄的時間點），不得改成套用當下的輪次 checkpoint——套用輪次自己的 `collect`／`finalize --apply --in-round` 才用套用當下的 checkpoint。
+- **manifest 與 apply-ready batch 用不同副檔名區分，杜絕誤讀**：manifest／raw 一律 `*.manifest.json`，經 `finalize` 產出、preflight 通過、可直接套用的候選一律 `*.apply-batch.json`；排定輪次的「檢查 `_待整併/`」步驟只掃 `*.apply-batch.json`，不得誤把裸 manifest 當成候選套用。
+- **候選檔命名：原子建立新編號檔，不覆寫既有候選（統一取代前版「append／開新檔」兩種矛盾說法）**：檔名固定帶 `{MMDD}-{HHMM或流水號}-YNA_CNA候選-{site}.apply-batch.json`；若同名已存在，一律改用下一個可用編號另存新檔，**不 append、不覆寫**既有候選內容——JSON 結構化檔案沒有安全的「append」語意，追加只能靠開新檔案達成。
+- **候選 envelope 必須帶完整可重播資訊，不能只有 `{"entries":[...], "new_topics":{...}}`**：`finalize`（無論是否 `--apply`）產出的 apply-batch 檔，除了現有 `entries`／`new_topics`／`receipt` 之外，還須額外保存：
+  - `site`
+  - 產出當下讀到的 cursor `revision` 與 `last_complete_end_utc`（產出時的游標前值）
+  - `window`（`lower_exclusive`／`upper_inclusive`，即這份候選實際涵蓋的窗口）
+  - manifest 的 checksum（或直接保留 manifest 路徑供事後核對）
+  - `deferred_video_ids`（這份候選裡確認 deferred 的影片，供排定輪次合併進 cursor 的 deferred 佇列）
+  排定輪次套用前要能靠這些欄位判斷：這份候選對應的窗口跟目前 cursor 是否銜接、有沒有過期或跟其他候選重疊。
+- **游標推進規則：只能取「已完整覆蓋之連續窗口的最大終點」，不得倒退、不得跳過中間缺口**：排定輪次若同時撿到多份候選（例如兩次手動觸發前後腳各出一份），依 envelope 裡的 `window`／cursor revision 排序後，只有當候選窗口與目前 cursor 的 `last_complete_end_utc` **相接或重疊**時，套用後才把 cursor 推進到該候選的 `window.upper_inclusive`；若候選窗口比目前 cursor 還舊（revision 過期）或跟目前 cursor 之間有未覆蓋的缺口，**仍可套用其 `entries`（靠永久 ID 去重，不會重複入庫）**，但**不得**用它去覆寫／推進 cursor，缺口要留給下一輪的正常 `collect` 從目前 cursor 續抓補齊。
+- **套用候選的 CLI 入口要明確、不能跟「讀 manifest+decisions」的一般路徑混用**：`finalize --apply` 現行介面吃的是 `--manifest`＋`--entries`（decisions），`--file` 一律只代表 state 路徑；套用「已經是完成品的 apply-batch 候選檔」是不同語意，**必須另開一個子命令**（例如 `s2_youtube_bridge.py apply-batch --batch <候選檔> --file <state> --cursor <cursor檔> --in-round`），內部直接呼叫既有 `s2_state.py add-batch`，並用候選 envelope 裡的 window／revision 資訊做上一條的游標推進判斷；不得讓排定輪次誤用 `finalize --apply --file <state>` 卻把候選檔塞進 `--file`。
+
+**排定輪次多一個檢查點**：CNA／YNA 站在收工步驟（Phase 5）除了做自己那份正常 `collect`／`finalize --apply --in-round` 之外，**開工時先檢查 `_待整併/` 底下有沒有待套用的 `*.apply-batch.json`**，有的話依上述游標推進規則排序、在同一個鎖 session 內用 `apply-batch` 子命令逐一套用，套用成功後把候選檔（及其對應 manifest）搬進 `_待整併/已整併/` 或直接刪除（比照既有 `_待整併/` 資料夾用完即清的慣例），失敗則保留候選檔、留到下一輪重試——這一步邏輯上等同 `13c3` §4b「整併 `_待整併/` 的批次」，只是候選內容從人工文字改成本 bridge 產的結構化 batch。
 
 **這樣設計後**：
-- 手動觸發**不需要**額外的按站別鎖檔（3.6 初版提的 `s2-youtube-<site>.lock` 可以拿掉）——候選檔寫入用一般的「檔案已存在就開新編號」規則即可（比照 `17-網址素材整併.md` §2「檔案已存在就 append，要另存才開新檔」），不會有跟排定輪次搶寫同一份正式 state 的風險，因為手動觸發**從不直接碰 state**。
-- 游標（`s2-youtube-cursors.json`）**只在候選檔被排定輪次真的套用成功後才前進**，不在手動觸發的 `collect`／`finalize` 階段前進——避免手動觸發抓了窗口、候選檔卻遲遲沒被排定輪次撿起來套用（例如人工忘記觸發下一輪、或候選檔一直沒通過 preflight）時，游標卻已經往前跳、造成該段窗口實質上永久漏收又查不出來。
-- 兩次手動觸發前後腳跑，可能各自產生一份候選檔、內容有重疊——**不需要特別防呆**，因為套用階段仍然是靠永久 ID（`YNA-<videoId>`／`CNA-<videoId>`）去重，重疊項目套用第二次會被 `add-batch` 正常跳過，不會造成重複入庫，只是白跑一次 API／字幕成本，此風險等級遠低於直接寫壞 state。
+- 手動觸發**不需要**額外的按站別鎖檔（3.6 初版提的 `s2-youtube-<site>.lock` 可以拿掉）——候選檔用上面的「原子開新編號檔」規則寫入，不會有跟排定輪次搶寫同一份正式 state 的風險，因為手動觸發**從不直接碰 state**。
+- 游標（`s2-youtube-cursors.json`）**只在候選檔被排定輪次真的套用成功、且窗口與現有 cursor 銜接時才前進**，不在手動觸發的 `collect`／`finalize` 階段前進、也不會被過期或跳空的候選覆寫——避免手動觸發抓了窗口、候選檔卻遲遲沒被排定輪次撿起來套用（例如人工忘記觸發下一輪、或候選檔一直沒通過 preflight）時，游標卻已經往前跳、造成該段窗口實質上永久漏收又查不出來。
+- 兩次手動觸發前後腳跑，可能各自產生一份候選檔、內容有重疊——**內容層面不需要特別防呆**，因為套用階段仍然是靠永久 ID（`YNA-<videoId>`／`CNA-<videoId>`）去重，重疊項目套用第二次會被 `add-batch` 正常跳過，不會造成重複入庫，只是白跑一次 API／字幕成本；但**游標層面**仍要照上面的規則判斷銜接與缺口，不能兩份候選都無條件推進游標。
 
 **不在本次計畫書實作範圍內，留待未來排程整合階段裁決**：是否要額外幫「獨立手動觸發」建一支排程（例如另一個 Windows 工作排程器項目，讓 CNA／YNA 可以用跟五站不同的頻率獨立跑 `collect`／`finalize`），或純粹作為人工/agent 臨時補跑用的 CLI 介面即可、不建排程。這是使用範圍的決定，不影響上面的技術設計。
 
@@ -319,6 +371,7 @@ python scripts/s2_youtube_bridge.py finalize `
 - [ ] 使用者明確把 D23 從「待評估」改為「核准實作」；未裁示不得進 production 實作。
 - [ ] 版權／引用原則取得權責窗口結論，至少確認：可否保存自動字幕、可否把影片內容作交接與後續寫稿依據、成品需要何種來源標示。
 - [ ] 決定 API key 的環境變數名稱與部署位置；確認不進 repo、不進 prompt、不進 log。
+- [x] **裁定 live／upcoming 影片處理規則並列為上線 hard gate（2026-09-21 補，Codex(gpt-5.6-sol) 稽核指出 3.4 只講「規則先定案再上線」卻沒被列進任何 gate；2026-09-21 使用者裁決、Codex(gpt-5.6-terra) 已實作並補測試）**：`liveBroadcastContent` 非 `none` 時，`upcoming`（預告片）一律 `deferred`；`live`（直播中）**維持現行既有行為：永久 `skip`，不重試**（不做「直播結束後重試」的額外邏輯，避免直播內容不穩定或延續數小時造成重複處理複雜度）。
 - [ ] 錄製 fixture：playlist 第一頁／多頁、videos join、YNA zh-Hant 字幕、CNA en 字幕、無字幕、private／live、重複 ID、時區邊界；fixture 必須去除憑證。
 - [ ] 記錄未接線前五站測試與排程基線，後續驗收要證明 NS／AP／RT／ENEX／ABC 無回歸。
 
@@ -344,17 +397,17 @@ python scripts/s2_youtube_bridge.py finalize `
 
 ### Phase 3：`finalize` 與 add-batch 契約（TDD）
 
-- [ ] 先寫逐欄 fixture：一筆 YNA、一筆 CNA、一筆 skip、一筆 decisions 遺漏、一筆錯 checkpoint、一筆 ID/source mismatch。
-- [ ] decisions keyed object → final wrapper；`entry/category/tc` 來自人工，`src_text/platform/checkpoint/source` 只能來自可信 manifest，人工檔不得覆蓋。
-- [ ] 所有 ready item 必須 accounted；任何 dropped／重複／錯 ID 都 exit 2 且不產 apply-ready 檔。
-- [ ] wrapper 固定帶 `new_topics`；驗證既有 add-batch 新題 gate 可運作。
-- [ ] 用臨時 state file 執行真 `s2_state.py add-batch` subprocess e2e：欄位完整落入 state、同 ID 重送只跳過、不產第二筆、YNA／CNA source preserved。
-- [ ] `--apply` 預設關閉；沒帶 `--file` 拒絕；人工模式遇鎖檔拒絕；`--in-round` 只略過「自己持有鎖」的檢查。
+- [x] 先寫逐欄 fixture：一筆 YNA、一筆 CNA、一筆 skip、一筆 decisions 遺漏、一筆錯 checkpoint、一筆 ID/source mismatch。
+- [x] decisions keyed object → final wrapper；`entry/category/tc` 來自人工，`src_text/platform/checkpoint/source` 只能來自可信 manifest，人工檔不得覆蓋。
+- [x] 所有 ready item 必須 accounted；任何 dropped／重複／錯 ID 都 exit 2 且不產 apply-ready 檔。
+- [x] wrapper 固定帶 `new_topics`；驗證既有 add-batch 新題 gate 可運作。
+- [x] 用臨時 state file 執行真 `s2_state.py add-batch` subprocess e2e：欄位完整落入 state、同 ID 重送只跳過、不產第二筆、YNA／CNA source preserved。
+- [ ] `--apply` 預設關閉；沒帶 `--file` 拒絕；`--in-round` 只略過「自己持有鎖」的檢查。**2026-09-21 訂正（Codex(gpt-5.6-sol) 稽核）**：鎖規則限縮為「任何直接寫正式 state 的非輪內 `--apply` 遇 `.s2-scan.lock` 必須拒絕」；純 `collect`／`finalize`（不帶 `--apply`，只產候選檔到 `_待整併/`）**不受** `.s2-scan.lock` 影響、鎖存在也照跑——3.7 已訂正為手動觸發從不直接寫 state，若這裡仍寫「人工模式遇鎖檔拒絕」會跟 3.7 的整個修正方向矛盾。
 
 ### Phase 4：游標交易順序與故障恢復（TDD）
 
-- [ ] 模擬 add-batch 失敗：游標完全不動。
-- [ ] 模擬 add-batch 成功、游標寫入失敗：重跑會因永久 ID 去重，不會重複入庫，也不漏收。
+- [x] 模擬 add-batch 失敗：游標完全不動。
+- [x] 模擬 add-batch 成功、游標寫入失敗：重跑會因永久 ID 去重，不會重複入庫，也不漏收。
 - [ ] 模擬 01:00／20:00 跳過、22:00 成功、04:30 執行：窗口涵蓋 22:00 後全部內容。
 - [ ] 模擬 22:00 失敗：04:30 從 17:00 的最後成功終點續抓，不得從名義 22:00 截斷。
 - [ ] 模擬 17:00 新日狀態檔：固定游標仍延續，10 分鐘重疊不造成跨班重複素材。
