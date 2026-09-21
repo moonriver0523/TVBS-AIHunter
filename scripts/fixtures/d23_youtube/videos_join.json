@@ -1,0 +1,64 @@
+{
+  "items": [
+    {
+      "id": "AbCd_ef-123",
+      "snippet": {
+        "channelId": "UC83jt4dlz1Gjl58fzQrrKZg",
+        "publishedAt": "2026-09-20T14:55:02+00:00",
+        "title": "CNA fixture headline",
+        "description": "fixture description",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {"duration": "PT1M35S"},
+      "status": {"privacyStatus": "public", "uploadStatus": "processed"}
+    },
+    {
+      "id": "CnaVid_00-1",
+      "snippet": {
+        "channelId": "UC83jt4dlz1Gjl58fzQrrKZg",
+        "publishedAt": "2026-09-20T14:20:00Z",
+        "title": "Private fixture video",
+        "description": "not available yet",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {"duration": "PT42S"},
+      "status": {"privacyStatus": "private", "uploadStatus": "processed"}
+    },
+    {
+      "id": "XyZ987_ab-c",
+      "snippet": {
+        "channelId": "UC83jt4dlz1Gjl58fzQrrKZg",
+        "publishedAt": "2026-09-20T12:00:00Z",
+        "title": "Live fixture video",
+        "description": "live placeholder",
+        "liveBroadcastContent": "live"
+      },
+      "contentDetails": {"duration": "PT10M"},
+      "status": {"privacyStatus": "public", "uploadStatus": "processed"}
+    },
+    {
+      "id": "YnaVid_ko-1",
+      "snippet": {
+        "channelId": "UCTHCOPwqNfZ0uiKOvFyhGwg",
+        "publishedAt": "2026-09-20T14:59:01Z",
+        "title": "YNA fixture headline",
+        "description": "fixture Korean context",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {"duration": "PT2M"},
+      "status": {"privacyStatus": "public", "uploadStatus": "processed"}
+    },
+    {
+      "id": "ZyX321_ko-a",
+      "snippet": {
+        "channelId": "UCTHCOPwqNfZ0uiKOvFyhGwg",
+        "publishedAt": "2026-09-20T12:05:00Z",
+        "title": "YNA second fixture",
+        "description": "fixture description",
+        "liveBroadcastContent": "none"
+      },
+      "contentDetails": {"duration": "PT30S"},
+      "status": {"privacyStatus": "public", "uploadStatus": "processed"}
+    }
+  ]
+}

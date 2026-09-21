@@ -50,6 +50,9 @@ def test_url_checkpoint_uuid():
     report("OTH01", bool(M.URL_ID_RE.fullmatch("OTH01")))
     report("YNA1 reject", M.URL_ID_RE.fullmatch("YNA1") is None)
     report("YNA100 reject", M.URL_ID_RE.fullmatch("YNA100") is None)
+    scheduled = "YNA-AbCd_ef-123"
+    report("scheduled YNA shape", M.SCHEDULED_YOUTUBE_ID_RE.fullmatch(scheduled) is not None)
+    report("scheduled CNA shape", M.SCHEDULED_YOUTUBE_ID_RE.fullmatch("CNA-XyZ987_ab-c") is not None)
     report("cp 0917-1300", bool(M.CHECKPOINT_RE.fullmatch("0917-1300")))
     report("cp 18:00 reject", M.CHECKPOINT_RE.fullmatch("18:00") is None)
     uid = "2fc482da-2bc8-4e9e-b43a-55922e17dd3e"
@@ -82,6 +85,10 @@ def test_strict_writer():
 
     canon, issue = _ok_or_pair(M.validate_material_id_for_write("YNA01", "YNA"))
     report("YNA write", canon == "YNA01")
+    canon, issue = _ok_or_pair(M.validate_material_id_for_write("YNA-AbCd_ef-123", "YNA"))
+    report("scheduled YNA write preserves case", canon == "YNA-AbCd_ef-123" and issue is None)
+    canon, issue = _ok_or_pair(M.validate_material_id_for_write("yna-AbCd_ef-123", "YNA"))
+    report("scheduled YNA normalizes prefix only", canon == "YNA-AbCd_ef-123" and issue is None)
     canon, issue = _ok_or_pair(M.validate_material_id_for_write("yna01", "YNA"))
     report("YNA upper", canon == "YNA01")
     canon, issue = _ok_or_pair(M.validate_material_id_for_write("CNA01", "YNA"))
@@ -96,6 +103,8 @@ def test_strict_writer():
     report("NS/AP mismatch blocking", issue is not None and issue.severity == "blocking")
     issue = M.validate_source_for_write("YNA01", "YT")
     report("YNA source=YT reject", issue is not None)
+    issue = M.validate_source_for_write("YNA-AbCd_ef-123", "CNA")
+    report("scheduled YNA/CNA mismatch reject", issue is not None)
     issue = M.validate_source_for_write("OTH01", "OTH")
     report("OTH source=OTH reserved reject", issue is not None)
     issue = M.validate_source_for_write("OTH01", "X")
@@ -134,6 +143,10 @@ def test_dispatcher():
     report("RTV alias", M.canonicalize_id_for_lookup("RTV2286", existing) == "RT2286")
     report("NS upper", M.canonicalize_id_for_lookup("sn-1mo", existing) == "SN-1MO")
     report("YNA upper", M.canonicalize_id_for_lookup("yna01") == "YNA01")
+    report("scheduled lookup preserves suffix case",
+           M.canonicalize_id_for_lookup("yna-AbCd_ef-123") == "YNA-AbCd_ef-123")
+    report("scheduled family preserves suffix case",
+           M.detect_id_family("YNA-AbCd_ef-123", lookup_alias=False) == "YNA")
     report("unknown trim only", M.canonicalize_id_for_lookup("  fooBar  ") == "fooBar")
     report("ENEX case keep", M.canonicalize_id_for_lookup("ENEX1234", existing) == "ENEX1234")
 
