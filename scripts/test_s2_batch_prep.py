@@ -1157,6 +1157,36 @@ out_norm, code_norm = run(bp.cmd_build, Args(
 check('build 正常草稿：exit 0 且不印轉換警告',
       code_norm == 0 and '已暫轉為 entry' not in out_norm, out_norm[-500:])
 
+# ── 2026-09-22（0922-1700輪返工追查，Sol code review建議補測）：
+# FMT_OPERATIONAL_NOTE 硬閘門檻降到 1（其餘reason code維持5）────────────
+OPNOTE_ENTRIES = write_json('opnote_entries.json', {
+    'RT9601': {'entry': 'RT9601 (地方) ▎摘要（相關人士發言，完整引言待補）。'
+                        '▎畫面：資料畫面。無BITE。'}
+})
+OPNOTE_RAW = write_json('opnote_raw.json', [
+    {'code': 'RT9601', 'head': 'head 9601', 'story': 'story 9601', 'sb_count': 0}
+])
+out_op, code_op = run(bp.cmd_build, Args(
+    site='rt', raw=OPNOTE_RAW, entries=OPNOTE_ENTRIES,
+    checkpoint='0922-1700', out=os.path.join(TMP, 'opnote_batch.json'), dry_run=True
+))
+check('硬閘門檻override：FMT_OPERATIONAL_NOTE 單則（count=1）就觸發硬閘攔截',
+      code_op == 2 and '硬閘攔截' in out_op and 'FMT_OPERATIONAL_NOTE' in out_op,
+      out_op[-500:])
+
+GMT_ENTRIES = write_json('gmt_entries.json', {
+    'RT9602': {'entry': 'RT9602 (地方) ▎摘要 GMT 換算。▎畫面：資料畫面。無BITE。'}
+})
+GMT_RAW = write_json('gmt_raw.json', [
+    {'code': 'RT9602', 'head': 'head 9602', 'story': 'story 9602', 'sb_count': 0}
+])
+out_gmt, code_gmt = run(bp.cmd_build, Args(
+    site='rt', raw=GMT_RAW, entries=GMT_ENTRIES,
+    checkpoint='0922-1700', out=os.path.join(TMP, 'gmt_batch.json'), dry_run=True
+))
+check('硬閘門檻維持不變：其餘 reason code（FMT_CONTAINS_GMT）單則（count=1）不觸發硬閘',
+      code_gmt in (0, 2) and '硬閘攔截' not in out_gmt, out_gmt[-500:])
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)

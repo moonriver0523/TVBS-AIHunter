@@ -165,23 +165,6 @@ def fmt_mmss(seconds):
 PERIOD_MARKS = "△▲◇■◆●"
 SEVERITY_MARKS = "🔴🟡⭐🟤🔖"
 
-_VALIDATE_MOD = None
-
-
-def _load_validate():
-    """惰性載入 `s2_validate.py`（跟 `s2_platform_lint.py` 的 `load_validate()` 同法，
-    只載一次快取起來）。"""
-    global _VALIDATE_MOD
-    if _VALIDATE_MOD is None:
-        import importlib.util
-        here = os.path.dirname(os.path.abspath(__file__))
-        spec = importlib.util.spec_from_file_location(
-            "s2_validate", os.path.join(here, "s2_validate.py"))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        _VALIDATE_MOD = mod
-    return _VALIDATE_MOD
-
 
 def norm_category(v):
     """`category` 允許兩種寫法，統一成物件。
@@ -254,24 +237,6 @@ def check_entries(entries):
         # 裸代碼**不是**編輯判斷問題，是機械前綴，交給 normalize_entry_head 補。
         if head and head not in (k, bare, "ENEX" + bare, "ABC" + bare):
             problems.append(f"{k}: raw_entry 行首代碼是 {head!r}，與鍵值不符")
-        # 🆕 2026-09-22（0922-1700輪返工追查）：操作備註（「完整引言待補」等給
-        # agent 自己看的註記）洩漏進 raw_entry，本檔原本完全不查，要等到
-        # extract 之後、交件當下的 `s2_platform_lint.py` 才抓到——那時已經跑完
-        # ffprobe／寫過候選檔。跟上面「行首代碼」同一種「確定要重寫、不是編輯
-        # 判斷」的形狀問題，往前挪到這裡（動 ffprobe 之前）最便宜，同時沿用
-        # `s2_validate.check_entry()` 同一套判準，不重寫第二套規則。只挑
-        # 「操作備註寫進素材行」這條——其餘（畫面段、摘要字數等）仍留給
-        # `s2_platform_lint.py`／agent 編輯判斷，不在這裡重覆。
-        try:
-            for issue in _load_validate().check_entry(raw, ident=k):
-                if '操作備註寫進素材行' in issue or '操作/狀態備註寫進素材行' in issue:
-                    problems.append(f"{k}: {issue}")
-        except Exception as e:
-            # 檢查本身壞掉絕不能擋住既有檢查（跟 `s2_state.fmt_issues` 同一原則：
-            # 這條是額外加的防護，寧可漏檢也不能讓既有 check-entries 因此失效）——
-            # 但完全靜默會讓 s2_validate.py 本身壞掉這種真 bug 隱形，印一句 stderr
-            # 警告（Sol code review 建議，2026-09-22）。
-            print(f"⚠️ {k}: 操作備註檢查本身失敗（{e}），此項已跳過該檢查", file=sys.stderr)
     return problems
 
 

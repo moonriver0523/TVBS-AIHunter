@@ -203,8 +203,20 @@ def _lint_row(entry_text, row):
 
 HARD_GATE_THRESHOLD = 5
 
-# 白名單：僅限確認為機械格式類別的 reason_code，達到門檻（>=5）時觸發硬閘擋下
-# 內容／語意／啟發式判斷（如引言翻譯、事實判斷、選材適當性、摘要字數）嚴格排除於白名單外，維持只警告不擋
+# 🆕 2026-09-22（0922-1700輪返工追查）：`FMT_OPERATIONAL_NOTE`（agent 內部備註如
+# 「完整引言待補」洩漏進成品）不是格式風格細節，是**絕對不該出現**的內容——出現
+# 1 則就已經是錯，不該等累積到 5 則才擋。0922-1700 那輪正是因為單次 add-batch／
+# update-entry 呼叫每次都零星 1-4 則、始終沒撞到全站門檻，全天下來悄悄累積成
+# 120 則，直到收工 render 才被 `s2_validate.check()` 整批抓到，逼出一輪大返工
+# （詳見該輪事後分析）。其餘白名單原因維持 5 則門檻（真的是格式風格細節，
+# 1-4 則容忍換取不中斷整輪掃帶）。
+HARD_GATE_THRESHOLD_OVERRIDES = {
+    'FMT_OPERATIONAL_NOTE': 1,
+}
+
+# 白名單：僅限確認為機械格式類別的 reason_code，達到門檻（>=5，見上方 OVERRIDES 例外）
+# 時觸發硬閘擋下。內容／語意／啟發式判斷（如引言翻譯、事實判斷、選材適當性、摘要字數）
+# 嚴格排除於白名單外，維持只警告不擋
 HARD_GATE_REASONS = {
     'FMT_FIRST_NOTE_BITE': '第一備註寫了 BITE',
     'FMT_MISSING_FOOTAGE_SEG': '缺 ▎畫面： 段',
@@ -313,7 +325,8 @@ def collect_build_lint_reasons(warnings, site=None, threshold=HARD_GATE_THRESHOL
 
     hard_gate_reasons = [
         info for info in grouped.values()
-        if info['is_hard_gate'] and info['count'] >= threshold
+        if info['is_hard_gate']
+        and info['count'] >= HARD_GATE_THRESHOLD_OVERRIDES.get(info['code'], threshold)
     ]
     return grouped, hard_gate_reasons
 
@@ -332,7 +345,8 @@ def _print_build_lint_warnings(warnings, site=None):
     summaries = [
         f'⚠️ 上面 {info["count"]} 則都是 {site_label} 的「{info["name"]}」同類問題，'
         f'建議整批重寫 {site_label} entries.json，不要逐筆 Edit 修補（見 13c 步驟3-4）'
-        for info in grouped.values() if info['count'] >= HARD_GATE_THRESHOLD
+        for info in grouped.values()
+        if info['count'] >= HARD_GATE_THRESHOLD_OVERRIDES.get(info['code'], HARD_GATE_THRESHOLD)
     ]
     total_len = len(header) + 1
     reserved = sum(len(summary) + 1 for summary in summaries)
@@ -441,12 +455,14 @@ def _enforce_build_hard_gate(warnings, site=None, dry_run=False, entries_path=No
         _print_build_lint_warnings(warnings, site=site_label)
     _write_gate_lock(entries_path, site_label, hard_gate_reasons, dry_run)
     lines = [
-        f'⛔ 【建批硬閘攔截】{site_label} 站偵測到機械格式錯誤達到硬閘門檻（同站同原因 ≥{HARD_GATE_THRESHOLD} 則），拒絕放行：'
+        f'⛔ 【建批硬閘攔截】{site_label} 站偵測到機械格式錯誤達到硬閘門檻，拒絕放行：'
     ]
     for r in hard_gate_reasons:
+        threshold_note = HARD_GATE_THRESHOLD_OVERRIDES.get(r['reason_code'], HARD_GATE_THRESHOLD)
         items_str = ', '.join(r['items'][:10]) + ('…' if len(r['items']) > 10 else '')
         lines.append(
-            f'  • 站別：{r["site"]} | 代碼：{r["reason_code"]}（{r["name"]}）| 共 {r["count"]} 則\n'
+            f'  • 站別：{r["site"]} | 代碼：{r["reason_code"]}（{r["name"]}）'
+            f'| 共 {r["count"]} 則（門檻 ≥{threshold_note}）\n'
             f'    涉及項目：{items_str}'
         )
     status_desc = ('--dry-run 預檢未通過，batch.json 尚未寫入！'

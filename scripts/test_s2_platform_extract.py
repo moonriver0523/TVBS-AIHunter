@@ -411,6 +411,32 @@ check("check-entries 有掛進 CLI",
       "check-entries" in open(os.path.join(HERE, "s2_platform_extract.py"),
                               encoding="utf-8").read())
 
+# ── 2026-09-22（0922-1700輪返工追查）：操作備註前置檢查 ────────────────
+_b = dict(GOOD); _b["929213"] = dict(
+    GOOD["929213"],
+    raw_entry="ENEX929213 (X) ▎摘要（相關人士發言，完整引言待補）▎畫面：…▎無BITE。")
+check("預檢：操作備註（完整引言待補）洩漏進正文要擋",
+      any("操作備註寫進素材行" in p for p in ex.check_entries(_b)), str(ex.check_entries(_b)))
+
+_b = dict(GOOD); _b["929213"] = dict(
+    GOOD["929213"],
+    raw_entry="ENEX929213 (X) ▎政府推出（產業待補助方案）協助業者。▎畫面：…▎無BITE。")
+check("預檢：合法內容含『待補』子字串（產業待補助）不誤擋",
+      ex.check_entries(_b) == [], str(ex.check_entries(_b)))
+
+_orig_load_validate = ex._load_validate
+ex._VALIDATE_MOD = None
+def _broken_load_validate():
+    raise RuntimeError("模擬 s2_validate.py 載入失敗")
+ex._load_validate = _broken_load_validate
+_b = dict(GOOD); _b["929213"] = dict(
+    GOOD["929213"],
+    raw_entry="ENEX929213 (X) ▎摘要（完整引言待補）▎畫面：…▎無BITE。")
+check("預檢：操作備註檢查本身失敗時不擋住既有 check-entries（fail-open）",
+      ex.check_entries(_b) == [], str(ex.check_entries(_b)))
+ex._load_validate = _orig_load_validate
+ex._VALIDATE_MOD = None
+
 # ── 2026-09-05（0905-0900 實錯）：行首裸代碼是機械前綴，不該退回重寫 ──────
 check("行首裸代碼自動補前綴（ABC）",
       ex.normalize_entry_head("090426151 (X) \u258e摘要", "ABC090426151")
