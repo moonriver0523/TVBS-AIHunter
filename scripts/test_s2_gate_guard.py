@@ -76,6 +76,8 @@ check('decide_edit：deny 訊息含 reason code 與筆數',
       and '7則' in (gate_guard.decide_edit(entries1) or ''))
 check('decide_edit：deny 訊息指路 Write 整批重寫',
       'Write' in (gate_guard.decide_edit(entries1) or ''))
+check('decide_edit：deny 訊息指路少量錯誤的 rewrite-entry 精準修補',
+      'rewrite-entry' in (gate_guard.decide_edit(entries1) or ''))
 check('decide_edit：deny 訊息指路手動解鎖逃生路徑 gate-clear',
       'gate-clear' in (gate_guard.decide_edit(entries1) or ''))
 

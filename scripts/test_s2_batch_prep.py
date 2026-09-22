@@ -791,6 +791,11 @@ check('gate lock：內容含 entries.json 絕對路徑（正斜線）',
 check('gate lock：內容含觸發的 reason code 與筆數',
       any(r.get('code') == 'FMT_FIRST_NOTE_BITE' and r.get('count') == 5 for r in _lock5.get('reasons', [])),
       json.dumps(_lock5, ensure_ascii=False))
+check('gate lock：每個 reason 記錄涉及 ID，供 rewrite-entry 做權限邊界',
+      any(r.get('code') == 'FMT_FIRST_NOTE_BITE'
+          and r.get('items') == [f'RT313{i}' for i in range(5)]
+          for r in _lock5.get('reasons', [])),
+      json.dumps(_lock5, ensure_ascii=False))
 check('gate lock：正式 build 觸發時 dry_run 欄位為 False', _lock5.get('dry_run') is False,
       json.dumps(_lock5, ensure_ascii=False))
 
@@ -941,10 +946,11 @@ check('R44 build --skeleton 保留 NS footage_type／duration_ms／inline_sot_co
       and _ns_rows['NS0001'].get('inline_sot_count') == 1,
       str(_ns_rows.get('NS0001')))
 
-# R41/R42 build lint 讀同一筆的 src_text＋結構化欄位，兩個提醒都要到出口。
-check('R41/R42 build lint 同時看到 inline SOT 與 duration 白名單',
-      'NS0001' in out_s3h and 'inline SOT' in out_s3h
-      and 'PKG/DONUT且時長>1分鐘' in out_s3h, out_s3h[-800:])
+# build 會先機械補上 SOT，再跑 lint；duration 白名單應已消失，inline SOT 的
+# 內容判斷仍需保留。
+check('R41/R42 build autofix 後只保留仍需人工判斷的 inline SOT 提醒',
+      '補SOT 1 則：NS0001' in out_s3h and 'inline SOT' in out_s3h
+      and 'PKG/DONUT且時長>1分鐘' not in out_s3h, out_s3h[-800:])
 
 NS_DIRECT_BATCH_OUT = os.path.join(TMP, 'ns_direct_batch.json')
 out_s3i, code_s3i = run(bp.cmd_build, Args(
@@ -1186,6 +1192,104 @@ out_gmt, code_gmt = run(bp.cmd_build, Args(
 ))
 check('硬閘門檻維持不變：其餘 reason code（FMT_CONTAINS_GMT）單則（count=1）不觸發硬閘',
       code_gmt in (0, 2) and '硬閘攔截' not in out_gmt, out_gmt[-500:])
+
+# ── gate lock 精準修補：少量錯誤走 rewrite-entry，5 則以上維持整批 Write ──
+_rewrite = getattr(bp, 'cmd_rewrite_entry', None)
+
+
+def run_rewrite(**kw):
+    if _rewrite is None:
+        return 'rewrite-entry 尚未實作', 1
+    defaults = dict(site='rt', ids=[], sets=[])
+    defaults.update(kw)
+    return run(_rewrite, Args(**defaults))
+
+
+_dir_rewrite_small = gate_scenario_dir('rewrite_small')
+REWRITE_SMALL_ENTRIES = write_json_in(_dir_rewrite_small, 'entries.json', {
+    'RT9701': {'entry': 'RT9701 (地方) ▎摘要（完整引言待補）。▎畫面：資料畫面。無BITE。',
+               'category': '國際/測試'},
+    'RT9702': {'entry': 'RT9702 (地方) ▎不應被改動。▎畫面：資料畫面。無BITE。',
+               'category': '國際/保留'},
+})
+REWRITE_SMALL_RAW = write_json_in(_dir_rewrite_small, 'raw.json', [
+    {'code': 'RT9701', 'head': 'head 9701', 'story': 'story 9701', 'sb_count': 0},
+    {'code': 'RT9702', 'head': 'head 9702', 'story': 'story 9702', 'sb_count': 0},
+])
+_, _small_gate_code = run(bp.cmd_build, Args(
+    site='rt', raw=REWRITE_SMALL_RAW, entries=REWRITE_SMALL_ENTRIES,
+    checkpoint='0922-2100', out=None, dry_run=True))
+REWRITE_SMALL_LOCK = bp._gate_lock_path(REWRITE_SMALL_ENTRIES, 'RT')
+_small_before = json.load(open(REWRITE_SMALL_ENTRIES, encoding='utf-8'))['RT9702']
+_fixed_9701 = json.dumps({
+    'entry': 'RT9701 (地方) ▎已補上完整摘要。▎畫面：資料畫面。無BITE。',
+    'category': '國際/測試',
+}, ensure_ascii=False)
+_out_rw_small, _code_rw_small = run_rewrite(
+    entries=REWRITE_SMALL_ENTRIES, ids=['RT9701'], sets=[f'RT9701={_fixed_9701}'])
+_small_after = json.load(open(REWRITE_SMALL_ENTRIES, encoding='utf-8'))
+check('rewrite-entry：1-4 則時只改指定 ID、其他 entry 完全不變',
+      _code_rw_small == 0
+      and _small_after.get('RT9701', {}).get('entry', '').startswith('RT9701 (地方) ▎已補上')
+      and _small_after.get('RT9702') == _small_before,
+      _out_rw_small[-500:])
+check('rewrite-entry：修完白名單 lint 歸零後自動清除 gate lock',
+      _code_rw_small == 0 and not os.path.exists(REWRITE_SMALL_LOCK)
+      and 'gate lock 已清除' in _out_rw_small,
+      _out_rw_small[-500:])
+
+_dir_rewrite_many = gate_scenario_dir('rewrite_many')
+REWRITE_MANY_ENTRIES = write_json_in(_dir_rewrite_many, 'entries.json', {
+    f'RT971{i}': f'RT971{i} (BITE) ▎摘要。▎畫面：資料畫面。無BITE。'
+    for i in range(5)
+})
+REWRITE_MANY_RAW = write_json_in(_dir_rewrite_many, 'raw.json', [
+    {'code': f'RT971{i}', 'head': f'head {i}', 'story': f'story {i}', 'sb_count': 1}
+    for i in range(5)
+])
+run(bp.cmd_build, Args(site='rt', raw=REWRITE_MANY_RAW, entries=REWRITE_MANY_ENTRIES,
+                       checkpoint='0922-2100', out=None, dry_run=True))
+_many_before = open(REWRITE_MANY_ENTRIES, encoding='utf-8').read()
+_out_rw_many, _code_rw_many = run_rewrite(
+    entries=REWRITE_MANY_ENTRIES, ids=['RT9710'],
+    sets=['RT9710=RT9710 ▎摘要。▎畫面：資料畫面。無BITE。'])
+check('rewrite-entry：reason count 達 5 則時拒絕並要求整批 Write',
+      _code_rw_many == 2 and '整批 Write' in _out_rw_many
+      and open(REWRITE_MANY_ENTRIES, encoding='utf-8').read() == _many_before,
+      _out_rw_many[-500:])
+
+_dir_rewrite_scope = gate_scenario_dir('rewrite_scope')
+REWRITE_SCOPE_ENTRIES = write_json_in(_dir_rewrite_scope, 'entries.json', {
+    'RT9721': 'RT9721 (地方) ▎摘要（完整引言待補）。▎畫面：資料畫面。無BITE。',
+    'RT9722': 'RT9722 (地方) ▎原稿。▎畫面：資料畫面。無BITE。',
+})
+REWRITE_SCOPE_RAW = write_json_in(_dir_rewrite_scope, 'raw.json', [
+    {'code': 'RT9721', 'head': 'head 1', 'story': 'story 1', 'sb_count': 0},
+    {'code': 'RT9722', 'head': 'head 2', 'story': 'story 2', 'sb_count': 0},
+])
+run(bp.cmd_build, Args(site='rt', raw=REWRITE_SCOPE_RAW, entries=REWRITE_SCOPE_ENTRIES,
+                       checkpoint='0922-2100', out=None, dry_run=True))
+_scope_before = open(REWRITE_SCOPE_ENTRIES, encoding='utf-8').read()
+_out_rw_scope, _code_rw_scope = run_rewrite(
+    entries=REWRITE_SCOPE_ENTRIES, ids=['RT9722'],
+    sets=['RT9722=RT9722 (地方) ▎越權改稿。▎畫面：資料畫面。無BITE。'])
+check('rewrite-entry：ID 不在 gate lock reason items 時拒絕且不改檔',
+      _code_rw_scope == 2 and '不在 gate lock' in _out_rw_scope
+      and open(REWRITE_SCOPE_ENTRIES, encoding='utf-8').read() == _scope_before,
+      _out_rw_scope[-500:])
+
+_dir_rewrite_missing = gate_scenario_dir('rewrite_missing_lock')
+REWRITE_NOLOCK_ENTRIES = write_json_in(_dir_rewrite_missing, 'entries.json', {
+    'RT9731': 'RT9731 (地方) ▎原稿。▎畫面：資料畫面。無BITE。'
+})
+_nolock_before = open(REWRITE_NOLOCK_ENTRIES, encoding='utf-8').read()
+_out_rw_nolock, _code_rw_nolock = run_rewrite(
+    entries=REWRITE_NOLOCK_ENTRIES, ids=['RT9731'],
+    sets=['RT9731=RT9731 (地方) ▎新稿。▎畫面：資料畫面。無BITE。'])
+check('rewrite-entry：gate lock 不存在時明確報錯且不改檔',
+      _code_rw_nolock == 2 and 'gate lock 不存在' in _out_rw_nolock
+      and open(REWRITE_NOLOCK_ENTRIES, encoding='utf-8').read() == _nolock_before,
+      _out_rw_nolock[-500:])
 
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')

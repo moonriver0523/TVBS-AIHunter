@@ -86,6 +86,29 @@ check('git status → 放行',
 check('非 Bash/PowerShell 工具 → 一律放行',
       d('Read', 'python -c "json.load(open(\'x.json\'))"') is None)
 
+# ── A40：s2_mark_ingested.py 缺 --file 不可交給 pipeline 掩蓋 exit code ──
+check('A40：mark-ingested 缺 --file 且串 tail pipeline → deny',
+      (r := d('Bash', 'python scripts/s2_mark_ingested.py --apply 2>&1 | tail -20'))
+      and '--file <狀態檔路徑>' in r and 'pipefail' in r)
+check('A40：mark-ingested --file 空白分隔寫法 → 放行',
+      d('Bash', 'python scripts/s2_mark_ingested.py --file state.json --apply') is None)
+check('A40：mark-ingested --file= 寫法 → 放行',
+      d('PowerShell', 'py scripts/s2_mark_ingested.py --file=state.json --apply') is None)
+check('A40：pipeline 後段提到 --file 不算腳本有帶參數 → deny',
+      d('Bash', 'python scripts/s2_mark_ingested.py --apply | echo --file state.json') is not None)
+check('A40：只有一般文字提到 mark_ingested，不是呼叫腳本 → 放行',
+      d('Bash', 'echo "s2_mark_ingested.py 執行完成"') is None)
+check('A40：其他腳本的 --file 不可誤算到 mark-ingested invocation → deny',
+      d('Bash', 'python scripts/s2_mark_ingested.py --apply && python scripts/s2_state.py --file x') is not None)
+check('A40：引號包住腳本路徑且有 --file → 放行',
+      d('Bash', 'python "E:/GitHub/TVBS-AIHunter/scripts/s2_mark_ingested.py" --file state.json') is None)
+check('A40：相似但不同的腳本檔名不可誤殺 → 放行',
+      d('Bash', 'python scripts/my_s2_mark_ingested.py --apply') is None)
+check('A40：echo 內完整提到呼叫範例也不是實際 invocation → 放行',
+      d('Bash', 'echo "python scripts/s2_mark_ingested.py --apply"') is None)
+check('A40：echo 的未加引號參數提到腳本也不是實際 invocation → 放行',
+      d('PowerShell', 'echo python scripts/s2_mark_ingested.py --apply') is None)
+
 # ── deny：臨場寫／跑一次性 .py 腳本（2026-08-30 補，A9③繞道變體）───
 check('跑存檔的臨時 .py（相對路徑，非 -c）→ deny，帶檔名',
       (r := d('Bash', 'python _mk_ns_snapshot.py'))

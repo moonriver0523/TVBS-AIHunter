@@ -342,12 +342,18 @@ def _print_build_lint_warnings(warnings, site=None):
     lines = [header]
     site_label = (site or '該站').upper()
     grouped, _ = collect_build_lint_reasons(warnings, site=site_label)
-    summaries = [
-        f'⚠️ 上面 {info["count"]} 則都是 {site_label} 的「{info["name"]}」同類問題，'
-        f'建議整批重寫 {site_label} entries.json，不要逐筆 Edit 修補（見 13c 步驟3-4）'
-        for info in grouped.values()
-        if info['count'] >= HARD_GATE_THRESHOLD_OVERRIDES.get(info['code'], HARD_GATE_THRESHOLD)
-    ]
+    summaries = []
+    for info in grouped.values():
+        if info['count'] < HARD_GATE_THRESHOLD_OVERRIDES.get(info['code'], HARD_GATE_THRESHOLD):
+            continue
+        if info['count'] < HARD_GATE_THRESHOLD:
+            summaries.append(
+                f'⚠️ 上面 {info["count"]} 則都是 {site_label} 的「{info["name"]}」同類問題，'
+                f'請用 rewrite-entry 精準修補 gate lock 列出的 ID')
+        else:
+            summaries.append(
+                f'⚠️ 上面 {info["count"]} 則都是 {site_label} 的「{info["name"]}」同類問題，'
+                f'建議整批重寫 {site_label} entries.json，不要逐筆 Edit 修補（見 13c 步驟3-4）')
     total_len = len(header) + 1
     reserved = sum(len(summary) + 1 for summary in summaries)
     warning_budget = max(total_len, INSPECT_TEXT_BUDGET - reserved)
@@ -375,7 +381,7 @@ def _gate_lock_path(entries_path, site_label):
     return os.path.join(d, f'{site_label.lower()}{GATE_LOCK_SUFFIX}')
 
 
-def _write_gate_lock(entries_path, site_label, hard_gate_reasons, dry_run):
+def _write_gate_lock(entries_path, site_label, hard_gate_reasons, dry_run, lint_rows=None):
     """硬閘觸發時落一份 lock 標記檔，供 PreToolUse hook（s2_gate_guard.py）
     技術性擋掉對同一 entries.json 的 Edit——不只是印訊息建議。"""
     if not entries_path:
@@ -384,11 +390,22 @@ def _write_gate_lock(entries_path, site_label, hard_gate_reasons, dry_run):
         'site': site_label,
         'entries_path': os.path.abspath(entries_path).replace('\\', '/'),
         'reasons': [
-            {'code': r['reason_code'], 'name': r['name'], 'count': r['count']}
+            {'code': r['reason_code'], 'name': r['name'], 'count': r['count'],
+             'items': list(dict.fromkeys(r.get('items') or []))}
             for r in hard_gate_reasons
         ],
         'triggered_at': datetime.datetime.now().isoformat(timespec='seconds'),
         'dry_run': bool(dry_run),
+    }
+    # rewrite-entry 只需重算「硬閘白名單」；其中唯一依賴 entry 以外欄位的規則
+    # 是 NS PKG/DONUT 的 footage_type/duration_ms/source。刻意不存 src_text，
+    # 避免 gate lock 複製整批全文；其餘語意警告不參與清鎖判定。
+    lock['lint_contexts'] = {
+        str(row.get('id')): {
+            key: row.get(key) for key in ('source', 'footage_type', 'duration_ms')
+            if row.get(key) is not None
+        }
+        for row in (lint_rows or []) if isinstance(row, dict) and row.get('id') is not None
     }
     try:
         with open(_gate_lock_path(entries_path, site_label), 'w', encoding='utf-8') as f:
@@ -426,7 +443,128 @@ def cmd_gate_clear(args):
     print(f'✅ 已手動清除 {site_label} gate lock：{path}', file=sys.stderr)
 
 
-def _enforce_build_hard_gate(warnings, site=None, dry_run=False, entries_path=None):
+def _rewrite_entry_error(message):
+    print(f'⛔ rewrite-entry 拒絕執行：{message}', file=sys.stderr)
+    sys.exit(2)
+
+
+def _parse_rewrite_sets(raw_sets):
+    parsed = {}
+    for raw in raw_sets or []:
+        item_id, sep, value = str(raw).partition('=')
+        item_id = item_id.strip()
+        if not sep or not item_id or not value:
+            _rewrite_entry_error('--set 必須是 `<ID>=<新 entry JSON 或純文字>`。')
+        if item_id in parsed:
+            _rewrite_entry_error(f'--set 重複指定 ID：{item_id}')
+        try:
+            payload = json.loads(value)
+        except ValueError:
+            payload = value
+        if not isinstance(payload, (str, dict)):
+            _rewrite_entry_error(f'{item_id} 的新內容必須是 JSON object 或純文字。')
+        parsed[item_id] = payload
+    return parsed
+
+
+def _hard_gate_reasons_for_entries(entries, site_label, lint_contexts):
+    """以 build 的 `_lint_row`＋`collect_build_lint_reasons` 重算白名單原因。"""
+    warnings = []
+    for item_id, payload in entries.items():
+        if str(item_id).startswith('_'):
+            continue
+        entry_text, _category, _tc, _status, _converted = parse_draft_entry(item_id, payload)
+        context = dict((lint_contexts or {}).get(str(item_id)) or {})
+        context['source'] = context.get('source') or site_label
+        for reason in _lint_row(entry_text, context):
+            warnings.append(f'{item_id}: {reason}')
+    grouped, _triggered = collect_build_lint_reasons(warnings, site=site_label)
+    return [info for info in grouped.values()
+            if info['is_hard_gate'] and info['count'] > 0]
+
+
+def cmd_rewrite_entry(args):
+    """依 active gate lock 精準改少量 ID；重跑共用 lint，歸零才自動解鎖。"""
+    site_label = args.site.upper()
+    lock_path = _gate_lock_path(args.entries, site_label)
+    if not os.path.exists(lock_path):
+        _rewrite_entry_error(f'gate lock 不存在：{lock_path}')
+    try:
+        with open(lock_path, encoding='utf-8') as f:
+            lock = json.load(f)
+    except (OSError, ValueError) as exc:
+        _rewrite_entry_error(f'gate lock 無法讀取：{exc}')
+
+    if lock.get('site') != site_label:
+        _rewrite_entry_error(f'gate lock 站別是 {lock.get("site")}，不是 {site_label}。')
+    locked_entries = os.path.normcase(os.path.abspath(lock.get('entries_path') or ''))
+    requested_entries = os.path.normcase(os.path.abspath(args.entries))
+    if locked_entries != requested_entries:
+        _rewrite_entry_error('gate lock 記錄的 entries_path 與 --entries 不一致。')
+
+    reasons = lock.get('reasons') or []
+    try:
+        counts = [int(r.get('count', 0)) for r in reasons]
+    except (TypeError, ValueError):
+        _rewrite_entry_error('gate lock 的 reason count 格式不合法；請重跑 build --dry-run。')
+    if any(count >= HARD_GATE_THRESHOLD for count in counts) or sum(counts) >= HARD_GATE_THRESHOLD:
+        _rewrite_entry_error(
+            f'gate lock 記錄共 {sum(counts)} 項格式錯誤（通用門檻 ≥{HARD_GATE_THRESHOLD}），'
+            '請改用整批 Write 重寫 entries.json。')
+
+    allowed_ids = {
+        str(item_id) for reason in reasons for item_id in (reason.get('items') or [])
+    }
+    if not allowed_ids:
+        _rewrite_entry_error('gate lock 沒有 reason items；請先重跑 build --dry-run 更新 lock。')
+    requested_ids = [str(item_id) for item_id in (args.ids or [])]
+    if not requested_ids or len(requested_ids) != len(set(requested_ids)):
+        _rewrite_entry_error('--id 至少給一個且不可重複。')
+    updates = _parse_rewrite_sets(args.sets)
+    if set(requested_ids) != set(updates):
+        _rewrite_entry_error('--id 與 --set 指定的 ID 必須完全一致。')
+    unauthorized = sorted(set(requested_ids) - allowed_ids)
+    if unauthorized:
+        _rewrite_entry_error(
+            f'ID 不在 gate lock 的 reason items 清單：{", ".join(unauthorized)}')
+
+    entries = load_json(args.entries)
+    if not isinstance(entries, dict):
+        _rewrite_entry_error('entries.json 頂層必須是 object。')
+    missing = sorted(set(requested_ids) - set(entries))
+    if missing:
+        _rewrite_entry_error(f'entries.json 找不到 ID：{", ".join(missing)}')
+    for item_id in requested_ids:
+        entries[item_id] = updates[item_id]
+
+    remaining = _hard_gate_reasons_for_entries(
+        entries, site_label, lock.get('lint_contexts') or {})
+    try:
+        _atomic_write_json(args.entries, entries)
+    except OSError as exc:
+        _rewrite_entry_error(f'entries.json 寫入失敗：{exc}')
+    print(f'✅ rewrite-entry 已精準更新 {len(requested_ids)} 則：{", ".join(requested_ids)}',
+          file=sys.stderr)
+
+    if not remaining:
+        _clear_gate_lock(args.entries, site_label)
+        return
+
+    lock['reasons'] = [
+        {'code': r['reason_code'], 'name': r['name'], 'count': r['count'],
+         'items': list(dict.fromkeys(r.get('items') or []))}
+        for r in remaining
+    ]
+    lock['last_checked_at'] = datetime.datetime.now().isoformat(timespec='seconds')
+    _atomic_write_json(lock_path, lock)
+    print('⚠️ gate lock 保留；白名單格式問題尚未歸零：', file=sys.stderr)
+    for reason in remaining:
+        print(f'  {reason["reason_code"]}（{reason["count"]}則）：'
+              f'{", ".join(reason.get("items") or [])}', file=sys.stderr)
+
+
+def _enforce_build_hard_gate(warnings, site=None, dry_run=False, entries_path=None,
+                             lint_rows=None):
     """正式 build 或 --dry-run 遇到白名單格式類 reason code 達門檻（>=5）時硬閘擋下。
 
     2026-09-18（R43 遵守修法方向1）：觸發時額外落一份 gate lock 標記檔
@@ -453,7 +591,7 @@ def _enforce_build_hard_gate(warnings, site=None, dry_run=False, entries_path=No
 
     if warnings:
         _print_build_lint_warnings(warnings, site=site_label)
-    _write_gate_lock(entries_path, site_label, hard_gate_reasons, dry_run)
+    _write_gate_lock(entries_path, site_label, hard_gate_reasons, dry_run, lint_rows=lint_rows)
     lines = [
         f'⛔ 【建批硬閘攔截】{site_label} 站偵測到機械格式錯誤達到硬閘門檻，拒絕放行：'
     ]
@@ -468,14 +606,25 @@ def _enforce_build_hard_gate(warnings, site=None, dry_run=False, entries_path=No
     status_desc = ('--dry-run 預檢未通過，batch.json 尚未寫入！'
                    if dry_run else
                    '正式 build 已中斷，batch.json 尚未寫入！')
+    reason_total = sum(r['count'] for r in hard_gate_reasons)
+    if reason_total < HARD_GATE_THRESHOLD:
+        fix_steps = [
+            f'    1. 請用 `rewrite-entry` 精準修補 gate lock 列出的 ID（此次共 {reason_total} 項）：',
+            f'       python scripts/s2_batch_prep.py rewrite-entry --site {site_label.lower()} '
+            f'--entries <entries.json路徑> --id <ID> --set <ID>=<新內容>',
+            f'    2. 指令會立刻重跑同一套 lint；白名單 reason count 全部降到 0 才自動解鎖。',
+        ]
+    else:
+        fix_steps = [
+            f'    1. 必須使用一次 `Write` 整批重寫 {site_label} entries.json（修正上述格式問題）。',
+            f'    2. 嚴格禁止逐筆使用 Edit / patch-entry 修補這類機械格式問題！'
+            f'（此次已技術性鎖定 Edit，逐筆修補會被工具層拒絕，見 gate lock）',
+            f'    3. 重寫後請先重跑 `build --dry-run` 預檢，直到該 reason code 計數降到 0 才能跑正式 build。',
+        ]
     lines.extend([
         f'  • 狀態：{status_desc}',
         f'  • 處置要求：',
-        f'    1. 必須使用一次 `Write` 整批重寫 {site_label} entries.json（修正上述格式問題）。',
-        f'    2. 嚴格禁止逐筆使用 Edit / patch-entry 修補這類機械格式問題！'
-        f'（此次已技術性鎖定 Edit，逐筆修補會被工具層拒絕，見 gate lock）',
-        f'    3. 重寫後請先重跑 `build --dry-run` 預檢，直到該 reason code 計數降到 0 才能跑正式 build。'
-    ])
+    ] + fix_steps)
     print('\n'.join(lines), file=sys.stderr)
     sys.exit(2)
 
@@ -965,7 +1114,9 @@ def cmd_build(args):
         # 否則同輪若還有別的白名單警告觸發硬閘，這輪autofix修補紀錄會
         # 隨著sys.exit消失，agent看不到「build幫你補了什麼」。
         _print_build_autofix_summary(autofix_bite_ids, autofix_sot_ids)
-        _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False), entries_path=args.entries)
+        _enforce_build_hard_gate(lint_warnings, args.site,
+                                 dry_run=getattr(args, 'dry_run', False),
+                                 entries_path=args.entries, lint_rows=batch)
         out = json.dumps({'entries': batch, 'new_topics': new_topics},
                          ensure_ascii=False, indent=2)
         note = f'（{len(batch)} 則，新格式、過閘；new_topics {len(new_topics)} 題）'
@@ -1051,7 +1202,9 @@ def cmd_build(args):
     # v2修正（Codex sol覆核②）：同骨架分支，autofix摘要要在硬閘可能
     # exit(2)之前印，不然遇到硬閘這輪的修補紀錄就印不出來了。
     _print_build_autofix_summary(autofix_bite_ids, autofix_sot_ids)
-    _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False), entries_path=args.entries)
+    _enforce_build_hard_gate(lint_warnings, args.site,
+                             dry_run=getattr(args, 'dry_run', False),
+                             entries_path=args.entries, lint_rows=batch)
     # 🔴 2026-09-08 硬上線：跟 --skeleton 分支同一個理由，三站一律出新格式外殼。
     # 這條分支沒有 entries.json 可以帶 `_new_topics`，所以 new_topics 固定空的；
     # 要開新中主題就照退回訊息在 batch 頂層自己補。
@@ -2945,6 +3098,15 @@ def main():
     p_gc.add_argument('--site', required=True, choices=['ns', 'ap', 'rt'])
     p_gc.add_argument('--entries', required=True, help='entries.json 路徑，用來定位同目錄下的 gate lock 檔')
     p_gc.set_defaults(func=cmd_gate_clear)
+
+    p_rw = sub.add_parser('rewrite-entry', help='gate lock 少量錯誤的受控精準修補；只准改 lock 列出的 ID')
+    p_rw.add_argument('--site', required=True, choices=['ns', 'ap', 'rt'])
+    p_rw.add_argument('--entries', required=True, help='active gate lock 對應的 entries.json')
+    p_rw.add_argument('--id', dest='ids', action='append', required=True,
+                      help='要改的 ID；多筆時重複帶 --id')
+    p_rw.add_argument('--set', dest='sets', action='append', required=True,
+                      help='<ID>=<新 entry JSON 或純文字>；每個 --id 各帶一組')
+    p_rw.set_defaults(func=cmd_rewrite_entry)
 
     p_af = sub.add_parser('autofix-tags', help='R43層1治本：機械修補entries.json草稿裡「有錨點可插」的'
                           '(BITE)/SOT標記缺口（build --dry-run前建議先跑一次；不猜內容，修不了的列出來）')

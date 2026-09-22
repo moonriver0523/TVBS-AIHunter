@@ -2,9 +2,9 @@
 """S2 掃帶 agent 的 PreToolUse/PostToolUse hook：硬閘觸發後技術性鎖住 Edit
 工具，不再只是文字建議（MASTER R43 遵守修法方向1，2026-09-18）。
 
-背景：`s2_batch_prep.py` 的 `_enforce_build_hard_gate()` 偵測到同站同一種機械
-格式錯誤達門檻（≥5 則）時印 ⛔ 並 `sys.exit(2)`，訊息明講「禁止逐筆 Edit /
-patch-entry、必須整批 Write 重寫」。但連續 4 輪（0917-0430～0918-2200）觀察到
+背景：`s2_batch_prep.py` 的 `_enforce_build_hard_gate()` 偵測到同站機械格式錯誤
+達各 reason code 門檻時印 ⛔ 並 `sys.exit(2)`。通用門檻是 5 則；少量但不可
+交付的 `FMT_OPERATIONAL_NOTE` 是 1 則。連續 4 輪（0917-0430～0918-2200）觀察到
 掃帶 agent 收到這則訊息仍選擇 Edit 逐筆修補——Edit/Write 只是文字建議，工具
 層沒有任何機制擋，agent 可以自由忽略。
 
@@ -22,6 +22,9 @@ patch-entry、必須整批 Write 重寫」。但連續 4 輪（0917-0430～0918-
     python s2_batch_prep.py gate-clear --site <站> --entries <entries.json路徑>
 手動清除，不會讓整輪掃帶完全卡住跑不完（方向1第4點）。
 
+少於通用門檻時，改走 `s2_batch_prep.py rewrite-entry`；該指令只接受 lock
+reason items 列出的 ID，並在寫入後用 build 共用 lint 歸零才清鎖。
+
 輸入輸出協議跟 `s2_bash_guard.py` 一致：stdin 一包 Claude Code hook JSON
 （`tool_name`／`tool_input`／PostToolUse 另有 `tool_response`）；deny 時印
 `permissionDecision=deny` 的 JSON（`ensure_ascii=True`）；放行／非目標事件
@@ -35,7 +38,11 @@ import sys
 
 _UNLOCK_HINT = (
     '\n⚠️ 這不是文字建議，是工具層技術鎖定——這個檔案在 gate lock 清除前，'
-    'Edit 一律被拒絕。請改用 `Write` 整批重寫該站 entries.json（重寫後 lock '
+    'Edit 一律被拒絕。若 lock 合計少於 5 項，可用 `rewrite-entry` 精準修補 lock '
+    '列出的 ID，修後 lint 歸零會自動解鎖：\n'
+    '  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py rewrite-entry '
+    '--site <站> --entries <entries.json路徑> --id <ID> --set <ID>=<新內容>\n'
+    '達 5 項以上請改用 `Write` 整批重寫該站 entries.json（重寫後 lock '
     '會自動清除）；真的需要人工介入才卡住時，用：\n'
     '  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py gate-clear '
     '--site <站> --entries <entries.json路徑>\n'

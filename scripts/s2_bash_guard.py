@@ -115,6 +115,17 @@ PY_RUN_FILE = re.compile(
     r'\s+([^\s"\']+\.py)\b'
 )
 
+# A40：只辨識「Python 真的把 s2_mark_ingested.py 當腳本執行」的形狀；一般
+# echo／註解裡提到檔名不算。路徑可裸寫或用單／雙引號包住。
+MARK_INGESTED_RUN = re.compile(
+    r'\b(?:python3?|py)(?:\.exe)?'
+    r'(?:\s+-[^\s]+|\s+utf-?8)*'
+    r'''\s+(?:"(?:[^"]*[\\/])?s2_mark_ingested\.py"'''
+    r'''|'(?:[^']*[\\/])?s2_mark_ingested\.py'|'''
+    r'''(?:[^\s"']*[\\/])?s2_mark_ingested\.py)(?=\s|$|[|;&])''',
+    re.IGNORECASE,
+)
+
 # python 讀 stdin 執行（heredoc／管線灌程式碼），跟落檔案再跑是同一件事的
 # 變體——`common/13c2 §…` 明文列為禁止形式（`python - << PYEOF`），但正則
 # 上不會被 PY_RUN_FILE 抓到（沒有 .py 路徑），也不會被 PY_INLINE 抓到
@@ -172,6 +183,12 @@ SCRIPT_HINT = (
     + _RETRY_WARNING
 )
 
+MARK_INGESTED_FILE_HINT = (
+    '⛔ s2_mark_ingested.py 必須帶 `--file <狀態檔路徑>`，本次呼叫已攔下。'
+    '串接 pipeline 時真正的 exit code 可能被後段指令掩蓋；建議分兩行執行，'
+    '或先加 `set -o pipefail`。'
+)
+
 
 # 標準工具的檔名慣例——這批（含測試）全部是 `s2_` 或 `test_s2_` 開頭，整個
 # 語料庫查過的 ~100 支一次性腳本沒有一支用這個前綴。**檔名符合就直接放行，
@@ -220,12 +237,93 @@ def _is_repo_script(path):
     return not any(p.startswith('_tmp') for p in rel.split('/'))
 
 
+def _command_tail(command, start):
+    """取出單一 shell invocation 的參數尾端；遇到未加引號的控制符就停止。
+
+    無法可靠判讀（例如引號未閉合）時回傳 None，讓 guard fail-open。
+    """
+    quote = None
+    escaped = False
+    chars = []
+    for ch in command[start:]:
+        if escaped:
+            chars.append(ch)
+            escaped = False
+            continue
+        if ch == '\\' and quote != "'":
+            chars.append(ch)
+            escaped = True
+            continue
+        if quote:
+            chars.append(ch)
+            if ch == quote:
+                quote = None
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            chars.append(ch)
+            continue
+        if ch in ('\n', '\r', ';', '|', '&'):
+            break
+        chars.append(ch)
+    if quote:
+        return None
+    return ''.join(chars)
+
+
+def _at_shell_command_start(command, position):
+    """確認 regex 命中的 python 是 shell command word，不是 echo/字串內容。"""
+    quote = None
+    escaped = False
+    segment_start = 0
+    for index, ch in enumerate(command[:position]):
+        if escaped:
+            escaped = False
+            continue
+        if ch in ('\\', '`') and quote != "'":
+            escaped = True
+            continue
+        if quote:
+            if ch == quote:
+                quote = None
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            continue
+        if ch in ('\n', '\r', ';', '|', '&'):
+            segment_start = index + 1
+    if quote:
+        return False
+    return not command[segment_start:position].strip()
+
+
+def _mark_ingested_missing_file(command):
+    """任一 mark-ingested invocation 缺有效 --file 值就回傳 True；解析失敗放行。"""
+    try:
+        for match in MARK_INGESTED_RUN.finditer(command):
+            if not _at_shell_command_start(command, match.start()):
+                continue
+            tail = _command_tail(command, match.end())
+            if tail is None:
+                return False
+            has_file = re.search(
+                r'(?:^|\s)--file(?:\s+[^\s|&;]+|=[^\s|&;]+)', tail)
+            if not has_file:
+                return True
+    except Exception:
+        return False
+    return False
+
+
 def decide(tool_name, command):
     """Bash／PowerShell 專用：回傳 None＝放行；否則回傳 deny 理由字串。"""
     if tool_name not in ('Bash', 'PowerShell'):
         return None
     if not command:
         return None
+
+    if _mark_ingested_missing_file(command):
+        return MARK_INGESTED_FILE_HINT
 
     if PY_INLINE.search(command):
         if '-s2-state.json' in command:
