@@ -1,15 +1,6 @@
 #!/usr/bin/env python3
 """S2 掃帶三站批次整備工具（②，2026-08-12）。
 
-🧪 v2 測試版（2026-09-22，未正式套用）：`build` 內建機械 autofix（見
-`_apply_mechanical_autofix`），把 `autofix-tags` 的兩種機械修補（補
-(BITE)括號、NS站補SOT字樣）直接搬進 `build`（含 `--dry-run`）跑 lint
-之前自動套用，不再只靠 `from-raw` 印建議文字指望 agent 主動去跑
-`autofix-tags`。只改記憶體中的 entry_text（不寫回 entries.json 原始
-檔），並在 stderr 印出修補筆數與 ID（不悄悄改稿）。經Codex sol覆核方向
-（同意：build落點對、不要靜默、不需依賴--skeleton）。測試通過前不要
-覆蓋回 `s2_batch_prep.py`。
-
 三站（NS／AP／RT）都要走同一組流程：先看 raw 抽取結果判斷要不要收、
 sb_count／has_sot／footage_type 這些機械欄位，再把 agent 自己寫的 `entry`
 （中文三段式摘要，這是編輯判斷，不可能機械生成）併回去、湊成能直接
@@ -423,18 +414,8 @@ def _enforce_build_hard_gate(warnings, site=None, dry_run=False, entries_path=No
     （`_clear_gate_lock`）——這是清除時機②，時機①見 s2_gate_guard.py。"""
     site_label = (site or '該站').upper()
     grouped, hard_gate_reasons = collect_build_lint_reasons(warnings or [], site=site_label)
-    # v2修正（Codex sol覆核①，既有問題）：原本只看`hard_gate_reasons`（count
-    # >=門檻才列入）判斷「沒有硬閘警告＝可以清鎖」，但reason code剩1-4則
-    # 時已經不在這份清單裡、卻還沒真的歸零，會被誤判成「已清乾淨」而提早
-    # 清鎖。改成同時確認白名單格式類reason code**全部**count==0（不分是否
-    # 達門檻）才清——對齊docstring原本講的「計數降到0」語意。build自動
-    # autofix上線後，count常從5+一次掉到1-4區間，這個既有瑕疵會被更常
-    # 踩到，這裡一併修掉。
-    any_hard_gate_reason_remaining = any(
-        info['is_hard_gate'] and info['count'] > 0 for info in grouped.values())
     if not hard_gate_reasons:
-        if not any_hard_gate_reason_remaining:
-            _clear_gate_lock(entries_path, site_label)
+        _clear_gate_lock(entries_path, site_label)
         return
 
     if warnings:
@@ -720,57 +701,6 @@ def _autofix_skeleton_lookup(skeleton_path):
     }
 
 
-def _apply_mechanical_autofix(entry_text, site, footage_type=None, duration_ms=None):
-    """R43層1治本 機械修補的共用純函式（v2，2026-09-22）——`cmd_autofix_tags`
-    與 `cmd_build` 共用同一套判準，不複製一份會漂移的邏輯。
-
-    只做兩種「有錨點、不用猜內容」的機械修補（詳見 `cmd_autofix_tags`
-    docstring）：
-      1. 有 `▎BITE：` 段但缺 `(BITE)` 第二括號 → 插入（任何站都做）。
-      2. NS 站 PKG/DONUT 且時長>1分鐘但第一備註缺 SOT 字樣 → 插入。
-         `footage_type`/`duration_ms` 傳 `None`＝呼叫端沒有這項資訊來源
-         （例如 `autofix-tags` 沒帶 `--skeleton`），這關直接跳過；傳空字串
-         `''` 也是有效值（照樣送進 `sot_marker_patchable` 判斷），因為
-         `build` 兩條分支的 row 一律帶這兩個欄位（SITE_SPEC 的 NS
-         `extra_of` 預設空字串，不是缺欄位），不需要額外依賴 `--skeleton`。
-
-    回傳 `(new_entry_text, notes)`，`notes` 是 `['補(BITE)', '補SOT']` 的
-    子集，沒修就是 `[]`——呼叫端用這個判斷要不要記進報告清單，避免
-    「悄悄改稿」agent 看不到發生了什麼事。
-    """
-    notes = []
-    ok, _why = s2_state.bite_tag_patchable(entry_text)
-    if ok:
-        entry_text = s2_state.insert_bite_tag(entry_text)
-        notes.append('補(BITE)')
-
-    if site == 'ns' and footage_type is not None and duration_ms is not None:
-        ok2, _why2 = pretag.sot_marker_patchable(entry_text, footage_type, duration_ms)
-        if ok2:
-            entry_text = pretag.insert_sot_marker(entry_text)
-            notes.append('補SOT')
-
-    return entry_text, notes
-
-
-def _print_build_autofix_summary(bite_ids, sot_ids):
-    """v2：`build` 自動套用機械修補後的稽核輸出——只印到 stderr，不影響
-    輸出檔本身；一定要列筆數＋ID，避免agent以為「格式不用管，反正build
-    會偷偷幫你修」（Codex sol覆核意見）。"""
-    if not bite_ids and not sot_ids:
-        return
-    parts = []
-    if bite_ids:
-        parts.append(f'補(BITE) {len(bite_ids)} 則：{", ".join(bite_ids[:20])}'
-                      + ('…' if len(bite_ids) > 20 else ''))
-    if sot_ids:
-        parts.append(f'補SOT {len(sot_ids)} 則：{", ".join(sot_ids[:20])}'
-                      + ('…' if len(sot_ids) > 20 else ''))
-    print('🔧 build 已自動機械修補（僅補漏標記，不動內容判斷；entries.json '
-          '原始檔未被寫回，agent仍應力求entries一次寫對，其餘問題照常警告/擋下）：\n  '
-          + '\n  '.join(parts), file=sys.stderr)
-
-
 def cmd_autofix_tags(args):
     """R43「層1治本」機械自動修補（2026-09-19，方向1/2的額外補強，非取代）。
 
@@ -816,16 +746,22 @@ def cmd_autofix_tags(args):
         if not entry_text:
             continue
 
-        skel_info = skel_lookup.get(item_id) if args.site == 'ns' else None
-        entry_text, notes = _apply_mechanical_autofix(
-            entry_text, args.site,
-            footage_type=skel_info.get('footage_type') if skel_info else None,
-            duration_ms=skel_info.get('duration_ms') if skel_info else None,
-        )
-        if '補(BITE)' in notes:
+        notes = []
+        ok, _why = s2_state.bite_tag_patchable(entry_text)
+        if ok:
+            entry_text = s2_state.insert_bite_tag(entry_text)
+            notes.append('補(BITE)')
             fixed_bite.append(item_id)
-        if '補SOT' in notes:
-            fixed_sot.append(item_id)
+
+        if args.site == 'ns':
+            skel_info = skel_lookup.get(item_id)
+            if skel_info:
+                ok2, _why2 = pretag.sot_marker_patchable(
+                    entry_text, skel_info.get('footage_type'), skel_info.get('duration_ms'))
+                if ok2:
+                    entry_text = pretag.insert_sot_marker(entry_text)
+                    notes.append('補SOT')
+                    fixed_sot.append(item_id)
 
         if notes:
             field = 'raw_entry' if was_converted else 'entry'
@@ -896,7 +832,6 @@ def cmd_build(args):
         new_topics = new_topics if isinstance(new_topics, dict) else {}
         lint_warnings = []  # §四（R31/T12）：build 出口共用 lint，見 _lint_row
         raw_entry_converted_ids = []
-        autofix_bite_ids, autofix_sot_ids = [], []  # v2：build內建機械autofix稽核用
         for row in rows:
             item_id = row.get('id')
             draft_payload = entries.get(item_id)
@@ -907,15 +842,6 @@ def cmd_build(args):
             if not entry_text:
                 missing.append(item_id)
                 continue
-            # v2：lint前先套用機械autofix（骨架row本身就帶footage_type/
-            # duration_ms，NS站不需要另外依賴--skeleton參數）。
-            entry_text, _autofix_notes = _apply_mechanical_autofix(
-                entry_text, args.site,
-                footage_type=row.get('footage_type'), duration_ms=row.get('duration_ms'))
-            if '補(BITE)' in _autofix_notes:
-                autofix_bite_ids.append(item_id)
-            if '補SOT' in _autofix_notes:
-                autofix_sot_ids.append(item_id)
             # 骨架的 entry/category/tc 是留空的佔位鍵，hint／prev_status 是
             # 骨架內部給 agent 看的提示，三者都不該原樣流進 batch.json。
             new_row = {k: v for k, v in row.items()
@@ -945,10 +871,6 @@ def cmd_build(args):
             batch.append(new_row)
 
         _report_raw_entry_conversions(raw_entry_converted_ids)
-        # v2修正（Codex sol覆核②）：autofix摘要要在硬閘可能exit(2)之前印，
-        # 否則同輪若還有別的白名單警告觸發硬閘，這輪autofix修補紀錄會
-        # 隨著sys.exit消失，agent看不到「build幫你補了什麼」。
-        _print_build_autofix_summary(autofix_bite_ids, autofix_sot_ids)
         _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False), entries_path=args.entries)
         out = json.dumps({'entries': batch, 'new_topics': new_topics},
                          ensure_ascii=False, indent=2)
@@ -969,7 +891,6 @@ def cmd_build(args):
     excluded = 0
     lint_warnings = []  # §四（R31/T12）：build 出口共用 lint，見 _lint_row
     raw_entry_converted_ids = []
-    autofix_bite_ids, autofix_sot_ids = [], []  # v2：build內建機械autofix稽核用
     for it in items:
         item_id = spec['id_of'](it)
         if spec['skip_of'](it):
@@ -983,21 +904,6 @@ def cmd_build(args):
          status_override, was_converted) = parse_draft_entry(item_id, draft_payload)
         if was_converted:
             raw_entry_converted_ids.append(item_id)
-
-        # v2：lint前先套用機械autofix。extra_fields先算好重用（原本
-        # row.update(spec['extra_of'](it))會重算一次，這裡只算一次），
-        # NS站的extra_of一律帶footage_type/duration_ms（預設空字串，不是
-        # 缺欄位），不需要額外依賴--skeleton。
-        extra_fields = spec['extra_of'](it)
-        if entry_text:
-            entry_text, _autofix_notes = _apply_mechanical_autofix(
-                entry_text, args.site,
-                footage_type=extra_fields.get('footage_type'),
-                duration_ms=extra_fields.get('duration_ms'))
-            if '補(BITE)' in _autofix_notes:
-                autofix_bite_ids.append(item_id)
-            if '補SOT' in _autofix_notes:
-                autofix_sot_ids.append(item_id)
 
         row = {
             'id': item_id,
@@ -1014,7 +920,7 @@ def cmd_build(args):
             row['category'] = category
         if tc is not None:
             row['tc'] = tc
-        row.update(extra_fields)
+        row.update(spec['extra_of'](it))
         if spec['source'] == 'NS':
             row['inline_sot_count'] = pretag.inline_sot_count(row['src_text'])
         # A31：機械 T/C／涉臺／(BITE) 建議，同 --skeleton 分支（見上）。
@@ -1032,9 +938,6 @@ def cmd_build(args):
         batch.append(row)
 
     _report_raw_entry_conversions(raw_entry_converted_ids)
-    # v2修正（Codex sol覆核②）：同骨架分支，autofix摘要要在硬閘可能
-    # exit(2)之前印，不然遇到硬閘這輪的修補紀錄就印不出來了。
-    _print_build_autofix_summary(autofix_bite_ids, autofix_sot_ids)
     _enforce_build_hard_gate(lint_warnings, args.site, dry_run=getattr(args, 'dry_run', False), entries_path=args.entries)
     # 🔴 2026-09-08 硬上線：跟 --skeleton 分支同一個理由，三站一律出新格式外殼。
     # 這條分支沒有 entries.json 可以帶 `_new_topics`，所以 new_topics 固定空的；
@@ -1202,9 +1105,10 @@ def cmd_from_raw(args):
         '工作草稿內容鍵一律用 entry，不是 raw_entry（raw_entry是狀態檔專用欄位，草稿階段不要用）。'
         '有BITE時第一備註別漏：CODE (地點/主題備註)(BITE) ▎摘要…▎畫面：…▎BITE：…（不是 CODE (BITE) ▎…，'
         '(BITE) 前面一定要有描述括號）；下表 ⚠️疑似BITE／⚠️SOT 是機械算好的提醒，不是判定，仍要自己確認內容。'
-        '（v2）build 跑 lint 前會自動機械補上「漏(BITE)括號／NS站漏SOT字樣」這兩種有錨點可插的缺口'
-        '（不猜內容，補完會印在 stderr），不必再手動先跑 autofix-tags；但entries仍應力求一次寫對，'
-        '其餘真的需要判斷的問題（例如(BITE)是唯一括號、缺描述）不會自動修，一樣會被列出來讓你確認。'
+        '寫完entries.json、build --dry-run之前，建議先跑一次 '
+        '`s2_batch_prep.py autofix-tags --site <站> --entries <路徑>'
+        '[--skeleton <骨架路徑>（NS站SOT修補要帶）]`——機械補上「漏(BITE)括號／漏SOT字樣」這兩種'
+        '有錨點可插的缺口（不猜內容），剩下真的需要判斷的（例如(BITE)是唯一括號、缺描述）會列出來讓你確認。'
     )
     contract_overhead = len(FROM_RAW_SCHEMA_CONTRACT) + 1
     page_budget = max(INSPECT_TEXT_BUDGET - contract_overhead, 200)
