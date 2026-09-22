@@ -490,7 +490,9 @@ try {
     }
 
     if (-not (Test-Path $PromptFile)) { throw "找不到 prompt 範本：$PromptFile" }
-    $prompt = (Get-Content $PromptFile -Raw -Encoding UTF8) -replace '\{CHECKPOINT\}', $Checkpoint
+    $prompt = (Get-Content $PromptFile -Raw -Encoding UTF8) `
+        -replace '\{CHECKPOINT\}', $Checkpoint `
+        -replace '\{RUN_ID\}', $RunId
 
     # Gemini 專用：讀規則檔攤開節流（2026-09-10 使用者裁定「先做1+讀規則延遲」）。
     # 假設（未證實）：開工頭幾步連續 Read 8 份規則檔（合計近 28 萬字元）全擠在

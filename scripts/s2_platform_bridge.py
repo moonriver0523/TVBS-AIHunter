@@ -34,6 +34,8 @@ import json
 import os
 import re
 import sys
+import tempfile
+from argparse import Namespace
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from s2_batch_prep import INSPECT_TEXT_BUDGET, _load_raw_any  # noqa: E402  卸殼／分頁預算；不要重寫
@@ -360,13 +362,25 @@ def _as_int_sb(v):
         return 0
 
 
-def cmd_build(args):
-    """骨架陣列 → platform `--entries` 要的 `{id: {raw_entry, category, …}}`。
+def _atomic_write_json(path, payload):
+    """同目錄暫存檔＋ replace，避免無人值守時留下半份 JSON。"""
+    out = os.path.abspath(os.fspath(path))
+    out_dir = os.path.dirname(out) or os.getcwd()
+    fd, tmp_path = tempfile.mkstemp(dir=out_dir, prefix='.s2pb_tmp_', suffix='.json')
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, out)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
-    `entry` 空字串的列印警告但仍輸出（讓下游 extract 自己記 known_gaps），
-    除非該筆 `skip` 有填（排除列不要求 raw_entry）。
-    """
-    rows = load_json(args.skeleton)
+
+def _build_entries(rows):
+    """純函式：骨架陣列 → (platform entries, 重複 ID, 未填 ID)。"""
     if not isinstance(rows, list):
         print(f"✗ 骨架應為陣列，實得 {type(rows).__name__}", file=sys.stderr)
         sys.exit(2)
@@ -402,11 +416,21 @@ def cmd_build(args):
         if sid in entries:
             dup_ids.append(sid)
         entries[sid] = value
+    return entries, dup_ids, missing
+
+
+def cmd_build(args):
+    """骨架陣列 → platform `--entries` 要的 `{id: {raw_entry, category, …}}`。
+
+    `entry` 空字串的列印警告但仍輸出（讓下游 extract 自己記 known_gaps），
+    除非該筆 `skip` 有填（排除列不要求 raw_entry）。
+    """
+    rows = load_json(args.skeleton)
+    entries, dup_ids, missing = _build_entries(rows)
 
     out = json.dumps(entries, ensure_ascii=False, indent=2)
     if args.out:
-        with open(args.out, "w", encoding="utf-8") as f:
-            f.write(out)
+        _atomic_write_json(args.out, entries)
         print(f"已寫入 {args.out}（{len(entries)} 則）", file=sys.stderr)
     else:
         print(out)
@@ -416,6 +440,99 @@ def cmd_build(args):
     if missing:
         print("⚠️ 骨架裡有、沒填 entry 的 id（未填，不算錯，該筆仍輸出給下游 extract 記 "
               f"known_gaps）：{', '.join(missing)}", file=sys.stderr)
+
+
+_REWRITE_FIELDS = frozenset(("entry", "category", "tc", "skip"))
+
+
+def _rewrite_error(message):
+    print(f"⛔ platform rewrite-entry 拒絕執行：{message}", file=sys.stderr)
+    sys.exit(2)
+
+
+def _canonical_platform_id(site, item_id):
+    value = str(item_id or "").strip()
+    if site == "enex":
+        return bare_enex_id(value)
+    return _abc_id(_abc_story_of_id(value))
+
+
+def _parse_rewrite_sets(site, raw_sets):
+    parsed = {}
+    display_ids = {}
+    for raw in raw_sets or []:
+        item_id, sep, value = str(raw).partition("=")
+        canonical = _canonical_platform_id(site, item_id)
+        if not sep or not canonical or not value:
+            _rewrite_error('--set 必須是 `<ID>={"entry":"…"}` JSON object。')
+        if canonical in parsed:
+            _rewrite_error(f"--set 重複指定 ID：{item_id.strip()}")
+        try:
+            payload = json.loads(value)
+        except ValueError as exc:
+            _rewrite_error(f"{item_id.strip()} 的 --set 不是合法 JSON object：{exc}")
+        if not isinstance(payload, dict) or not payload:
+            _rewrite_error(f"{item_id.strip()} 的新內容必須是非空 JSON object。")
+        unknown = sorted(set(payload) - _REWRITE_FIELDS)
+        if unknown:
+            _rewrite_error(
+                f"{item_id.strip()} 含不可修改欄位：{', '.join(unknown)}；"
+                f"只允許 {', '.join(sorted(_REWRITE_FIELDS))}。")
+        parsed[canonical] = payload
+        display_ids[canonical] = item_id.strip()
+    return parsed, display_ids
+
+
+def cmd_rewrite_entry(args):
+    """修骨架的少量編輯欄位，再由完整骨架整批重建 entries。"""
+    if os.path.normcase(os.path.realpath(args.skeleton)) == os.path.normcase(
+            os.path.realpath(args.entries)):
+        _rewrite_error('--skeleton 與 --entries 不能是同一個檔案。')
+    rows = load_json(args.skeleton)
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        _rewrite_error("骨架頂層必須是 dict 陣列。")
+    wrong_site = [str(row.get("id") or "?") for row in rows
+                  if str(row.get("source") or "").lower() != args.site]
+    if wrong_site:
+        _rewrite_error(
+            f"骨架含非 {args.site.upper()} 列：{', '.join(wrong_site[:10])}"
+            + ("…" if len(wrong_site) > 10 else ""))
+
+    requested = [_canonical_platform_id(args.site, item_id) for item_id in (args.ids or [])]
+    if not requested or any(not item_id for item_id in requested):
+        _rewrite_error("--id 至少給一個有效 ID。")
+    if len(requested) != len(set(requested)):
+        _rewrite_error("--id 不可重複（含帶／不帶站別前綴的同一 ID）。")
+
+    updates, _display_ids = _parse_rewrite_sets(args.site, args.sets)
+    if set(requested) != set(updates):
+        _rewrite_error("--id 與 --set 指定的 ID 必須完全一致。")
+
+    row_by_id = {}
+    for row in rows:
+        canonical = _canonical_platform_id(args.site, row.get("id"))
+        if canonical:
+            if canonical in row_by_id:
+                _rewrite_error(f"骨架有重複 ID：{row.get('id')}")
+            row_by_id[canonical] = row
+    missing = [item_id for item_id in requested if item_id not in row_by_id]
+    if missing:
+        _rewrite_error(f"骨架找不到 ID：{', '.join(missing)}")
+
+    for item_id in requested:
+        row_by_id[item_id].update(updates[item_id])
+
+    # 全部驗證成功後才落檔；骨架是唯一人工判斷來源，entries 是可重建衝生物。
+    _build_entries(rows)
+    _atomic_write_json(args.skeleton, rows)
+    cmd_build(Namespace(skeleton=args.skeleton, out=args.entries))
+    print(
+        f"✅ platform rewrite-entry 已更新 {len(requested)} 則骨架並整批重建 entries："
+        f"{', '.join(requested)}",
+        file=sys.stderr,
+    )
+    print("ℹ️ 若候選檔已經產生，請用原本參數重跑 s2_platform_extract.py，"
+          "不要 Edit 候選 JSON/TXT。", file=sys.stderr)
 
 
 def main(argv=None):
@@ -445,6 +562,19 @@ def main(argv=None):
     p_bd.add_argument("--skeleton", required=True)
     p_bd.add_argument("--out")
     p_bd.set_defaults(func=cmd_build)
+
+    p_rw = sub.add_parser(
+        "rewrite-entry",
+        help="受控修改骨架編輯欄位，並整批重建 platform entries",
+    )
+    p_rw.add_argument("--site", required=True, choices=["enex", "abc"])
+    p_rw.add_argument("--skeleton", required=True, help="from-raw 產生的完整骨架 JSON")
+    p_rw.add_argument("--entries", required=True, help="重建後的 platform entries 輸出路徑")
+    p_rw.add_argument("--id", dest="ids", action="append", required=True,
+                      help="要修的 ID；多筆時重複帶 --id")
+    p_rw.add_argument("--set", dest="sets", action="append", required=True,
+                      help='`<ID>={"entry":"…","category":"…"}`；只允許 entry/category/tc/skip')
+    p_rw.set_defaults(func=cmd_rewrite_entry)
 
     args = ap.parse_args(argv)
     args.func(args)

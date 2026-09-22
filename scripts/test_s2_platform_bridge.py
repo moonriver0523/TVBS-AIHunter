@@ -504,3 +504,87 @@ def test_from_raw_page_zero_is_out_of_range(tmp_path, capsys, monkeypatch):
         assert e.code == 1
     cap = capsys.readouterr()
     assert "超出範圍" in cap.err
+
+
+# ── 6. ENEX/ABC 受控批次修補 ───────────────────────────────────────────────
+
+def test_rewrite_entry_updates_skeleton_and_rebuilds_all_entries(tmp_path, capsys):
+    """修一筆時必須保留其他骨架列，並由完整骨架重建整份 entries。"""
+    rows = [
+        {
+            "id": "100001", "source": "ENEX", "src_text": "body 1", "sb_count": 0,
+            "entry": "old one", "category": "舊分類", "tc": "", "skip": "",
+        },
+        {
+            "id": "100002", "source": "ENEX", "src_text": "body 2", "sb_count": 0,
+            "entry": "keep two", "category": "保留分類", "tc": "T2", "skip": "",
+        },
+    ]
+    skeleton = _write(tmp_path / "enex_skeleton_2200.json", rows)
+    entries = tmp_path / "enex_entries_2200.json"
+    _build(skeleton=str(skeleton), out=str(entries))
+    capsys.readouterr()
+
+    bridge.cmd_rewrite_entry(Namespace(
+        site="enex", skeleton=str(skeleton), entries=str(entries),
+        ids=["ENEX100001"],
+        sets=['100001={"entry":"new one","category":"新分類","tc":"T1"}'],
+    ))
+    captured = capsys.readouterr()
+    updated_rows = {row["id"]: row for row in _load(skeleton)}
+    rebuilt = _load(entries)
+
+    assert updated_rows["100001"]["entry"] == "new one"
+    assert updated_rows["100001"]["category"] == "新分類"
+    assert updated_rows["100001"]["tc"] == "T1"
+    assert updated_rows["100002"] == rows[1]
+    assert rebuilt["100001"]["raw_entry"] == "new one"
+    assert rebuilt["100001"]["category"] == "新分類"
+    assert rebuilt["100002"]["raw_entry"] == "keep two"
+    assert "整批重建 entries" in captured.err
+    assert "s2_platform_extract.py" in captured.err
+
+
+def test_rewrite_entry_rejects_mechanical_field_and_leaves_files_unchanged(tmp_path):
+    """不准藉批次出口改 id/src_text/detailId 這些機械欄位。"""
+    rows = [{
+        "id": "ABC091601001", "source": "ABC", "src_text": "original body",
+        "detailId": "9000001", "sb_count": 0, "entry": "old", "category": "x",
+        "tc": "", "skip": "",
+    }]
+    skeleton = _write(tmp_path / "abc_skeleton_2200.json", rows)
+    entries = tmp_path / "abc_entries_2200.json"
+    _build(skeleton=str(skeleton), out=str(entries))
+    before_skeleton = skeleton.read_text(encoding="utf-8")
+    before_entries = entries.read_text(encoding="utf-8")
+
+    try:
+        bridge.cmd_rewrite_entry(Namespace(
+            site="abc", skeleton=str(skeleton), entries=str(entries),
+            ids=["ABC091601001"],
+            sets=['ABC091601001={"src_text":"tampered"}'],
+        ))
+        raise AssertionError("expected SystemExit")
+    except SystemExit as exc:
+        assert exc.code == 2
+
+    assert skeleton.read_text(encoding="utf-8") == before_skeleton
+    assert entries.read_text(encoding="utf-8") == before_entries
+
+
+def test_rewrite_entry_rejects_same_input_output_path(tmp_path):
+    """避免把作為唯一人工判斷來源的骨架覆寫成 entries map。"""
+    skeleton = _write(tmp_path / "enex_skeleton.json", [{
+        "id": "100001", "source": "ENEX", "entry": "old", "category": "x",
+        "tc": "", "skip": "", "sb_count": 0,
+    }])
+    before = skeleton.read_text(encoding="utf-8")
+    try:
+        bridge.cmd_rewrite_entry(Namespace(
+            site="enex", skeleton=str(skeleton), entries=str(skeleton),
+            ids=["100001"], sets=['100001={"entry":"new"}'],
+        ))
+        raise AssertionError("expected SystemExit")
+    except SystemExit as exc:
+        assert exc.code == 2
+    assert skeleton.read_text(encoding="utf-8") == before

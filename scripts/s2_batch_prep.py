@@ -1212,8 +1212,16 @@ def cmd_build(args):
     _write_or_preview_build(args, out, f'（{len(batch)} 則，新格式、過閘）')
 
     if missing:
-        print(f'⚠️ raw 裡有但 entries.json 沒寫的 id（未收進 batch，不算錯，'
-              f'但確認是不是漏判）：{", ".join(missing)}', file=sys.stderr)
+        _report_id_list(
+            missing,
+            small_heading='⚠️ raw 裡有但 entries.json 沒寫的 id（未收進 batch，不算錯，但確認是不是漏判）：',
+            large_heading='⚠️ raw 裡有但 entries.json 沒寫',
+            reason='未收進 batch，不算錯，但請確認是不是漏判',
+            anchor_path=args.entries,
+            suffix='_missing_ids.txt',
+            stream=sys.stderr,
+            small_inline=True,
+        )
     if excluded:
         print(f'機械排除 {excluded} 則（見 dump 輸出的排除原因）', file=sys.stderr)
     _print_build_lint_warnings(lint_warnings, args.site)
@@ -2357,6 +2365,45 @@ def _advisory_key(item):
     return (None, None, None, repr(item))
 
 
+ID_LIST_INLINE_LIMIT = 10
+
+
+def _id_list_output_path(anchor_path, suffix):
+    """將大量 ID 清單放在輸入檔旁；路徑不可用時才退回 CWD。"""
+    try:
+        anchor_abs = os.path.abspath(os.fspath(anchor_path))
+        directory = os.path.dirname(anchor_abs)
+        stem = os.path.splitext(os.path.basename(anchor_abs))[0]
+        if directory and os.path.isdir(directory) and stem:
+            return os.path.join(directory, stem + suffix)
+    except (TypeError, ValueError, OSError):
+        pass
+    return os.path.join(os.getcwd(), 's2' + suffix)
+
+
+def _report_id_list(ids, *, small_heading, large_heading, reason, anchor_path,
+                    suffix, stream=None, small_inline=False):
+    """少量 ID 維持舊 stdout/stderr 格式；大量時寫旁檔、只印摘要。"""
+    if stream is None:
+        # 不在函式定義時綁死 sys.stdout，讓 redirect_stdout／呼叫端接得到。
+        stream = sys.stdout
+    if len(ids) <= ID_LIST_INLINE_LIMIT:
+        if small_inline:
+            print(small_heading + ', '.join(ids), file=stream)
+        else:
+            print(small_heading, file=stream)
+            for item_id in ids:
+                print(f'  - {item_id}', file=stream)
+        return None
+
+    out_path = _id_list_output_path(anchor_path, suffix)
+    body = small_heading + '\n' + ''.join(f'  - {item_id}\n' for item_id in ids)
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write(body)
+    print(f'{large_heading}（{len(ids)} 則，清單已寫入 {out_path}；{reason}）', file=stream)
+    return out_path
+
+
 def cmd_compare(args):
     """raw 與 batch 對照，**只印差異**：raw 有 batch 沒有的 id、batch 有 raw
     沒有的 id、batch 缺欄位的則。乾淨就一行「無差異」，不印整批。
@@ -2448,18 +2495,35 @@ def cmd_compare(args):
     found = False
     if missing:
         found = True
-        print(f'raw 有、batch 沒有（{len(missing)} 則——可能是刻意排除，'
-              f'但要說得出理由）：')
-        for i in missing:
-            print(f'  - {i}')
+        _report_id_list(
+            missing,
+            small_heading=f'raw 有、batch 沒有（{len(missing)} 則——可能是刻意排除，但要說得出理由）：',
+            large_heading='raw 有、batch 沒有',
+            reason='可能是刻意排除，但要說得出理由',
+            anchor_path=args.raw,
+            suffix='_missing_ids.txt',
+        )
     if extra:
         found = True
-        print(f'batch 有、raw 沒有（{len(extra)} 則——來源不明，要查）：')
-        for i in extra:
-            print(f'  - {i}')
+        _report_id_list(
+            extra,
+            small_heading=f'batch 有、raw 沒有（{len(extra)} 則——來源不明，要查）：',
+            large_heading='batch 有、raw 沒有',
+            reason='來源不明，要查',
+            anchor_path=args.raw,
+            suffix='_extra_ids.txt',
+        )
     if dup_batch:
         found = True
-        print(f'batch 內重複 id（{len(dup_batch)} 個）：{", ".join(dup_batch)}')
+        _report_id_list(
+            dup_batch,
+            small_heading=f'batch 內重複 id（{len(dup_batch)} 個）：',
+            large_heading='batch 內重複 id',
+            reason='請檢查 batch 產生流程',
+            anchor_path=args.raw,
+            suffix='_duplicate_ids.txt',
+            small_inline=True,
+        )
     if gaps:
         found = True
         print(f'batch 缺欄位（{len(gaps)} 則，查的是 {"/".join(required)}）：')

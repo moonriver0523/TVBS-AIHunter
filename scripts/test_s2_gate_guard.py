@@ -132,6 +132,60 @@ out_allow, code_allow = run_hook({
 check('subprocess：Edit 無對應 lock → stdout 全空（放行）', out_allow == '', repr(out_allow))
 check('subprocess：Edit 無對應 lock → exit 0', code_allow == 0, str(code_allow))
 
+# ── ENEX/ABC 整批產物：無 gate lock 也禁止逐筆 Edit ────────────────
+platform_entries = os.path.join(d2, 'enex_entries_2200.json')
+with open(platform_entries, 'w', encoding='utf-8') as f:
+    json.dump({'100001': {'raw_entry': 'old', 'category': 'x'}}, f)
+platform_reason = gate_guard.decide_edit(platform_entries) or ''
+check('platform entries：無 lock 仍 deny Edit', bool(platform_reason))
+check('platform entries：deny 訊息引導 bridge rewrite-entry',
+      's2_platform_bridge.py rewrite-entry' in platform_reason
+      and '--skeleton' in platform_reason and '--entries' in platform_reason)
+
+candidate_json = os.path.join(d2, '0923-ABC-state.json')
+with open(candidate_json, 'w', encoding='utf-8') as f:
+    json.dump({'source': 'ABC', 'items': [], 'counts': {}}, f)
+candidate_txt = os.path.join(d2, '0923-ABC.txt')
+with open(candidate_txt, 'w', encoding='utf-8') as f:
+    f.write('ABC 候選')
+check('platform 候選 JSON：禁止直接 Edit', gate_guard.decide_edit(candidate_json) is not None)
+check('platform 候選 TXT：禁止直接 Edit', gate_guard.decide_edit(candidate_txt) is not None)
+check('platform 候選：deny 訊息要求重跑 extract',
+      's2_platform_extract.py' in (gate_guard.decide_edit(candidate_json) or ''))
+
+custom_candidate = os.path.join(d2, 'custom_output.json')
+with open(custom_candidate, 'w', encoding='utf-8') as f:
+    json.dump({'source': 'ENEX', 'items': [], 'counts': {}}, f)
+check('platform 候選臨時改名：仍能依 JSON 形狀擋下',
+      gate_guard.decide_edit(custom_candidate) is not None)
+
+out_platform, code_platform = run_hook({
+    'hook_event_name': 'PreToolUse',
+    'tool_name': 'Edit',
+    'tool_input': {'file_path': platform_entries, 'old_string': 'old', 'new_string': 'new'},
+})
+try:
+    platform_payload = json.loads(out_platform)
+    platform_deny = platform_payload.get('hookSpecificOutput', {}).get('permissionDecision') == 'deny'
+except (ValueError, AttributeError):
+    platform_deny = False
+check('subprocess：platform entries Edit → 合法 deny JSON',
+      code_platform == 0 and platform_deny, out_platform)
+out_platform_multi, _ = run_hook({
+    'hook_event_name': 'PreToolUse',
+    'tool_name': 'MultiEdit',
+    'tool_input': {'file_path': platform_entries, 'edits': []},
+})
+try:
+    platform_multi_deny = (
+        json.loads(out_platform_multi).get('hookSpecificOutput', {})
+        .get('permissionDecision') == 'deny')
+except (ValueError, AttributeError):
+    platform_multi_deny = False
+check('subprocess：platform entries MultiEdit 也無法繞過', platform_multi_deny,
+      out_platform_multi)
+check('platform 辨識不誤擋一般 JSON', gate_guard.decide_edit(other_file) is None)
+
 # 非 Edit／Write 工具（例如 Read）一律不動作
 out_other, code_other = run_hook({
     'hook_event_name': 'PreToolUse',

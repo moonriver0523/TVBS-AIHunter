@@ -112,6 +112,61 @@ check('compare 抓到 batch 有 raw 沒有（RT9999）', 'RT9999' in out6)
 check('compare 抓到缺 src_text（RT1002）', 'RT1002：缺 src_text' in out6)
 check('compare 抓到 batch 內重複 id', '重複 id' in out6 and 'RT1001' in out6)
 
+# ID 清單數量門檻：10 則以下維持舊的逐筆輸出；11 則起改為摘要＋旁檔。
+SMALL_RAW = write_json('small_ids_raw.json', {
+    'items': [{'code': f'RTS{i:02d}', 'head': 'h', 'story': 's'} for i in range(10)]})
+SMALL_BATCH = write_json('small_ids_batch.json', [])
+out_small_ids, _ = run(bp.cmd_compare, Args(
+    raw=SMALL_RAW, batch=SMALL_BATCH, site='rt', require=None, json_result=None))
+check('ID 清單量小（=10）維持逐筆印出',
+      '  - RTS00' in out_small_ids and '  - RTS09' in out_small_ids
+      and '清單已寫入' not in out_small_ids)
+
+LARGE_RAW = write_json('large_ids_raw.json', {
+    'items': [{'code': f'RTM{i:02d}', 'head': 'h', 'story': 's'} for i in range(11)]})
+_large_batch_rows = []
+for _i in range(11):
+    _large_batch_rows.extend([
+        dict(id=f'RTE{_i:02d}', **FULL),
+        dict(id=f'RTE{_i:02d}', **FULL),
+    ])
+LARGE_BATCH = write_json('large_ids_batch.json', _large_batch_rows)
+out_large_ids, _ = run(bp.cmd_compare, Args(
+    raw=LARGE_RAW, batch=LARGE_BATCH, site='rt', require=None, json_result=None))
+_missing_list = os.path.join(TMP, 'large_ids_raw_missing_ids.txt')
+_extra_list = os.path.join(TMP, 'large_ids_raw_extra_ids.txt')
+_dup_list = os.path.join(TMP, 'large_ids_raw_duplicate_ids.txt')
+check('compare 大量 missing/extra/dup 只印數量摘要',
+      '清單已寫入' in out_large_ids
+      and '  - RTM00' not in out_large_ids and '  - RTE00' not in out_large_ids,
+      out_large_ids[:500])
+check('compare 大量 missing/extra/dup 各寫一份完整清單',
+      all(os.path.exists(p) for p in (_missing_list, _extra_list, _dup_list)))
+check('compare 大量清單保留原理由文字與全部 ID',
+      '可能是刻意排除' in open(_missing_list, encoding='utf-8').read()
+      and 'RTM00' in open(_missing_list, encoding='utf-8').read()
+      and 'RTM10' in open(_missing_list, encoding='utf-8').read()
+      and 'RTE10' in open(_extra_list, encoding='utf-8').read())
+
+# cmd_build 同樣覆蓋大量 missing 的摘要＋旁檔路徑。
+BUILD_LARGE_ENTRIES = write_json('build_large_entries.json', {})
+BUILD_LARGE_RAW = write_json(
+    'build_large_raw.json',
+    [{'code': f'RTM{i:02d}', 'head': 'h', 'story': 's'} for i in range(11)])
+BUILD_LARGE_OUT = os.path.join(TMP, 'build_large_batch.json')
+out_build_large, code_build_large = run(bp.cmd_build, Args(
+    site='rt', raw=BUILD_LARGE_RAW, entries=BUILD_LARGE_ENTRIES,
+    checkpoint='0923-2200', out=BUILD_LARGE_OUT, skeleton=None,
+    dry_run=False))
+_build_missing_list = os.path.join(TMP, 'build_large_entries_missing_ids.txt')
+check('build 大量 missing 改印數量摘要、不印全清單',
+      code_build_large == 0 and '11 則，清單已寫入' in out_build_large
+      and 'RTM00, RTM01' not in out_build_large, out_build_large[:500])
+check('build 大量 missing 旁檔寫在 entries 同目錄且內容完整',
+      os.path.exists(_build_missing_list)
+      and 'RTM00' in open(_build_missing_list, encoding='utf-8').read()
+      and 'RTM10' in open(_build_missing_list, encoding='utf-8').read())
+
 out7, _ = run(bp.cmd_compare, Args(raw=RAW, batch=BATCH_OK, site='rt', require='sb_count'))
 check('compare --require 可自訂欄位', 'sb_count' in out7 and '缺欄位' in out7)
 

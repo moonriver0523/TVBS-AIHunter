@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """S2 掃帶 agent 的 PreToolUse/PostToolUse hook：硬閘觸發後技術性鎖住 Edit
 工具，不再只是文字建議（MASTER R43 遵守修法方向1，2026-09-18）。
+同一個 hook 也攔截 ENEX/ABC entries 與候選衝生檔的逐筆 Edit，引導改走
+`s2_platform_bridge.py rewrite-entry` 修骨架後整批重建。
 
 背景：`s2_batch_prep.py` 的 `_enforce_build_hard_gate()` 偵測到同站機械格式錯誤
 達各 reason code 門檻時印 ⛔ 並 `sys.exit(2)`。通用門檻是 5 則；少量但不可
@@ -34,6 +36,7 @@ reason items 列出的 ID，並在寫入後用 build 共用 lint 歸零才清鎖
 import glob
 import json
 import os
+import re
 import sys
 
 _UNLOCK_HINT = (
@@ -48,6 +51,71 @@ _UNLOCK_HINT = (
     '--site <站> --entries <entries.json路徑>\n'
     '手動解鎖，不要換個包法（MultiEdit、先 Read 再 Write 單一小段…）繞過去。'
 )
+
+_PLATFORM_ENTRIES_NAME_RE = re.compile(
+    r'(?:^|[_-])(enex|abc)[_-]entries(?:[_-][^.]+)?\.json$', re.IGNORECASE)
+_PLATFORM_CANDIDATE_JSON_RE = re.compile(
+    r'^\d{4}-(enex|abc)-state\.json$', re.IGNORECASE)
+_PLATFORM_CANDIDATE_TXT_RE = re.compile(
+    r'^\d{4}-(enex|abc)\.txt$', re.IGNORECASE)
+
+
+def _platform_artifact_kind(file_path):
+    """辨識 ENEX/ABC 不得直接 Edit 的 entries 或候選衝生檔。
+
+    檔名是正式流程的主判準；JSON 已存在時再用內容形狀接住臨時改名。
+    任何讀檔失敗一律 fail-open，不准 hook 本身弄死掃帶輪。
+    """
+    if not file_path:
+        return None
+    base = os.path.basename(str(file_path))
+    match = _PLATFORM_ENTRIES_NAME_RE.search(base)
+    if match:
+        return f'{match.group(1).upper()} entries'
+    match = _PLATFORM_CANDIDATE_JSON_RE.match(base)
+    if match:
+        return f'{match.group(1).upper()} 候選 JSON'
+    match = _PLATFORM_CANDIDATE_TXT_RE.match(base)
+    if match:
+        return f'{match.group(1).upper()} 候選 TXT'
+
+    if not str(file_path).lower().endswith('.json'):
+        return None
+    try:
+        with open(file_path, encoding='utf-8-sig') as f:
+            data = json.load(f)
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    source = str(data.get('source') or '').upper()
+    if source in ('ENEX', 'ABC') and isinstance(data.get('items'), list):
+        return f'{source} 候選 JSON'
+    values = [v for k, v in data.items() if not str(k).startswith('_')]
+    if values and all(isinstance(v, dict) for v in values) and any(
+            'raw_entry' in v for v in values):
+        upper_name = base.upper()
+        if 'ENEX' in upper_name:
+            return 'ENEX entries'
+        if 'ABC' in upper_name or any(str(k).upper().startswith('ABC') for k in data):
+            return 'ABC entries'
+    return None
+
+
+def _platform_edit_reason(file_path):
+    kind = _platform_artifact_kind(file_path)
+    if not kind:
+        return None
+    return (
+        f'⛔ 【ENEX/ABC 批次修補鎖定】{kind} 是整批產物，禁止用 Edit 逐筆修補：'
+        f'{file_path}。請修正 from-raw 產生的骨架，並整批重建 entries：\n'
+        '  python E:/GitHub/TVBS-AIHunter/scripts/s2_platform_bridge.py rewrite-entry '
+        '--site <enex|abc> --skeleton <skeleton.json> --entries <entries.json> '
+        '--id <ID> --set <ID>={"entry":"...","category":"...","tc":"...","skip":""}\n'
+        '多筆可重複帶 --id/--set；指令會保留完整骨架並整批重建 entries。'
+        '若此檔是候選 JSON/TXT，重建 entries 後再用原參數重跑 '
+        's2_platform_extract.py；候選檔不是人工修補來源。'
+    )
 
 
 def _norm(path):
@@ -80,18 +148,18 @@ def _find_lock_for_path(file_path):
 def decide_edit(file_path):
     """PreToolUse／Edit 專用：回傳 None＝放行；否則回傳 deny 理由字串。"""
     found = _find_lock_for_path(file_path)
-    if not found:
-        return None
-    lock_path, lock = found
-    site = lock.get('site', '?')
-    reasons = lock.get('reasons') or []
-    reason_str = '、'.join(
-        f'{r.get("code")}（{r.get("count")}則）' for r in reasons
-    ) or '（reason 記錄缺失）'
-    return (
-        f'⛔ 【Edit 技術鎖定】{site} 站的 gate lock 仍 active（{lock_path}），'
-        f'觸發原因：{reason_str}。' + _UNLOCK_HINT
-    )
+    if found:
+        lock_path, lock = found
+        site = lock.get('site', '?')
+        reasons = lock.get('reasons') or []
+        reason_str = '、'.join(
+            f'{r.get("code")}（{r.get("count")}則）' for r in reasons
+        ) or '（reason 記錄缺失）'
+        return (
+            f'⛔ 【Edit 技術鎖定】{site} 站的 gate lock 仍 active（{lock_path}），'
+            f'觸發原因：{reason_str}。' + _UNLOCK_HINT
+        )
+    return _platform_edit_reason(file_path)
 
 
 def _write_looked_successful(tool_response):
@@ -142,7 +210,7 @@ def main():
             clear_lock_after_write(file_path)
         return 0
 
-    if tool_name != 'Edit':
+    if tool_name not in ('Edit', 'MultiEdit'):
         return 0
 
     reason = decide_edit(file_path)
