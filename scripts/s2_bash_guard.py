@@ -132,6 +132,19 @@ MARK_INGESTED_RUN = re.compile(
 # （不是 -c）。2026-08-31 補（獨立 review F4）。
 PY_STDIN_HEREDOC = re.compile(r'\b(?:python3?|py)(?:\.exe)?\s+-?\s*<<')
 
+UUIDGEN_RUN = re.compile(r'\buuidgen(?:\.exe)?\b', re.IGNORECASE)
+
+UUIDGEN_HINT = (
+    '⛔ 不需要呼叫 uuidgen：S2 launcher 已產生並匯出本輪 `S2_RUN_ID`，'
+    'Prompt 裡的 `{RUN_ID}` 也已替換。請直接使用 `$S2_RUN_ID`（PowerShell：'
+    '`$env:S2_RUN_ID`）；若值為空，先停止並檢查 launcher，不要另外造第二個 run_id。'
+)
+
+UNCLOSED_QUOTE_HINT = (
+    '⛔ shell 指令有未閉合引號，已在送進 shell 前攔下。請檢查最後一段單／雙引號；'
+    '長 JSON 請改用既有工具的檔案參數，不要塞進一條巨大行內字串。'
+)
+
 _RETRY_WARNING = (
     '\n⚠️ 這條規則已經攔過你至少一次（同一輪內再撞到＝重複嘗試同一招）。'
     '不要換個包法（heredoc、-c 換寫法、繞個變數名）再試一次——直接照上面的標準子指令下，'
@@ -271,6 +284,28 @@ def _command_tail(command, start):
     return ''.join(chars)
 
 
+def _has_unclosed_quote(command):
+    """Conservative single-line quote check; heredocs/multiline commands are skipped."""
+    if not isinstance(command, str) or '\n' in command or '\r' in command or '<<' in command:
+        return False
+    quote = None
+    escaped = False
+    for ch in command:
+        if escaped:
+            escaped = False
+            continue
+        if ch in ('\\', '`') and quote != "'":
+            escaped = True
+            continue
+        if quote:
+            if ch == quote:
+                quote = None
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+    return quote is not None
+
+
 def _at_shell_command_start(command, position):
     """確認 regex 命中的 python 是 shell command word，不是 echo/字串內容。"""
     quote = None
@@ -321,6 +356,13 @@ def decide(tool_name, command):
         return None
     if not command:
         return None
+
+    if _has_unclosed_quote(command):
+        return UNCLOSED_QUOTE_HINT
+
+    for match in UUIDGEN_RUN.finditer(command):
+        if _at_shell_command_start(command, match.start()):
+            return UUIDGEN_HINT
 
     if _mark_ingested_missing_file(command):
         return MARK_INGESTED_FILE_HINT

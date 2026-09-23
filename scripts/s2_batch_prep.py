@@ -433,6 +433,35 @@ def _clear_gate_lock(entries_path, site_label):
         print(f'⚠️ gate lock 清除失敗：{exc}', file=sys.stderr)
 
 
+def _remaining_active_lock_reasons(lock, grouped):
+    """Return positive counts only for reason codes that originally triggered ``lock``.
+
+    A different hard-gate-class warning below its own threshold must never inherit an
+    existing lock.  It stays a warning until it independently reaches its threshold.
+    """
+    original_codes = {
+        str(reason.get('code')) for reason in (lock or {}).get('reasons', [])
+        if isinstance(reason, dict) and reason.get('code')
+    }
+    remaining = []
+    for code in original_codes:
+        info = (grouped or {}).get(code)
+        if not isinstance(info, dict) or not info.get('is_hard_gate') or info.get('count', 0) <= 0:
+            continue
+        remaining.append(info)
+    return sorted(remaining, key=lambda info: info.get('reason_code') or info.get('code') or '')
+
+
+def _update_active_lock(lock_path, lock, remaining):
+    lock['reasons'] = [
+        {'code': r.get('reason_code') or r.get('code'), 'name': r['name'],
+         'count': r['count'], 'items': list(dict.fromkeys(r.get('items') or []))}
+        for r in remaining
+    ]
+    lock['last_checked_at'] = datetime.datetime.now().isoformat(timespec='seconds')
+    _atomic_write_json(lock_path, lock)
+
+
 def cmd_gate_clear(args):
     """逃生路徑：手動清除 gate lock，避免流程死鎖（方向1第4點）。"""
     site_label = args.site.upper()
@@ -804,6 +833,11 @@ def _cmd_rewrite_entry_free(args, site_label):
 
     entries = load_json(args.entries)
     if not isinstance(entries, dict):
+        if isinstance(entries, list):
+            _rewrite_entry_error(
+                '--entries 收到的是 batch/skeleton 陣列，不是 `{id:{entry,...}}` 的 '
+                'entries.json。請把 `--entries` 改成 build 的上游 entries 草稿；'
+                'batch 產物請回上游修正後重跑 build。')
         _rewrite_entry_error('entries.json 頂層必須是 object。')
 
     # 兩個方向的「ID 打錯字」都要大聲失敗，不准靜默走進另一種語意。
@@ -938,6 +972,11 @@ def cmd_rewrite_entry(args):
 
     entries = load_json(args.entries)
     if not isinstance(entries, dict):
+        if isinstance(entries, list):
+            _rewrite_entry_error(
+                '--entries 收到的是 batch/skeleton 陣列，不是 `{id:{entry,...}}` 的 '
+                'entries.json。請把 `--entries` 改成 build 的上游 entries 草稿；'
+                'batch 產物請回上游修正後重跑 build。')
         _rewrite_entry_error('entries.json 頂層必須是 object。')
     missing = sorted(set(requested_ids) - set(entries))
     if missing:
@@ -945,8 +984,10 @@ def cmd_rewrite_entry(args):
     for item_id in requested_ids:
         entries[item_id] = updates[item_id]
 
-    remaining = _hard_gate_reasons_for_entries(
+    all_remaining = _hard_gate_reasons_for_entries(
         entries, site_label, lock.get('lint_contexts') or {})
+    remaining = _remaining_active_lock_reasons(
+        lock, {r['reason_code']: r for r in all_remaining})
     try:
         _atomic_write_json(args.entries, entries)
     except OSError as exc:
@@ -958,13 +999,7 @@ def cmd_rewrite_entry(args):
         _clear_gate_lock(args.entries, site_label)
         return
 
-    lock['reasons'] = [
-        {'code': r['reason_code'], 'name': r['name'], 'count': r['count'],
-         'items': list(dict.fromkeys(r.get('items') or []))}
-        for r in remaining
-    ]
-    lock['last_checked_at'] = datetime.datetime.now().isoformat(timespec='seconds')
-    _atomic_write_json(lock_path, lock)
+    _update_active_lock(lock_path, lock, remaining)
     print('⚠️ gate lock 保留；白名單格式問題尚未歸零：', file=sys.stderr)
     for reason in remaining:
         print(f'  {reason["reason_code"]}（{reason["count"]}則）：'
@@ -1009,18 +1044,17 @@ def _enforce_build_hard_gate(warnings, site=None, dry_run=False, entries_path=No
     （`_clear_gate_lock`）——這是清除時機②，時機①見 s2_gate_guard.py。"""
     site_label = (site or '該站').upper()
     grouped, hard_gate_reasons = collect_build_lint_reasons(warnings or [], site=site_label)
-    # v2修正（Codex sol覆核①，既有問題）：原本只看`hard_gate_reasons`（count
-    # >=門檻才列入）判斷「沒有硬閘警告＝可以清鎖」，但reason code剩1-4則
-    # 時已經不在這份清單裡、卻還沒真的歸零，會被誤判成「已清乾淨」而提早
-    # 清鎖。改成同時確認白名單格式類reason code**全部**count==0（不分是否
-    # 達門檻）才清——對齊docstring原本講的「計數降到0」語意。build自動
-    # autofix上線後，count常從5+一次掉到1-4區間，這個既有瑕疵會被更常
-    # 踩到，這裡一併修掉。
-    any_hard_gate_reason_remaining = any(
-        info['is_hard_gate'] and info['count'] > 0 for info in grouped.values())
     if not hard_gate_reasons:
-        if not any_hard_gate_reason_remaining:
-            _clear_gate_lock(entries_path, site_label)
+        owning = _lock_owning_entries(entries_path) if entries_path else None
+        if owning:
+            lock_path, lock = owning
+            remaining = _remaining_active_lock_reasons(lock, grouped)
+            if remaining:
+                _update_active_lock(lock_path, lock, remaining)
+            else:
+                # A42: only the reason set that actually crossed a hard-gate threshold
+                # may keep its lock.  Unrelated 1-4 count warnings never inherit it.
+                _clear_gate_lock(entries_path, site_label)
         return
 
     if warnings:
@@ -1911,8 +1945,25 @@ def _raw_from_payload(path, data, *, offload=False):
     if isinstance(data, dict):
         key, val = select_payload_key(data)
         if key is None:
+            # entries.json is a flat ``{id: payload}`` map, not a broken list
+            # envelope.  Make it directly inspectable/searchable and surface the
+            # top-level key as ``id`` so callers do not have to hand-roll Python.
+            material = [(item_id, payload) for item_id, payload in data.items()
+                        if not str(item_id).startswith('_')]
+            if material and all(isinstance(payload, (dict, str))
+                                for _item_id, payload in material):
+                items = []
+                for item_id, payload in material:
+                    row = dict(payload) if isinstance(payload, dict) else {'entry': payload}
+                    row.setdefault('id', str(item_id))
+                    items.append(row)
+                return RawLoadResult(
+                    items=items,
+                    shell_desc=f'flat map（id→entry，共 {len(items)} 筆）',
+                    root_shape='flat_map', payload_key=None, envelope=None)
             raise ValueError(
-                f'{path} {val.message}。實際頂層鍵：{list(data.keys())}')
+                f'{path} {val.message}。實際頂層鍵：{list(data.keys())}；'
+                '若這是 entries.json，值必須是 object 或 entry 字串。')
         shape = 'offload_dict_envelope' if offload else 'dict_envelope'
         desc = (
             f'Claude Code offload 殼＋dict 殼，陣列在 "{key}" 鍵下，{len(val)} 筆'
@@ -2201,8 +2252,10 @@ def cmd_inspect(args):
     fields = [f.strip() for f in args.fields.split(',')] if args.fields else None
     lengths = getattr(args, 'lengths', False)
 
+    total = len(indexed)
+    shown = _slice_inspect_rows(indexed, args)
+    offset = getattr(args, 'offset', 0) or 0
     limit = args.limit or 100
-    shown, total = indexed[:limit], len(indexed)
 
     # 全文 vs 預覽改由**字元預算**決定，不再由筆數決定（T9，見 _plan_full_detail）。
     # `cap` 是每欄位截斷長度，None＝整批全文。
@@ -2253,9 +2306,9 @@ def cmd_inspect(args):
             lines.append(f'{item_id}\t{_title_of_any(it)}')
 
     print('\n'.join(lines))
-    if total > limit:
-        print(f'…另 {total - limit} 筆略，用 --limit 調整', file=sys.stderr)
-    print(f'共 {len(items)} 筆，本次顯示 {min(total, limit)} 筆', file=sys.stderr)
+    if total > offset + limit:
+        print(f'…另 {total - offset - limit} 筆略，用 --offset/--limit 調整', file=sys.stderr)
+    print(f'共 {len(items)} 筆，本次顯示 {len(shown)} 筆（offset={offset}）', file=sys.stderr)
     if budget_note:
         print(budget_note, file=sys.stderr)
     # 逐則翻閱的觸發點（T9）。比照 A10 v2 的 T/C 覆蓋率閘門：光把「請批次」寫進
@@ -2264,6 +2317,15 @@ def cmd_inspect(args):
         print(f'💡 這次只看了 1 則，同檔還有 {len(items) - 1} 筆。'
               f'`--ids a,b,c` 可一次取多則，總長吃得下 {INSPECT_TEXT_BUDGET:,} 字元'
               f'就整批印全文——分開叫每次都要重付一次 context。', file=sys.stderr)
+
+
+def _slice_inspect_rows(indexed, args):
+    """Apply the discoverable ``--offset``/``--limit`` window used by inspect."""
+    offset = getattr(args, 'offset', 0) or 0
+    if offset < 0:
+        raise ValueError('--offset 必須是 0 或正整數（0-based）。')
+    limit = getattr(args, 'limit', None) or 100
+    return indexed[offset:offset + limit]
 
 
 def cmd_search(args):
@@ -2322,6 +2384,24 @@ def cmd_search(args):
     if len(hits) > limit:
         print(f'…另 {len(hits) - limit} 筆命中略，用 --limit 調整', file=sys.stderr)
     print(f'共 {len(items)} 筆項目，命中 {len(hits)} 處', file=sys.stderr)
+
+
+def cmd_check_entries(args):
+    """Delegate the commonly guessed command to the canonical platform validator."""
+    try:
+        with open(args.entries, encoding='utf-8-sig') as f:
+            entries = json.load(f)
+    except (OSError, ValueError) as exc:
+        print(f'✗ check-entries 讀取失敗：{exc}', file=sys.stderr)
+        sys.exit(2)
+    import s2_platform_extract
+    problems = s2_platform_extract.check_entries(entries)
+    if problems:
+        print('⛔ entries 形狀預檢未通過：', file=sys.stderr)
+        for problem in problems:
+            print(f'  • {problem}', file=sys.stderr)
+        sys.exit(2)
+    print('✅ entries 形狀預檢通過。', file=sys.stderr)
 
 
 # ── 稽核快照與比對（A2，2026-08-17）──────────────────────────
@@ -3471,6 +3551,13 @@ def cmd_rename_field(args):
     print(f'已寫入 {out}（原檔 {args.batch} 未動）', file=sys.stderr)
 
 
+def _nonnegative_int(raw):
+    value = int(raw)
+    if value < 0:
+        raise argparse.ArgumentTypeError('必須是 0 或正整數')
+    return value
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -3513,6 +3600,8 @@ def main():
     p_inspect.add_argument('--ids', help='逗號分隔的 id 清單')
     p_inspect.add_argument('--fields', help='逗號分隔的欄位名清單')
     p_inspect.add_argument('--limit', type=int, help='最多顯示幾筆，預設 100')
+    p_inspect.add_argument('--offset', type=_nonnegative_int, default=0,
+                           help='略過前 N 筆後再套 --limit（0-based，預設 0）')
     p_inspect.add_argument('--index', type=int, help='只看第 i 筆（0-based）')
     p_inspect.add_argument('--site', choices=['ns', 'ap', 'rt', 'enex', 'abc'],
                            help='per-site id 規則（RT 是 code；AP 清單檔自動看穿 _source；'
@@ -3578,6 +3667,12 @@ def main():
     p_cmp.set_defaults(func=cmd_compare)
     p_dc.set_defaults(func=cmd_dedup_check)
     p_search.set_defaults(func=cmd_search)
+
+    p_check = sub.add_parser(
+        'check-entries',
+        help='相容入口：委派 s2_platform_extract.py 的 entries 形狀預檢')
+    p_check.add_argument('--entries', required=True)
+    p_check.set_defaults(func=cmd_check_entries)
 
     p_rf = sub.add_parser('rename-field',
                           help='工作 batch JSON（entries.json／batch.json）裡把一個鍵改名，輸出到新檔（R33）')
