@@ -268,6 +268,14 @@ YNA 一天約 5 輪、每輪視窗 3.5~6.5 小時；`playlistItems.list` 分頁�
 - **殘留風險（子代理誠實列出，這次不修）**：①偵測漏網——Edit片段只含值不含鍵（如`old_string="國際/中東"`）擋不到，這次14次實測全帶`"category":`鍵所以覆蓋得到現況，但這是最明顯的繞過方式；②截斷值裡變動點前有逗號會漏抓（真實category值用`/`不用`,`機率低但存在）；③臨時改名的batch檔（不照命名慣例）擋不到；④`state.json`／`*_skeleton_*.json`／`*_detail_*.json`／`*_raw_*.json`目前都沒有Edit鎖，若agent改去對這些檔逐筆Edit，這道鎖擋不到；⑤下一輪要觀察agent被擋後是否真的改走批次路徑，還是退化成整份`Write`重寫（訊息裡刻意留的逃生口，若被濫用需收緊）。
 - **✅ 既有缺陷已修（2026-09-23，使用者裁示「好」）**：`_find_lock_for_path()`讀到的`*_gate_lock.json`若頂層不是dict（例如被寫成陣列），原本`lock.get('entries_path')`會拋`AttributeError`（呼叫點在`main()`的try/except之外，雖是fail-open放行不是夜間殺手，但會讓該目錄下四條攔截分支全部失效）。已加`isinstance(lock, dict)`防護＋回歸測試，`test_s2_gate_guard.py`140/140、`test_s2_gate_guard_settings_wiring.py`13/13全過，commit `f814009`。
 
+### A41 通用兜底：同檔逐筆Edit次數上限（2026-09-23，第五種攔截）
+
+- **動機**：前四條都是「等實測抓到具體破口（哪個檔名／哪個欄位）才補一條」的whack-a-mole，毛病每換位置就要重新盯log抓。使用者明確要求做一個不分檔名／欄位的通用兜底（「一次全部做完，我好累了」）。
+- **修法**（Opus子代理實作，Claude Code獨立審過diff+跑測試）：`s2_gate_guard.py`新增`decide_edit()`第五個判斷分支`_generic_edit_reason`——**同一輪掃帶（同一個`claude -p` session）內，同一份`.json`檔累計收到第3次（含）以後的Edit／MultiEdit一律擋下**，門檻可用環境變數`S2_GATE_EDIT_THRESHOLD`調整（刻意不寫進deny訊息，避免變成教agent繞過的說明書）。跨呼叫計數靠暫存檔`<temp>/s2_gate_guard_tally/<session_id>-<sha1短碼>.json`（session_id是PreToolUse stdin官方共同欄位，每輪掃帶是新session id、計數自然歸零；session_id缺席整條跳過不計數不擋）；寫檔走`.tmp`→`os.replace()`原子換名；每個session第一次建檔時順手清掉24小時前的舊計數檔。優先度**最低**，只有前四條全部放行才輪到它算數，被前四條擋下的Edit不計數、訊息不被搶走；MultiEdit算1次（不照內部edits筆數，理由是這條鎖壓的是工具呼叫次數／turn數，照筆數算等於懲罰正確的批次行為）；被擋的那次也算進次數（PreToolUse看不到Edit最後成不成功，計數只能是「嘗試次數」，同時解掉「擋下就重置→門檻永遠打不到」的死結）；成功Write不重置計數（較嚴的一邊比較安全）。
+- **重要範圍決策（使用者裁示）**：這條規則因為`.claude/settings.json`本來就有掛`s2_gate_guard.py`（任務B/2026-09-18時掛的），會連使用者自己在repo的互動式session／子代理也一起管到（對同一份`.json`連改3次就被擋，可能誤傷合法的手動連續小修正）。使用者選擇**「只留S2掃帶用」**：已把`s2_gate_guard.py`從`.claude/settings.json`的PreToolUse `Edit|MultiEdit`與PostToolUse `Write`兩處拿掉，改成只留在S2 launcher的`--settings scripts/s2_guard_settings.json`裡；互動式session完全不受影響（含全部五條規則，不只第五條）。`test_s2_gate_guard_settings_wiring.py`同步反轉對應斷言（原本斷言「兩份settings.json都要指到」，這正是本次要改掉的行為，非回歸破壞）。
+- **Claude Code獨立驗證**：`git diff`逐字審過（含`.claude/settings.json`手動修的JSON語法，`python -m json.tool`驗證合法）；`py_compile`過；`test_s2_gate_guard.py`(221，含新增81項)/`test_s2_gate_guard_settings_wiring.py`(13，反轉後全過)/`test_s2_batch_prep.py`(232)/`test_s2_bash_guard.py`(51)自己重跑全PASS，跟子代理自報數字一致。
+- **殘留風險（子代理誠實列出）**：①並行下可能少算不會多算（兩個hook行程同時讀改寫同一份計數檔，方向是「少擋」符合fail-open原則，刻意不加檔案鎖）；②計數檔被刪/壞掉會靜默從0重算，沒有告警機制，攔截率無法從hook端稽核；③`session_id`若CLI哪天不再送，整條規則靜默失效（不擋不報錯，不會弄死掃帶但也沒人發現）；④門檻3可能誤傷分散的合法連續修正（子代理判斷目前抓到的毛病都是爆發式如40秒內11次，不是這種情況，且沒有任何修改會被硬鎖死，改用`Write`整份重寫永遠是逃生口）；⑤下一輪要觀察agent被擋後是否退化成濫用`Write`整份重寫（token可能反而更貴），這條逃生口若被濫用需要收緊。
+
 ---
 
 ## ❌ 明文不做（防止後人重提）

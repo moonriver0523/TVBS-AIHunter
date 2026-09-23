@@ -47,6 +47,30 @@ footage_type、status…）維持自由可改——batch 本來就是 draft，�
 判準是「category／tc 的**值真的有變**」而不是「字串出現 category」：整顆 item
 物件重寫但這兩個值照抄，一樣放行。替代路徑見 `_batch_edit_reason` 的訊息。
 
+2026-09-23（A41 第四種攔截＝通用兜底）：上面三條都是「等實測抓到破口才補一條」的
+whack-a-mole，毛病每換一個檔名／欄位就要再補一次。這條改用**次數**當判準，不看檔名
+也不看欄位：**同一輪掃帶（同一個 `claude -p` session）內，同一份 `.json` 檔累計收到
+第 3 次（含）以後的 Edit／MultiEdit 一律擋下**。門檻預設 3，可用環境變數
+`S2_GATE_EDIT_THRESHOLD` 調整（給使用者調，不寫進 deny 訊息裡，免得變成教 agent
+繞過的說明書）。
+  - 跨呼叫計數：這支 hook 每次工具呼叫都是全新的 python 行程，沒有記憶體可累計，
+    所以把計數落在暫存檔 `<temp>/s2_gate_guard_tally/<session_id>.json`，內容是
+    `{"檔案絕對路徑（_norm 過）": 次數}`。檔名綁 PreToolUse stdin 的 `session_id`
+    （官方 hook 協定的共同欄位），保證①不同 S2 session／別的 `claude` 視窗互不汙染、
+    ②每輪掃帶是新的 `claude -p` 行程＝新 session id＝計數自然歸零，不會跨輪疊加。
+    `session_id` 缺席（舊版 CLI、單元測試直呼函式）→ 這條規則整條跳過，不計數也不擋。
+  - 計數檔清理：每個 session 第一次建檔時順手掃一次同目錄，刪掉 mtime 超過 24 小時的
+    舊計數檔（一輪掃帶約 1 小時，24 小時綽綽有餘）。放在系統暫存夾還有 OS 自身的
+    清理機制當第二道保險，不需要另外排程。
+  - 優先度**最低**：前四條（gate lock／ENEX-ABC／NS-AP-RT／batch 欄位）任一命中就
+    直接回它們的精準訊息，**不計數**——那幾條一發就擋，用不到「累計到第 3 次」，
+    而且計數只對「前面都放行」的 Edit 才有意義（要擋的是真的打出去的逐筆修補）。
+  - 訊息誠實承認侷限：這條不知道是哪個檔案／哪個欄位，給不出精準指令，只能說
+    「有專屬批次指令就改用它，沒有就用一次 Write 整份重寫」。
+  - 被擋的那一次**也算進次數**：PreToolUse 本來就看不到 Edit 最後成功與否
+    （字串沒對到也會失敗），所以計數只能是「嘗試次數」，誠實寫成「第 N 次嘗試」。
+    這同時解掉「擋下就重置 → 門檻永遠打不到」的死結。
+
 輸入輸出協議跟 `s2_bash_guard.py` 一致：stdin 一包 Claude Code hook JSON
 （`tool_name`／`tool_input`／PostToolUse 另有 `tool_response`）；deny 時印
 `permissionDecision=deny` 的 JSON（`ensure_ascii=True`）；放行／非目標事件
@@ -54,10 +78,13 @@ footage_type、status…）維持自由可改——batch 本來就是 draft，�
 沿用 `s2_bash_guard.py` 的 fail-open 原則。
 """
 import glob
+import hashlib
 import json
 import os
 import re
 import sys
+import tempfile
+import time
 
 _UNLOCK_HINT = (
     '\n⚠️ 這不是文字建議，是工具層技術鎖定——這個檔案在 gate lock 清除前，'
@@ -360,10 +387,161 @@ def _find_lock_for_path(file_path):
     return None
 
 
-def decide_edit(file_path, tool_input=None):
+# ── 通用兜底：同一 session 同一份 JSON 的 Edit／MultiEdit 次數上限 ──────────
+# 門檻＝「第幾次（含）開始擋」。3 ＝前兩次放行，第 3 次起擋。
+_EDIT_TALLY_DEFAULT_THRESHOLD = 3
+# 計數檔保留時間；超過就在下一個 session 建檔時順手清掉。一輪掃帶約 1 小時。
+_EDIT_TALLY_TTL_SECONDS = 24 * 60 * 60
+_EDIT_TALLY_DIR_NAME = 's2_gate_guard_tally'
+_TALLY_NAME_UNSAFE_RE = re.compile(r'[^A-Za-z0-9_-]')
+
+
+def _edit_tally_threshold():
+    """門檻可用環境變數調整（`S2_GATE_EDIT_THRESHOLD`）。
+
+    刻意**不**寫進 deny 訊息：那是給使用者調參數用的，寫進訊息等於教 agent
+    怎麼繞過這道鎖。任何解析失敗一律退回預設值 3。
+    """
+    raw = os.environ.get('S2_GATE_EDIT_THRESHOLD')
+    if raw is None:
+        return _EDIT_TALLY_DEFAULT_THRESHOLD
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return _EDIT_TALLY_DEFAULT_THRESHOLD
+    return value if value >= 1 else _EDIT_TALLY_DEFAULT_THRESHOLD
+
+
+def _edit_tally_dir():
+    """計數檔放系統暫存夾（`S2_GATE_TALLY_DIR` 可覆寫，單元測試用）。
+
+    刻意不放在目標檔案同目錄：掃帶的目標檔在 G:\\ 雲端同步夾，丟計數檔進去會
+    被同步上雲、也會混進當輪產物清單裡。
+    """
+    return (os.environ.get('S2_GATE_TALLY_DIR')
+            or os.path.join(tempfile.gettempdir(), _EDIT_TALLY_DIR_NAME))
+
+
+def _edit_tally_file(dir_, session_id):
+    """session id → 計數檔路徑。
+
+    先把非 `[A-Za-z0-9_-]` 的字元換成底線（session id 理論上是 UUID，但不能假設），
+    再接一段原始值的 sha1 短碼——避免「清洗後撞名」把兩個 session 併成同一份計數。
+    """
+    raw = str(session_id)
+    safe = _TALLY_NAME_UNSAFE_RE.sub('_', raw)[:64]
+    digest = hashlib.sha1(raw.encode('utf-8', 'replace')).hexdigest()[:10]
+    return os.path.join(dir_, '%s-%s.json' % (safe, digest))
+
+
+def _sweep_stale_tallies(dir_, keep_path):
+    """刪掉同目錄裡過期的舊計數檔；只在某個 session 第一次建檔時呼叫一次。
+
+    單檔失敗（權限、別的行程正在寫）不准影響判定，逐檔 try/except 吞掉。
+    """
+    now = time.time()
+    keep = _norm(keep_path)
+    try:
+        names = os.listdir(dir_)
+    except OSError:
+        return
+    for name in names:
+        path = os.path.join(dir_, name)
+        if _norm(path) == keep:
+            continue
+        try:
+            if now - os.path.getmtime(path) > _EDIT_TALLY_TTL_SECONDS:
+                os.remove(path)
+        except OSError:
+            pass
+
+
+def _bump_edit_tally(session_id, file_path):
+    """把 (session, 檔案) 的計數 +1 並回傳新值。
+
+    寫檔走「寫 `.tmp` → `os.replace()` 原子換名」：Claude Code 可能同時送出多個
+    工具呼叫，兩個 hook 行程並行讀改寫同一份計數檔時，直接覆寫有機率留下半截
+    JSON，下次讀取解析失敗就被當成「沒有計數」靜默歸零。原子換名讓讀到的永遠
+    是某一次完整的內容。
+    ⚠️ 已知殘留風險：並行下兩邊各自讀到 1、各自寫回 2 → 少算一次。方向是
+    「少擋」而不是「誤擋」，符合整支 hook 的 fail-open 原則，不為此加檔案鎖
+    （鎖失敗或卡住的代價遠大於偶爾少算一次）。
+    """
+    dir_ = _edit_tally_dir()
+    path = _edit_tally_file(dir_, session_id)
+    os.makedirs(dir_, exist_ok=True)
+    first_time = not os.path.exists(path)
+
+    data = {}
+    if not first_time:
+        try:
+            with open(path, encoding='utf-8') as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                data = loaded
+        except (OSError, ValueError):
+            data = {}  # 計數檔壞掉＝重新從 0 算起，寧可少擋不可誤擋
+
+    key = _norm(file_path)
+    prev = data.get(key)
+    count = (prev if isinstance(prev, int) and prev > 0 else 0) + 1
+    data[key] = count
+
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=True)
+    os.replace(tmp, path)
+
+    if first_time:
+        _sweep_stale_tallies(dir_, path)
+    return count
+
+
+def _generic_edit_reason(file_path, session_id):
+    """第五條（優先度最低）：同一 session 同一份 JSON 的逐筆 Edit 次數上限。
+
+    只在前四條全部放行後才會被呼叫，所以：
+      - 已經被 gate lock／ENEX-ABC／NS-AP-RT／batch 欄位鎖擋下的 Edit **不計數**，
+        訊息也不會被這條搶走（那四條的訊息更精準）。
+      - 只管 `.json`：其餘副檔名（.md／.py／.txt…）完全不碰，逐筆改文件是正常行為。
+      - `session_id` 缺席一律跳過——沒有 session 就沒有「同一輪」的定義，
+        用全域計數檔會跨輪疊加，比不擋更糟。
+    整段包 try/except：計數機制自己壞掉不准弄死掃帶輪，也不准誤擋。
+    """
+    if not session_id or not file_path:
+        return None
+    if not str(file_path).lower().endswith('.json'):
+        return None
+    threshold = _edit_tally_threshold()
+    try:
+        count = _bump_edit_tally(session_id, file_path)
+    except Exception:
+        return None
+    if not isinstance(count, int) or count < threshold:
+        return None
+    return (
+        f'⛔ 【同檔逐筆 Edit 次數上限】這一輪（同一個 claude session）已經對同一份檔案'
+        f'發出第 {count} 次 Edit／MultiEdit 嘗試，達到上限 {threshold} 次，'
+        f'第 {threshold} 次（含）以後一律擋下：{file_path}\n'
+        '（算的是「嘗試次數」——PreToolUse 看不到 Edit 最後成功與否，被擋的這次也算進去。）\n'
+        'ℹ️ 誠實說明：這是**通用兜底規則**，不分檔名也不分欄位，'
+        '所以它**不知道**這份檔案對應哪一支批次指令，沒辦法像其他幾道鎖那樣直接把指令給你。'
+        '請自己判斷，擇一：\n'
+        '  1) 這份檔案**有**專屬的批次指令（s2_batch_prep.py／s2_state.py／'
+        's2_platform_bridge.py 的子指令等）→ 改用那支指令，一次把剩下的修改做完。\n'
+        '  2) **沒有**對應的批次指令 → 用一次 `Write` 整份重寫這個檔案，'
+        '把剩下的修改全部一起寫進去。\n'
+        '⚠️ 不要換個包法（改用 MultiEdit、拆更小段、先 Read 再 Edit…）繼續逐筆改：'
+        '逐筆 Edit 每一筆都要多開一輪 assistant turn，cache read token 跟著整輪翻倍，'
+        '這正是這道鎖要擋的成本破口。'
+    )
+
+
+def decide_edit(file_path, tool_input=None, session_id=None):
     """PreToolUse／Edit 專用：回傳 None＝放行；否則回傳 deny 理由字串。
 
-    判斷順序刻意固定為「gate lock → ENEX/ABC → NS/AP/RT → batch 草稿欄位」：
+    判斷順序刻意固定為「gate lock → ENEX/ABC → NS/AP/RT → batch 草稿欄位
+    → 通用次數上限」：
       1. 有 active gate lock 時一律優先回 lock 訊息（帶站別／reason code／
          `gate-clear` 逃生路徑，比泛用訊息精確），行為跟 2026-09-18 上線版完全相同。
       2. ENEX/ABC 既有判斷擺第二，結果不受後面新增分支影響。
@@ -373,8 +551,13 @@ def decide_edit(file_path, tool_input=None):
          的無條件鎖。擺最後可以保證就算哪天命名規則撞在一起，前三條的行為
          一個字都不會變。實際上四條的檔名集合互斥（batch vs entries vs 候選檔），
          順序不具語意負擔。
+      5. 通用次數上限（2026-09-23 新增）擺**最後、優先度最低**：它是唯一不看
+         檔名也不看欄位的兜底規則，只有前四條全部放行才輪到它算數——也就是說
+         被前四條擋下的 Edit 完全不進計數，訊息也不會被它搶走。
     ⚠️ `tool_input` 可略（預設 None）：舊呼叫端（只給 file_path）行為完全不變，
     沒有內容可判讀時第 4 條一律放行，沿用整支 hook 的 fail-open 原則。
+    ⚠️ `session_id` 可略（預設 None）：不給就等於關掉第 5 條（不計數、不擋），
+    所有既有呼叫端與既有測試的行為一個字都不會變。
     """
     found = _find_lock_for_path(file_path)
     if found:
@@ -394,7 +577,10 @@ def decide_edit(file_path, tool_input=None):
     site_reason = _site_edit_reason(file_path)
     if site_reason:
         return site_reason
-    return _batch_edit_reason(file_path, tool_input)
+    batch_reason = _batch_edit_reason(file_path, tool_input)
+    if batch_reason:
+        return batch_reason
+    return _generic_edit_reason(file_path, session_id)
 
 
 def _write_looked_successful(tool_response):
@@ -435,6 +621,9 @@ def main():
         tool_name = payload.get('tool_name', '')
         tool_input = payload.get('tool_input') or {}
         file_path = tool_input.get('file_path', '')
+        # 官方 hook 協定的共同欄位（PreToolUse/PostToolUse 都有）；舊版 CLI 沒有
+        # 這個欄位時值是 None，第 5 條規則會整條跳過。
+        session_id = payload.get('session_id')
     except Exception:
         return 0
 
@@ -448,7 +637,7 @@ def main():
     if tool_name not in ('Edit', 'MultiEdit'):
         return 0
 
-    reason = decide_edit(file_path, tool_input)
+    reason = decide_edit(file_path, tool_input, session_id)
     if reason:
         print(json.dumps({
             'hookSpecificOutput': {

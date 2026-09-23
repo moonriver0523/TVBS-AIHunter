@@ -20,6 +20,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GUARD = os.path.join(HERE, 's2_gate_guard.py')
@@ -28,6 +29,13 @@ gate_guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate_guard)
 
 TMP = tempfile.mkdtemp(prefix='s2_gate_guard_test_')
+
+# ⚠️ 必須在任何 subprocess 呼叫**之前**設定：`run_hook` 沒有帶 env=，子行程是
+# 繼承這裡的環境變數。把第 5 條（通用次數上限）的計數檔導進測試專用暫存夾，
+# 才不會汙染真實的系統暫存夾、也不會被別的 S2 session 的計數檔干擾。
+TALLY_DIR = os.path.join(TMP, 'tally')
+os.environ['S2_GATE_TALLY_DIR'] = TALLY_DIR
+
 results = []
 
 
@@ -613,6 +621,329 @@ try:
 except AttributeError as e:
     check('_find_lock_for_path：gate_lock.json 頂層不是 dict → 略過不炸、回 None',
           False, f'炸了：{e!r}')
+
+# ── 通用兜底：同一 session 同一份 JSON 的 Edit／MultiEdit 次數上限 ──────────
+# （2026-09-23，A41 第四種攔截）門檻預設 3：第 1／2 次放行，第 3 次起擋。
+# 這條不分檔名也不分欄位，是「未來毛病換位置」時的安全網。
+d11 = os.path.join(TMP, 'generic_tally')
+os.makedirs(d11, exist_ok=True)
+
+
+def plain_json(dir_, name):
+    """刻意取一個前四條規則都不會命中的檔名／內容（不是 entries／batch／候選檔、
+    同目錄也沒有 gate lock），確保測到的真的是第 5 條。"""
+    p = os.path.join(dir_, name)
+    with open(p, 'w', encoding='utf-8') as f:
+        json.dump({'note': 'x'}, f, ensure_ascii=False)
+    return p
+
+
+def tally_snapshot(session_id):
+    """把某個 session 的計數檔讀回來（找不到→{}），用來驗「有沒有被計數」。"""
+    path = gate_guard._edit_tally_file(TALLY_DIR, session_id)
+    try:
+        with open(path, encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+generic_a = plain_json(d11, 'generic_notes.json')
+check('前置：通用兜底目標檔沒被前四條命中（無 session_id → 放行）',
+      gate_guard.decide_edit(generic_a) is None)
+
+g1 = gate_guard.decide_edit(generic_a, edit_input(generic_a, 'a', 'b'), 'sess-A')
+g2 = gate_guard.decide_edit(generic_a, edit_input(generic_a, 'b', 'c'), 'sess-A')
+g3 = gate_guard.decide_edit(generic_a, edit_input(generic_a, 'c', 'd'), 'sess-A') or ''
+check('通用兜底：同檔第 1 次 Edit → 放行', g1 is None, ascii(str(g1)))
+check('通用兜底：同檔第 2 次 Edit → 放行', g2 is None, ascii(str(g2)))
+check('通用兜底：同檔第 3 次 Edit → deny', bool(g3))
+g4 = gate_guard.decide_edit(generic_a, edit_input(generic_a, 'd', 'e'), 'sess-A') or ''
+check('通用兜底：第 4 次以後繼續 deny（不會因為被擋就重置）', bool(g4))
+
+# 訊息內容
+check('通用兜底：deny 訊息帶出實際次數與門檻',
+      '第 3 次' in g3 and '上限 3 次' in g3, ascii(g3))
+check('通用兜底：deny 訊息點名 Edit／MultiEdit 兩個工具',
+      'Edit' in g3 and 'MultiEdit' in g3, ascii(g3))
+check('通用兜底：deny 訊息帶出檔案路徑', os.path.basename(generic_a) in g3, ascii(g3))
+check('通用兜底：deny 訊息誠實承認「不知道對應哪支批次指令」',
+      '通用兜底' in g3 and '不知道' in g3, ascii(g3))
+check('通用兜底：deny 訊息給兩條出路（專屬批次指令／一次 Write 整份重寫）',
+      'Write' in g3 and '整份重寫' in g3, ascii(g3))
+check('通用兜底：deny 訊息說明「嘗試次數」含被擋的這次',
+      '嘗試次數' in g3, ascii(g3))
+check('通用兜底：deny 訊息不冒充前四條的精準指令（不含 gate-clear／自由模式／batch 草稿）',
+      'gate-clear' not in g3 and '自由模式' not in g3 and 'batch 草稿' not in g3,
+      ascii(g3))
+check('通用兜底：deny 訊息不外洩門檻環境變數（免得變成繞過說明書）',
+      'S2_GATE_EDIT_THRESHOLD' not in g3, ascii(g3))
+
+# 不同檔案各自獨立計數
+generic_b = plain_json(d11, 'other_notes.json')
+check('通用兜底：另一份檔案第 1 次 → 放行（每個檔案各自計數）',
+      gate_guard.decide_edit(generic_b, edit_input(generic_b, 'a', 'b'), 'sess-A') is None)
+check('通用兜底：另一份檔案第 2 次 → 放行',
+      gate_guard.decide_edit(generic_b, edit_input(generic_b, 'b', 'c'), 'sess-A') is None)
+check('通用兜底：另一份檔案第 3 次 → deny',
+      gate_guard.decide_edit(generic_b, edit_input(generic_b, 'c', 'd'), 'sess-A') is not None)
+
+# 不同 session（＝不同輪掃帶）計數重置，不會疊加
+check('通用兜底：換一個 session id → 同一份檔案第 1 次重新放行（每輪自然歸零）',
+      gate_guard.decide_edit(generic_a, edit_input(generic_a, 'a', 'b'), 'sess-B') is None)
+check('通用兜底：新 session 第 2 次仍放行（沒有把舊 session 的次數疊加進來）',
+      gate_guard.decide_edit(generic_a, edit_input(generic_a, 'b', 'c'), 'sess-B') is None)
+check('通用兜底：新 session 第 3 次才 deny',
+      gate_guard.decide_edit(generic_a, edit_input(generic_a, 'c', 'd'), 'sess-B') is not None)
+check('通用兜底：兩個 session 各自一份計數檔，內容互不影響',
+      tally_snapshot('sess-A') != tally_snapshot('sess-B')
+      and len(tally_snapshot('sess-A')) == 2 and len(tally_snapshot('sess-B')) == 1,
+      ascii(str((tally_snapshot('sess-A'), tally_snapshot('sess-B')))))
+
+# 路徑變體（反斜線／大小寫）要共用同一筆計數，不能各算各的
+generic_c = plain_json(d11, 'path_variant.json')
+gate_guard.decide_edit(generic_c, edit_input(generic_c, 'a', 'b'), 'sess-P')
+gate_guard.decide_edit(generic_c.replace('/', '\\'),
+                       edit_input(generic_c, 'b', 'c'), 'sess-P')
+check('通用兜底：反斜線／大小寫變體共用同一筆計數（第 3 次照樣擋）',
+      gate_guard.decide_edit(generic_c.upper(),
+                             edit_input(generic_c, 'c', 'd'), 'sess-P') is not None)
+check('通用兜底：路徑變體只在計數檔留一個 key（_norm 正規化生效）',
+      len(tally_snapshot('sess-P')) == 1, ascii(str(tally_snapshot('sess-P'))))
+
+# MultiEdit 一次算 1 次（不是照 edits 陣列筆數算）
+# 理由：這條鎖要壓的是 turn 數／cache read token，成本由「工具呼叫次數」決定；
+# 一次送 5 筆的 MultiEdit 正是我們要鼓勵的批次行為，照筆數算等於懲罰正確做法。
+generic_m = plain_json(d11, 'multi_count.json')
+multi5 = multi_input(generic_m, [('a%d' % i, 'b%d' % i) for i in range(5)])
+check('通用兜底 MultiEdit：一次 5 筆 edits 仍只算 1 次 → 第 1 次放行',
+      gate_guard.decide_edit(generic_m, multi5, 'sess-M') is None)
+check('通用兜底 MultiEdit：第 2 次 MultiEdit → 放行',
+      gate_guard.decide_edit(generic_m, multi5, 'sess-M') is None)
+check('通用兜底 MultiEdit：第 3 次 MultiEdit → deny（MultiEdit 與 Edit 併同一筆計數）',
+      gate_guard.decide_edit(generic_m, multi5, 'sess-M') is not None)
+check('通用兜底 MultiEdit：計數是 3 不是 15（證明不是照 edits 筆數算）',
+      tally_snapshot('sess-M').get(gate_guard._norm(generic_m)) == 3,
+      ascii(str(tally_snapshot('sess-M'))))
+
+# 非 .json 一律不管（逐筆改文件／腳本是正常行為）
+for _name in ('notes.md', 'helper.txt', 'tool.py', 'settings.jsonc'):
+    _p = os.path.join(d11, _name)
+    with open(_p, 'w', encoding='utf-8') as f:
+        f.write('x')
+    _allowed = all(
+        gate_guard.decide_edit(_p, edit_input(_p, 'a', 'b'), 'sess-NONJSON') is None
+        for _ in range(5))
+    check(f'通用兜底：非 .json 連改 5 次照樣放行、完全不計數：{_name}',
+          _allowed and not tally_snapshot('sess-NONJSON'))
+
+# session_id 缺席 → 整條規則跳過（沒有「同一輪」的定義，不准用全域計數檔）
+generic_nosess = plain_json(d11, 'no_session.json')
+_tally_files_before = sorted(os.listdir(TALLY_DIR))
+check('通用兜底：沒有 session_id → 連改 10 次都放行（不計數）',
+      all(gate_guard.decide_edit(generic_nosess,
+                                 edit_input(generic_nosess, 'a', 'b')) is None
+          for _ in range(10)))
+check('通用兜底：沒有 session_id → 計數夾內容完全沒變（連檔案都不碰）',
+      sorted(os.listdir(TALLY_DIR)) == _tally_files_before,
+      str(sorted(os.listdir(TALLY_DIR))))
+
+# 計數檔壞掉 → fail-open（從 0 重算，不准誤擋也不准炸）
+generic_corrupt = plain_json(d11, 'corrupt_tally.json')
+gate_guard.decide_edit(generic_corrupt, edit_input(generic_corrupt, 'a', 'b'), 'sess-C')
+gate_guard.decide_edit(generic_corrupt, edit_input(generic_corrupt, 'b', 'c'), 'sess-C')
+with open(gate_guard._edit_tally_file(TALLY_DIR, 'sess-C'), 'w', encoding='utf-8') as f:
+    f.write('{ 這不是合法 JSON')
+check('通用兜底：計數檔內容壞掉 → 從 0 重算（放行，fail-open）',
+      gate_guard.decide_edit(generic_corrupt,
+                             edit_input(generic_corrupt, 'c', 'd'), 'sess-C') is None)
+with open(gate_guard._edit_tally_file(TALLY_DIR, 'sess-C'), 'w', encoding='utf-8') as f:
+    json.dump(['頂層不是 dict'], f)
+check('通用兜底：計數檔頂層不是 dict → 一樣從 0 重算、不炸',
+      gate_guard.decide_edit(generic_corrupt,
+                             edit_input(generic_corrupt, 'd', 'e'), 'sess-C') is None)
+
+# 門檻可用環境變數調整
+generic_thr = plain_json(d11, 'threshold_env.json')
+os.environ['S2_GATE_EDIT_THRESHOLD'] = '5'
+try:
+    _thr_results = [gate_guard.decide_edit(generic_thr,
+                                           edit_input(generic_thr, 'a', 'b'), 'sess-T')
+                    for _ in range(5)]
+    check('通用兜底：門檻改 5 → 前 4 次放行',
+          all(r is None for r in _thr_results[:4]), ascii(str(_thr_results[:4])))
+    check('通用兜底：門檻改 5 → 第 5 次 deny 且訊息寫「上限 5 次」',
+          _thr_results[4] is not None and '上限 5 次' in (_thr_results[4] or ''),
+          ascii(str(_thr_results[4])))
+    os.environ['S2_GATE_EDIT_THRESHOLD'] = '不是數字'
+    check('通用兜底：門檻環境變數不是數字 → 退回預設 3',
+          gate_guard._edit_tally_threshold() == 3)
+    os.environ['S2_GATE_EDIT_THRESHOLD'] = '0'
+    check('通用兜底：門檻環境變數 <1 → 退回預設 3（不准設成「第 0 次就擋」）',
+          gate_guard._edit_tally_threshold() == 3)
+finally:
+    os.environ.pop('S2_GATE_EDIT_THRESHOLD', None)
+check('通用兜底：拿掉環境變數 → 門檻回到預設 3',
+      gate_guard._edit_tally_threshold() == 3)
+
+# ── 優先序：前四條擋下的 Edit 不計數、訊息也不被第 5 條搶走 ──────────────
+_before_lock = dict(tally_snapshot('sess-PRIO'))
+for _ in range(5):
+    _r = gate_guard.decide_edit(entries1, edit_input(entries1, 'a', 'b'), 'sess-PRIO') or ''
+    check('優先序：有 gate lock 的檔案連打 5 次 → 每次都回 lock 訊息（不被次數鎖搶走）',
+          'gate-clear' in _r and '同檔逐筆 Edit 次數上限' not in _r, ascii(_r))
+for _ in range(5):
+    _r = gate_guard.decide_edit(platform_entries,
+                                edit_input(platform_entries, 'a', 'b'), 'sess-PRIO') or ''
+    check('優先序：ENEX entries 連打 5 次 → 每次都回 platform bridge 訊息',
+          's2_platform_bridge.py rewrite-entry' in _r
+          and '同檔逐筆 Edit 次數上限' not in _r, ascii(_r))
+for _ in range(5):
+    _r = gate_guard.decide_edit(ns_entries_nolock,
+                                edit_input(ns_entries_nolock, 'a', 'b'), 'sess-PRIO') or ''
+    check('優先序：NS entries 連打 5 次 → 每次都回自由模式訊息',
+          '自由模式' in _r and '同檔逐筆 Edit 次數上限' not in _r, ascii(_r))
+for _ in range(5):
+    _r = gate_guard.decide_edit(ns_batch, edit_input(
+        ns_batch, '"category": "A/B"', '"category": "A/C"'), 'sess-PRIO') or ''
+    check('優先序：batch 草稿改 category 連打 5 次 → 每次都回 batch 欄位鎖訊息',
+          'batch 草稿' in _r and '同檔逐筆 Edit 次數上限' not in _r, ascii(_r))
+check('優先序：被前四條擋下的檔案完全沒有進計數檔（不重複計數）',
+      tally_snapshot('sess-PRIO') == _before_lock,
+      ascii(str(tally_snapshot('sess-PRIO'))))
+
+# 但 batch 草稿改「其他欄位」是被第 4 條放行的，就該進計數、第 3 次由第 5 條接手
+_batch_entry_edit = edit_input(ns_batch, '"entry": "a"', '"entry": "b"')
+check('銜接：batch 草稿改 entry（第 4 條放行）第 1 次 → 放行',
+      gate_guard.decide_edit(ns_batch, _batch_entry_edit, 'sess-HANDOFF') is None)
+check('銜接：batch 草稿改 entry 第 2 次 → 放行',
+      gate_guard.decide_edit(ns_batch, _batch_entry_edit, 'sess-HANDOFF') is None)
+_handoff = gate_guard.decide_edit(ns_batch, _batch_entry_edit, 'sess-HANDOFF') or ''
+check('銜接：batch 草稿改 entry 第 3 次 → 由第 5 條（通用次數上限）接手擋下',
+      '同檔逐筆 Edit 次數上限' in _handoff and 'batch 草稿' not in _handoff,
+      ascii(_handoff))
+
+# ── 計數檔落點與清理 ────────────────────────────────────────────────
+_tally_basenames = {os.path.basename(gate_guard._edit_tally_file(TALLY_DIR, s))
+                    for s in ('sess-A', 'sess-B', 'sess-M', 'sess-P')}
+check('計數檔：落在 S2_GATE_TALLY_DIR，不汙染目標檔案所在目錄（雲端同步夾）',
+      os.path.isdir(TALLY_DIR)
+      and _tally_basenames <= set(os.listdir(TALLY_DIR))
+      and not (_tally_basenames & set(os.listdir(d11))),
+      str(sorted(os.listdir(d11))))
+check('計數檔：寫完不留 .tmp 暫存檔（os.replace 原子換名）',
+      not [n for n in os.listdir(TALLY_DIR) if n.endswith('.tmp')],
+      str(sorted(os.listdir(TALLY_DIR))))
+
+_stale = os.path.join(TALLY_DIR, 'stale-session-0000000000.json')
+with open(_stale, 'w', encoding='utf-8') as f:
+    json.dump({'x': 1}, f)
+_old = time.time() - (25 * 60 * 60)
+os.utime(_stale, (_old, _old))
+_fresh_keep = gate_guard._edit_tally_file(TALLY_DIR, 'sess-A')
+check('前置：過期計數檔與現役計數檔都存在',
+      os.path.exists(_stale) and os.path.exists(_fresh_keep))
+generic_sweep = plain_json(d11, 'sweep_trigger.json')
+gate_guard.decide_edit(generic_sweep, edit_input(generic_sweep, 'a', 'b'), 'sess-SWEEP')
+check('計數檔清理：新 session 第一次建檔時順手刪掉超過 24 小時的舊計數檔',
+      not os.path.exists(_stale))
+check('計數檔清理：沒過期的其他 session 計數檔不會被誤刪',
+      os.path.exists(_fresh_keep))
+
+# ── subprocess 全流程：真的走一次 stdin→stdout hook 協議 ────────────────
+generic_sub = plain_json(d11, 'subprocess_tally.json')
+
+
+def run_generic(session_id):
+    return run_hook({
+        'hook_event_name': 'PreToolUse', 'tool_name': 'Edit',
+        'session_id': session_id,
+        'tool_input': edit_input(generic_sub, 'a', 'b'),
+    })
+
+
+out_g1, code_g1 = run_generic('sess-SUB')
+out_g2, _ = run_generic('sess-SUB')
+out_g3, code_g3 = run_generic('sess-SUB')
+check('subprocess：帶 session_id 的第 1 次 Edit → stdout 全空（放行）',
+      out_g1 == '' and code_g1 == 0, repr(out_g1))
+check('subprocess：第 2 次 Edit → 仍放行', out_g2 == '', repr(out_g2))
+try:
+    generic_deny_payload = json.loads(out_g3)
+    generic_deny_ok = (
+        generic_deny_payload.get('hookSpecificOutput', {}).get('permissionDecision') == 'deny'
+        and generic_deny_payload.get('hookSpecificOutput', {}).get('hookEventName') == 'PreToolUse')
+except (ValueError, AttributeError):
+    generic_deny_ok = False
+check('subprocess：第 3 次 Edit → 合法 deny JSON（exit 0）',
+      code_g3 == 0 and generic_deny_ok, out_g3)
+check('subprocess：通用兜底 deny 輸出是 ASCII 安全（ensure_ascii，cp950 主控台不炸）',
+      all(ord(c) < 128 for c in out_g3.strip()) if out_g3.strip() else False,
+      repr(out_g3))
+out_g_other, _ = run_generic('sess-SUB-OTHER')
+check('subprocess：換一個 session_id → 同一份檔案重新從第 1 次算起（放行）',
+      out_g_other == '', repr(out_g_other))
+
+# MultiEdit 走 subprocess 也要併進同一筆計數
+generic_sub_multi = plain_json(d11, 'subprocess_multi.json')
+for _i in range(2):
+    run_hook({'hook_event_name': 'PreToolUse', 'tool_name': 'MultiEdit',
+              'session_id': 'sess-SUBM',
+              'tool_input': multi_input(generic_sub_multi, [('a', 'b'), ('c', 'd')])})
+out_sm, _ = run_hook({'hook_event_name': 'PreToolUse', 'tool_name': 'Edit',
+                      'session_id': 'sess-SUBM',
+                      'tool_input': edit_input(generic_sub_multi, 'e', 'f')})
+try:
+    subm_deny = (json.loads(out_sm).get('hookSpecificOutput', {})
+                 .get('permissionDecision') == 'deny')
+except (ValueError, AttributeError):
+    subm_deny = False
+check('subprocess：MultiEdit×2 ＋ Edit×1 → 第 3 次被擋（兩種工具併同一筆計數）',
+      subm_deny, out_sm)
+
+# PostToolUse／Write 不會被第 5 條計數（Write 本來就是建議路徑）
+generic_write = plain_json(d11, 'write_not_counted.json')
+for _i in range(5):
+    run_hook({'hook_event_name': 'PostToolUse', 'tool_name': 'Write',
+              'session_id': 'sess-WRITE',
+              'tool_input': {'file_path': generic_write, 'content': '{}'},
+              'tool_response': {'success': True}})
+check('Write 不計數：PostToolUse Write×5 後，Edit 仍從第 1 次算起（放行）',
+      gate_guard.decide_edit(generic_write,
+                             edit_input(generic_write, 'a', 'b'), 'sess-WRITE') is None)
+
+# 內部函式邊界
+check('通用兜底內部函式：空路徑 → None',
+      gate_guard._generic_edit_reason('', 'sess-X') is None)
+check('通用兜底內部函式：session_id 空字串 → None',
+      gate_guard._generic_edit_reason(generic_a, '') is None)
+
+# 計數機制自己壞掉（磁碟滿、權限、目錄被刪…）→ 不准擋、不准炸。
+# 直接把 `_bump_edit_tally` 換成一定會拋例外的版本，確保走的是 except 分支，
+# 而不是「剛好次數還沒到門檻」這種假通過。
+_real_bump = gate_guard._bump_edit_tally
+
+
+def _boom(*_a, **_kw):
+    raise OSError('模擬計數檔寫入失敗')
+
+
+gate_guard._bump_edit_tally = _boom
+try:
+    _failopen = [gate_guard._generic_edit_reason(generic_a, 'sess-A') for _ in range(5)]
+    check('通用兜底：計數機制落地失敗（丟例外）→ 連 5 次都放行，不擋也不炸',
+          all(r is None for r in _failopen), ascii(str(_failopen)))
+    check('通用兜底：計數機制壞掉時 decide_edit 整體仍正常回傳（不影響前四條）',
+          gate_guard.decide_edit(entries1, edit_input(entries1, 'a', 'b'),
+                                 'sess-A') is not None)
+finally:
+    gate_guard._bump_edit_tally = _real_bump
+check('通用兜底：還原後計數機制照常運作（sess-A 的 generic_notes.json 仍在門檻上）',
+      gate_guard._generic_edit_reason(generic_a, 'sess-A') is not None)
+check('通用兜底內部函式：session id 清洗後撞名也不會共用計數檔（sha1 短碼區隔）',
+      gate_guard._edit_tally_file(TALLY_DIR, 'a/b')
+      != gate_guard._edit_tally_file(TALLY_DIR, 'a:b'),
+      gate_guard._edit_tally_file(TALLY_DIR, 'a/b'))
 
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)

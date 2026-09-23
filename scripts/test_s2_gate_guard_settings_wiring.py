@@ -77,20 +77,25 @@ check('.claude/settings.json：既有 Write|Edit|MultiEdit post-hook（post-edit
 check('.claude/settings.json：既有 Bash post-hook（post-bash）沒被動到',
       any('post-bash' in c for c in hooks_for(c_post, 'Bash')))
 
+# 2026-09-23：A41 第四種攔截（通用次數兜底）擺進 s2_gate_guard.py 後，
+# 使用者裁示「只留 S2 掃帶用」——.claude/settings.json 是互動 session／子代理
+# 共用設定，第四／五條規則不分檔名，會連使用者自己在這個 repo 開的互動式
+# session 也一起管到（誤傷合法的手動連續小修正）。已把 s2_gate_guard.py 從
+# .claude/settings.json 的 PreToolUse Edit|MultiEdit 與 PostToolUse Write
+# 兩處拿掉，只留在 S2 launcher 的 `--settings s2_guard_settings.json` 裡，
+# 互動式 session 完全不受影響。這裡刻意**取代**原本「兩處都要指到
+# s2_gate_guard.py」的斷言，新期望值正是本次要改掉的行為，不是回歸破壞。
 c_edit_cmds = hooks_for(c_pre, 'Edit|MultiEdit')
-check('.claude/settings.json：PreToolUse 的 Edit|MultiEdit matcher 指到 s2_gate_guard.py（跟既有 pre-edit 那組分開，不互相覆蓋）',
-      any('s2_gate_guard.py' in c for c in c_edit_cmds), str(c_edit_cmds))
+check('.claude/settings.json：PreToolUse 的 Edit|MultiEdit matcher **不再**指到 s2_gate_guard.py（只留 S2 掃帶用，互動式 session 不受影響）',
+      not any('s2_gate_guard.py' in c for c in c_edit_cmds), str(c_edit_cmds))
 
 c_post_write_cmds = hooks_for(c_post, 'Write')
-check('.claude/settings.json：PostToolUse 新增獨立 Write matcher 指到 s2_gate_guard.py',
-      any('s2_gate_guard.py' in c for c in c_post_write_cmds), str(c_post_write_cmds))
+check('.claude/settings.json：PostToolUse 沒有獨立 Write matcher 指到 s2_gate_guard.py（同上）',
+      not any('s2_gate_guard.py' in c for c in c_post_write_cmds), str(c_post_write_cmds))
 
-# 兩份都指到同一支腳本（唯一實作、不要分岔成兩份邏輯）
-check('兩份 settings.json 的 Edit deny hook 指到同一支腳本檔案（絕對路徑字串相同）',
-      edit_cmds and c_edit_cmds and edit_cmds[0].strip().endswith('s2_gate_guard.py')
-      and c_edit_cmds[0].strip().endswith('s2_gate_guard.py')
-      and edit_cmds[0].split('python', 1)[-1].strip() == c_edit_cmds[0].split('python', 1)[-1].strip(),
-      f'{edit_cmds} vs {c_edit_cmds}')
+# s2_guard_settings.json（S2 掃帶專用）仍要指到，且路徑正確——唯一實作沒有分岔
+check('s2_guard_settings.json 的 Edit deny hook 指到真實存在的 s2_gate_guard.py',
+      edit_cmds and edit_cmds[0].strip().endswith('s2_gate_guard.py'), str(edit_cmds))
 
 # 腳本本身真的存在（設定檔指到的路徑不是空話）
 GATE_GUARD_PATH = os.path.join(REPO_ROOT, 'scripts', 's2_gate_guard.py')
