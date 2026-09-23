@@ -598,5 +598,21 @@ check('_find_lock_for_path：空字串路徑 → None', gate_guard._find_lock_fo
 check('_find_lock_for_path：路徑所在目錄不存在 → None',
       gate_guard._find_lock_for_path(os.path.join(TMP, 'no_such_dir_xyz', 'x.json')) is None)
 
+# ── 既有缺陷修復：*_gate_lock.json 頂層不是 dict（例如被寫成陣列）不炸 ──
+d_badlock = os.path.join(TMP, 'badlock_notdict')
+os.makedirs(d_badlock, exist_ok=True)
+target_badlock = os.path.join(d_badlock, 'ns_entries_1100.json')
+with open(target_badlock, 'w', encoding='utf-8') as f:
+    f.write('{}')
+with open(os.path.join(d_badlock, 'ns_gate_lock.json'), 'w', encoding='utf-8') as f:
+    json.dump(['不是 dict，是陣列'], f)
+try:
+    result_badlock = gate_guard._find_lock_for_path(target_badlock)
+    check('_find_lock_for_path：gate_lock.json 頂層不是 dict → 略過不炸、回 None',
+          result_badlock is None)
+except AttributeError as e:
+    check('_find_lock_for_path：gate_lock.json 頂層不是 dict → 略過不炸、回 None',
+          False, f'炸了：{e!r}')
+
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
 sys.exit(0 if all(results) else 1)

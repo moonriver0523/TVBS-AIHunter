@@ -352,6 +352,8 @@ def _find_lock_for_path(file_path):
                 lock = json.load(f)
         except (OSError, ValueError):
             continue
+        if not isinstance(lock, dict):
+            continue
         entries_path = lock.get('entries_path')
         if entries_path and _norm(entries_path) == target:
             return lock_path, lock
