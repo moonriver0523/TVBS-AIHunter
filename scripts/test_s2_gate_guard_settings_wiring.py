@@ -53,8 +53,8 @@ bash_cmds = hooks_for(pre, 'Bash|PowerShell|Write')
 check('s2_guard_settings.json：既有 D9 bash guard matcher 沒被動到',
       any('s2_bash_guard.py' in c for c in bash_cmds), str(bash_cmds))
 
-edit_cmds = hooks_for(pre, 'Edit')
-check('s2_guard_settings.json：PreToolUse 新增 Edit matcher 指到 s2_gate_guard.py',
+edit_cmds = hooks_for(pre, 'Edit|MultiEdit')
+check('s2_guard_settings.json：PreToolUse 新增 Edit|MultiEdit matcher 指到 s2_gate_guard.py',
       any('s2_gate_guard.py' in c for c in edit_cmds), str(edit_cmds))
 
 post_write_cmds = hooks_for(post, 'Write')
@@ -77,8 +77,8 @@ check('.claude/settings.json：既有 Write|Edit|MultiEdit post-hook（post-edit
 check('.claude/settings.json：既有 Bash post-hook（post-bash）沒被動到',
       any('post-bash' in c for c in hooks_for(c_post, 'Bash')))
 
-c_edit_cmds = hooks_for(c_pre, 'Edit')
-check('.claude/settings.json：PreToolUse 新增獨立 Edit matcher 指到 s2_gate_guard.py（跟既有 Write|Edit|MultiEdit 那組分開，不互相覆蓋）',
+c_edit_cmds = hooks_for(c_pre, 'Edit|MultiEdit')
+check('.claude/settings.json：PreToolUse 的 Edit|MultiEdit matcher 指到 s2_gate_guard.py（跟既有 pre-edit 那組分開，不互相覆蓋）',
       any('s2_gate_guard.py' in c for c in c_edit_cmds), str(c_edit_cmds))
 
 c_post_write_cmds = hooks_for(c_post, 'Write')

@@ -147,7 +147,11 @@ param(
     # 2026-09-10 使用者一次性指定：0910-2000 手動測試輪撞429不要走A（自動改Sonnet），
     # 改由外部（claudeg3 session）接手。預設關閉（正常排程輪照舊用A，不受影響），
     # 手動測試時明傳這個旗標才會跳過A的Claude補跑，只留診斷紀錄。
-    [switch]$NoAutoClaudeFallback
+    [switch]$NoAutoClaudeFallback,
+
+    # A41 session 拆分實驗。預設關閉；不接排程。只有明傳時才載入 round manifest，
+    # 並把三站與交換平台拆成兩個循序 Claude session。
+    [switch]$SplitSession
 )
 
 $ErrorActionPreference = 'Stop'
@@ -531,6 +535,22 @@ try {
         Write-Host "*** TestMode：每站上限 $TestLimit 則 ***"
     }
 
+    # A41：固定只在原本就是五站的輪次拆。01:00／20:00 沒有交換平台工作，
+    # 開第二個 session 只有固定成本，且會讓「Split」名不副實，所以明確拒絕。
+    $splitSessions = @()
+    if ($SplitSession) {
+        if ($hhmm -notin @('0430', '0700', '1100', '1700', '2200')) {
+            throw "-SplitSession 只適用五站輪（04:30／07:00／11:00／17:00／22:00）；本輪是 $hhmm"
+        }
+        if ($EffectiveProvider -ne 'claude') {
+            throw "-SplitSession 目前只支援 Claude provider；請明傳 -Provider claude"
+        }
+        $splitSessions = @(
+            [pscustomobject]@{ Id = 'core'; Sites = 'NS,AP,RT' },
+            [pscustomobject]@{ Id = 'platform'; Sites = 'ENEX,ABC' }
+        )
+    }
+
     # ── D7（2026-08-13 使用者裁定）：claude 的工作目錄直接設成本班 scratch 夾 ──
     # R13（暫存檔先落 repo 根再搬）規則寫進 13d §1 後首輪照犯、連四輪，證明規則文字
     # 管不住相對路徑的落點。cwd 改到 scratch 夾後，agent 隨手寫的相對路徑檔案自動落對。
@@ -595,6 +615,15 @@ try {
     # 手動清過兩次。驗測試設定時 DryRun 要跑很多次，這條不修就等於紀錄檔報廢。
     if ($DryRun) {
         Write-Host "--- DryRun [$Checkpoint] run_id=$RunId checkpoint_label=$CheckpointLabel provider=$EffectiveProvider model=$Model effort=$Effort NoToolBan=$NoToolBan NoBashGuard=$NoBashGuard NoMinBoot=$NoMinBoot cwd=$scratchCwd（不寫 _輪次紀錄）---"
+        if ($SplitSession) {
+            $dryManifest = Join-Path $LogDir "round-$Checkpoint-$RunId.json"
+            Write-Host "SplitSession：不寫 manifest；正式執行時依序規劃："
+            Write-Host "python s2_round_manifest.py init --manifest $dryManifest --session core:NS,AP,RT --session platform:ENEX,ABC"
+            foreach ($session in $splitSessions) {
+                Write-Host "[$($session.Id)] start-session → claude -p（限 $($session.Sites)）→ finish-session"
+            }
+            Write-Host "assert-complete → start-finalize → set-top/set-run → s2_render.py → finish-finalize"
+        }
         Write-Host "組出來的 claude 參數："
         Write-Host ($claudeArgs -join ' ')
         Write-Host "以下是會送出的 prompt 前 400 字："
@@ -602,8 +631,12 @@ try {
         exit 0
     }
 
-    $null = Write-Run -Event START -Detail "model=$Model`teffort=$Effort`tprovider=$EffectiveProvider$(if ($TestMode) { " TestMode(上限$TestLimit)" })"
-    Write-Host "START [$Checkpoint] run_id=$RunId provider=$EffectiveProvider model=$Model effort=$Effort log=$runLog"
+    $null = Write-Run -Event START -Detail "model=$Model`teffort=$Effort`tprovider=$EffectiveProvider$(if ($TestMode) { " TestMode(上限$TestLimit)" })$(if ($SplitSession) { ' SplitSession' })"
+    if ($SplitSession) {
+        Write-Host "START [$Checkpoint] run_id=$RunId provider=$EffectiveProvider model=$Model effort=$Effort logs=掃帶log-$Checkpoint-$RunId-{core,platform}.txt"
+    } else {
+        Write-Host "START [$Checkpoint] run_id=$RunId provider=$EffectiveProvider model=$Model effort=$Effort log=$runLog"
+    }
 
     # Provider=gemini：dot-source 借值＋確保本機 proxy 在監聽，只設定這個
     # process scope 的 ANTHROPIC_* 四個環境變數。金鑰本身不在這支腳本裡，
@@ -648,8 +681,111 @@ try {
         #    不再因 set-top 收工才下而記到上一輪。
         $env:S2_CHECKPOINT = $Checkpoint
         $t0 = Get-Date
-        claude @claudeArgs *> $runLog
-        $code = $LASTEXITCODE
+        if ($SplitSession) {
+            $manifestPath = Join-Path $LogDir "round-$Checkpoint-$RunId.json"
+            $stateForSplit = if ($liveState) { $liveState.FullName } else { $null }
+            if (-not $stateForSplit) { throw 'SplitSession 找不到本班狀態檔，拒絕開工' }
+            $shiftBase = [System.IO.Path]::GetFileName($stateForSplit).Split('-')[0]
+            $outputForSplit = Join-Path $StateDir "$shiftBase`晚班交接.txt"
+
+            $initArgs = @(
+                "$PSScriptRoot\s2_round_manifest.py", 'init',
+                '--manifest', $manifestPath, '--checkpoint', $Checkpoint,
+                '--run-id', $RunId, '--state-file', $stateForSplit,
+                '--output-file', $outputForSplit,
+                '--session', 'core:NS,AP,RT', '--session', 'platform:ENEX,ABC'
+            )
+            & python -X utf8 @initArgs
+            if ($LASTEXITCODE -ne 0) { throw "建立 round manifest 失敗（離開碼 $LASTEXITCODE）" }
+
+            foreach ($session in $splitSessions) {
+                $sessionLog = Join-Path $LogDir "掃帶log-$Checkpoint-$RunId-$($session.Id).txt"
+                $attemptOutput = & python -X utf8 "$PSScriptRoot\s2_round_manifest.py" start-session `
+                    --manifest $manifestPath --session-id $session.Id --pid $PID
+                if ($LASTEXITCODE -ne 0) { throw "session $($session.Id) 無法開始" }
+                $attemptId = [string]($attemptOutput | Select-Object -First 1)
+
+                $scopePrompt = $prompt + $(if ($session.Id -eq 'core') { @"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【A41 分段執行契約：core】
+本次只處理 NS → AP → RT。禁止掃描、擷取或整併 ENEX／ABC；禁止執行 D23；
+禁止 set-top、set-run、s2_render.py 與任何全輪收工／最終通知。三站清單對帳仍須完成，
+資料照常以 checkpoint=$Checkpoint、run_id=$RunId 入庫。完成三站與對帳後立即正常結束。
+此契約覆蓋上方通用 prompt 中要求同一 session 做完五站與收工的段落。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"@ } else { @"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【A41 分段執行契約：platform】
+core 已完成。本次只處理 ENEX → ABC；禁止重掃 NS／AP／RT，禁止重跑三站清單對帳。
+交換平台照 V5-1／V7-1 與 13c1／13c1b 正常擷取、整併、lint；完成後做瀏覽器收工硬步驟
+（含最後觸碰 NS landing／ABC cmspage）及 D23 dry-run。禁止 set-top、set-run、
+s2_render.py 與最終通知；殼層會在兩段 manifest 都成功後統一 finalize。
+資料照常以 checkpoint=$Checkpoint、run_id=$RunId 入庫。此契約覆蓋上方通用 prompt
+中要求重做三站或由 agent render／收工的段落。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"@ })
+                $sessionArgs = @($claudeArgs)
+                $sessionArgs[1] = $scopePrompt
+                $sessionCode = 1
+                $sessionError = $null
+                try {
+                    claude @sessionArgs *> $sessionLog
+                    $sessionCode = $LASTEXITCODE
+                } catch {
+                    $sessionError = $_.Exception.Message
+                }
+
+                $finishArgs = @(
+                    "$PSScriptRoot\s2_round_manifest.py", 'finish-session',
+                    '--manifest', $manifestPath, '--session-id', $session.Id,
+                    '--attempt-id', $attemptId, '--exit-code', $sessionCode,
+                    '--log', $sessionLog
+                )
+                if ($sessionError) { $finishArgs += @('--error', $sessionError) }
+                & python -X utf8 @finishArgs
+                if ($LASTEXITCODE -ne 0) { throw "session $($session.Id) manifest 收尾失敗" }
+                if ($sessionCode -ne 0 -or $sessionError) {
+                    throw "session $($session.Id) 失敗（離開碼 $sessionCode）：$sessionError"
+                }
+            }
+
+            & python -X utf8 "$PSScriptRoot\s2_round_manifest.py" assert-complete --manifest $manifestPath
+            if ($LASTEXITCODE -ne 0) { throw '必要 session 未全部完成；拒絕 render' }
+            & python -X utf8 "$PSScriptRoot\s2_round_manifest.py" start-finalize --manifest $manifestPath
+            if ($LASTEXITCODE -ne 0) { throw 'manifest 無法進入 finalizing' }
+
+            $finalCode = 1
+            $finalError = $null
+            try {
+                & python -X utf8 "$PSScriptRoot\s2_state.py" --file $stateForSplit set-top checkpoint $Checkpoint
+                if ($LASTEXITCODE -ne 0) { throw 'set-top 失敗' }
+                $setRunArgs = @('--file', $stateForSplit, 'set-run', '--checkpoint', $Checkpoint, '--run-id', $RunId)
+                if ($CheckpointLabel) { $setRunArgs += @('--checkpoint-label', $CheckpointLabel) }
+                & python -X utf8 "$PSScriptRoot\s2_state.py" @setRunArgs
+                if ($LASTEXITCODE -ne 0) { throw 'set-run 失敗' }
+                & python -X utf8 "$PSScriptRoot\s2_render.py" --file $stateForSplit --out $outputForSplit
+                $finalCode = $LASTEXITCODE
+                if ($finalCode -ne 0) { throw "s2_render.py 失敗（離開碼 $finalCode）" }
+            } catch {
+                $finalError = $_.Exception.Message
+            }
+            $finishFinalArgs = @(
+                "$PSScriptRoot\s2_round_manifest.py", 'finish-finalize',
+                '--manifest', $manifestPath, '--exit-code', $finalCode,
+                '--artifact', $outputForSplit
+            )
+            if ($finalError) { $finishFinalArgs += @('--error', $finalError) }
+            & python -X utf8 @finishFinalArgs
+            if ($LASTEXITCODE -ne 0) { throw 'manifest finalize 記錄失敗' }
+            if ($finalCode -ne 0 -or $finalError) { throw "SplitSession finalize 失敗：$finalError" }
+            $runLog = Join-Path $LogDir "掃帶log-$Checkpoint-$RunId-platform.txt"
+            $code = 0
+        } else {
+            claude @claudeArgs *> $runLog
+            $code = $LASTEXITCODE
+        }
     } finally {
         if ($geminiEnvSet) {
             Remove-Item Env:\ANTHROPIC_BASE_URL      -ErrorAction SilentlyContinue
@@ -852,7 +988,7 @@ try {
         # 下一輪數字變好會被誤算成腳本的功勞（0817 的 13c §1a 澄清就差點如此）。
         $metricsArgs = @('--checkpoint', $Checkpoint,
                          '--run-id', $RunId,
-                         '--flags', "model=$Model;effort=$Effort;TestMode=$([bool]$TestMode);NoToolBan=$([bool]$NoToolBan);NoBashGuard=$([bool]$NoBashGuard);NoMinBoot=$([bool]$NoMinBoot)")
+                         '--flags', "model=$Model;effort=$Effort;TestMode=$([bool]$TestMode);NoToolBan=$([bool]$NoToolBan);NoBashGuard=$([bool]$NoBashGuard);NoMinBoot=$([bool]$NoMinBoot)$(if ($SplitSession) { ';SplitSession=True' })")
         if ($CheckpointLabel) { $metricsArgs += @('--checkpoint-label', $CheckpointLabel) }
         if ($scratchCwd) {
             $sanitized = $scratchCwd -replace '[^a-zA-Z0-9]', '-'
