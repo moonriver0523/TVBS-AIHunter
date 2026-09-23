@@ -1,4 +1,6 @@
 import locale
+import hashlib
+import json
 import subprocess
 import tempfile
 import unittest
@@ -92,6 +94,70 @@ class SplitSessionLauncherTests(unittest.TestCase):
             "$sessionArgs[1] = $scopePrompt",
         ]:
             self.assertIn(contract, source)
+
+    def test_resume_dry_run_uses_manifest_identity_without_mutating_it(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        state = root / "0923-s2-state.json"
+        state.write_text('{"items": [], "reconcile_log": {}}', encoding="utf-8")
+        manifest = root / "round.json"
+        payload = {
+            "schema_version": 1, "checkpoint": "0923-1700",
+            "run_id": "00000000-0000-4000-8000-000000000041",
+            "mode": "split-session-shadow", "status": "failed", "revision": 1,
+            "created_at": "2026-09-23T17:00:00+08:00",
+            "updated_at": "2026-09-23T17:01:00+08:00",
+            "state_file": str(state), "output_file": str(root / "handover.txt"),
+            "sessions": [
+                {"id": "core", "order": 0, "sites": ["NS", "AP", "RT"],
+                 "required": True, "status": "failed", "attempts": [],
+                 "completed_at": None},
+                {"id": "platform", "order": 1, "sites": ["ENEX", "ABC"],
+                 "required": True, "status": "pending", "attempts": [],
+                 "completed_at": None},
+            ],
+            "finalization": {"status": "pending", "started_at": None,
+                             "completed_at": None, "exit_code": None,
+                             "artifacts": [], "error": None},
+        }
+        manifest.write_text(json.dumps(payload), encoding="utf-8")
+        before = hashlib.sha256(manifest.read_bytes()).hexdigest()
+        args = [
+            "pwsh", "-NoProfile", "-File", str(LAUNCHER), "-DryRun",
+            "-ResumeManifest", str(manifest), "-Provider", "claude",
+            "-StateDir", str(root), "-LogDir", str(root / "logs"),
+            "-TelemetryDir", str(root / "telemetry"),
+            "-LockFile", str(root / "scan.lock"),
+        ]
+        result = subprocess.run(
+            args, cwd=HERE.parent, text=True, encoding=_CONSOLE_ENCODING, errors="replace",
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30,
+        )
+        self.assertEqual(0, result.returncode, result.stdout)
+        self.assertIn("prepare-resume --manifest", result.stdout)
+        self.assertNotIn("s2_round_manifest.py init", result.stdout)
+        self.assertEqual(before, hashlib.sha256(manifest.read_bytes()).hexdigest())
+
+    def test_split_gemini_rejection_explains_429_design_gap(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        (root / "state").mkdir()
+        args = [
+            "pwsh", "-NoProfile", "-File", str(LAUNCHER), "-DryRun",
+            "-SplitSession", "-Checkpoint", "0923-1700", "-RunId", str(uuid.uuid4()),
+            "-Provider", "gemini", "-StateDir", str(root / "state"),
+            "-LogDir", str(root / "logs"), "-TelemetryDir", str(root / "telemetry"),
+            "-LockFile", str(root / "scan.lock"),
+        ]
+        result = subprocess.run(
+            args, cwd=HERE.parent, text=True, encoding=_CONSOLE_ENCODING, errors="replace",
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30,
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("429", result.stdout)
+        self.assertIn("刻意限定 Claude", result.stdout)
 
 
 if __name__ == "__main__":

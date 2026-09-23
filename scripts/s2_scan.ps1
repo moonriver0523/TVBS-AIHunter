@@ -151,11 +151,45 @@ param(
 
     # A41 session 拆分實驗。預設關閉；不接排程。只有明傳時才載入 round manifest，
     # 並把三站與交換平台拆成兩個循序 Claude session。
-    [switch]$SplitSession
+    [switch]$SplitSession,
+
+    # 手動接續一份 split round manifest。此旗標本身等同開啟 SplitSession；只重跑
+    # pending/failed session，不重做 completed session。若舊 PID 仍活著會拒絕接手。
+    [string]$ResumeManifest,
+
+    # 只有操作者確認舊 process 已失控、但 PID 判活仍命中時才用。預設不搶活行程。
+    [switch]$ForceResume
 )
 
 $ErrorActionPreference = 'Stop'
 $script:TerminalWritten = $false
+
+$resumeData = $null
+if ($ResumeManifest) {
+    if (-not (Test-Path -LiteralPath $ResumeManifest -PathType Leaf)) {
+        throw "找不到要 resume 的 manifest：$ResumeManifest"
+    }
+    $ResumeManifest = (Resolve-Path -LiteralPath $ResumeManifest).Path
+    $resumeData = Get-Content -LiteralPath $ResumeManifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($Checkpoint -and $Checkpoint -ne [string]$resumeData.checkpoint) {
+        throw "-Checkpoint $Checkpoint 與 resume manifest 的 $($resumeData.checkpoint) 不一致"
+    }
+    if ($RunId -and $RunId -ne [string]$resumeData.run_id) {
+        throw "-RunId 與 resume manifest 的 run_id 不一致"
+    }
+    $Checkpoint = [string]$resumeData.checkpoint
+    $RunId = [string]$resumeData.run_id
+    $resumeShape = @($resumeData.sessions | ForEach-Object {
+        "$($_.id):$(@($_.sites) -join ',')"
+    }) -join ';'
+    if ($resumeShape -ne 'core:NS,AP,RT;platform:ENEX,ABC') {
+        throw "resume manifest 的 session 拓撲不是 A41 固定契約：$resumeShape"
+    }
+    $SplitSession = $true
+}
+if ($ForceResume -and -not $ResumeManifest) {
+    throw '-ForceResume 必須搭配 -ResumeManifest'
+}
 
 if (-not $Checkpoint) { $Checkpoint = Get-Date -Format 'MMdd-HHmm' }
 if ([string]::IsNullOrWhiteSpace($CheckpointLabel) -and $Checkpoint -match '^(\d{4}-\d{4})-(.+)$') {
@@ -543,7 +577,7 @@ try {
             throw "-SplitSession 只適用五站輪（04:30／07:00／11:00／17:00／22:00）；本輪是 $hhmm"
         }
         if ($EffectiveProvider -ne 'claude') {
-            throw "-SplitSession 目前只支援 Claude provider；請明傳 -Provider claude"
+            throw "-SplitSession/-ResumeManifest 是刻意限定 Claude 的實驗路徑；Gemini 尚未實作『每一分段各自遇 429 時的 fallback／重試歸屬』，請改傳 -Provider claude"
         }
         $splitSessions = @(
             [pscustomobject]@{ Id = 'core'; Sites = 'NS,AP,RT' },
@@ -559,14 +593,18 @@ try {
     #      每天換資料夾——所以收工量測 hook 要帶 --transcript-dir 明講（見下方）。
     #   2. MCP 已用 --mcp-config 明講（不看 cwd 臉色）、權限走 bypassPermissions、
     #      repo 用 --add-dir 掛著，agent 呼叫 repo 腳本本來就慣用絕對路徑或先 cd。
-    $liveState = Get-ChildItem $StateDir -Filter '*-s2-state.json' -File -ErrorAction SilentlyContinue |
-                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $liveState = if ($resumeData -and $resumeData.state_file) {
+        Get-Item -LiteralPath ([string]$resumeData.state_file) -ErrorAction Stop
+    } else {
+        Get-ChildItem $StateDir -Filter '*-s2-state.json' -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    }
     $scratchCwd = $null
     if ($liveState) {
         $shiftMmdd = $liveState.Name.Substring(0, 4)
         $sy = (Get-Date).Year
         if ($shiftMmdd -gt (Get-Date -Format 'MMdd')) { $sy-- }   # 跨年（0101 輪看到 1231）
-        $scratchCwd = Join-Path $StateDir "$sy$shiftMmdd"
+        $scratchCwd = Join-Path $liveState.DirectoryName "$sy$shiftMmdd"
         New-Item -ItemType Directory -Force -Path $scratchCwd | Out-Null
         Set-Location -LiteralPath $scratchCwd
     }
@@ -616,9 +654,12 @@ try {
     if ($DryRun) {
         Write-Host "--- DryRun [$Checkpoint] run_id=$RunId checkpoint_label=$CheckpointLabel provider=$EffectiveProvider model=$Model effort=$Effort NoToolBan=$NoToolBan NoBashGuard=$NoBashGuard NoMinBoot=$NoMinBoot cwd=$scratchCwd（不寫 _輪次紀錄）---"
         if ($SplitSession) {
-            $dryManifest = Join-Path $LogDir "round-$Checkpoint-$RunId.json"
-            Write-Host "SplitSession：不寫 manifest；正式執行時依序規劃："
-            Write-Host "python s2_round_manifest.py init --manifest $dryManifest --session core:NS,AP,RT --session platform:ENEX,ABC"
+            $dryManifest = if ($ResumeManifest) { $ResumeManifest } else { Join-Path $LogDir "round-$Checkpoint-$RunId.json" }
+            Write-Host "SplitSession：DryRun 不寫 manifest；正式執行時依序規劃："
+            if ($ResumeManifest) { Write-Host "prepare-resume --manifest $dryManifest$(if ($ForceResume) { ' --force' })" }
+            if (-not $ResumeManifest) {
+                Write-Host "python s2_round_manifest.py init --manifest $dryManifest --session core:NS,AP,RT --session platform:ENEX,ABC"
+            }
             foreach ($session in $splitSessions) {
                 Write-Host "[$($session.Id)] start-session → claude -p（限 $($session.Sites)）→ finish-session"
             }
@@ -682,23 +723,40 @@ try {
         $env:S2_CHECKPOINT = $Checkpoint
         $t0 = Get-Date
         if ($SplitSession) {
-            $manifestPath = Join-Path $LogDir "round-$Checkpoint-$RunId.json"
+            $manifestPath = if ($ResumeManifest) { $ResumeManifest } else { Join-Path $LogDir "round-$Checkpoint-$RunId.json" }
             $stateForSplit = if ($liveState) { $liveState.FullName } else { $null }
             if (-not $stateForSplit) { throw 'SplitSession 找不到本班狀態檔，拒絕開工' }
             $shiftBase = [System.IO.Path]::GetFileName($stateForSplit).Split('-')[0]
-            $outputForSplit = Join-Path $StateDir "$shiftBase`晚班交接.txt"
+            $outputForSplit = if ($resumeData -and $resumeData.output_file) {
+                [string]$resumeData.output_file
+            } else {
+                Join-Path $liveState.DirectoryName "$shiftBase`晚班交接.txt"
+            }
 
-            $initArgs = @(
-                "$PSScriptRoot\s2_round_manifest.py", 'init',
-                '--manifest', $manifestPath, '--checkpoint', $Checkpoint,
-                '--run-id', $RunId, '--state-file', $stateForSplit,
-                '--output-file', $outputForSplit,
-                '--session', 'core:NS,AP,RT', '--session', 'platform:ENEX,ABC'
-            )
-            & python -X utf8 @initArgs
-            if ($LASTEXITCODE -ne 0) { throw "建立 round manifest 失敗（離開碼 $LASTEXITCODE）" }
+            if ($ResumeManifest) {
+                $resumeArgs = @("$PSScriptRoot\s2_round_manifest.py", 'prepare-resume', '--manifest', $manifestPath)
+                if ($ForceResume) { $resumeArgs += '--force' }
+                & python -X utf8 @resumeArgs
+                if ($LASTEXITCODE -ne 0) { throw "manifest 不可安全 resume；若已人工確認舊行程失控才可加 -ForceResume" }
+            } else {
+                $initArgs = @(
+                    "$PSScriptRoot\s2_round_manifest.py", 'init',
+                    '--manifest', $manifestPath, '--checkpoint', $Checkpoint,
+                    '--run-id', $RunId, '--state-file', $stateForSplit,
+                    '--output-file', $outputForSplit,
+                    '--session', 'core:NS,AP,RT', '--session', 'platform:ENEX,ABC'
+                )
+                & python -X utf8 @initArgs
+                if ($LASTEXITCODE -ne 0) { throw "建立 round manifest 失敗（離開碼 $LASTEXITCODE）" }
+            }
 
             foreach ($session in $splitSessions) {
+                $currentManifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                $currentSession = $currentManifest.sessions | Where-Object { $_.id -eq $session.Id }
+                if ($currentSession.status -eq 'completed') {
+                    Write-Host "[$($session.Id)] 已完成，resume 略過"
+                    continue
+                }
                 $sessionLog = Join-Path $LogDir "掃帶log-$Checkpoint-$RunId-$($session.Id).txt"
                 $attemptOutput = & python -X utf8 "$PSScriptRoot\s2_round_manifest.py" start-session `
                     --manifest $manifestPath --session-id $session.Id --pid $PID
@@ -753,7 +811,7 @@ s2_render.py 與最終通知；殼層會在兩段 manifest 都成功後統一 fi
 
             & python -X utf8 "$PSScriptRoot\s2_round_manifest.py" assert-complete --manifest $manifestPath
             if ($LASTEXITCODE -ne 0) { throw '必要 session 未全部完成；拒絕 render' }
-            & python -X utf8 "$PSScriptRoot\s2_round_manifest.py" start-finalize --manifest $manifestPath
+            & python -X utf8 "$PSScriptRoot\s2_round_manifest.py" start-finalize --manifest $manifestPath --pid $PID
             if ($LASTEXITCODE -ne 0) { throw 'manifest 無法進入 finalizing' }
 
             $finalCode = 1
@@ -988,12 +1046,13 @@ s2_render.py 與最終通知；殼層會在兩段 manifest 都成功後統一 fi
         # 下一輪數字變好會被誤算成腳本的功勞（0817 的 13c §1a 澄清就差點如此）。
         $metricsArgs = @('--checkpoint', $Checkpoint,
                          '--run-id', $RunId,
-                         '--flags', "model=$Model;effort=$Effort;TestMode=$([bool]$TestMode);NoToolBan=$([bool]$NoToolBan);NoBashGuard=$([bool]$NoBashGuard);NoMinBoot=$([bool]$NoMinBoot)$(if ($SplitSession) { ';SplitSession=True' })")
+                         '--flags', "model=$Model;effort=$Effort;TestMode=$([bool]$TestMode);NoToolBan=$([bool]$NoToolBan);NoBashGuard=$([bool]$NoBashGuard);NoMinBoot=$([bool]$NoMinBoot)$(if ($SplitSession) { ';SplitSession=True' })$(if ($ResumeManifest) { ';ResumeManifest=True' })")
         if ($CheckpointLabel) { $metricsArgs += @('--checkpoint-label', $CheckpointLabel) }
         if ($scratchCwd) {
             $sanitized = $scratchCwd -replace '[^a-zA-Z0-9]', '-'
             $metricsArgs += @('--transcript-dir', "$env:USERPROFILE\.claude\projects\$sanitized")
         }
+        if ($SplitSession) { $metricsArgs += @('--manifest', $manifestPath) }
         python "$PSScriptRoot\s2_token_metrics.py" @metricsArgs 2>&1 |
             Out-Null
     } catch {

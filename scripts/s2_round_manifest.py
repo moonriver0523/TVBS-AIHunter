@@ -24,6 +24,8 @@ from typing import Any, Iterable
 SCHEMA_VERSION = 1
 CHECKPOINT_RE = re.compile(r"^\d{4}-\d{4}$")
 SESSION_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+CORE_SITES = {"NS", "AP", "RT"}
+PLATFORM_SITES = {"ENEX", "ABC"}
 
 
 class ManifestError(RuntimeError):
@@ -200,6 +202,135 @@ def _session(manifest: dict[str, Any], session_id: str) -> dict[str, Any]:
     raise ManifestError(f"unknown session: {session_id}")
 
 
+def _load_state_evidence(path: str | os.PathLike[str] | None, checkpoint: str) -> dict[str, Any]:
+    """Read only the small, stable facts needed by a session receipt."""
+    if not path:
+        return {"site_item_ids": {}, "reconcile": {}}
+    try:
+        with open(path, encoding="utf-8-sig") as handle:
+            state = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ManifestError(f"cannot read receipt state_file {path}: {exc}") from exc
+
+    by_site = {site: [] for site in CORE_SITES | PLATFORM_SITES}
+    items = state.get("items", [])
+    if isinstance(items, dict):
+        items = [dict(id=item_id, **(row if isinstance(row, dict) else {}))
+                 for item_id, row in items.items()]
+    if not isinstance(items, list):
+        raise ManifestError("receipt state_file items must be a list or object")
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        item_id = str(item.get("id") or "").upper()
+        source = str(item.get("source") or "").upper()
+        site = source if source in by_site else None
+        if item_id.startswith("AP"):
+            site = "AP"
+        elif item_id.startswith("RT"):
+            site = "RT"
+        elif item_id.startswith("ENEX"):
+            site = "ENEX"
+        elif item_id.startswith("ABC"):
+            site = "ABC"
+        if site:
+            by_site[site].append(item_id)
+
+    top = state.get("_top") if isinstance(state.get("_top"), dict) else state
+    raw_log = top.get("reconcile_log", {}) if isinstance(top, dict) else {}
+    row = raw_log.get(checkpoint, {}) if isinstance(raw_log, dict) else {}
+    reconcile = {
+        site: row.get(site) for site in CORE_SITES
+        if isinstance(row, dict) and site in row
+    }
+    return {
+        "site_item_ids": {site: sorted(set(ids)) for site, ids in by_site.items()},
+        "reconcile": reconcile,
+    }
+
+
+def _read_stream_log(path: Path) -> tuple[list[str], dict[str, Any]]:
+    """Return tool-input strings plus the final Claude result metadata."""
+    tool_inputs: list[str] = []
+    result: dict[str, Any] = {}
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return tool_inputs, result
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        if row.get("type") == "result":
+            result = row
+        msg = row.get("message") or {}
+        for block in (msg.get("content") or []):
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                tool_inputs.append(json.dumps(block.get("input") or {}, ensure_ascii=False))
+    return tool_inputs, result
+
+
+def _platform_trace_sites(tool_inputs: Iterable[str]) -> set[str]:
+    joined = "\n".join(tool_inputs).lower()
+    found: set[str] = set()
+    operational = r"s2_platform_(?:extract|bridge|merge|lint|reconcile)[^\s\"']*[^\n]*"
+    for match in re.findall(operational, joined):
+        if re.search(r"(?:^|[^a-z0-9])enex(?:[^a-z0-9]|$)", match):
+            found.add("ENEX")
+        if re.search(r"(?:^|[^a-z0-9])abc(?:[^a-z0-9]|$)", match):
+            found.add("ABC")
+    if "members.enex.news" in joined:
+        found.add("ENEX")
+    if any(domain in joined for domain in ("extremereach", "adbridge", "newssearch")):
+        found.add("ABC")
+    return found
+
+
+def _build_receipt(
+    manifest: dict[str, Any], target: dict[str, Any], log: Path,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    before = target.get("receipt_baseline") or {"site_item_ids": {}, "reconcile": {}}
+    after = _load_state_evidence(manifest.get("state_file"), manifest["checkpoint"])
+    tool_inputs, result = _read_stream_log(log)
+    traced = _platform_trace_sites(tool_inputs)
+    site_rows = {}
+    missing = []
+    for site in target["sites"]:
+        old_ids = set(before.get("site_item_ids", {}).get(site, []))
+        new_ids = set(after.get("site_item_ids", {}).get(site, [])) - old_ids
+        reasons = []
+        if new_ids:
+            reasons.append(f"items+{len(new_ids)}")
+        if site in CORE_SITES:
+            old_rec = before.get("reconcile", {}).get(site)
+            new_rec = after.get("reconcile", {}).get(site)
+            if new_rec is not None and new_rec != old_rec:
+                reasons.append("reconcile_updated")
+        elif site in traced:
+            reasons.append("operational_tool_trace")
+        if site in CORE_SITES:
+            site_ok = "reconcile_updated" in reasons
+        else:
+            site_ok = bool(reasons)
+        site_rows[site] = {"ok": site_ok, "evidence": reasons}
+        if not site_ok:
+            missing.append(site)
+    receipt = {
+        "status": "verified" if not missing else "failed",
+        "sites": site_rows,
+        "missing_sites": missing,
+    }
+    metadata = {
+        "transcript_session_id": result.get("session_id"),
+        "total_cost_usd": result.get("total_cost_usd"),
+        "result_usage": result.get("usage"),
+    }
+    return receipt, metadata
+
+
 def _mutate(path: str | os.PathLike[str], fn: Any) -> dict[str, Any]:
     manifest = load_manifest(path)
     updated = deepcopy(manifest)
@@ -228,6 +359,19 @@ def start_session(
                 )
         if any(s["status"] == "running" for s in manifest["sessions"]):
             raise ManifestError("another session is already running")
+        if "receipt_baseline" not in target:
+            snapshot = _load_state_evidence(
+                manifest.get("state_file"), manifest["checkpoint"]
+            )
+            target["receipt_baseline"] = {
+                "site_item_ids": {
+                    site: snapshot["site_item_ids"].get(site, []) for site in target["sites"]
+                },
+                "reconcile": {
+                    site: snapshot["reconcile"][site] for site in target["sites"]
+                    if site in snapshot["reconcile"]
+                },
+            }
         target["status"] = "running"
         target["attempts"].append(
             {
@@ -240,6 +384,10 @@ def start_session(
                 "log_path": None,
                 "log_size": None,
                 "log_sha256": None,
+                "transcript_session_id": None,
+                "total_cost_usd": None,
+                "result_usage": None,
+                "receipt": None,
                 "error": None,
             }
         )
@@ -265,7 +413,12 @@ def finish_session(
 
         log = Path(log_path) if log_path else None
         log_ok = bool(log and log.is_file() and log.stat().st_size > 0)
-        succeeded = exit_code == 0 and log_ok and not error
+        receipt = None
+        metadata: dict[str, Any] = {}
+        if log_ok and log:
+            receipt, metadata = _build_receipt(manifest, target, log)
+        receipt_ok = bool(receipt and receipt["status"] == "verified")
+        succeeded = exit_code == 0 and log_ok and receipt_ok and not error
         attempt["ended_at"] = _now()
         attempt["exit_code"] = exit_code
         attempt["log_path"] = str(log) if log else None
@@ -274,6 +427,11 @@ def finish_session(
             content = log.read_bytes()
             attempt["log_size"] = len(content)
             attempt["log_sha256"] = hashlib.sha256(content).hexdigest()
+        attempt.update(metadata)
+        attempt["receipt"] = receipt
+        if not receipt_ok and not error:
+            missing = ", ".join((receipt or {}).get("missing_sites", target["sites"]))
+            attempt["error"] = f"site receipt missing evidence: {missing}"
         attempt["status"] = "completed" if succeeded else "failed"
         target["status"] = attempt["status"]
         target["completed_at"] = attempt["ended_at"] if succeeded else None
@@ -291,6 +449,65 @@ def finish_session(
     return _mutate(path, change)
 
 
+def _pid_alive(pid: Any) -> bool:
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    if os.name == "nt":
+        try:
+            import ctypes
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            handle = kernel32.OpenProcess(0x00100000, False, pid)  # query limited info
+            if not handle:
+                return False
+            try:
+                code = ctypes.c_ulong()
+                return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259
+            finally:
+                kernel32.CloseHandle(handle)
+        except (AttributeError, OSError):
+            return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
+
+
+def prepare_resume(
+    path: str | os.PathLike[str], *, force: bool = False,
+) -> dict[str, Any]:
+    """Take over a failed/stale split round and make its next transition legal."""
+    def change(manifest: dict[str, Any]) -> None:
+        if manifest["status"] not in {"failed", "running", "ready_to_finalize", "finalizing"}:
+            raise ManifestError(f"round cannot resume from {manifest['status']}")
+        active: list[tuple[str, dict[str, Any]]] = []
+        for session in manifest["sessions"]:
+            if session["status"] == "running" and session["attempts"]:
+                active.append((f"session {session['id']}", session["attempts"][-1]))
+        finalization = manifest["finalization"]
+        if finalization["status"] == "running":
+            active.append(("finalization", finalization))
+        alive = [(label, row.get("pid")) for label, row in active if _pid_alive(row.get("pid"))]
+        if alive and not force:
+            detail = ", ".join(f"{label} pid={pid}" for label, pid in alive)
+            raise ManifestError(f"refusing resume while prior process is alive: {detail}; use --force")
+        for label, row in active:
+            row["status"] = "failed"
+            row["ended_at" if label.startswith("session") else "completed_at"] = _now()
+            row["error"] = "manual resume took over stale work" + (" (forced)" if force else "")
+        for session in manifest["sessions"]:
+            if session["status"] == "running":
+                session["status"] = "failed"
+                session["completed_at"] = None
+        if finalization["status"] == "running":
+            finalization["status"] = "failed"
+        all_done = all(not s["required"] or s["status"] == "completed"
+                       for s in manifest["sessions"])
+        manifest["status"] = "ready_to_finalize" if all_done else "failed"
+
+    return _mutate(path, change)
+
+
 def assert_complete(manifest: dict[str, Any]) -> None:
     """Fail closed unless every required child session completed successfully."""
     validate_manifest(manifest)
@@ -304,7 +521,9 @@ def assert_complete(manifest: dict[str, Any]) -> None:
         raise ManifestIncompleteError(f"round status is {manifest['status']}")
 
 
-def start_finalization(path: str | os.PathLike[str]) -> dict[str, Any]:
+def start_finalization(
+    path: str | os.PathLike[str], *, pid: int | None = None,
+) -> dict[str, Any]:
     def change(manifest: dict[str, Any]) -> None:
         assert_complete(manifest)
         finalization = manifest["finalization"]
@@ -312,7 +531,7 @@ def start_finalization(path: str | os.PathLike[str]) -> dict[str, Any]:
             raise ManifestError(f"cannot finalize from {finalization['status']}")
         finalization.update(
             status="running", started_at=_now(), completed_at=None,
-            exit_code=None, artifacts=[], error=None,
+            exit_code=None, artifacts=[], error=None, pid=pid,
         )
         manifest["status"] = "finalizing"
 
@@ -390,6 +609,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     start_fin = sub.add_parser("start-finalize")
     start_fin.add_argument("--manifest", required=True)
+    start_fin.add_argument("--pid", type=int)
 
     finish_fin = sub.add_parser("finish-finalize")
     finish_fin.add_argument("--manifest", required=True)
@@ -399,6 +619,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     status = sub.add_parser("status")
     status.add_argument("--manifest", required=True)
+    resume = sub.add_parser("prepare-resume")
+    resume.add_argument("--manifest", required=True)
+    resume.add_argument("--force", action="store_true")
     return parser
 
 
@@ -423,16 +646,22 @@ def main(argv: list[str] | None = None) -> int:
                 args.manifest, args.session_id, args.attempt_id,
                 exit_code=args.exit_code, log_path=args.log, error=args.error,
             )
+            if _session(manifest, args.session_id)["status"] != "completed":
+                receipt_error = _session(manifest, args.session_id)["attempts"][-1].get("error")
+                print(f"ERROR: session verification failed: {receipt_error}", file=os.sys.stderr)
+                return 2
         elif args.command == "assert-complete":
             manifest = load_manifest(args.manifest)
             assert_complete(manifest)
         elif args.command == "start-finalize":
-            manifest = start_finalization(args.manifest)
+            manifest = start_finalization(args.manifest, pid=args.pid)
         elif args.command == "finish-finalize":
             manifest = finish_finalization(
                 args.manifest, exit_code=args.exit_code,
                 artifacts=args.artifact, error=args.error,
             )
+        elif args.command == "prepare-resume":
+            manifest = prepare_resume(args.manifest, force=args.force)
         else:
             manifest = load_manifest(args.manifest)
         print(json.dumps(

@@ -477,12 +477,65 @@ def measure(session_path):
     }
 
 
+def measure_manifest(manifest_path, transcript_dir=None):
+    """Aggregate every completed split-session transcript into one round row."""
+    with open(manifest_path, encoding='utf-8') as f:
+        manifest = json.load(f)
+    segments = []
+    for session in manifest.get('sessions', []):
+        completed = [a for a in session.get('attempts', [])
+                     if a.get('status') == 'completed']
+        if not completed:
+            continue
+        attempt = completed[-1]
+        session_id = attempt.get('transcript_session_id')
+        if not session_id:
+            raise SystemExit(f'分段 {session.get("id")} 缺 transcript_session_id，無法完整記帳')
+        measured = measure(resolve_session_path(session_id, transcript_dir))
+        measured['segment'] = session.get('id')
+        measured['sites'] = session.get('sites', [])
+        measured['total_cost_usd'] = attempt.get('total_cost_usd')
+        segments.append(measured)
+    if not segments:
+        raise SystemExit('manifest 沒有可量測的 completed session')
+
+    numeric = ('requests', 'tool_calls', 'cache_read_input_tokens',
+               'cache_creation_input_tokens', 'output_tokens', 'input_tokens',
+               'classified_total', 'phase_calls_total')
+    result = {key: sum(int(s.get(key) or 0) for s in segments) for key in numeric}
+    tools = {}
+    phases = {}
+    for segment in segments:
+        for name, count in segment.get('tool_calls_by_name', {}).items():
+            tools[name] = tools.get(name, 0) + count
+        for name, stat in segment.get('phases', {}).items():
+            row = phases.setdefault(name, {'calls': 0, 'minutes': 0.0})
+            row['calls'] += stat.get('calls', 0)
+            row['minutes'] += stat.get('minutes', 0.0)
+    for row in phases.values():
+        row['minutes'] = round(row['minutes'], 1)
+    costs = [s.get('total_cost_usd') for s in segments]
+    result.update({
+        'session_file': [s['session_file'] for s in segments],
+        'segments': segments,
+        'total_cost_usd': (round(sum(float(c) for c in costs), 6)
+                           if all(c is not None for c in costs) else None),
+        'cache_read_per_tool_call': round(
+            result['cache_read_input_tokens'] / result['tool_calls'], 3
+        ) if result['tool_calls'] else None,
+        'phases': {name: phases[name] for name in PHASES if name in phases},
+        'tool_calls_by_name': dict(sorted(tools.items(), key=lambda kv: -kv[1])),
+    })
+    return result
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--checkpoint', required=True, help='輪次代號，例如 0812-1200')
     ap.add_argument('--run-id', required=True, help='lowercase UUID v4')
     ap.add_argument('--checkpoint-label', default=None, help='nullable 1–80 Unicode label')
     ap.add_argument('--session', help='session id（不帶副檔名）。不帶則自動抓最新修改的 transcript')
+    ap.add_argument('--manifest', help='split round manifest；量測並加總所有 completed session')
     ap.add_argument('--transcript-dir', help='transcript 目錄（D7 之後 launcher 每輪帶入；不帶用舊預設）')
     ap.add_argument('--dry-run', action='store_true', help='只印結果，不寫入 _token_metrics.jsonl')
     ap.add_argument('--flags', help='launcher 旗標，格式 `model=sonnet;effort=medium;NoToolBan=False`')
@@ -501,8 +554,13 @@ def main():
     recorded_at = datetime.now(timezone(timedelta(hours=8))).strftime(
         '%Y-%m-%dT%H:%M:%S+08:00')
 
-    session_path = resolve_session_path(args.session, args.transcript_dir)
-    result = measure(session_path)
+    if args.manifest and args.session:
+        ap.error('--manifest 與 --session 不可同時使用')
+    if args.manifest:
+        result = measure_manifest(args.manifest, args.transcript_dir)
+    else:
+        session_path = resolve_session_path(args.session, args.transcript_dir)
+        result = measure(session_path)
     result = {
         'schema_version': 2,
         'recorded_at': recorded_at,
