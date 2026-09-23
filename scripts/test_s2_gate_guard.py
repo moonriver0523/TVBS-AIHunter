@@ -287,6 +287,228 @@ except (ValueError, AttributeError):
     site_multi_deny = False
 check('subprocess：NS entries MultiEdit 也無法繞過', site_multi_deny, out_site_multi)
 
+# ── batch 草稿：只鎖 category／tc 欄位的逐筆 Edit（2026-09-23，A41 第三種攔截）──
+# 0923-1100 輪實測：entries.json 的逐筆 Edit 被上面兩道鎖擋下了（AP 2 次、ABC 1 次），
+# 但同一輪對 batch.json 做了 14 次逐筆 Edit 完全沒被擋，14 次全在改 category 值。
+d10 = os.path.join(TMP, 'batch_draft')
+os.makedirs(d10, exist_ok=True)
+
+
+def batch_file(dir_, name):
+    """batch 草稿檔本身的內容不影響判斷（檔名＋Edit 內容才是判準），
+    但還是寫成真實形狀，避免被內容形狀類的判斷誤傷。"""
+    p = os.path.join(dir_, name)
+    with open(p, 'w', encoding='utf-8') as f:
+        json.dump([{'id': 'NS0001', 'source': 'NS', 'src_text': 'x',
+                    'entry': '', 'category': '', 'tc': ''}], f, ensure_ascii=False)
+    return p
+
+
+ns_batch = batch_file(d10, 'ns_batch_1100.json')
+
+
+def edit_input(path, old, new):
+    return {'file_path': path, 'old_string': old, 'new_string': new}
+
+
+def multi_input(path, pairs):
+    return {'file_path': path,
+            'edits': [{'old_string': o, 'new_string': n} for o, n in pairs]}
+
+
+# ① category 欄位 → 擋
+batch_cat_reason = gate_guard.decide_edit(ns_batch, edit_input(
+    ns_batch, '"category": "國際/中東"', '"category": "國際/以巴衝突"')) or ''
+check('batch 草稿：改 category 值 → deny', bool(batch_cat_reason))
+check('batch 草稿：deny 訊息點名 category／tc 兩個欄位',
+      'category' in batch_cat_reason and 'tc' in batch_cat_reason,
+      ascii(batch_cat_reason))
+check('batch 草稿：deny 訊息講明只鎖這兩欄、其他欄位照樣可改',
+      'entry' in batch_cat_reason and 'footage_type' in batch_cat_reason,
+      ascii(batch_cat_reason))
+check('batch 草稿：deny 訊息指路 rewrite-entry→build（尚未 add-batch 的修法）',
+      's2_batch_prep.py rewrite-entry' in batch_cat_reason
+      and 'build' in batch_cat_reason, ascii(batch_cat_reason))
+check('batch 草稿：deny 訊息指路 s2_state.py set-category --pairs（真實指令位置）',
+      's2_state.py' in batch_cat_reason
+      and 'set-category --pairs' in batch_cat_reason, ascii(batch_cat_reason))
+check('batch 草稿：deny 訊息指路 s2_state.py set-tc --pairs',
+      'set-tc --pairs' in batch_cat_reason, ascii(batch_cat_reason))
+check('batch 草稿：deny 訊息附 collate-category 收字串的捷徑',
+      'collate-category' in batch_cat_reason, ascii(batch_cat_reason))
+check('batch 草稿：deny 訊息不冒充不存在的 s2_batch_prep.py set-category',
+      's2_batch_prep.py set-category' not in batch_cat_reason, ascii(batch_cat_reason))
+check('batch 草稿：deny 訊息不混入 gate lock 的 gate-clear 解鎖訊息（四段訊息互斥）',
+      'gate-clear' not in batch_cat_reason, ascii(batch_cat_reason))
+
+# ② tc 欄位 → 擋
+check('batch 草稿：改 tc 值 → deny',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, '"tc": ""', '"tc": "川普關稅/美國"')) is not None)
+check('batch 草稿：新增原本不存在的 tc 鍵 → deny（單側有鍵也算動到）',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, '"src_text": "x"',
+          '"src_text": "x",\n  "tc": "川普關稅/美國"')) is not None)
+check('batch 草稿：刪掉 category 鍵 → deny',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, '"category": "國際/中東",\n  "tc": ""', '"tc": ""')) is not None)
+
+# ③ 其他欄位 → 放行（batch 本來就是 draft，刻意保留彈性）
+check('batch 草稿：改 entry 欄位 → 放行',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, '"entry": ""', '"entry": "NS0001 (華府/關稅) ▎摘要…"')) is None)
+check('batch 草稿：改 footage_type 欄位 → 放行',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, '"footage_type": "PKG"', '"footage_type": "VO"')) is None)
+check('batch 草稿：改 status 欄位 → 放行',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, '"status": "pending"', '"status": "has_script"')) is None)
+check('batch 草稿：entry 內文剛好提到 category 這個英文字（沒有鍵樣式）→ 放行',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, '"entry": "舊文"',
+          '"entry": "報導提到 category 這個字"')) is None)
+
+# ④ 整顆物件重寫但 category／tc 原值照抄 → 放行（證明判準是「值有變」不是「出現關鍵字」）
+same_cat_old = ('{"id": "NS0001", "entry": "舊", "category": "國際/中東", "tc": "/以色列"}')
+same_cat_new = ('{"id": "NS0001", "entry": "新", "category": "國際/中東", "tc": "/以色列"}')
+check('batch 草稿：整顆物件重寫但 category／tc 值不變 → 放行',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, same_cat_old, same_cat_new)) is None)
+check('batch 草稿：整顆物件重寫且 category 值有變 → deny',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, same_cat_old,
+          same_cat_new.replace('國際/中東', '國際/以巴衝突'))) is not None)
+check('batch 草稿：只有排版空白不同、category 值一樣 → 放行',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, '"category":"國際/中東"', '"category": "國際/中東"')) is None)
+check('batch 草稿：截斷的半截 category 值（片段不是合法 JSON）照樣比得出差異 → deny',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, '"category": "國際/中', '"category": "國際/以')) is not None)
+check('batch 草稿：category 值是 R25 的 dict 形狀也接得住 → deny',
+      gate_guard.decide_edit(ns_batch, edit_input(
+          ns_batch, '"category": {"大分類": "國際", "中主題": "中東"}',
+          '"category": {"大分類": "國際", "中主題": "以巴衝突"}')) is not None)
+
+# ⑤ MultiEdit：混合「該擋」與「不該擋」→ 整組擋
+#    理由：MultiEdit 在工具層 all-or-nothing，放行等於讓 category 改動過關；
+#    且否則只要在 category 改動旁塞一筆 entry 改動就能繞過。拆開單獨送即可。
+check('batch 草稿 MultiEdit：全部都是其他欄位 → 放行',
+      gate_guard.decide_edit(ns_batch, multi_input(ns_batch, [
+          ('"entry": "a"', '"entry": "b"'),
+          ('"status": "pending"', '"status": "has_script"')])) is None)
+check('batch 草稿 MultiEdit：全部都是 category → deny',
+      gate_guard.decide_edit(ns_batch, multi_input(ns_batch, [
+          ('"category": "國際/中東"', '"category": "國際/以巴衝突"'),
+          ('"category": "國際/美國"', '"category": "國際/川普關稅"')])) is not None)
+check('batch 草稿 MultiEdit：混合（entry 放行 ＋ category 該擋）→ 整組 deny（不准夾帶繞過）',
+      gate_guard.decide_edit(ns_batch, multi_input(ns_batch, [
+          ('"entry": "a"', '"entry": "b"'),
+          ('"category": "國際/中東"', '"category": "國際/以巴衝突"')])) is not None)
+check('batch 草稿 MultiEdit：edits 空陣列 → 放行（沒有內容可判讀，fail-open）',
+      gate_guard.decide_edit(ns_batch, {'file_path': ns_batch, 'edits': []}) is None)
+
+# ⑥ 檔名變體：production 真的出現過的全部要擋
+for _name in ('ap_batch_1100_full.json', 'ap_batch_1100_extra.json',
+              'ap_batch_1100b.json', 'ns_batch_2000b.json',
+              'rt_backfill_batch_2359.json', 'ap_batch_0100_sntv.json',
+              'ap_batch_2000_b.json', '_rt_batch_1000.json',
+              'rt_batch_1100.json', 'enex_batch_1100.json', 'abc_batch_1100.json'):
+    check(f'batch 檔名變體照樣擋：{_name}',
+          gate_guard.decide_edit(batch_file(d10, _name), edit_input(
+              os.path.join(d10, _name), '"category": "A/B"',
+              '"category": "A/C"')) is not None)
+
+# ⑦ 檔名不命中 batch 規則的檔案，就算內容在改 category 也不受影響
+#    ⚠️ 這裡刻意不在 d10 裡建 `*_gate_lock.json`：`_find_lock_for_path` 對
+#    「內容不是 dict 的 lock 檔」會直接 AttributeError（既有缺陷，不在這次範圍，
+#    已列入回報），planted 之後會連累同目錄後續所有 decide_edit 呼叫。
+for _name in ('ns_skeleton_1100.json', '0922-s2-state.json',
+              'state.json', 'yc_batch_2200.json', 'yna_cna_batch_2000.json',
+              'weird_batch.json', 'ns_raw_1100.json', 'ns_entries_1100.json'):
+    _p = batch_file(d10, _name)
+    _r = gate_guard.decide_edit(_p, edit_input(
+        _p, '"category": "A/B"', '"category": "A/C"')) or ''
+    check(f'batch 擋線不誤擋非 batch 檔（即使在改 category）：{_name}',
+          'batch 草稿' not in _r, ascii(_r))
+
+# 檔名層級直接驗（不碰檔案系統，避開上面那個 lock 檔地雷）
+for _name in ('ns_gate_lock.json', 'ap_gate_lock.json', 'ns_entries_1100.json',
+              'enex_entries_1100.json', 'ns_skeleton_1100.json',
+              '0922-s2-state.json', 'entries.json',
+              'yc_batch_2200.json', 'yna_cna_batch_2000.json',
+              'weird_batch.json', 'batch.json', 'my_batch.json'):
+    check(f'_batch_artifact_kind 不命中：{_name}',
+          gate_guard._batch_artifact_kind(_name) is None,
+          str(gate_guard._batch_artifact_kind(_name)))
+
+# ⑧ 向後相容：只給 file_path（沒有 tool_input）→ 放行，既有呼叫端行為零改變
+check('batch 草稿：decide_edit 只帶 file_path（無 tool_input）→ 放行（向後相容）',
+      gate_guard.decide_edit(ns_batch) is None)
+check('回歸：既有 ns_batch_0430.json 單參數呼叫仍放行',
+      gate_guard.decide_edit(os.path.join(d8, 'ns_batch_0430.json')) is None)
+
+# ⑨ 優先序：entries 檔就算在改 category，也要走既有的 entries 訊息，不能被 batch 分支搶走
+_entries_cat_reason = gate_guard.decide_edit(ns_entries_nolock, edit_input(
+    ns_entries_nolock, '"category": "A/B"', '"category": "A/C"')) or ''
+check('優先序：NS entries 改 category → 仍走 NS/AP/RT 自由模式訊息，不是 batch 訊息',
+      '自由模式' in _entries_cat_reason
+      and 'batch 草稿' not in _entries_cat_reason, ascii(_entries_cat_reason))
+_platform_cat_reason = gate_guard.decide_edit(platform_entries, edit_input(
+    platform_entries, '"category": "A/B"', '"category": "A/C"')) or ''
+check('優先序：ENEX entries 改 category → 仍走 platform bridge 訊息',
+      's2_platform_bridge.py rewrite-entry' in _platform_cat_reason
+      and 'batch 草稿' not in _platform_cat_reason, ascii(_platform_cat_reason))
+_locked_cat_reason = gate_guard.decide_edit(ns_entries_locked, edit_input(
+    ns_entries_locked, '"category": "A/B"', '"category": "A/C"')) or ''
+check('優先序：有 gate lock 的檔案改 category → 仍走 lock 訊息（最高優先不變）',
+      'gate-clear' in _locked_cat_reason and 'batch 草稿' not in _locked_cat_reason,
+      ascii(_locked_cat_reason))
+
+# ⑩ subprocess 全流程
+out_batch, code_batch = run_hook({
+    'hook_event_name': 'PreToolUse', 'tool_name': 'Edit',
+    'tool_input': edit_input(ns_batch, '"category": "國際/中東"',
+                             '"category": "國際/以巴衝突"'),
+})
+try:
+    batch_deny = (json.loads(out_batch).get('hookSpecificOutput', {})
+                  .get('permissionDecision') == 'deny')
+except (ValueError, AttributeError):
+    batch_deny = False
+check('subprocess：batch 草稿改 category 的 Edit → 合法 deny JSON',
+      code_batch == 0 and batch_deny, out_batch)
+check('subprocess：batch deny 輸出是 ASCII 安全（ensure_ascii，cp950 主控台不炸）',
+      all(ord(c) < 128 for c in out_batch.strip()) if out_batch.strip() else False,
+      repr(out_batch))
+
+out_batch_ok, code_batch_ok = run_hook({
+    'hook_event_name': 'PreToolUse', 'tool_name': 'Edit',
+    'tool_input': edit_input(ns_batch, '"entry": ""', '"entry": "新素材行"'),
+})
+check('subprocess：batch 草稿改 entry 的 Edit → stdout 全空（放行）',
+      out_batch_ok == '' and code_batch_ok == 0, repr(out_batch_ok))
+
+out_batch_multi, _ = run_hook({
+    'hook_event_name': 'PreToolUse', 'tool_name': 'MultiEdit',
+    'tool_input': multi_input(ns_batch, [
+        ('"entry": "a"', '"entry": "b"'),
+        ('"category": "國際/中東"', '"category": "國際/以巴衝突"')]),
+})
+try:
+    batch_multi_deny = (json.loads(out_batch_multi).get('hookSpecificOutput', {})
+                        .get('permissionDecision') == 'deny')
+except (ValueError, AttributeError):
+    batch_multi_deny = False
+check('subprocess：batch 草稿混合 MultiEdit 也無法繞過', batch_multi_deny,
+      out_batch_multi)
+
+check('batch 內部函式：tool_input 不是 dict → 不擋（fail-open）',
+      gate_guard._batch_tool_input_touches_fields(None) is False)
+check('batch 內部函式：old/new 皆非字串 → 不擋（fail-open）',
+      gate_guard._batch_edit_touches_fields(None, None) is False)
+check('batch 內部函式：_batch_artifact_kind 空路徑 → None',
+      gate_guard._batch_artifact_kind('') is None)
+
 # 非 Edit／Write 工具（例如 Read）一律不動作
 out_other, code_other = run_hook({
     'hook_event_name': 'PreToolUse',

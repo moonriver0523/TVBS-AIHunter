@@ -36,6 +36,17 @@ ENEX/ABC，**不管有沒有 gate lock 一律技術性擋下逐筆 Edit/MultiEdi
 訊息優先序：有 lock → 維持原本 lock 解鎖訊息（更精確）；沒 lock → 才顯示
 自由模式訊息，兩者不會同時出現。
 
+2026-09-23（A41 第三種攔截）：`*_batch_*.json` 草稿（`build` 產的 add-batch
+輸入）**只鎖 category／tc 兩個欄位**的逐筆 Edit/MultiEdit，其餘欄位（entry、
+footage_type、status…）維持自由可改——batch 本來就是 draft，無條件全鎖會把
+沒有替代指令的正常修正也卡死，夜間無人值守整輪掛掉的風險更大。
+0923-1100 輪實測：`ns_batch_1100.json` 被連打 12 次 Edit（11 次擠在 40 秒內）、
+`ap_batch_1100_full.json`／`rt_batch_1100.json` 各 1 次，14 次全部只在改一個
+`"category"` 值——同一輪的 entries.json 逐筆 Edit 倒是被上面兩道鎖正確擋下
+（AP 2 次、ABC 1 次，agent 都改走 `rewrite-entry`）。
+判準是「category／tc 的**值真的有變**」而不是「字串出現 category」：整顆 item
+物件重寫但這兩個值照抄，一樣放行。替代路徑見 `_batch_edit_reason` 的訊息。
+
 輸入輸出協議跟 `s2_bash_guard.py` 一致：stdin 一包 Claude Code hook JSON
 （`tool_name`／`tool_input`／PostToolUse 另有 `tool_response`）；deny 時印
 `permissionDecision=deny` 的 JSON（`ensure_ascii=True`）；放行／非目標事件
@@ -187,6 +198,139 @@ def _site_edit_reason(file_path):
     )
 
 
+_BATCH_DRAFT_NAME_RE = re.compile(
+    r'(?:^|[_-])(ns|ap|rt|enex|abc)[_-](?:[A-Za-z0-9]+[_-])*batch\d*(?:[_.-][^/\\]*)?\.json$',
+    re.IGNORECASE)
+
+# JSON 裡 `"category": <值>` / `"tc": <值>` 的鍵＋值。值依序試：物件（R25 的
+# `{"大分類":…}` 形狀）→ 帶跳脫的字串 → 兜底吃到逗號／換行／右大括號為止
+# （Edit 片段常常是被截斷的半截值，兜底這條保證「鍵有出現就一定抓得到值」，
+# 兩側才比得出差異）。
+_BATCH_FIELD_RE = re.compile(
+    r'"(category|tc)"\s*:\s*(\{[^{}]*\}|"(?:[^"\\]|\\.)*"|[^,\n}]*)',
+    re.IGNORECASE)
+_BATCH_FIELD_KEY_RE = re.compile(r'"(category|tc)"\s*:', re.IGNORECASE)
+
+
+def _batch_artifact_kind(file_path):
+    """辨識 NS/AP/RT/ENEX/ABC 的 batch.json 草稿（`build` 產的 add-batch 輸入）。
+
+    檔名是**唯一**判準——刻意不做上面兩支那種「內容形狀 fallback」，因為
+    `from-raw` 產的骨架（`*_skeleton_*.json`）每筆也是
+    `{id, source, checkpoint, status, src_text, entry, category, tc, hint}`，
+    跟 batch 草稿同形狀，加形狀判斷只會把 skeleton 誤認成 batch、回錯訊息。
+    production 的 batch 檔名一律照命名慣例走（下列全取自真實紀錄）：
+    production 實際出現過的形狀全部要接住（`ns_batch_1100.json`、
+    `ap_batch_1100_full.json`、`ap_batch_1100_extra.json`、`ap_batch_1100b.json`、
+    `ns_batch_2000b.json`、`rt_backfill_batch_2359.json`、`ap_batch_0100_sntv.json`、
+    `_rt_batch_1000.json`——取自 `_guard_calls.log` 與 `s2_batch_prep.py` docstring
+    的真實紀錄，不是臆測的命名規則）。
+    ⛔ 不可誤擋：`ns_entries_0430.json`（`_site_artifact_kind` 的線）、
+    `ns_skeleton_0430.json`、`ns_gate_lock.json`、`0922-s2-state.json`，以及
+    非這五站的 `yc_batch_2200.json`／`yna_cna_batch_2000.json`（YouTube／YNA-CNA
+    另有各自流程，不在這次範圍）。
+    註：ENEX/ABC 目前實際上不產 `*_batch_*.json`（那兩站走 skeleton→entries→
+    add-batch），寫進 regex 只是為了將來改流程時不會漏接。
+    """
+    if not file_path:
+        return None
+    base = os.path.basename(str(file_path))
+    match = _BATCH_DRAFT_NAME_RE.search(base)
+    if match:
+        return f'{match.group(1).upper()} batch 草稿'
+    return None
+
+
+def _batch_fields_of(text):
+    """把一段 Edit 片段裡所有 `category`／`tc` 的鍵值抽成 [(鍵, 值)] 清單。
+
+    鍵一律轉小寫、值去頭尾空白，讓「只是排版空白不同」不算改動。
+    """
+    if not isinstance(text, str) or not text:
+        return []
+    return [(m.group(1).lower(), m.group(2).strip())
+            for m in _BATCH_FIELD_RE.finditer(text)]
+
+
+def _batch_edit_touches_fields(old_string, new_string):
+    """這一組 (old_string, new_string) 有沒有真的動到 category／tc 的值。
+
+    判準刻意設計成「**值有變**才算」，不是「字串裡出現 category 就擋」：
+      - 只改 entry／footage_type／status → 片段裡根本沒有 `"category":` 鍵樣式
+        → 兩側清單都空 → 放行。
+      - 整顆 item 物件重寫、但 category／tc 原值照抄 → 兩側清單相同 → 放行
+        （真正被改的是別的欄位，符合「batch 是 draft、其他欄位保持彈性」）。
+      - 改 category／tc 的值、或新增／刪掉這兩個鍵 → 兩側清單不同 → 擋。
+    誤判風險：entry 內文如果剛好逐字包含 `"category":`（要同時有雙引號＋冒號）
+    才可能誤命中，中文新聞素材行出現這種字串的機率極低；且即使命中，也還要
+    「兩側的值不同」才會擋，比單純找關鍵字保守得多。
+    """
+    if not (isinstance(old_string, str) or isinstance(new_string, str)):
+        return False
+    old_text = old_string if isinstance(old_string, str) else ''
+    new_text = new_string if isinstance(new_string, str) else ''
+    if not (_BATCH_FIELD_KEY_RE.search(old_text)
+            or _BATCH_FIELD_KEY_RE.search(new_text)):
+        return False
+    return _batch_fields_of(old_text) != _batch_fields_of(new_text)
+
+
+def _batch_tool_input_touches_fields(tool_input):
+    """Edit（old_string/new_string）與 MultiEdit（edits 陣列）共用的入口。
+
+    MultiEdit **只要有任何一筆**動到 category／tc 就整組擋，理由有二：
+      1. MultiEdit 在工具層是 all-or-nothing，放行等於讓那筆 category 改動過關；
+      2. 否則只要在 category 改動旁邊塞一筆無關的 entry 改動就能繞過這道鎖。
+    被擋時把不該擋的那幾筆拆出來單獨送即可，沒有「唯一路徑被封死」的風險。
+    """
+    if not isinstance(tool_input, dict):
+        return False
+    edits = tool_input.get('edits')
+    if isinstance(edits, list):
+        for edit in edits:
+            if not isinstance(edit, dict):
+                continue
+            if _batch_edit_touches_fields(edit.get('old_string'),
+                                          edit.get('new_string')):
+                return True
+        return False
+    return _batch_edit_touches_fields(tool_input.get('old_string'),
+                                      tool_input.get('new_string'))
+
+
+def _batch_edit_reason(file_path, tool_input):
+    kind = _batch_artifact_kind(file_path)
+    if not kind:
+        return None
+    if not _batch_tool_input_touches_fields(tool_input):
+        return None
+    return (
+        f'⛔ 【batch 草稿 category／tc 欄位鎖定】{kind} 的 category／tc 是整批欄位，'
+        f'禁止用 Edit／MultiEdit 逐筆改值：{file_path}。\n'
+        '（0923-1100 輪實測：ns_batch_1100.json 被連打 12 次 Edit、每次只改一個 '
+        'category 值，其中 11 次擠在 40 秒內；ap_batch_1100_full.json／'
+        'rt_batch_1100.json 各 1 次。同一件事一條批次指令就做得完。）\n'
+        'ℹ️ 這道鎖**只鎖 category／tc**；batch 草稿的其他欄位（entry、footage_type、'
+        'status…）照舊可以自由 Edit，不受影響。\n'
+        '✅ 改走批次路徑，擇一：\n'
+        '  1) 這份 batch 還沒 add-batch 進狀態檔 → 修上游 entries.json 草稿後重跑 build：\n'
+        '     python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py rewrite-entry '
+        '--site <ns|ap|rt> --entries <entries.json路徑> '
+        '--id <ID> --set <ID>={"category":"大分類/中主題/小分題","tc":"T1,T2/C1,C2"}\n'
+        '     （多筆重複帶 --id/--set），再用原參數重跑 `build --out <batch.json>` 整批重建。\n'
+        '  2) 已經 add-batch 進狀態檔 → 直接在狀態檔上整批改（分隔符優先認分號）：\n'
+        '     python E:/GitHub/TVBS-AIHunter/scripts/s2_state.py --file <state.json路徑> '
+        'set-category --pairs "ID1=大分類/中主題;ID2=大分類/中主題/小分題;…"\n'
+        '     python E:/GitHub/TVBS-AIHunter/scripts/s2_state.py --file <state.json路徑> '
+        'set-tc --pairs "ID1=T1,T2/C1,C2;ID2=/臺灣;…"\n'
+        '     ⚠️ set-tc 每 checkpoint 有呼叫次數上限，務必整批一次下。batch 裡已標好的 '
+        'category 可先用 `s2_batch_prep.py collate-category <batch.json…>` '
+        '收成現成的 --pairs 字串。\n'
+        '  3) 真的要整份大改 → 用一次 `Write` 重寫整個 batch.json，'
+        '不要換個包法（MultiEdit、先 Read 再 Write 單一小段…）繞過去。'
+    )
+
+
 def _norm(path):
     """正規化成絕對路徑＋正斜線＋大小寫不敏感比較，跟 s2_bash_guard.py
     既有慣例一致（Windows 路徑分隔字元與大小寫都不可靠）。"""
@@ -214,15 +358,21 @@ def _find_lock_for_path(file_path):
     return None
 
 
-def decide_edit(file_path):
+def decide_edit(file_path, tool_input=None):
     """PreToolUse／Edit 專用：回傳 None＝放行；否則回傳 deny 理由字串。
 
-    判斷順序刻意固定為「gate lock → ENEX/ABC → NS/AP/RT」：
+    判斷順序刻意固定為「gate lock → ENEX/ABC → NS/AP/RT → batch 草稿欄位」：
       1. 有 active gate lock 時一律優先回 lock 訊息（帶站別／reason code／
          `gate-clear` 逃生路徑，比泛用訊息精確），行為跟 2026-09-18 上線版完全相同。
-      2. ENEX/ABC 既有判斷擺第二，結果不受這次 NS/AP/RT 新增分支影響。
-      3. 沒有 lock 的 NS/AP/RT entries 才走新的自由模式訊息——兩段訊息互斥，
-         不會同時出現、也不會互相覆蓋。
+      2. ENEX/ABC 既有判斷擺第二，結果不受後面新增分支影響。
+      3. 沒有 lock 的 NS/AP/RT entries 走自由模式訊息。
+      4. batch 草稿的 category／tc 欄位鎖擺**最後、優先度最低**（2026-09-23）：
+         它是唯一「要看 Edit 內容才決定」的條件式分支，前三條都是純檔名／lock
+         的無條件鎖。擺最後可以保證就算哪天命名規則撞在一起，前三條的行為
+         一個字都不會變。實際上四條的檔名集合互斥（batch vs entries vs 候選檔），
+         順序不具語意負擔。
+    ⚠️ `tool_input` 可略（預設 None）：舊呼叫端（只給 file_path）行為完全不變，
+    沒有內容可判讀時第 4 條一律放行，沿用整支 hook 的 fail-open 原則。
     """
     found = _find_lock_for_path(file_path)
     if found:
@@ -239,7 +389,10 @@ def decide_edit(file_path):
     platform_reason = _platform_edit_reason(file_path)
     if platform_reason:
         return platform_reason
-    return _site_edit_reason(file_path)
+    site_reason = _site_edit_reason(file_path)
+    if site_reason:
+        return site_reason
+    return _batch_edit_reason(file_path, tool_input)
 
 
 def _write_looked_successful(tool_response):
@@ -293,7 +446,7 @@ def main():
     if tool_name not in ('Edit', 'MultiEdit'):
         return 0
 
-    reason = decide_edit(file_path)
+    reason = decide_edit(file_path, tool_input)
     if reason:
         print(json.dumps({
             'hookSpecificOutput': {
