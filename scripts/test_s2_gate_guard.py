@@ -186,6 +186,107 @@ check('subprocess：platform entries MultiEdit 也無法繞過', platform_multi_
       out_platform_multi)
 check('platform 辨識不誤擋一般 JSON', gate_guard.decide_edit(other_file) is None)
 
+# ── NS/AP/RT entries：無 gate lock 也禁止逐筆 Edit（2026-09-23，A41 續辦）──
+# 0923-0430 輪實測：完全沒觸發 gate lock，agent 仍自發對 ns_entries_0430.json
+# 連打 10 次 Edit（AP/RT 各 1 次），成本＋150%、turns＋81%。
+d8 = os.path.join(TMP, 'site_entries_no_lock')
+os.makedirs(d8, exist_ok=True)
+
+
+def site_entries(dir_, name, payload=None):
+    p = os.path.join(dir_, name)
+    with open(p, 'w', encoding='utf-8') as f:
+        json.dump(payload if payload is not None else
+                  {'NS0001': {'entry': 'x', 'category': '國際/測試'}}, f, ensure_ascii=False)
+    return p
+
+
+ns_entries_nolock = site_entries(d8, 'ns_entries_0430.json')
+site_reason = gate_guard.decide_edit(ns_entries_nolock) or ''
+check('NS entries：無 lock 仍 deny Edit', bool(site_reason))
+check('NS entries：deny 訊息引導 s2_batch_prep.py rewrite-entry 且列齊參數',
+      's2_batch_prep.py rewrite-entry' in site_reason
+      and '--site' in site_reason and '--entries' in site_reason
+      and '--id' in site_reason and '--set' in site_reason, ascii(site_reason))
+check('NS entries：deny 訊息講明是「自由模式」（跟 lock 解鎖訊息區分得開）',
+      '自由模式' in site_reason and '沒有' in site_reason, ascii(site_reason))
+check('NS entries：無 lock 時不混入 gate-clear 解鎖訊息（兩段訊息互斥）',
+      'gate-clear' not in site_reason, ascii(site_reason))
+check('NS entries：deny 訊息點名白名單欄位 entry／category／tc',
+      'entry' in site_reason and 'category' in site_reason and 'tc' in site_reason,
+      ascii(site_reason))
+
+for _name in ('ap_entries_0430.json', 'rt_entries_0430.json',
+              'ns_entries_0430.renamed.json', 'rt_entries2_0700.json',
+              'ap_cctv_entries_1700.json', 'rt_backfill_entries_2359.json',
+              'ns_entries_1100_v2.json', 'rt_entries_2000b.json',
+              'ap_entries_all_0700.json'):
+    check(f'NS/AP/RT entries 命名變體照樣擋：{_name}',
+          gate_guard.decide_edit(site_entries(d8, _name)) is not None)
+
+for _name in ('ns_batch_0430.json', 'ns_skeleton_0430.json', 'entries.json',
+              'ns_raw_0430.json'):
+    check(f'NS/AP/RT 擋線不誤擋非 entries 檔：{_name}',
+          gate_guard.decide_edit(site_entries(d8, _name)) is None)
+
+# 臨時改名：靠 NS/AP/RT 草稿獨有的頂層保留鍵 `_new_topics` 接住
+renamed_draft = site_entries(d8, 'draft_output.json', {
+    '_new_topics': {}, 'NS0002': {'entry': 'y'}})
+check('NS/AP/RT entries 臨時改名：靠 _new_topics 形狀擋下',
+      gate_guard.decide_edit(renamed_draft) is not None)
+batch_like = site_entries(d8, 'weird_batch.json', {'entries': [], 'new_topics': {}})
+check('NS/AP/RT 形狀判斷不誤擋 batch.json 的 new_topics（不帶底線）',
+      gate_guard.decide_edit(batch_like) is None)
+
+# 訊息優先序：有 lock → 維持既有 lock 訊息，不被新的 NS/AP/RT 訊息蓋掉
+d9 = os.path.join(TMP, 'site_entries_with_lock')
+os.makedirs(d9, exist_ok=True)
+ns_entries_locked = site_entries(d9, 'ns_entries_0430.json')
+write_lock(d9, 'NS', ns_entries_locked,
+           reasons=[{'code': 'FMT_MISSING_FOOTAGE_SEG', 'name': '缺 ▎畫面： 段', 'count': 6}])
+locked_reason = gate_guard.decide_edit(ns_entries_locked) or ''
+check('訊息優先序：NS entries 有 lock 時回 lock 訊息（含 gate-clear 逃生路徑）',
+      'gate-clear' in locked_reason and 'FMT_MISSING_FOOTAGE_SEG' in locked_reason,
+      ascii(locked_reason))
+check('訊息優先序：有 lock 時不顯示自由模式訊息（避免兩段互相矛盾）',
+      '自由模式' not in locked_reason, ascii(locked_reason))
+
+# 同目錄有別的檔案的 lock → 該檔案本身仍走新的自由模式訊息
+ap_entries_same_dir = site_entries(d9, 'ap_entries_0430.json')
+same_dir_reason = gate_guard.decide_edit(ap_entries_same_dir) or ''
+check('訊息優先序：同目錄 lock 指到別的檔案時，本檔走自由模式訊息',
+      bool(same_dir_reason) and '自由模式' in same_dir_reason
+      and 'gate-clear' not in same_dir_reason, ascii(same_dir_reason))
+
+# ENEX/ABC 既有判斷不受影響（不可被 NS/AP/RT 新分支蓋掉）
+check('回歸：ENEX entries 仍走 platform bridge 訊息，不被 NS/AP/RT 分支搶走',
+      's2_platform_bridge.py rewrite-entry' in (gate_guard.decide_edit(platform_entries) or ''))
+
+out_site, code_site = run_hook({
+    'hook_event_name': 'PreToolUse',
+    'tool_name': 'Edit',
+    'tool_input': {'file_path': ns_entries_nolock, 'old_string': 'x', 'new_string': 'y'},
+})
+try:
+    site_deny = (json.loads(out_site).get('hookSpecificOutput', {})
+                 .get('permissionDecision') == 'deny')
+except (ValueError, AttributeError):
+    site_deny = False
+check('subprocess：NS entries 無 lock 的 Edit → 合法 deny JSON',
+      code_site == 0 and site_deny, out_site)
+
+out_site_multi, _ = run_hook({
+    'hook_event_name': 'PreToolUse',
+    'tool_name': 'MultiEdit',
+    'tool_input': {'file_path': ns_entries_nolock, 'edits': []},
+})
+try:
+    site_multi_deny = (json.loads(out_site_multi).get('hookSpecificOutput', {})
+                       .get('permissionDecision') == 'deny')
+except (ValueError, AttributeError):
+    site_multi_deny = False
+check('subprocess：NS entries MultiEdit 也無法繞過', site_multi_deny, out_site_multi)
+
 # 非 Edit／Write 工具（例如 Read）一律不動作
 out_other, code_other = run_hook({
     'hook_event_name': 'PreToolUse',

@@ -1333,18 +1333,180 @@ check('rewrite-entry：ID 不在 gate lock reason items 時拒絕且不改檔',
       and open(REWRITE_SCOPE_ENTRIES, encoding='utf-8').read() == _scope_before,
       _out_rw_scope[-500:])
 
-_dir_rewrite_missing = gate_scenario_dir('rewrite_missing_lock')
-REWRITE_NOLOCK_ENTRIES = write_json_in(_dir_rewrite_missing, 'entries.json', {
-    'RT9731': 'RT9731 (地方) ▎原稿。▎畫面：資料畫面。無BITE。'
+# ── rewrite-entry 自由模式（沒有 gate lock）──────────────────────────────
+# 2026-09-23（A41 續辦）：`s2_gate_guard.py` 把 NS/AP/RT entries.json 改成
+# 無條件禁止逐筆 Edit 之後，「沒觸發 gate lock 但想微調幾則」必須有合法管道。
+# ⚠️ 這一段**取代**原本「gate lock 不存在時明確報錯且不改檔」那個案例——
+# 那個舊期望值正是本次要改掉的行為，不是回歸破壞（見報告說明）。
+_dir_rewrite_free = gate_scenario_dir('rewrite_free')
+REWRITE_FREE_ENTRIES = write_json_in(_dir_rewrite_free, 'entries.json', {
+    'RT9731': {'entry': 'RT9731 (地方) ▎原稿。▎畫面：資料畫面。無BITE。',
+               'category': '國際/測試', 'tc': 'T'},
+    'RT9732': {'entry': 'RT9732 (地方) ▎不應被改動。▎畫面：資料畫面。無BITE。',
+               'category': '國際/保留'},
+    '_new_topics': {},
 })
-_nolock_before = open(REWRITE_NOLOCK_ENTRIES, encoding='utf-8').read()
-_out_rw_nolock, _code_rw_nolock = run_rewrite(
-    entries=REWRITE_NOLOCK_ENTRIES, ids=['RT9731'],
-    sets=['RT9731=RT9731 (地方) ▎新稿。▎畫面：資料畫面。無BITE。'])
-check('rewrite-entry：gate lock 不存在時明確報錯且不改檔',
-      _code_rw_nolock == 2 and 'gate lock 不存在' in _out_rw_nolock
-      and open(REWRITE_NOLOCK_ENTRIES, encoding='utf-8').read() == _nolock_before,
-      _out_rw_nolock[-500:])
+_free_before_9732 = json.load(open(REWRITE_FREE_ENTRIES, encoding='utf-8'))['RT9732']
+check('rewrite-entry 自由模式前置：確認這個情境真的沒有 gate lock',
+      not os.path.exists(bp._gate_lock_path(REWRITE_FREE_ENTRIES, 'RT')))
+
+_out_rw_free, _code_rw_free = run_rewrite(
+    entries=REWRITE_FREE_ENTRIES, ids=['RT9731'],
+    sets=['RT9731=RT9731 (地方) ▎改好的摘要。▎畫面：資料畫面。無BITE。'])
+_free_after = json.load(open(REWRITE_FREE_ENTRIES, encoding='utf-8'))
+check('rewrite-entry 自由模式：沒有 gate lock 也能修補（exit 0）',
+      _code_rw_free == 0, ascii(_out_rw_free[-400:]))
+check('rewrite-entry 自由模式：純文字 --set 只改 entry，category／tc 原樣保留',
+      _free_after['RT9731']['entry'].startswith('RT9731 (地方) ▎改好的摘要')
+      and _free_after['RT9731']['category'] == '國際/測試'
+      and _free_after['RT9731']['tc'] == 'T',
+      ascii(json.dumps(_free_after.get('RT9731'), ensure_ascii=False)))
+check('rewrite-entry 自由模式：未指定的 ID 完全不動',
+      _free_after['RT9732'] == _free_before_9732)
+check('rewrite-entry 自由模式：頂層保留鍵 _new_topics 原樣保留',
+      _free_after.get('_new_topics') == {})
+check('rewrite-entry 自由模式：訊息講明走的是自由模式',
+      '自由模式' in _out_rw_free, ascii(_out_rw_free[-400:]))
+check('rewrite-entry 自由模式：不會順手生出 gate lock 檔',
+      not os.path.exists(bp._gate_lock_path(REWRITE_FREE_ENTRIES, 'RT')))
+
+# 只改 category（JSON object），entry 不能被動到
+_out_rw_cat, _code_rw_cat = run_rewrite(
+    entries=REWRITE_FREE_ENTRIES, ids=['RT9732'],
+    sets=['RT9732=' + json.dumps({'category': '國際/改過'}, ensure_ascii=False)])
+_free_after_cat = json.load(open(REWRITE_FREE_ENTRIES, encoding='utf-8'))
+check('rewrite-entry 自由模式：object --set 只覆寫指定欄位，entry 原樣保留',
+      _code_rw_cat == 0
+      and _free_after_cat['RT9732']['category'] == '國際/改過'
+      and _free_after_cat['RT9732']['entry'] == _free_before_9732['entry'],
+      ascii(json.dumps(_free_after_cat.get('RT9732'), ensure_ascii=False)))
+
+# 機械欄位／非白名單欄位一律拒絕
+_dir_rewrite_free_field = gate_scenario_dir('rewrite_free_field')
+REWRITE_FIELD_ENTRIES = write_json_in(_dir_rewrite_free_field, 'entries.json', {
+    'RT9741': {'entry': 'RT9741 (地方) ▎原稿。▎畫面：資料畫面。無BITE。', 'category': '國際/測試'},
+})
+_field_before = open(REWRITE_FIELD_ENTRIES, encoding='utf-8').read()
+for _bad_field in ('id', 'src_text', 'status', 'raw_entry'):
+    _out_bad, _code_bad = run_rewrite(
+        entries=REWRITE_FIELD_ENTRIES, ids=['RT9741'],
+        sets=['RT9741=' + json.dumps({_bad_field: 'x'}, ensure_ascii=False)])
+    check(f'rewrite-entry 自由模式：拒絕非白名單欄位 {_bad_field} 且不改檔',
+          _code_bad == 2 and '不可修改欄位' in _out_bad
+          and open(REWRITE_FIELD_ENTRIES, encoding='utf-8').read() == _field_before,
+          ascii(_out_bad[-300:]))
+
+_out_reserved, _code_reserved = run_rewrite(
+    entries=REWRITE_FIELD_ENTRIES, ids=['_new_topics'],
+    sets=['_new_topics=x'])
+check('rewrite-entry 自由模式：拒絕把底線開頭保留鍵當素材則修改',
+      _code_reserved == 2 and '保留鍵' in _out_reserved
+      and open(REWRITE_FIELD_ENTRIES, encoding='utf-8').read() == _field_before,
+      ascii(_out_reserved[-300:]))
+
+_out_absent, _code_absent = run_rewrite(
+    entries=REWRITE_FIELD_ENTRIES, ids=['RT9999'], sets=['RT9999=新增則'])
+check('rewrite-entry 自由模式：不存在的 ID 拒絕（新增則是 Write 的工作）',
+      _code_absent == 2 and '找不到 ID' in _out_absent
+      and open(REWRITE_FIELD_ENTRIES, encoding='utf-8').read() == _field_before,
+      ascii(_out_absent[-300:]))
+
+# 落檔前的 lint 護欄：改出達門檻的白名單格式錯誤就整個拒絕
+_dir_rewrite_free_lint = gate_scenario_dir('rewrite_free_lint')
+REWRITE_LINT_ENTRIES = write_json_in(_dir_rewrite_free_lint, 'entries.json', {
+    f'RT975{i}': {'entry': f'RT975{i} (地方) ▎乾淨摘要 {i}。▎畫面：資料畫面。無BITE。'}
+    for i in range(5)
+})
+_lint_before = open(REWRITE_LINT_ENTRIES, encoding='utf-8').read()
+_out_op, _code_op = run_rewrite(
+    entries=REWRITE_LINT_ENTRIES, ids=['RT9750'],
+    sets=['RT9750=RT9750 (地方) ▎摘要（完整引言待補）。▎畫面：資料畫面。無BITE。'])
+check('rewrite-entry 自由模式：改出 FMT_OPERATIONAL_NOTE（門檻 1）就拒絕且不改檔',
+      _code_op == 2 and 'FMT_OPERATIONAL_NOTE' in _out_op
+      and open(REWRITE_LINT_ENTRIES, encoding='utf-8').read() == _lint_before,
+      ascii(_out_op[-400:]))
+
+_out_many_bad, _code_many_bad = run_rewrite(
+    entries=REWRITE_LINT_ENTRIES,
+    ids=[f'RT975{i}' for i in range(5)],
+    sets=[f'RT975{i}=RT975{i} (BITE) ▎摘要。▎畫面：資料畫面。無BITE。' for i in range(5)])
+check('rewrite-entry 自由模式：一次改出 5 則 FMT_FIRST_NOTE_BITE（門檻 5）就拒絕且不改檔',
+      _code_many_bad == 2 and 'FMT_FIRST_NOTE_BITE' in _out_many_bad
+      and open(REWRITE_LINT_ENTRIES, encoding='utf-8').read() == _lint_before,
+      ascii(_out_many_bad[-400:]))
+
+# 未達門檻的白名單警告只印警告、照樣落檔（不能把整份檔案鎖死）
+_out_sub, _code_sub = run_rewrite(
+    entries=REWRITE_LINT_ENTRIES, ids=['RT9751'],
+    sets=['RT9751=RT9751 (BITE) ▎摘要。▎畫面：資料畫面。無BITE。'])
+_lint_after = json.load(open(REWRITE_LINT_ENTRIES, encoding='utf-8'))
+check('rewrite-entry 自由模式：未達門檻的白名單警告只提醒、仍允許落檔',
+      _code_sub == 0 and _lint_after['RT9751']['entry'].startswith('RT9751 (BITE)')
+      and 'FMT_FIRST_NOTE_BITE' in _out_sub,
+      ascii(_out_sub[-400:]))
+
+# 既有 raw_entry 筆誤形態：改 entry 時要把 raw_entry 一起拿掉，
+# 否則 parse_draft_entry 會把兩鍵並存當成資料衝突 exit 2
+_dir_rewrite_free_raw = gate_scenario_dir('rewrite_free_raw')
+REWRITE_RAW_ENTRIES = write_json_in(_dir_rewrite_free_raw, 'entries.json', {
+    'RT9761': {'raw_entry': 'RT9761 (地方) ▎舊稿。▎畫面：資料畫面。無BITE。',
+               'category': '國際/測試'},
+})
+_out_raw, _code_raw = run_rewrite(
+    entries=REWRITE_RAW_ENTRIES, ids=['RT9761'],
+    sets=['RT9761=RT9761 (地方) ▎新稿。▎畫面：資料畫面。無BITE。'])
+_raw_after = json.load(open(REWRITE_RAW_ENTRIES, encoding='utf-8'))['RT9761']
+check('rewrite-entry 自由模式：原本是 raw_entry 的草稿改 entry 後不留兩鍵衝突',
+      _code_raw == 0 and 'raw_entry' not in _raw_after
+      and _raw_after['entry'].startswith('RT9761 (地方) ▎新稿')
+      and _raw_after['category'] == '國際/測試',
+      ascii(json.dumps(_raw_after, ensure_ascii=False)))
+
+# 純字串草稿（舊格式）：只改 entry 仍維持純字串形狀
+_dir_rewrite_free_str = gate_scenario_dir('rewrite_free_str')
+REWRITE_STR_ENTRIES = write_json_in(_dir_rewrite_free_str, 'entries.json', {
+    'RT9771': 'RT9771 (地方) ▎原稿。▎畫面：資料畫面。無BITE。',
+})
+_out_str, _code_str = run_rewrite(
+    entries=REWRITE_STR_ENTRIES, ids=['RT9771'],
+    sets=['RT9771=RT9771 (地方) ▎新稿。▎畫面：資料畫面。無BITE。'])
+_str_after = json.load(open(REWRITE_STR_ENTRIES, encoding='utf-8'))['RT9771']
+check('rewrite-entry 自由模式：舊格式純字串草稿改 entry 後仍是純字串',
+      _code_str == 0 and isinstance(_str_after, str)
+      and _str_after.startswith('RT9771 (地方) ▎新稿'),
+      ascii(json.dumps(_str_after, ensure_ascii=False)))
+
+# 有 gate lock 時：自由模式一律不接手，既有 lock 路徑行為完全不變（回歸）
+_dir_rewrite_lock_guard = gate_scenario_dir('rewrite_lock_still_scoped')
+REWRITE_LOCKGUARD_ENTRIES = write_json_in(_dir_rewrite_lock_guard, 'entries.json', {
+    'RT9781': 'RT9781 (地方) ▎摘要（完整引言待補）。▎畫面：資料畫面。無BITE。',
+    'RT9782': 'RT9782 (地方) ▎原稿。▎畫面：資料畫面。無BITE。',
+})
+REWRITE_LOCKGUARD_RAW = write_json_in(_dir_rewrite_lock_guard, 'raw.json', [
+    {'code': 'RT9781', 'head': 'h1', 'story': 's1', 'sb_count': 0},
+    {'code': 'RT9782', 'head': 'h2', 'story': 's2', 'sb_count': 0},
+])
+run(bp.cmd_build, Args(site='rt', raw=REWRITE_LOCKGUARD_RAW,
+                       entries=REWRITE_LOCKGUARD_ENTRIES,
+                       checkpoint='0923-0430', out=None, dry_run=True))
+check('回歸前置：lock 已產生', os.path.exists(bp._gate_lock_path(REWRITE_LOCKGUARD_ENTRIES, 'RT')))
+_lockguard_before = open(REWRITE_LOCKGUARD_ENTRIES, encoding='utf-8').read()
+_out_lockguard, _code_lockguard = run_rewrite(
+    entries=REWRITE_LOCKGUARD_ENTRIES, ids=['RT9782'],
+    sets=['RT9782=RT9782 (地方) ▎越權改稿。▎畫面：資料畫面。無BITE。'])
+check('回歸：有 lock 時仍只准改 lock reason items 列出的 ID（自由模式不接手）',
+      _code_lockguard == 2 and '不在 gate lock' in _out_lockguard
+      and open(REWRITE_LOCKGUARD_ENTRIES, encoding='utf-8').read() == _lockguard_before,
+      ascii(_out_lockguard[-400:]))
+
+# 帶錯 --site 不能混進自由模式繞過別站的 lock（跟 hook 端 _find_lock_for_path 同判準）
+_out_xsite, _code_xsite = run_rewrite(
+    site='ap', entries=REWRITE_LOCKGUARD_ENTRIES, ids=['RT9782'],
+    sets=['RT9782=RT9782 (地方) ▎換個站別繞過。▎畫面：資料畫面。無BITE。'])
+check('回歸：帶錯 --site 不能混進自由模式繞過別站 gate lock',
+      _code_xsite == 2 and '站別不一致' in _out_xsite
+      and open(REWRITE_LOCKGUARD_ENTRIES, encoding='utf-8').read() == _lockguard_before,
+      ascii(_out_xsite[-400:]))
 
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')

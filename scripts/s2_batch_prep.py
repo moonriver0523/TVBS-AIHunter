@@ -118,6 +118,7 @@ batch 檔），實測發現三站清單原始檔各包一層不同的站方外�
 import argparse
 import copy
 import datetime
+import glob
 import json
 import os
 import re
@@ -483,12 +484,214 @@ def _hard_gate_reasons_for_entries(entries, site_label, lint_contexts):
             if info['is_hard_gate'] and info['count'] > 0]
 
 
+# 自由模式（無 gate lock）可改的欄位白名單。
+# NS/AP/RT 的 entries.json 草稿契約是 `{id: {entry, category, tc}}`（13c 步驟3／
+# 13c2 §「agent 只寫 {id:{entry,category,tc}}」），三個都是人工判斷欄位；機械欄位
+# （id／source／checkpoint／src_text／footage_type…）根本不在草稿裡，是 `build`
+# 從骨架或 raw 併進去的，所以這裡不需要「禁止清單」，只要正面白名單即可。
+# 刻意**不收** `status`（骨架已機械推導，草稿階段改它等於繞過 status_of）與
+# `raw_entry`（那是狀態檔欄位、寫進草稿是既有筆誤來源，見 parse_draft_entry）。
+_REWRITE_FREE_FIELDS = ('entry', 'category', 'tc')
+
+
+def _parse_rewrite_sets_free(raw_sets):
+    """自由模式的 `--set` 解析：回傳 {ID: {欄位: 新值}}（局部 patch，不是整份取代）。
+
+    - `<ID>=<純文字>` → 視為 `{"entry": "<純文字>"}`（最常見的「只想改素材行」情境）。
+    - `<ID>={"category":"…"}` → JSON object，鍵必須全在 `_REWRITE_FREE_FIELDS` 內。
+    跟 lock 模式的 `_parse_rewrite_sets`（整份取代語意）刻意分開兩支，避免改到
+    既有已上線路徑的行為。
+    """
+    parsed = {}
+    for raw in raw_sets or []:
+        item_id, sep, value = str(raw).partition('=')
+        item_id = item_id.strip()
+        if not sep or not item_id or not value:
+            _rewrite_entry_error('--set 必須是 `<ID>=<新 entry 純文字>` 或 '
+                                 '`<ID>={"entry":"…","category":"…","tc":"…"}`。')
+        if item_id in parsed:
+            _rewrite_entry_error(f'--set 重複指定 ID：{item_id}')
+        try:
+            payload = json.loads(value)
+        except ValueError:
+            payload = value
+        if isinstance(payload, str):
+            payload = {'entry': payload}
+        elif isinstance(payload, dict):
+            if not payload:
+                _rewrite_entry_error(f'{item_id} 的新內容是空 object，沒有東西可改。')
+            unknown = sorted(set(payload) - set(_REWRITE_FREE_FIELDS))
+            if unknown:
+                _rewrite_entry_error(
+                    f'{item_id} 含不可修改欄位：{", ".join(unknown)}；自由模式只允許 '
+                    f'{", ".join(_REWRITE_FREE_FIELDS)}（機械欄位由 build 從骨架／raw 產生，'
+                    '不在草稿裡改）。')
+        else:
+            _rewrite_entry_error(f'{item_id} 的新內容必須是 JSON object 或純文字。')
+        parsed[item_id] = payload
+    return parsed
+
+
+def _apply_free_patch(existing, patch):
+    """把白名單 patch 併進單筆草稿值，回傳新值（不就地改 `existing`）。
+
+    - 原值是 dict → 複製後只覆寫 patch 指定的鍵，其餘（category／tc／status…）原樣保留。
+    - 原值是純字串 → 只改 entry 時仍回純字串（維持舊格式草稿的形狀）；
+      要一併改 category／tc 才升級成 dict，並把原字串放進 `entry`。
+    - 原 dict 用的是 `raw_entry`（既有筆誤形態，`build` 會記憶體內自動轉正）而
+      patch 要改 `entry` → 把 `raw_entry` 一起拿掉，否則兩鍵並存會被
+      `parse_draft_entry` 當資料衝突 exit 2。
+    """
+    if isinstance(existing, dict):
+        new_value = dict(existing)
+        if 'entry' in patch and 'raw_entry' in new_value:
+            new_value.pop('raw_entry')
+        new_value.update(patch)
+        return new_value
+    base_text = existing if isinstance(existing, str) else ''
+    if set(patch) == {'entry'}:
+        return patch['entry']
+    new_value = {'entry': base_text}
+    new_value.update(patch)
+    return new_value
+
+
+def _hard_gate_counts_for_entries(entries, site_label, lint_contexts):
+    """`{reason_code: count}`，只含白名單機械格式類（沿用 build 同一套 lint）。"""
+    return {info['reason_code']: info['count']
+            for info in _hard_gate_reasons_for_entries(entries, site_label, lint_contexts)}
+
+
+def _reject_if_lint_regressed(before_counts, after_counts, entries_path):
+    """自由模式的落檔前護欄：改出「新的、且已達硬閘門檻」的白名單格式錯誤就拒絕。
+
+    判準＝某 reason code 修改後 **count 比修改前多** 且 **達到該 code 的門檻**
+    （`HARD_GATE_THRESHOLD_OVERRIDES` 優先，`FMT_OPERATIONAL_NOTE` 是 1 則）。
+    只看「變更後達門檻」而不是「一有變多就擋」，是為了不把「本來就髒、agent
+    正在分批修」的檔案鎖死；真正的關卡仍是 `build` 的 `_enforce_build_hard_gate`，
+    這裡只是不讓 rewrite-entry 成為繞過它的後門。
+    """
+    regressed = []
+    for code, count in sorted(after_counts.items()):
+        threshold = HARD_GATE_THRESHOLD_OVERRIDES.get(code, HARD_GATE_THRESHOLD)
+        if count > before_counts.get(code, 0) and count >= threshold:
+            regressed.append((code, before_counts.get(code, 0), count, threshold))
+    if not regressed:
+        return
+    lines = [f'這次修改會讓白名單機械格式錯誤達到硬閘門檻，{entries_path} 未被修改：']
+    for code, before, after, threshold in regressed:
+        name = HARD_GATE_REASONS.get(code, code)
+        lines.append(f'  • {code}（{name}）：{before} 則 → {after} 則（門檻 ≥{threshold}）')
+    lines.append('  請先修好內容再重跑 rewrite-entry，或改用一次 `Write` 整批重寫。')
+    _rewrite_entry_error('\n'.join(lines))
+
+
+def _lock_owning_entries(entries_path):
+    """同目錄掃 `*_gate_lock.json`，回傳「鎖住這份 entries.json」的那把 lock。
+
+    判準跟 hook 端 `s2_gate_guard.py:_find_lock_for_path` 一致（比對 lock 記錄的
+    `entries_path`，不看檔名的站別），用來擋掉**帶錯 `--site` 混進自由模式**：
+    `rewrite-entry --site ap --entries ns_entries_0430.json` 只會去找
+    `ap_gate_lock.json`，找不到就以為沒鎖——那份檔案其實被 `ns_gate_lock.json`
+    鎖著，會整個繞過「只准改 lock reason items 列出的 ID」這道限制。
+    讀不動的 lock 一律跳過（跟 hook 端同樣 fail-open，不讓壞檔卡死掃帶輪）。
+    """
+    target = os.path.normcase(os.path.abspath(entries_path)).replace('\\', '/')
+    d = os.path.dirname(os.path.abspath(entries_path))
+    if not os.path.isdir(d):
+        return None
+    for lock_path in glob.glob(os.path.join(d, f'*{GATE_LOCK_SUFFIX}')):
+        try:
+            with open(lock_path, encoding='utf-8') as f:
+                lock = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(lock, dict):
+            continue
+        locked = lock.get('entries_path')
+        if locked and os.path.normcase(os.path.abspath(locked)).replace('\\', '/') == target:
+            return lock_path, lock
+    return None
+
+
+def _cmd_rewrite_entry_free(args, site_label):
+    """自由模式（沒有 active gate lock）：可自行指定 ID 做局部欄位修補。
+
+    2026-09-23（A41 續辦）：`s2_gate_guard.py` 改成 NS/AP/RT entries.json 無條件
+    禁止逐筆 Edit 之後，「沒觸發 gate lock 但想微調幾則格式」這個情境必須有一條
+    合法管道，否則只剩「整份 Write 重寫」一招——對只想改一兩個字的情況既不精準
+    也浪費（0923-0430 輪那 10 次 NS Edit 正是這種微調）。
+
+    與 lock 模式的差異（lock 模式那條路徑一行都沒動）：
+      - 不要求 lock 存在、不檢查 ID 是否在 lock 的 reason items 裡。
+      - `--set` 是**局部 patch**（只覆寫 entry／category／tc），不是整份取代。
+      - 不寫、不清任何 lock；落檔前多一道「不准把 lint 改爛到達門檻」的護欄。
+    """
+    other_lock = _lock_owning_entries(args.entries)
+    if other_lock:
+        lock_path, lock = other_lock
+        _rewrite_entry_error(
+            f'這份 entries.json 其實被 {lock.get("site", "?")} 站的 gate lock 鎖住'
+            f'（{lock_path}），但 --site 給的是 {site_label}，站別不一致。'
+            f'請改用 `--site {str(lock.get("site", "")).lower()}` 走 lock 模式，'
+            '不要用錯站別混進自由模式。')
+
+    requested_ids = [str(item_id) for item_id in (args.ids or [])]
+    if not requested_ids or len(requested_ids) != len(set(requested_ids)):
+        _rewrite_entry_error('--id 至少給一個且不可重複。')
+    reserved = sorted(item_id for item_id in requested_ids if item_id.startswith('_'))
+    if reserved:
+        _rewrite_entry_error(
+            f'--id 不可指向底線開頭的保留鍵：{", ".join(reserved)}'
+            '（`_new_topics` 這類頂層保留鍵不是素材則，要改請用 Write 整批重寫）。')
+    updates = _parse_rewrite_sets_free(args.sets)
+    if set(requested_ids) != set(updates):
+        _rewrite_entry_error('--id 與 --set 指定的 ID 必須完全一致。')
+
+    entries = load_json(args.entries)
+    if not isinstance(entries, dict):
+        _rewrite_entry_error('entries.json 頂層必須是 object。')
+    missing = sorted(set(requested_ids) - set(entries))
+    if missing:
+        _rewrite_entry_error(
+            f'entries.json 找不到 ID：{", ".join(missing)}'
+            '（自由模式只能改既有則，要新增請用 Write 整批重寫）。')
+
+    # 「修改前」的基準要在套用 patch 之前算，否則比不出這次改壞了什麼。
+    before_counts = _hard_gate_counts_for_entries(entries, site_label, {})
+    for item_id in requested_ids:
+        entries[item_id] = _apply_free_patch(entries[item_id], updates[item_id])
+    after_counts = _hard_gate_counts_for_entries(entries, site_label, {})
+    _reject_if_lint_regressed(before_counts, after_counts, args.entries)
+
+    try:
+        _atomic_write_json(args.entries, entries)
+    except OSError as exc:
+        _rewrite_entry_error(f'entries.json 寫入失敗：{exc}')
+    print(f'✅ rewrite-entry（自由模式，無 gate lock）已局部修補 {len(requested_ids)} 則：'
+          f'{", ".join(requested_ids)}', file=sys.stderr)
+    still = sorted((code, count) for code, count in after_counts.items() if count > 0)
+    if still:
+        detail = '、'.join(f'{code}（{count}則）' for code, count in still)
+        print(f'⚠️ 這份 entries.json 仍有白名單格式警告（未達門檻、不擋落檔）：{detail}',
+              file=sys.stderr)
+    print('ℹ️ 修補完請重跑 `build --dry-run` 預檢，確認該站 reason code 降到 0 再跑正式 build。',
+          file=sys.stderr)
+
+
 def cmd_rewrite_entry(args):
-    """依 active gate lock 精準改少量 ID；重跑共用 lint，歸零才自動解鎖。"""
+    """精準改少量 ID 的受控修補，分兩種模式：
+
+      - **有 active gate lock**（既有、2026-09-18 上線路徑，邏輯一行未改）：
+        只准改 lock reason items 列出的 ID；重跑共用 lint，歸零才自動解鎖。
+      - **沒有 gate lock**（2026-09-23 新增自由模式，見 `_cmd_rewrite_entry_free`）：
+        可自行指定 ID，做 entry／category／tc 的局部欄位修補；不碰 lock，
+        落檔前擋「把 lint 改爛到達硬閘門檻」。
+    """
     site_label = args.site.upper()
     lock_path = _gate_lock_path(args.entries, site_label)
     if not os.path.exists(lock_path):
-        _rewrite_entry_error(f'gate lock 不存在：{lock_path}')
+        return _cmd_rewrite_entry_free(args, site_label)
     try:
         with open(lock_path, encoding='utf-8') as f:
             lock = json.load(f)
@@ -3163,13 +3366,18 @@ def main():
     p_gc.add_argument('--entries', required=True, help='entries.json 路徑，用來定位同目錄下的 gate lock 檔')
     p_gc.set_defaults(func=cmd_gate_clear)
 
-    p_rw = sub.add_parser('rewrite-entry', help='gate lock 少量錯誤的受控精準修補；只准改 lock 列出的 ID')
+    p_rw = sub.add_parser('rewrite-entry',
+                          help='entries.json 的受控精準修補：有 gate lock 時只准改 lock 列出的 ID；'
+                               '沒有 lock 時走自由模式（自選 ID，只改 entry/category/tc）')
     p_rw.add_argument('--site', required=True, choices=['ns', 'ap', 'rt'])
-    p_rw.add_argument('--entries', required=True, help='active gate lock 對應的 entries.json')
+    p_rw.add_argument('--entries', required=True,
+                      help='要修補的 entries.json；有 active gate lock 時必須跟 lock 記錄的路徑一致')
     p_rw.add_argument('--id', dest='ids', action='append', required=True,
                       help='要改的 ID；多筆時重複帶 --id')
     p_rw.add_argument('--set', dest='sets', action='append', required=True,
-                      help='<ID>=<新 entry JSON 或純文字>；每個 --id 各帶一組')
+                      help='<ID>=<新 entry JSON 或純文字>；每個 --id 各帶一組。'
+                           '有 lock＝整份取代該則的值；無 lock（自由模式）＝局部覆寫，'
+                           '純文字等同 {"entry":"…"}，object 只允許 entry/category/tc')
     p_rw.set_defaults(func=cmd_rewrite_entry)
 
     p_af = sub.add_parser('autofix-tags', help='R43層1治本：機械修補entries.json草稿裡「有錨點可插」的'

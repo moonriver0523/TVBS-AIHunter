@@ -24,8 +24,17 @@
     python s2_batch_prep.py gate-clear --site <站> --entries <entries.json路徑>
 手動清除，不會讓整輪掃帶完全卡住跑不完（方向1第4點）。
 
-少於通用門檻時，改走 `s2_batch_prep.py rewrite-entry`；該指令只接受 lock
-reason items 列出的 ID，並在寫入後用 build 共用 lint 歸零才清鎖。
+少於通用門檻時，改走 `s2_batch_prep.py rewrite-entry`；**有 lock** 時該指令
+只接受 lock reason items 列出的 ID，並在寫入後用 build 共用 lint 歸零才清鎖。
+
+2026-09-23（A41 續辦）：NS/AP/RT 的 `{site}_entries_{checkpoint}.json` 比照
+ENEX/ABC，**不管有沒有 gate lock 一律技術性擋下逐筆 Edit/MultiEdit**——0923-0430
+輪實測到 agent 在完全沒觸發 gate lock 的情況下，自發對 `ns_entries_0430.json`
+連打 10 次 Edit（AP/RT 各 1 次），turns 124→224、cache read 37.7M→105.9M、
+成本 $10.52→$26.32，新增則數卻完全一樣。沒有 lock 時的修補管道改走
+`s2_batch_prep.py rewrite-entry` 的**自由模式**（見該檔 `cmd_rewrite_entry`）。
+訊息優先序：有 lock → 維持原本 lock 解鎖訊息（更精確）；沒 lock → 才顯示
+自由模式訊息，兩者不會同時出現。
 
 輸入輸出協議跟 `s2_bash_guard.py` 一致：stdin 一包 Claude Code hook JSON
 （`tool_name`／`tool_input`／PostToolUse 另有 `tool_response`）；deny 時印
@@ -118,6 +127,66 @@ def _platform_edit_reason(file_path):
     )
 
 
+_SITE_ENTRIES_NAME_RE = re.compile(
+    r'(?:^|[_-])(ns|ap|rt)[_-](?:[A-Za-z0-9]+[_-])*entries\d*(?:[_.-][^/\\]*)?\.json$',
+    re.IGNORECASE)
+
+
+def _site_artifact_kind(file_path):
+    """辨識 NS/AP/RT 不得直接 Edit 的 entries.json 草稿。
+
+    檔名是主判準：production 實際出現過的形狀全部要接住（`ns_entries_0430.json`、
+    `ns_entries_0430.renamed.json`、`rt_entries2_0700.json`、`ap_cctv_entries_1700.json`、
+    `rt_backfill_entries_2359.json`、`ns_entries_1100_v2.json`、`rt_entries_2000b.json`
+    ——全部取自 `_guard_calls.log` 的真實紀錄，不是臆測的命名規則）。
+    ⛔ 不可誤擋：裸 `entries.json`（沒有站別前綴，既有測試 fixture 依賴放行）、
+    `ns_batch_0430.json`、`ns_skeleton_0430.json`、`ns_gate_lock.json`，以及
+    ENEX/ABC 的 `abc_entries_0430.json`（那條線由 `_platform_artifact_kind` 負責，
+    兩邊判斷互不重疊）。
+
+    檔名沒中時再用內容形狀接住臨時改名：NS/AP/RT 草稿頂層保留鍵 `_new_topics`
+    （13c2 §「要開新中主題就在 entries.json 頂層放 `_new_topics`」）是這三站
+    entries 草稿獨有的標記——`batch.json` 用的是不帶底線的 `new_topics`，不會撞。
+    任何讀檔失敗一律 fail-open，不准 hook 本身弄死掃帶輪。
+    """
+    if not file_path:
+        return None
+    base = os.path.basename(str(file_path))
+    match = _SITE_ENTRIES_NAME_RE.search(base)
+    if match:
+        return f'{match.group(1).upper()} entries'
+
+    if not str(file_path).lower().endswith('.json'):
+        return None
+    try:
+        with open(file_path, encoding='utf-8-sig') as f:
+            data = json.load(f)
+    except (OSError, ValueError, TypeError):
+        return None
+    if isinstance(data, dict) and '_new_topics' in data:
+        return 'NS/AP/RT entries'
+    return None
+
+
+def _site_edit_reason(file_path):
+    kind = _site_artifact_kind(file_path)
+    if not kind:
+        return None
+    return (
+        f'⛔ 【NS/AP/RT 批次修補鎖定】{kind} 是整批產物，禁止用 Edit／MultiEdit '
+        f'逐筆修補：{file_path}。\n'
+        'ℹ️ 目前**沒有** gate lock，`rewrite-entry` 走自由模式（可自行指定要改的 ID，'
+        '不受 lock reason items 限制）：\n'
+        '  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py rewrite-entry '
+        '--site <ns|ap|rt> --entries <entries.json路徑> '
+        '--id <ID> --set <ID>={"entry":"...","category":"...","tc":"..."}\n'
+        '多筆可重複帶 --id/--set；只准改 entry／category／tc（其餘欄位一律拒絕），'
+        '落檔前會重跑 build 那套共用 lint，修出新的白名單格式錯誤達門檻就整個拒絕、不寫檔。\n'
+        '要整份大改就用一次 `Write` 整批重寫，不要換個包法'
+        '（MultiEdit、先 Read 再 Write 單一小段…）繞過去。'
+    )
+
+
 def _norm(path):
     """正規化成絕對路徑＋正斜線＋大小寫不敏感比較，跟 s2_bash_guard.py
     既有慣例一致（Windows 路徑分隔字元與大小寫都不可靠）。"""
@@ -146,7 +215,15 @@ def _find_lock_for_path(file_path):
 
 
 def decide_edit(file_path):
-    """PreToolUse／Edit 專用：回傳 None＝放行；否則回傳 deny 理由字串。"""
+    """PreToolUse／Edit 專用：回傳 None＝放行；否則回傳 deny 理由字串。
+
+    判斷順序刻意固定為「gate lock → ENEX/ABC → NS/AP/RT」：
+      1. 有 active gate lock 時一律優先回 lock 訊息（帶站別／reason code／
+         `gate-clear` 逃生路徑，比泛用訊息精確），行為跟 2026-09-18 上線版完全相同。
+      2. ENEX/ABC 既有判斷擺第二，結果不受這次 NS/AP/RT 新增分支影響。
+      3. 沒有 lock 的 NS/AP/RT entries 才走新的自由模式訊息——兩段訊息互斥，
+         不會同時出現、也不會互相覆蓋。
+    """
     found = _find_lock_for_path(file_path)
     if found:
         lock_path, lock = found
@@ -159,7 +236,10 @@ def decide_edit(file_path):
             f'⛔ 【Edit 技術鎖定】{site} 站的 gate lock 仍 active（{lock_path}），'
             f'觸發原因：{reason_str}。' + _UNLOCK_HINT
         )
-    return _platform_edit_reason(file_path)
+    platform_reason = _platform_edit_reason(file_path)
+    if platform_reason:
+        return platform_reason
+    return _site_edit_reason(file_path)
 
 
 def _write_looked_successful(tool_response):
