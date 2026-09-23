@@ -532,6 +532,123 @@ def _parse_rewrite_sets_free(raw_sets):
     return parsed
 
 
+# `_new_topics` 頂層保留鍵的欄位白名單。形狀不是這裡自己定的，取自
+# `cmd_build` 的 P1b-2 註解與 `s2_state.py`（`_reject_bare_gated` 的提示訊息、
+# `cmd_add_batch` 真正讀的鍵、`_register_topic` 的簽名）：
+#   {題名: {"charter": 這題收什麼／不收什麼, "big": 大分類[, "aliases": [別名…]]}}
+# `build --skeleton` 把它原樣搬到 batch 頂層的 `new_topics`，`add-batch` 再拿去
+# 登記中主題。add-batch 只讀這三個鍵，多寫的鍵一路被丟掉（寫了等於沒寫），
+# 所以這裡用正面白名單擋下拼錯的欄位名，不讓它靜默消失。
+_NEW_TOPIC_FIELDS = ('charter', 'big', 'aliases')
+
+
+def _normalize_new_topic_aliases(name, aliases):
+    """`--new-topics` 的 aliases 型別檢查，回傳原樣（不代替 add-batch 做切割）。
+
+    `s2_state.cmd_add_batch` 兩種寫法都吃：list（直接用）與逗號／分號分隔的
+    字串（它自己 `re.split`）。這裡照收兩種、只確認「不是空的、元素都是非空
+    字串」，型別不對就當場拒絕——寫進去 add-batch 那邊會 `aliases = None`
+    靜默吃掉，等於別名沒登記到。
+    """
+    if isinstance(aliases, str):
+        if not aliases.strip():
+            _rewrite_entry_error(f'--new-topics 的「{name}」aliases 是空字串。')
+        return aliases
+    if isinstance(aliases, list):
+        if not aliases:
+            _rewrite_entry_error(f'--new-topics 的「{name}」aliases 是空陣列。')
+        if any(not (isinstance(a, str) and a.strip()) for a in aliases):
+            _rewrite_entry_error(
+                f'--new-topics 的「{name}」aliases 必須是「非空字串」的陣列。')
+        return list(aliases)
+    _rewrite_entry_error(
+        f'--new-topics 的「{name}」aliases 必須是陣列（["別名1","別名2"]）'
+        '或逗號分隔字串，不能是其他型別。')
+
+
+def _parse_new_topics_patch(raw):
+    """解析 `--new-topics <JSON字串>`，回傳 {題名: {欄位: 值}} 的逐欄 patch。
+
+    `{}`（空 object）是合法輸入，語意＝「確保 `_new_topics` 這個頂層鍵存在」
+    （沒有就建成 `{}`，有就原樣不動）——規則（13c2 §2）要求三站 entries.json
+    一律帶這個鍵，而 `s2_gate_guard.py` 也拿它當 entries.json 的內容形狀判準。
+    """
+    try:
+        payload = json.loads(raw)
+    except ValueError as exc:
+        _rewrite_entry_error(f'--new-topics 必須是合法 JSON：{exc}')
+    if not isinstance(payload, dict):
+        _rewrite_entry_error(
+            '--new-topics 必須是 JSON object：'
+            '{"題名":{"charter":"這一題收什麼、不收什麼","big":"大分類"}}。')
+    parsed = {}
+    for name, spec in payload.items():
+        if not isinstance(name, str) or not name.strip():
+            _rewrite_entry_error('--new-topics 的題名必須是非空字串。')
+        if name.startswith('_'):
+            _rewrite_entry_error(f'--new-topics 的題名不可用底線開頭：{name}')
+        if not isinstance(spec, dict):
+            _rewrite_entry_error(
+                f'--new-topics 的「{name}」必須是 object'
+                '（{"charter":"…","big":"…"}）；add-batch 對非 object 的值是'
+                '靜默跳過，寫進去等於沒登記。')
+        if not spec:
+            _rewrite_entry_error(f'--new-topics 的「{name}」是空 object，沒有東西可寫。')
+        unknown = sorted(set(spec) - set(_NEW_TOPIC_FIELDS))
+        if unknown:
+            _rewrite_entry_error(
+                f'--new-topics 的「{name}」含不支援欄位：{", ".join(unknown)}；'
+                f'只允許 {", ".join(_NEW_TOPIC_FIELDS)}（add-batch 只讀這三個，'
+                '其餘鍵會被靜默丟掉）。')
+        clean = {}
+        for field in ('charter', 'big'):
+            if field in spec:
+                value = spec[field]
+                if not isinstance(value, str) or not value.strip():
+                    _rewrite_entry_error(
+                        f'--new-topics 的「{name}」{field} 必須是非空字串。')
+                clean[field] = value
+        if 'aliases' in spec:
+            clean['aliases'] = _normalize_new_topic_aliases(name, spec['aliases'])
+        parsed[name] = clean
+    return parsed
+
+
+def _apply_new_topics_patch(entries, patch, entries_path):
+    """把 `--new-topics` 的 patch 併進 entries.json 頂層 `_new_topics`，回傳改到的題名。
+
+    - **逐題、逐欄** merge：只帶 charter 就只換 charter，那一題原本的 big／
+      aliases 留著；這樣「補一題的 charter」不必把整顆 spec 重打一次。
+      （原值那一題不是 object＝壞資料，這次 patch 既然點名了它就整顆換掉。）
+    - 合併**之後**每一題都必須同時有非空 `charter` 與 `big`：`_register_topic`
+      對空值是「不覆寫」而不是報錯，放空殼進去會登記出一筆沒 charter 的中主題，
+      正是 A10 P1b 要擋的東西。驗證放在合併後，才不會妨礙逐欄補件。
+    - 既有 `_new_topics` 不是 object（壞檔）→ 直接拒絕，不靜默重建：那可能是
+      agent 寫錯形狀，蓋掉等於銷毀證據。
+    """
+    current = entries.get('_new_topics')
+    if '_new_topics' in entries and not isinstance(current, dict):
+        _rewrite_entry_error(
+            f'{entries_path} 既有的 `_new_topics` 不是 object'
+            f'（是 {type(current).__name__}），不敢靜默覆蓋；'
+            '請先用一次 `Write` 整批重寫把它修正。')
+    merged = dict(current) if isinstance(current, dict) else {}
+    for name, spec in patch.items():
+        base = merged.get(name)
+        new_spec = dict(base) if isinstance(base, dict) else {}
+        new_spec.update(spec)
+        missing = [field for field in ('charter', 'big')
+                   if not str(new_spec.get(field) or '').strip()]
+        if missing:
+            _rewrite_entry_error(
+                f'--new-topics 的「{name}」合併後仍缺：{"、".join(missing)}；'
+                '中主題登記必須同時有 charter（這一題收什麼、不收什麼）與 '
+                'big（大分類），少一個 add-batch 會登記出空殼。')
+        merged[name] = new_spec
+    entries['_new_topics'] = merged
+    return sorted(patch)
+
+
 def _apply_free_patch(existing, patch):
     """把白名單 patch 併進單筆草稿值，回傳新值（不就地改 `existing`）。
 
@@ -626,6 +743,21 @@ def _cmd_rewrite_entry_free(args, site_label):
       - 不要求 lock 存在、不檢查 ID 是否在 lock 的 reason items 裡。
       - `--set` 是**局部 patch**（只覆寫 entry／category／tc），不是整份取代。
       - 不寫、不清任何 lock；落檔前多一道「不准把 lint 改爛到達門檻」的護欄。
+
+    2026-09-23 追加（0923-1300 輪實測代價）：原本「只能改既有 ID、不准碰
+    `_new_topics`」的限制，讓那一輪 agent 只是想在 `ns_entries_1300.json` 加一個
+    `_new_topics` 開新中主題，就被逼去重生成整份檔案（70 秒＋數千 output token），
+    比那一筆小改動貴得多——鎖定反而變貴。所以自由模式另外開兩條路：
+      - `--new-id <ID>`：**明示**這個 ID 是新增的（必須同時出現在 `--id`／`--set`）。
+        刻意做成顯式旗標而不是「找不到就當新增」：後者會把 ID 打錯字靜默變成
+        一則憑空長出來的素材，夜間無人值守時沒人會發現。有了這個旗標，兩個方向
+        的錯都會大聲失敗——沒標卻不存在＝當打錯，標了卻已存在＝當打錯。
+        新增與修改既有 ID **可以混在同一次呼叫**（同一批判斷本來就會同時產生
+        「補一則」和「改一則」，拆成兩次呼叫只是多一次往返）。
+      - `--new-topics <JSON>`：patch entries.json 頂層 `_new_topics` 保留鍵。
+        跟 `--id`／`--set` 完全分開的機制（它不是素材則，套 `_apply_free_patch`
+        的欄位白名單只會語意錯亂），可以跟新增 ID 同一次用，也可以單獨用
+        （不帶任何 `--id`）。
     """
     other_lock = _lock_owning_entries(args.entries)
     if other_lock:
@@ -636,31 +768,89 @@ def _cmd_rewrite_entry_free(args, site_label):
             f'請改用 `--site {str(lock.get("site", "")).lower()}` 走 lock 模式，'
             '不要用錯站別混進自由模式。')
 
+    raw_new_topics = getattr(args, 'new_topics', None)
+    new_topics_patch = (_parse_new_topics_patch(raw_new_topics)
+                        if raw_new_topics is not None else None)
+
     requested_ids = [str(item_id) for item_id in (args.ids or [])]
-    if not requested_ids or len(requested_ids) != len(set(requested_ids)):
+    if len(requested_ids) != len(set(requested_ids)):
         _rewrite_entry_error('--id 至少給一個且不可重複。')
+    if not requested_ids and new_topics_patch is None:
+        _rewrite_entry_error(
+            '--id 至少給一個且不可重複'
+            '（只想補頂層 `_new_topics`、一則素材都不改的話，'
+            '改帶 `--new-topics <JSON>`，不用給 --id）。')
     reserved = sorted(item_id for item_id in requested_ids if item_id.startswith('_'))
     if reserved:
         _rewrite_entry_error(
             f'--id 不可指向底線開頭的保留鍵：{", ".join(reserved)}'
-            '（`_new_topics` 這類頂層保留鍵不是素材則，要改請用 Write 整批重寫）。')
+            '（`_new_topics` 這類頂層保留鍵不是素材則，請改用 `--new-topics <JSON>`；'
+            '其餘底線開頭的鍵一律要用 Write 整批重寫）。')
     updates = _parse_rewrite_sets_free(args.sets)
     if set(requested_ids) != set(updates):
         _rewrite_entry_error('--id 與 --set 指定的 ID 必須完全一致。')
 
+    # `--new-id` 只是「這個 ID 是新增的」這個意圖的標記，不另外帶內容——
+    # 內容照舊走 `--set`，所以它必須是 `--id`／`--set` 的子集，
+    # 「--id 與 --set 必須完全一致」這個既有不變量也就不用動。
+    declared_new = [str(item_id) for item_id in (getattr(args, 'new_ids', None) or [])]
+    if len(declared_new) != len(set(declared_new)):
+        _rewrite_entry_error('--new-id 不可重複。')
+    stray = sorted(set(declared_new) - set(requested_ids))
+    if stray:
+        _rewrite_entry_error(
+            f'--new-id 必須同時出現在 --id／--set：{", ".join(stray)}'
+            '（--new-id 只標記「這則是新增的」，內容一樣要用 --set 給）。')
+
     entries = load_json(args.entries)
     if not isinstance(entries, dict):
         _rewrite_entry_error('entries.json 頂層必須是 object。')
-    missing = sorted(set(requested_ids) - set(entries))
+
+    # 兩個方向的「ID 打錯字」都要大聲失敗，不准靜默走進另一種語意。
+    collide = sorted(set(declared_new) & set(entries))
+    if collide:
+        _rewrite_entry_error(
+            f'--new-id 指的 ID 其實已經在 entries.json 裡：{", ".join(collide)}。'
+            '這通常是 ID 打錯字（想新增卻撞到既有則）；'
+            '若真的是要改這幾則既有素材，拿掉 --new-id 再跑一次即可'
+            '（拿掉之後就是局部欄位修補，不會整則被蓋掉）。')
+    missing = sorted(set(requested_ids) - set(entries) - set(declared_new))
     if missing:
         _rewrite_entry_error(
-            f'entries.json 找不到 ID：{", ".join(missing)}'
-            '（自由模式只能改既有則，要新增請用 Write 整批重寫）。')
+            f'entries.json 找不到 ID：{", ".join(missing)}。'
+            '若確實要**新增**這幾則，請同時帶 `--new-id <ID>` 明示'
+            '（新增與修改既有則可以混在同一次呼叫）；'
+            '沒帶這個旗標一律當成 ID 打錯，不會靜默生出新則。')
+
+    # 新增則的必要欄位：`entry` 非空。`category`／`tc` 是允許晚點補的
+    # （`parse_draft_entry` 兩個都容許 None，`build` 只在有值時才寫進 batch），
+    # 但 entry 空的話 `cmd_build` 會把這則丟進 `missing` 整則消失——
+    # 那等於「新增了一個看不見的洞」，所以在這裡就擋。
+    for item_id in declared_new:
+        entry_text = updates[item_id].get('entry')
+        if not isinstance(entry_text, str) or not entry_text.strip():
+            _rewrite_entry_error(
+                f'新增的 {item_id} 沒有非空的 entry：--set 必須給素材行'
+                f'（`--set {item_id}=<素材行純文字>`，等同 '
+                '{"entry":"…"}；category／tc 可以晚點再補）。'
+                'entry 空的話 build 會把這則當「缺素材行」整則丟掉。')
+
+    changed_topics = (_apply_new_topics_patch(entries, new_topics_patch, args.entries)
+                      if new_topics_patch is not None else [])
 
     # 「修改前」的基準要在套用 patch 之前算，否則比不出這次改壞了什麼。
+    # （`_new_topics` 在 `_hard_gate_reasons_for_entries` 是被跳過的底線鍵，
+    #   上面先併它不影響這裡的基準。）
     before_counts = _hard_gate_counts_for_entries(entries, site_label, {})
     for item_id in requested_ids:
-        entries[item_id] = _apply_free_patch(entries[item_id], updates[item_id])
+        if item_id in entries:
+            entries[item_id] = _apply_free_patch(entries[item_id], updates[item_id])
+        else:
+            # 新增則一律用 13c 的正規草稿形狀 `{entry[, category, tc]}`，
+            # 不沿用 `_apply_free_patch` 對舊格式純字串的相容分支。
+            entries[item_id] = dict(updates[item_id])
+    # 新增則本身的格式問題也要被硬閘看到——`_hard_gate_counts_for_entries` 是
+    # 掃整份 entries，新則寫進 dict 之後自然納入統計，不需要另外開一套。
     after_counts = _hard_gate_counts_for_entries(entries, site_label, {})
     _reject_if_lint_regressed(before_counts, after_counts, args.entries)
 
@@ -668,8 +858,23 @@ def _cmd_rewrite_entry_free(args, site_label):
         _atomic_write_json(args.entries, entries)
     except OSError as exc:
         _rewrite_entry_error(f'entries.json 寫入失敗：{exc}')
-    print(f'✅ rewrite-entry（自由模式，無 gate lock）已局部修補 {len(requested_ids)} 則：'
-          f'{", ".join(requested_ids)}', file=sys.stderr)
+    patched_ids = [item_id for item_id in requested_ids if item_id not in declared_new]
+    summary = []
+    if patched_ids:
+        summary.append(f'局部修補 {len(patched_ids)} 則（{", ".join(patched_ids)}）')
+    if declared_new:
+        summary.append(f'新增 {len(declared_new)} 則（{", ".join(declared_new)}）')
+    if new_topics_patch is not None:
+        summary.append(f'_new_topics 寫入 {len(changed_topics)} 題'
+                       + (f'（{"、".join(changed_topics)}）' if changed_topics
+                          else '（空殼，只確保這個頂層鍵存在）'))
+    print('✅ rewrite-entry（自由模式，無 gate lock）：' + '、'.join(summary),
+          file=sys.stderr)
+    if declared_new:
+        print('ℹ️ 新增的 ID 必須同時存在於 `from-raw` 產的骨架裡——'
+              '`build --skeleton` 是照骨架逐列走的，骨架沒有這個 id 就不會出現在 '
+              'batch.json（不會報錯，是靜默略過）。新增前請先確認骨架有這一則。',
+              file=sys.stderr)
     still = sorted((code, count) for code, count in after_counts.items() if count > 0)
     if still:
         detail = '、'.join(f'{code}（{count}則）' for code, count in still)
@@ -764,6 +969,32 @@ def cmd_rewrite_entry(args):
     for reason in remaining:
         print(f'  {reason["reason_code"]}（{reason["count"]}則）：'
               f'{", ".join(reason.get("items") or [])}', file=sys.stderr)
+
+
+def cmd_rewrite_entry_cli(args):
+    """argparse 的入口薄殼：只擋「有 active gate lock 卻帶自由模式專屬旗標」。
+
+    `--new-id`／`--new-topics` 只有自由模式看得懂；lock 模式那條路徑是刻意一行
+    未動的既有已上線邏輯，它會**直接忽略**這兩個旗標——不擋的話
+    `--id A --set A=… --new-id B --set B=…` 在有 lock 時會變成「A 改了、B 靜默
+    消失」這種做一半的結果。這層只做這一件事，其餘一律原樣轉交
+    `cmd_rewrite_entry`（所以既有測試直接呼叫 `cmd_rewrite_entry` 仍等價）。
+    """
+    free_only = []
+    if getattr(args, 'new_ids', None):
+        free_only.append('--new-id')
+    if getattr(args, 'new_topics', None) is not None:
+        free_only.append('--new-topics')
+    if free_only:
+        lock_path = _gate_lock_path(args.entries, args.site.upper())
+        if os.path.exists(lock_path):
+            _rewrite_entry_error(
+                f'{"／".join(free_only)} 只在自由模式（沒有 gate lock）可用，'
+                f'但這份 entries.json 目前有 active gate lock：{lock_path}。\n'
+                '  請先用 `rewrite-entry --id/--set` 修完 lock 列出的 ID'
+                '（白名單 lint 歸零會自動解鎖），解鎖後再新增則／補 `_new_topics`；'
+                '真的要整份大改就用一次 `Write` 整批重寫。')
+    return cmd_rewrite_entry(args)
 
 
 def _enforce_build_hard_gate(warnings, site=None, dry_run=False, entries_path=None,
@@ -3368,17 +3599,31 @@ def main():
 
     p_rw = sub.add_parser('rewrite-entry',
                           help='entries.json 的受控精準修補：有 gate lock 時只准改 lock 列出的 ID；'
-                               '沒有 lock 時走自由模式（自選 ID，只改 entry/category/tc）')
+                               '沒有 lock 時走自由模式（自選 ID 改 entry/category/tc，'
+                               '另可 --new-id 新增則、--new-topics 補 _new_topics）')
     p_rw.add_argument('--site', required=True, choices=['ns', 'ap', 'rt'])
     p_rw.add_argument('--entries', required=True,
                       help='要修補的 entries.json；有 active gate lock 時必須跟 lock 記錄的路徑一致')
-    p_rw.add_argument('--id', dest='ids', action='append', required=True,
+    # --id/--set 刻意不設 required：自由模式允許「只補 --new-topics、不動任何素材則」。
+    # 兩種模式缺 --id 時仍各自以 exit 2 明確報錯（lock 模式的那句一個字未改）。
+    p_rw.add_argument('--id', dest='ids', action='append',
                       help='要改的 ID；多筆時重複帶 --id')
-    p_rw.add_argument('--set', dest='sets', action='append', required=True,
+    p_rw.add_argument('--set', dest='sets', action='append',
                       help='<ID>=<新 entry JSON 或純文字>；每個 --id 各帶一組。'
                            '有 lock＝整份取代該則的值；無 lock（自由模式）＝局部覆寫，'
                            '純文字等同 {"entry":"…"}，object 只允許 entry/category/tc')
-    p_rw.set_defaults(func=cmd_rewrite_entry)
+    p_rw.add_argument('--new-id', dest='new_ids', action='append',
+                      help='【自由模式限定】明示這個 ID 是**新增**的（必須同時出現在 '
+                           '--id/--set，且 --set 要帶非空 entry）。不帶這個旗標時，'
+                           '--id 指到不存在的 ID 一律當成打錯字拒絕，不會靜默新增。'
+                           '新增與修改既有則可以混在同一次呼叫')
+    p_rw.add_argument('--new-topics', dest='new_topics',
+                      help='【自由模式限定】patch entries.json 頂層 `_new_topics` 保留鍵，'
+                           '值是 JSON 字串 {"題名":{"charter":"這題收什麼、不收什麼",'
+                           '"big":"大分類","aliases":["別名"]}}；逐題逐欄合併，'
+                           '合併後每題都要有非空 charter 與 big。'
+                           '`{}` ＝只確保這個頂層鍵存在。可單獨使用（不給 --id）')
+    p_rw.set_defaults(func=cmd_rewrite_entry_cli)
 
     p_af = sub.add_parser('autofix-tags', help='R43層1治本：機械修補entries.json草稿裡「有錨點可插」的'
                           '(BITE)/SOT標記缺口（build --dry-run前建議先跑一次；不猜內容，修不了的列出來）')

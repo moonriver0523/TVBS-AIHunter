@@ -220,6 +220,12 @@ def _site_edit_reason(file_path):
         '--id <ID> --set <ID>={"entry":"...","category":"...","tc":"..."}\n'
         '多筆可重複帶 --id/--set；只准改 entry／category／tc（其餘欄位一律拒絕），'
         '落檔前會重跑 build 那套共用 lint，修出新的白名單格式錯誤達門檻就整個拒絕、不寫檔。\n'
+        'ℹ️ 自由模式**也能新增則、也能補 `_new_topics`**，不必為了這兩件事去重寫整份檔案：\n'
+        '  • 新增一則：`--id <新ID> --new-id <新ID> --set <新ID>={"entry":"...",'
+        '"category":"..."}`（--new-id 是明示新增的旗標；沒帶它而 ID 不存在＝當打錯字拒絕）。\n'
+        '  • 開新中主題：`--new-topics \'{"題名":{"charter":"這題收什麼、不收什麼",'
+        '"big":"大分類"}}\'`（可單獨使用，不必給 --id；逐題逐欄合併）。\n'
+        '  兩者可以跟一般修補混在**同一次**呼叫裡。\n'
         '要整份大改就用一次 `Write` 整批重寫，不要換個包法'
         '（MultiEdit、先 Read 再 Write 單一小段…）繞過去。'
     )

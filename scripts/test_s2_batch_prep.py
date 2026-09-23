@@ -1255,9 +1255,23 @@ _rewrite = getattr(bp, 'cmd_rewrite_entry', None)
 def run_rewrite(**kw):
     if _rewrite is None:
         return 'rewrite-entry 尚未實作', 1
-    defaults = dict(site='rt', ids=[], sets=[])
+    defaults = dict(site='rt', ids=[], sets=[], new_ids=None, new_topics=None)
     defaults.update(kw)
     return run(_rewrite, Args(**defaults))
+
+
+# argparse 真正掛的是薄殼 `cmd_rewrite_entry_cli`（擋「有 lock 卻帶自由模式旗標」）；
+# 上面的 run_rewrite 刻意仍直打 cmd_rewrite_entry，好讓既有 lock 模式回歸案例
+# 走的是一模一樣的路徑。
+_rewrite_cli = getattr(bp, 'cmd_rewrite_entry_cli', None)
+
+
+def run_rewrite_cli(**kw):
+    if _rewrite_cli is None:
+        return 'rewrite-entry CLI 薄殼尚未實作', 1
+    defaults = dict(site='rt', ids=[], sets=[], new_ids=None, new_topics=None)
+    defaults.update(kw)
+    return run(_rewrite_cli, Args(**defaults))
 
 
 _dir_rewrite_small = gate_scenario_dir('rewrite_small')
@@ -1406,8 +1420,8 @@ check('rewrite-entry 自由模式：拒絕把底線開頭保留鍵當素材則�
 
 _out_absent, _code_absent = run_rewrite(
     entries=REWRITE_FIELD_ENTRIES, ids=['RT9999'], sets=['RT9999=新增則'])
-check('rewrite-entry 自由模式：不存在的 ID 拒絕（新增則是 Write 的工作）',
-      _code_absent == 2 and '找不到 ID' in _out_absent
+check('rewrite-entry 自由模式：沒帶 --new-id 時，不存在的 ID 仍拒絕（ID 打錯字防呆）',
+      _code_absent == 2 and '找不到 ID' in _out_absent and '--new-id' in _out_absent
       and open(REWRITE_FIELD_ENTRIES, encoding='utf-8').read() == _field_before,
       ascii(_out_absent[-300:]))
 
@@ -1476,6 +1490,226 @@ check('rewrite-entry 自由模式：舊格式純字串草稿改 entry 後仍是�
       and _str_after.startswith('RT9771 (地方) ▎新稿'),
       ascii(json.dumps(_str_after, ensure_ascii=False)))
 
+# ── 自由模式 A41 續辦（2026-09-23）：新增 ID（--new-id）與 _new_topics（--new-topics）─
+# ⚠️ 這一段**反轉**上面「不存在的 ID 拒絕（新增則是 Write 的工作）」那個舊斷言的
+# 立場：舊期望值是「自由模式只能改既有則」，本次刻意改掉它，不是回歸破壞。
+# （0923-1300 輪實測代價：agent 只想在 ns_entries_1300.json 加一個 `_new_topics`，
+#   被擋下後只能整份 Write 重生成，花 70 秒＋數千 output token。）
+# 舊案例本身保留、但意義換了：沒帶 `--new-id` 時 ID 不存在仍拒絕——那現在是
+# 「ID 打錯字防呆」，不再是「不准新增」。
+_dir_rw_add = gate_scenario_dir('rewrite_free_add')
+REWRITE_ADD_ENTRIES = write_json_in(_dir_rw_add, 'entries.json', {
+    'RT9801': {'entry': 'RT9801 (地方) ▎既有則。▎畫面：資料畫面。無BITE。',
+               'category': '國際/既有'},
+})
+_add_before_9801 = json.load(open(REWRITE_ADD_ENTRIES, encoding='utf-8'))['RT9801']
+_new_payload = json.dumps({
+    'entry': 'RT9802 (地方) ▎新增的一則。▎畫面：資料畫面。無BITE。',
+    'category': '國際/新增', 'tc': 'T',
+}, ensure_ascii=False)
+_out_add, _code_add = run_rewrite(
+    entries=REWRITE_ADD_ENTRIES, ids=['RT9802'], new_ids=['RT9802'],
+    sets=[f'RT9802={_new_payload}'])
+_add_after = json.load(open(REWRITE_ADD_ENTRIES, encoding='utf-8'))
+check('rewrite-entry 自由模式：--new-id 可以新增單一 ID（exit 0）',
+      _code_add == 0, ascii(_out_add[-400:]))
+check('rewrite-entry 自由模式：新增則寫成 13c 正規形狀 {entry, category, tc}',
+      _add_after.get('RT9802') == {
+          'entry': 'RT9802 (地方) ▎新增的一則。▎畫面：資料畫面。無BITE。',
+          'category': '國際/新增', 'tc': 'T'},
+      ascii(json.dumps(_add_after.get('RT9802'), ensure_ascii=False)))
+check('rewrite-entry 自由模式：新增則不會動到既有則',
+      _add_after.get('RT9801') == _add_before_9801)
+check('rewrite-entry 自由模式：訊息分開報「新增」與「局部修補」',
+      '新增 1 則' in _out_add and '局部修補' not in _out_add, ascii(_out_add[-400:]))
+check('rewrite-entry 自由模式：新增則會提醒骨架必須也有這個 id',
+      '骨架' in _out_add, ascii(_out_add[-400:]))
+
+# 新增 + 修改既有，混在同一次呼叫
+_out_mix, _code_mix = run_rewrite(
+    entries=REWRITE_ADD_ENTRIES, ids=['RT9801', 'RT9803'], new_ids=['RT9803'],
+    sets=['RT9801=' + json.dumps({'category': '國際/改過'}, ensure_ascii=False),
+          'RT9803=RT9803 (地方) ▎第二則新增。▎畫面：資料畫面。無BITE。'])
+_mix_after = json.load(open(REWRITE_ADD_ENTRIES, encoding='utf-8'))
+check('rewrite-entry 自由模式：新增與修改既有可以混在同一次呼叫',
+      _code_mix == 0
+      and _mix_after['RT9801']['category'] == '國際/改過'
+      and _mix_after['RT9801']['entry'] == _add_before_9801['entry']
+      and _mix_after['RT9803'] == {
+          'entry': 'RT9803 (地方) ▎第二則新增。▎畫面：資料畫面。無BITE。'},
+      ascii(json.dumps(_mix_after, ensure_ascii=False)[-300:]))
+
+# 新增則缺必要欄位（entry）
+_dir_rw_addbad = gate_scenario_dir('rewrite_free_add_bad')
+REWRITE_ADDBAD_ENTRIES = write_json_in(_dir_rw_addbad, 'entries.json', {
+    'RT9811': {'entry': 'RT9811 (地方) ▎既有則。▎畫面：資料畫面。無BITE。'},
+})
+_addbad_before = open(REWRITE_ADDBAD_ENTRIES, encoding='utf-8').read()
+_out_noentry, _code_noentry = run_rewrite(
+    entries=REWRITE_ADDBAD_ENTRIES, ids=['RT9812'], new_ids=['RT9812'],
+    sets=['RT9812=' + json.dumps({'category': '國際/沒有素材行'}, ensure_ascii=False)])
+check('rewrite-entry 自由模式：新增則缺 entry 欄位就拒絕且不改檔',
+      _code_noentry == 2 and '沒有非空的 entry' in _out_noentry
+      and open(REWRITE_ADDBAD_ENTRIES, encoding='utf-8').read() == _addbad_before,
+      ascii(_out_noentry[-300:]))
+
+_out_blank, _code_blank = run_rewrite(
+    entries=REWRITE_ADDBAD_ENTRIES, ids=['RT9813'], new_ids=['RT9813'],
+    sets=['RT9813=' + json.dumps({'entry': '   '}, ensure_ascii=False)])
+check('rewrite-entry 自由模式：新增則 entry 只有空白也拒絕',
+      _code_blank == 2 and '沒有非空的 entry' in _out_blank
+      and open(REWRITE_ADDBAD_ENTRIES, encoding='utf-8').read() == _addbad_before,
+      ascii(_out_blank[-300:]))
+
+# --new-id 指到其實已存在的 ID（典型 ID 打錯字）→ 拒絕，不靜默整則蓋掉
+_out_dup, _code_dup = run_rewrite(
+    entries=REWRITE_ADDBAD_ENTRIES, ids=['RT9811'], new_ids=['RT9811'],
+    sets=['RT9811=RT9811 (地方) ▎以為是新增。▎畫面：資料畫面。無BITE。'])
+check('rewrite-entry 自由模式：--new-id 撞到既有 ID 就拒絕（當成打錯字）',
+      _code_dup == 2 and '其實已經在 entries.json 裡' in _out_dup
+      and open(REWRITE_ADDBAD_ENTRIES, encoding='utf-8').read() == _addbad_before,
+      ascii(_out_dup[-300:]))
+
+# --new-id 必須是 --id／--set 的子集
+_out_stray, _code_stray = run_rewrite(
+    entries=REWRITE_ADDBAD_ENTRIES, ids=['RT9811'], new_ids=['RT9899'],
+    sets=['RT9811=RT9811 (地方) ▎改稿。▎畫面：資料畫面。無BITE。'])
+check('rewrite-entry 自由模式：--new-id 沒同時出現在 --id／--set 就拒絕',
+      _code_stray == 2 and '必須同時出現在 --id' in _out_stray
+      and open(REWRITE_ADDBAD_ENTRIES, encoding='utf-8').read() == _addbad_before,
+      ascii(_out_stray[-300:]))
+
+# 新增則也要被落檔前的 lint 硬閘看到
+_dir_rw_addlint = gate_scenario_dir('rewrite_free_add_lint')
+REWRITE_ADDLINT_ENTRIES = write_json_in(_dir_rw_addlint, 'entries.json', {
+    'RT9821': {'entry': 'RT9821 (地方) ▎乾淨摘要。▎畫面：資料畫面。無BITE。'},
+})
+_addlint_before = open(REWRITE_ADDLINT_ENTRIES, encoding='utf-8').read()
+_out_addop, _code_addop = run_rewrite(
+    entries=REWRITE_ADDLINT_ENTRIES, ids=['RT9822'], new_ids=['RT9822'],
+    sets=['RT9822=RT9822 (地方) ▎新增（完整引言待補）。▎畫面：資料畫面。無BITE。'])
+check('rewrite-entry 自由模式：新增則格式錯到達門檻（FMT_OPERATIONAL_NOTE）照樣被硬閘擋',
+      _code_addop == 2 and 'FMT_OPERATIONAL_NOTE' in _out_addop
+      and open(REWRITE_ADDLINT_ENTRIES, encoding='utf-8').read() == _addlint_before,
+      ascii(_out_addop[-400:]))
+
+_out_add5, _code_add5 = run_rewrite(
+    entries=REWRITE_ADDLINT_ENTRIES,
+    ids=[f'RT983{i}' for i in range(5)],
+    new_ids=[f'RT983{i}' for i in range(5)],
+    sets=[f'RT983{i}=RT983{i} (BITE) ▎摘要。▎畫面：資料畫面。無BITE。' for i in range(5)])
+check('rewrite-entry 自由模式：一次新增 5 則 FMT_FIRST_NOTE_BITE（門檻 5）也被擋且不改檔',
+      _code_add5 == 2 and 'FMT_FIRST_NOTE_BITE' in _out_add5
+      and open(REWRITE_ADDLINT_ENTRIES, encoding='utf-8').read() == _addlint_before,
+      ascii(_out_add5[-400:]))
+
+# ── --new-topics ────────────────────────────────────────────────────────
+_dir_rw_nt = gate_scenario_dir('rewrite_free_newtopics')
+REWRITE_NT_ENTRIES = write_json_in(_dir_rw_nt, 'entries.json', {
+    'RT9841': {'entry': 'RT9841 (地方) ▎既有則。▎畫面：資料畫面。無BITE。'},
+})
+_nt_json = json.dumps(
+    {'加薩停火談判': {'charter': '收加薩停火的談判進度，不收地面戰況',
+                      'big': '國際', 'aliases': ['加薩談判']}}, ensure_ascii=False)
+_out_nt, _code_nt = run_rewrite(entries=REWRITE_NT_ENTRIES, new_topics=_nt_json)
+_nt_after = json.load(open(REWRITE_NT_ENTRIES, encoding='utf-8'))
+check('rewrite-entry 自由模式：--new-topics 可以單獨使用（不給 --id）且 exit 0',
+      _code_nt == 0, ascii(_out_nt[-400:]))
+check('rewrite-entry 自由模式：--new-topics 寫出 build/add-batch 預期的 charter/big/aliases 形狀',
+      _nt_after.get('_new_topics') == {
+          '加薩停火談判': {'charter': '收加薩停火的談判進度，不收地面戰況',
+                           'big': '國際', 'aliases': ['加薩談判']}},
+      ascii(json.dumps(_nt_after.get('_new_topics'), ensure_ascii=False)))
+check('rewrite-entry 自由模式：--new-topics 不動任何素材則',
+      _nt_after.get('RT9841', {}).get('entry', '').startswith('RT9841 (地方) ▎既有則'))
+
+# 逐題逐欄合併：只帶 charter，原本的 big/aliases 要留著
+_out_nt2, _code_nt2 = run_rewrite(
+    entries=REWRITE_NT_ENTRIES,
+    new_topics=json.dumps({'加薩停火談判': {'charter': '改寫過的 charter'}},
+                          ensure_ascii=False))
+_nt_after2 = json.load(open(REWRITE_NT_ENTRIES, encoding='utf-8'))['_new_topics']
+check('rewrite-entry 自由模式：--new-topics 是逐欄合併，只換 charter 不會清掉 big/aliases',
+      _code_nt2 == 0
+      and _nt_after2['加薩停火談判'] == {'charter': '改寫過的 charter',
+                                         'big': '國際', 'aliases': ['加薩談判']},
+      ascii(json.dumps(_nt_after2, ensure_ascii=False)))
+
+# 新增 ID ＋ 補 _new_topics 同一次呼叫（0923-1300 那輪真正想做的事）
+_out_both, _code_both = run_rewrite(
+    entries=REWRITE_NT_ENTRIES, ids=['RT9842'], new_ids=['RT9842'],
+    sets=['RT9842=RT9842 (地方) ▎新題的第一則。▎畫面：資料畫面。無BITE。'],
+    new_topics=json.dumps({'某國大選': {'charter': '只收該國大選本身',
+                                        'big': '國際'}}, ensure_ascii=False))
+_both_after = json.load(open(REWRITE_NT_ENTRIES, encoding='utf-8'))
+check('rewrite-entry 自由模式：一次呼叫可同時新增 ID 與補 _new_topics',
+      _code_both == 0
+      and _both_after['RT9842']['entry'].startswith('RT9842 (地方) ▎新題的第一則')
+      and _both_after['_new_topics']['某國大選']['big'] == '國際'
+      and '加薩停火談判' in _both_after['_new_topics'],
+      ascii(_out_both[-400:]))
+
+# `{}` ＝只確保頂層鍵存在（13c2 §2 要求三站一律帶這個鍵）
+_dir_rw_nt_empty = gate_scenario_dir('rewrite_free_newtopics_empty')
+REWRITE_NTE_ENTRIES = write_json_in(_dir_rw_nt_empty, 'entries.json', {
+    'RT9851': {'entry': 'RT9851 (地方) ▎既有則。▎畫面：資料畫面。無BITE。'},
+})
+_out_nte, _code_nte = run_rewrite(entries=REWRITE_NTE_ENTRIES, new_topics='{}')
+_nte_after = json.load(open(REWRITE_NTE_ENTRIES, encoding='utf-8'))
+check('rewrite-entry 自由模式：--new-topics {} 只把頂層鍵補成空 object',
+      _code_nte == 0 and _nte_after.get('_new_topics') == {}
+      and '_new_topics' in _out_nte,
+      ascii(_out_nte[-300:]))
+
+# --new-topics 的格式驗證
+_dir_rw_nt_bad = gate_scenario_dir('rewrite_free_newtopics_bad')
+REWRITE_NTBAD_ENTRIES = write_json_in(_dir_rw_nt_bad, 'entries.json', {
+    'RT9861': {'entry': 'RT9861 (地方) ▎既有則。▎畫面：資料畫面。無BITE。'},
+})
+_ntbad_before = open(REWRITE_NTBAD_ENTRIES, encoding='utf-8').read()
+for _label, _bad_nt, _expect in (
+        ('不是合法 JSON', '{題名: 沒引號}', '必須是合法 JSON'),
+        ('JSON 但不是 object', '["題名"]', '必須是 JSON object'),
+        ('單題的值不是 object', '{"題名": "charter 寫成字串"}', '必須是 object'),
+        ('缺 big', '{"題名": {"charter": "只有 charter"}}', '合併後仍缺'),
+        ('缺 charter', '{"題名": {"big": "國際"}}', '合併後仍缺'),
+        ('charter 是空字串', '{"題名": {"charter": "  ", "big": "國際"}}', '必須是非空字串'),
+        ('含不支援欄位', '{"題名": {"charter": "c", "big": "國際", "tc": "T"}}',
+         '含不支援欄位'),
+        ('aliases 型別錯', '{"題名": {"charter": "c", "big": "國際", "aliases": 5}}',
+         'aliases 必須是陣列'),
+        ('aliases 元素非字串', '{"題名": {"charter": "c", "big": "國際", "aliases": [1]}}',
+         '非空字串'),
+        ('題名用底線開頭', '{"_x": {"charter": "c", "big": "國際"}}', '不可用底線開頭'),
+):
+    _o, _c = run_rewrite(entries=REWRITE_NTBAD_ENTRIES, new_topics=_bad_nt)
+    check(f'rewrite-entry 自由模式：--new-topics 格式驗證拒絕「{_label}」且不改檔',
+          _c == 2 and _expect in _o
+          and open(REWRITE_NTBAD_ENTRIES, encoding='utf-8').read() == _ntbad_before,
+          ascii(_o[-300:]))
+
+# 既有 `_new_topics` 是壞形狀時不靜默重建
+_dir_rw_nt_broken = gate_scenario_dir('rewrite_free_newtopics_broken')
+REWRITE_NTBROKEN_ENTRIES = write_json_in(_dir_rw_nt_broken, 'entries.json', {
+    'RT9871': {'entry': 'RT9871 (地方) ▎既有則。▎畫面：資料畫面。無BITE。'},
+    '_new_topics': ['寫成陣列了'],
+})
+_ntbroken_before = open(REWRITE_NTBROKEN_ENTRIES, encoding='utf-8').read()
+_out_ntbroken, _code_ntbroken = run_rewrite(
+    entries=REWRITE_NTBROKEN_ENTRIES,
+    new_topics=json.dumps({'某題': {'charter': 'c', 'big': '國際'}}, ensure_ascii=False))
+check('rewrite-entry 自由模式：既有 _new_topics 不是 object 時拒絕，不靜默覆蓋',
+      _code_ntbroken == 2 and '不敢靜默覆蓋' in _out_ntbroken
+      and open(REWRITE_NTBROKEN_ENTRIES, encoding='utf-8').read() == _ntbroken_before,
+      ascii(_out_ntbroken[-300:]))
+
+# 什麼都沒給：--id 與 --new-topics 皆空 → 明確報錯
+_out_nothing, _code_nothing = run_rewrite(entries=REWRITE_NTBAD_ENTRIES)
+check('rewrite-entry 自由模式：--id 與 --new-topics 都沒給就明確報錯',
+      _code_nothing == 2 and '--id 至少給一個' in _out_nothing
+      and '--new-topics' in _out_nothing,
+      ascii(_out_nothing[-300:]))
+
 # 有 gate lock 時：自由模式一律不接手，既有 lock 路徑行為完全不變（回歸）
 _dir_rewrite_lock_guard = gate_scenario_dir('rewrite_lock_still_scoped')
 REWRITE_LOCKGUARD_ENTRIES = write_json_in(_dir_rewrite_lock_guard, 'entries.json', {
@@ -1507,6 +1741,41 @@ check('回歸：帶錯 --site 不能混進自由模式繞過別站 gate lock',
       _code_xsite == 2 and '站別不一致' in _out_xsite
       and open(REWRITE_LOCKGUARD_ENTRIES, encoding='utf-8').read() == _lockguard_before,
       ascii(_out_xsite[-400:]))
+
+# 薄殼 cmd_rewrite_entry_cli：有 lock 時自由模式專屬旗標一律擋下，
+# 不讓它靜默被 lock 模式忽略（那會變成「一半做了一半沒做」）。
+for _label, _kw in (
+        ('--new-id', dict(ids=['RT9781', 'RT9790'], new_ids=['RT9790'],
+                          sets=['RT9781=RT9781 (地方) ▎修好。▎畫面：資料畫面。無BITE。',
+                                'RT9790=RT9790 (地方) ▎偷渡新增。▎畫面：資料畫面。無BITE。'])),
+        ('--new-topics', dict(ids=['RT9781'],
+                              sets=['RT9781=RT9781 (地方) ▎修好。▎畫面：資料畫面。無BITE。'],
+                              new_topics='{"某題":{"charter":"c","big":"國際"}}')),
+):
+    _o_cli, _c_cli = run_rewrite_cli(entries=REWRITE_LOCKGUARD_ENTRIES, **_kw)
+    check(f'CLI 薄殼：有 gate lock 時 {_label} 直接拒絕且不改檔',
+          _c_cli == 2 and '只在自由模式' in _o_cli
+          and open(REWRITE_LOCKGUARD_ENTRIES, encoding='utf-8').read() == _lockguard_before,
+          ascii(_o_cli[-400:]))
+
+# 薄殼在沒有旗標時必須完全透明（lock 模式行為一個字未變）
+_o_cli_pass, _c_cli_pass = run_rewrite_cli(
+    entries=REWRITE_LOCKGUARD_ENTRIES, ids=['RT9782'],
+    sets=['RT9782=RT9782 (地方) ▎越權改稿。▎畫面：資料畫面。無BITE。'])
+check('CLI 薄殼：沒帶自由模式旗標時原樣轉交，lock 模式行為不變',
+      _c_cli_pass == 2 and '不在 gate lock' in _o_cli_pass
+      and open(REWRITE_LOCKGUARD_ENTRIES, encoding='utf-8').read() == _lockguard_before,
+      ascii(_o_cli_pass[-400:]))
+
+# 沒有 lock 時薄殼放行，自由模式旗標照常運作
+_o_cli_free, _c_cli_free = run_rewrite_cli(
+    entries=REWRITE_NTE_ENTRIES,
+    new_topics='{"薄殼放行題":{"charter":"c","big":"國際"}}')
+check('CLI 薄殼：沒有 gate lock 時 --new-topics 照常放行',
+      _c_cli_free == 0
+      and json.load(open(REWRITE_NTE_ENTRIES, encoding='utf-8'))
+      ['_new_topics'].get('薄殼放行題', {}).get('big') == '國際',
+      ascii(_o_cli_free[-300:]))
 
 shutil.rmtree(TMP, ignore_errors=True)
 print(f'\nPASS={sum(results)} FAIL={len(results) - sum(results)}')
