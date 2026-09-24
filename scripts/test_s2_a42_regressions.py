@@ -60,7 +60,10 @@ class CostPriorityTests(unittest.TestCase):
                 self.assertIn('lint', outcome['warning'])
                 self.assertIn('build --dry-run', outcome['warning'])
         self.assertIn('第 3 次', outcomes[2]['reason'])
-        self.assertIn('Write', outcomes[2]['reason'])
+        # A43上線後，第3次deny的補救指引已從「改用Write整批重寫」
+        # 換成新的--init-patch scaffold流程（見s2_batch_prep.py的
+        # rewrite-entry --init-patch），這是預期的改進，不是回歸。
+        self.assertIn('--init-patch', outcomes[2]['reason'])
 
     def test_mechanical_fields_and_active_lock_remain_denied(self):
         category_edit = {
