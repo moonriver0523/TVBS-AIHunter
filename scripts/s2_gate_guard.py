@@ -85,18 +85,18 @@ import sys
 import tempfile
 import time
 
-_UNLOCK_HINT = (
-    '\n⚠️ 這不是文字建議，是工具層技術鎖定——這個檔案在 gate lock 清除前，'
-    'Edit 一律被拒絕。若 lock 合計少於 5 項，可用 `rewrite-entry` 精準修補 lock '
-    '列出的 ID，修後 lint 歸零會自動解鎖：\n'
-    '  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py rewrite-entry '
-    '--site <站> --entries <entries.json路徑> --id <ID> --set <ID>=<新內容>\n'
-    '達 5 項以上請改用 `Write` 整批重寫該站 entries.json（重寫後 lock '
-    '會自動清除）；真的需要人工介入才卡住時，用：\n'
-    '  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py gate-clear '
-    '--site <站> --entries <entries.json路徑>\n'
-    '手動解鎖，不要換個包法（MultiEdit、先 Read 再 Write 單一小段…）繞過去。'
-)
+def _unlock_hint(file_path, site):
+    entries = os.path.abspath(str(file_path))
+    patch = os.path.splitext(entries)[0] + '.patch.json'
+    site_lower = str(site).lower()
+    return (
+        '\n⚠️ 這不是文字建議，是工具層技術鎖定——gate lock 清除前 Edit 一律被拒絕。'
+        '先執行唯一 scaffold 指令，再把全部 changes 填完一次 apply：\n'
+        f'  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py rewrite-entry '
+        f'--site {site_lower} --entries "{entries}" --init-patch "{patch}"\n'
+        'scaffold 建好後會印出唯一 apply 指令。真的需要人工介入才卡住時才用 gate-clear；'
+        '不要用 MultiEdit 或局部 Write 繞鎖。'
+    )
 
 _PLATFORM_ENTRIES_NAME_RE = re.compile(
     r'(?:^|[_-])(enex|abc)[_-]entries(?:[_-][^.]+)?\.json$', re.IGNORECASE)
@@ -152,13 +152,24 @@ def _platform_edit_reason(file_path):
     kind = _platform_artifact_kind(file_path)
     if not kind:
         return None
+    if kind.endswith('entries'):
+        entries = os.path.abspath(str(file_path))
+        skeleton = re.sub(r'(?i)([_-])entries(?=([_-]|\.))', r'\1skeleton', entries, count=1)
+        patch = os.path.splitext(skeleton)[0] + '.patch.json'
+        site = kind.split(' ', 1)[0].lower()
+        next_action = (
+            '\n  python E:/GitHub/TVBS-AIHunter/scripts/s2_platform_bridge.py rewrite-entry '
+            f'--site {site} --skeleton "{skeleton}" --entries "{entries}" '
+            f'--init-patch "{patch}"\n'
+            'scaffold 建好後會印出唯一 apply 指令。'
+        )
+    else:
+        next_action = ('\n此檔是候選衝生物；回到同輪 skeleton/entries，執行 bridge '
+                       'rewrite-entry --init-patch，再重跑 extract/lint。')
     return (
         f'⛔ 【ENEX/ABC 批次修補鎖定】{kind} 是整批產物，禁止用 Edit 逐筆修補：'
-        f'{file_path}。請修正 from-raw 產生的骨架，並整批重建 entries：\n'
-        '  python E:/GitHub/TVBS-AIHunter/scripts/s2_platform_bridge.py rewrite-entry '
-        '--site <enex|abc> --skeleton <skeleton.json> --entries <entries.json> '
-        '--id <ID> --set <ID>={"entry":"...","category":"...","tc":"...","skip":""}\n'
-        '多筆可重複帶 --id/--set；指令會保留完整骨架並整批重建 entries。'
+        f'{file_path}。請修正 from-raw 產生的骨架，並整批重建 entries：'
+        + next_action +
         '若此檔是候選 JSON/TXT，重建 entries 後再用原參數重跑 '
         's2_platform_extract.py；候選檔不是人工修補來源。'
     )
@@ -209,24 +220,18 @@ def _site_edit_reason(file_path):
     kind = _site_artifact_kind(file_path)
     if not kind:
         return None
+    entries = os.path.abspath(str(file_path))
+    patch = os.path.splitext(entries)[0] + '.patch.json'
+    site = (_site_name_from_kind(kind) or 'NS').lower()
     return (
         f'⛔ 【NS/AP/RT 批次修補鎖定】{kind} 是整批產物，禁止用 Edit／MultiEdit '
         f'逐筆修補：{file_path}。\n'
-        'ℹ️ 目前**沒有** gate lock，`rewrite-entry` 走自由模式（可自行指定要改的 ID，'
-        '不受 lock reason items 限制）：\n'
+        'ℹ️ 目前**沒有** gate lock，走自由模式。先建立綁定目前 SHA 的 patch scaffold：\n'
         '  python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py rewrite-entry '
-        '--site <ns|ap|rt> --entries <entries.json路徑> '
-        '--id <ID> --set <ID>={"entry":"...","category":"...","tc":"..."}\n'
-        '多筆可重複帶 --id/--set；只准改 entry／category／tc（其餘欄位一律拒絕），'
-        '落檔前會重跑 build 那套共用 lint，修出新的白名單格式錯誤達門檻就整個拒絕、不寫檔。\n'
-        'ℹ️ 自由模式**也能新增則、也能補 `_new_topics`**，不必為了這兩件事去重寫整份檔案：\n'
-        '  • 新增一則：`--id <新ID> --new-id <新ID> --set <新ID>={"entry":"...",'
-        '"category":"..."}`（--new-id 是明示新增的旗標；沒帶它而 ID 不存在＝當打錯字拒絕）。\n'
-        '  • 開新中主題：`--new-topics \'{"題名":{"charter":"這題收什麼、不收什麼",'
-        '"big":"大分類"}}\'`（可單獨使用，不必給 --id；逐題逐欄合併）。\n'
-        '  兩者可以跟一般修補混在**同一次**呼叫裡。\n'
-        '要整份大改就用一次 `Write` 整批重寫，不要換個包法'
-        '（MultiEdit、先 Read 再 Write 單一小段…）繞過去。'
+        f'--site {site} --entries "{entries}" --init-patch "{patch}"\n'
+        'scaffold 建好後會印出唯一 apply 指令。多筆 changes 一次套用；只准改 '
+        'entry／category／tc（其餘欄位一律拒絕），'
+        '落檔前會重跑 build 那套共用 lint，修出新的白名單格式錯誤達門檻就整個拒絕、不寫檔。'
     )
 
 
@@ -345,8 +350,7 @@ def _edit_limit_reason(file_path, count, threshold):
     return (
         f'⛔ 【同檔逐筆 Edit 次數上限】這一輪已對同一份檔案發出第 {count} 次 '
         f'Edit／MultiEdit，達到上限；第 {threshold} 次（含）起硬擋：{file_path}\n'
-        '請改用一次 `Write` 整批重寫，或使用該檔案對應的批次子指令；'
-        '不要改用 MultiEdit 或拆更小段繞過。'
+        + (_site_edit_reason(file_path) or '請改用該檔案對應的批次子指令。')
     )
 
 
@@ -381,7 +385,7 @@ def _site_cost_priority_decision(file_path, tool_input, session_id):
     warning = (
         f'⚠️ 【A42 成本優先】第 {count}/{threshold - 1} 次既有 ID `entry` Edit 已放行。'
         'PostToolUse 會強制執行共用 lint；完成後仍必須立即跑完整 `build --dry-run`。'
-        f'第 {threshold} 次起硬擋並改走一次 Write／批次重寫。'
+        f'第 {threshold} 次起硬擋並改走 rewrite-entry --patch-file 一次 apply。'
     )
     return {'reason': None, 'warning': warning}
 
@@ -501,11 +505,10 @@ def _batch_edit_reason(file_path, tool_input):
         'ℹ️ 這道鎖**只鎖 category／tc**；batch 草稿的其他欄位（entry、footage_type、'
         'status…）照舊可以自由 Edit，不受影響。\n'
         '✅ 改走批次路徑，擇一：\n'
-        '  1) 這份 batch 還沒 add-batch 進狀態檔 → 修上游 entries.json 草稿後重跑 build：\n'
-        '     python E:/GitHub/TVBS-AIHunter/scripts/s2_batch_prep.py rewrite-entry '
-        '--site <ns|ap|rt> --entries <entries.json路徑> '
-        '--id <ID> --set <ID>={"category":"大分類/中主題/小分題","tc":"T1,T2/C1,C2"}\n'
-        '     （多筆重複帶 --id/--set），再用原參數重跑 `build --out <batch.json>` 整批重建。\n'
+        '  1) 這份 batch 還沒 add-batch 進狀態檔 → 回到上游 entries.json，用 '
+        '`s2_batch_prep.py rewrite-entry --init-patch <patch.json>` 產生 scaffold，'
+        '把多則改動放進 changes 後以 `--patch-file <patch.json>` 一次 apply，'
+        '再用原參數重跑 `build --out <batch.json>`。\n'
         '  2) 已經 add-batch 進狀態檔 → 直接在狀態檔上整批改（分隔符優先認分號）：\n'
         '     python E:/GitHub/TVBS-AIHunter/scripts/s2_state.py --file <state.json路徑> '
         'set-category --pairs "ID1=大分類/中主題;ID2=大分類/中主題/小分題;…"\n'
@@ -513,9 +516,7 @@ def _batch_edit_reason(file_path, tool_input):
         'set-tc --pairs "ID1=T1,T2/C1,C2;ID2=/臺灣;…"\n'
         '     ⚠️ set-tc 每 checkpoint 有呼叫次數上限，務必整批一次下。batch 裡已標好的 '
         'category 可先用 `s2_batch_prep.py collate-category <batch.json…>` '
-        '收成現成的 --pairs 字串。\n'
-        '  3) 真的要整份大改 → 用一次 `Write` 重寫整個 batch.json，'
-        '不要換個包法（MultiEdit、先 Read 再 Write 單一小段…）繞過去。'
+        '收成現成的 --pairs 字串。'
     )
 
 
@@ -741,7 +742,7 @@ def evaluate_edit(file_path, tool_input=None, session_id=None):
         ) or '（reason 記錄缺失）'
         return {'reason': (
             f'⛔ 【Edit 技術鎖定】{site} 站的 gate lock 仍 active（{lock_path}），'
-            f'觸發原因：{reason_str}。' + _UNLOCK_HINT
+            f'觸發原因：{reason_str}。' + _unlock_hint(file_path, site)
         ), 'warning': None}
     platform_reason = _platform_edit_reason(file_path)
     if platform_reason:

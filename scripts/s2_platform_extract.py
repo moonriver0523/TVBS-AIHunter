@@ -451,7 +451,7 @@ def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds,
         if not raw_entry:
             known_gaps.append(f"{code}: raw_entry 尚未填（三段式中文摘要是編輯判斷，這支不代寫，"
                                f"lint 會擋，交件前要補）")
-        items.append({
+        candidate = {
             "id": code,
             "source": "ENEX",
             "first_seen_checkpoint": None,  # 呼叫端統一填 checkpoint
@@ -461,7 +461,10 @@ def extract_enex(raw_items, entries, duration_fn=probe_duration_seconds,
             "sb_count": ent.get("sb_count", 0),
             "src_text": truncate(it.get("desc", "")),
             "enex": {"newslinkId": it.get("nlid"), "duration": dur_str, "partner": it.get("partner")},
-        })
+        }
+        if ent.get("tc"):
+            candidate["tc"] = ent["tc"]
+        items.append(candidate)
     return items, skipped, dropped, known_gaps
 
 
@@ -544,7 +547,7 @@ def extract_abc(raw_rows, entries):
             known_gaps.append(f"{code}: Length 值 `{_len}` {why}，未自動補進素材行——"
                               f"⛔ 不要手動補 `▎00:00` 佔位（18 §140），留白就好")
 
-        items.append({
+        candidate = {
             "id": code,
             "source": "ABC",
             "first_seen_checkpoint": None,
@@ -555,7 +558,10 @@ def extract_abc(raw_rows, entries):
             "src_text": truncate(src_text),
             "abc": {"slug": row.get("Slug"), "storyNumber": story,
                     "duration": row.get("Length"), "detailId": ent.get("detailId")},
-        })
+        }
+        if ent.get("tc"):
+            candidate["tc"] = ent["tc"]
+        items.append(candidate)
     return items, skipped, dropped, known_gaps
 
 

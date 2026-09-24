@@ -151,3 +151,29 @@
 - 已merge回main（合併commit見git log）。`rewrite-entry skip`誤改與bulk`topic-register --entries`原子性問題**未修**，留待另案。
 - 下一步：未啟用canary觀察，若要驗證真實成本與安全性，需另外決定是否切canary觀察排程。
 
+## 2026-09-24 — A43 逐筆 Edit／長 session 根本解法評估（規劃完成、未實作）
+
+- **產出與範圍**：完整規劃在 Codex scratch [plan_root_fix.md](C:/Users/User/AppData/Local/Temp/claude/C--Users-User/eb4b2d77-4a48-422c-b0db-25ce3810af6b/scratchpad/codex-bash-batch/plan_root_fix.md)；MASTER 已新增 A43。本階段只查證與規劃，沒有修改 production 程式、prompt、排程或 state。
+- **split-session 現況更正**：A41 早期「manifest 已寫、尚未接線」已過期。main 的 `3714ea7`／`8c04952` 已完成 `{RUN_ID}`、`-SplitSession`、core→platform 循序兩段、fail-closed receipt、resume/finalize，以及兩段 transcript/token/cost 聚合；基本接線工程量為 0。剩餘是至少一次 17:00 真實 canary、ENEX/ABC 正式 reconcile receipt、啟用政策。split 不會直接減 Edit／turns，只會讓 platform turns 不再重讀 core conversation；A41 的 10%～20% cache-read 降幅仍是未驗證推估。
+- **批次修補結論**：優先在 `s2_platform_bridge.py rewrite-entry` 與 `s2_batch_prep.py rewrite-entry` 加同一份 file-backed `--patch-file` 契約（target SHA、局部 set、全批驗證、原子寫入、dry-run、patch scaffold），不把 `s2_state.py add-batch` 改成 upsert；正式 state 既有稿更新沿用已有的 `update-entry --batch`。另查到 platform bridge 接受 `tc`，但 build/merge 沒有把它帶往下游，須在新介面前修正或從契約移除。
+- **重算量化**：直接解析 0922-1700／2359 stream-json，ENEX 39＋ABC 9 是 48 個獨立 Edit turns，對應 25,002,406 cache-read tokens；全輪分別為 257／217 tool-use turns、114.1M／90.6M cache read。batch patch 的驗收目標是 targeted Edit＝0、repair turns 48→約4～6；split 的增量效益要在 batch canary 後另量，兩者不能直接相加。
+- **建議交付順序**：Phase 0 fixture/規格 0.5 日；Phase 1 兩條 patch-file 路徑 2～3 日；採用提示 0.5 日；單 session canary 工程 0.5 日＋2～3 輪；split safety replay＋一輪 17:00 canary 工程 1 日；若要正式排程，再補 platform 強 receipt 1～2 日。未經使用者裁決不動工。
+
+## 2026-09-24 — A43 file-backed batch patch Phase 0＋1＋1b 完成（已 merge main）
+
+- **交接位置**：隔離 worktree `E:\GitHub\TVBS-AIHunter-a43-batchpatch`；branch `feat/a43-batch-patch`；實作 commit `58e5683f93951f1ad51601d8e1e1b3e867e9530b`。
+- **Phase 0**：新增 sanitized 0922-1700 ENEX 39 則＋0922-2359 ABC 9 則 fixture 與 replay，只保留合成 ID／欄位／數值遺測，不含真實 ID、路徑或素材。腳本可重算 48 次 targeted Edit、25,002,406 cache-read tokens、474 全輪 tool turns、65 全輪 Edit calls、7,393,439 source-log bytes 與 lint 結果；規格固化於 `common/plans/A43-file-backed-batch-patch.md`。
+- **Phase 1**：`s2_platform_bridge.py rewrite-entry` 與 `s2_batch_prep.py rewrite-entry` 均支援 schema v1 `--patch-file [--dry-run]` 與 `--init-patch`。契約含 `entry/category/tc/skip` 全域白名單（core seam 依既有契約只收 `entry/category/tc`）、前綴 ID canonicalization、SHA stale-write 防線、lock/lint 全批驗證、局部 set 與原子替換，失敗不留半套。platform `tc` 已從 skeleton 帶到 entries、candidate 與 merge。
+- **Phase 1b**：build/lint/gate 錯誤改為輸出可直接執行的 scaffold／apply 路徑；13c 只加窄幅一句，沒有新增懲罰規則。`s2_token_metrics.py` 新增 targeted Edit、platform/core patch apply 及 legacy rewrite 獨立桶與採用率。
+- **驗證**：A43 unittest 15/15、batch prep 266/266、gate guard 221/221、platform 77/77、token metrics 靜態分桶全過；`py_compile`、`git diff --check`、`s2_rules_check.py` 全過。含多則 apply、錯站、裸／前綴 ID、canonical duplicate、未知／機械欄位、stale SHA、lock 權限、lint regression、單檔與 platform pair 寫入中斷／rollback。
+- **邊界**：merge main前未啟用排程、未碰 `s2_round_manifest.py`／`-SplitSession`，`add-batch` 仍是 add-only，正式 state 更新仍走 `update-entry --batch`。D23 與 `TVBS-AIHunter-s2-parallel` worktree 未動。
+- **A44發現的驗收指標**：0924-1100真實輪已量到RT/ENEX的零散inspect/search/rewrite/整份Write問題（RT 38 calls、ENEX 35 calls，對量體相近正常基準各為2.78×/3.00×）——這正是A43要解決的問題形狀。canary驗收要看RT/ENEX calls是否從38/35降回約14/12、整份Write次數是否下降。
+
+## 2026-09-24 — A44 0924-1100 逐站成本／耗時歸因（查證完成）
+
+- **產出與範圍**：完整報告在 Codex scratch [findings_1100_persite.md](C:/Users/User/AppData/Local/Temp/claude/C--Users-User/eb4b2d77-4a48-422c-b0db-25ce3810af6b/scratchpad/codex-bash-batch/findings_1100_persite.md)；可重跑工具為同目錄 `analyze_persite_logs.py`，逐 call TSV／JSON summary 在 `persite_output/`。完整解析 0924-1100 的 1,411 行 JSONL、237 tool_use／237 result，另用同一分類器解析 0919／0920／0921 的正常 11:00 與 17:00 輪。只寫分析與追蹤文件，沒有修改 production 程式、prompt、排程或 state。
+- **精確歸站**：NS 49／AP 80／RT 38／ENEX 35／ABC 2／通用 33，合計237、UNKNOWN=0；本輪一次assistant message只有一個tool call，所以是237個tool-use turns，result的238 turns另含最後回覆。cache read歸因：NS15.77M／AP41.12M／RT27.02M／ENEX27.10M／ABC1.61M／通用13.55M，最後回覆0.819M，與總126.984M守恆。時間口徑校正：`duration_api_ms`＝56.65分，`duration_ms`總wall＝61.50分；逐call互斥分攤的tool loop＝61.04分。
+- **核心判斷**：不是只有AP。帳面排除AP backlog與ABC登入失守後，NS＋RT＋ENEX＋通用仍有155 calls／33.56分／83.43M，對A41/A42前三個正常11:00平均61.67 calls／7.37分／13.99M，為2.51×／4.55×／5.96×。NS本輪78則、正常11:00平均26.3則，49 calls也幾乎同比到2.94×，主要是另一個高量體站；RT 17則卻38 calls、ENEX 17則卻35 calls，對量體相近正常17:00基準分別為2.78×與3.00× calls，確認兩站存在量體以外的流程膨脹。
+- **根因與 confound**：RT雖0 error，仍有大量零散inspect/search與3次rewrite＋build鏈；ENEX有5 errors、3次整份Write、`entry/raw_entry`改名後反覆extract、補26筆dropped再重建。AP仍是最大單站且先於RT/ENEX，把後兩站每-turn cache推到歷史約2.5×，所以AP是直接主因兼context放大器，但非唯一工作量。A42新防呆只明確對到4次壞指令早拒（3 quote＋1 JS syntax），RT 0 error仍膨脹，沒有主要A42 computational regression證據。背景Codex可能對75.2秒目錄`ls`有小幅影響，但排除AP/ABC後相對基準多出的26.19分僅2.54分是tool-wait增量，約23.65分是model/agent gap；不支持本機資源競爭為主因。A43 commits在獨立branch/worktree，main於本輪全程仍是A42 merge `804a55a`，沒有跑到一半換production code。
+- **後續量測建議**：A43 batch-patch canary要以RT/ENEX calls是否從38/35降回約14/12及整份Write次數為驗收；split-session另看platform每-turn cache是否回落，兩者效益不可混算。若要再判背景任務，下一輪需同步採CPU／disk queue遙測，不能只靠時間重疊推因果。
+

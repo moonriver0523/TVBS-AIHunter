@@ -128,6 +128,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import s2_state  # noqa: E402  from-raw 讀狀態檔（唯讀，D12 已在庫標記）
 import s2_pretag as pretag  # noqa: E402  機械 T/C 建議＋(BITE)建議，見 A31
+import s2_patch_file as patch_file  # noqa: E402  A43 共用 patch schema／SHA／atomic write
 from s2_material_schema import (  # noqa: E402
     RawLoadResult,
     merge_concat_metadata,
@@ -354,7 +355,7 @@ def _print_build_lint_warnings(warnings, site=None):
         else:
             summaries.append(
                 f'⚠️ 上面 {info["count"]} 則都是 {site_label} 的「{info["name"]}」同類問題，'
-                f'建議整批重寫 {site_label} entries.json，不要逐筆 Edit 修補（見 13c 步驟3-4）')
+                f'請先累積到 rewrite-entry --patch-file，再一次 apply（見下方硬閘指令）')
     total_len = len(header) + 1
     reserved = sum(len(summary) + 1 for summary in summaries)
     warning_budget = max(total_len, INSPECT_TEXT_BUDGET - reserved)
@@ -728,7 +729,7 @@ def _reject_if_lint_regressed(before_counts, after_counts, entries_path):
     for code, before, after, threshold in regressed:
         name = HARD_GATE_REASONS.get(code, code)
         lines.append(f'  • {code}（{name}）：{before} 則 → {after} 則（門檻 ≥{threshold}）')
-    lines.append('  請先修好內容再重跑 rewrite-entry，或改用一次 `Write` 整批重寫。')
+    lines.append('  請修正 patch file 內容後重跑 rewrite-entry --patch-file；target 保持未修改。')
     _rewrite_entry_error('\n'.join(lines))
 
 
@@ -918,6 +919,125 @@ def _cmd_rewrite_entry_free(args, site_label):
           file=sys.stderr)
 
 
+def _load_active_rewrite_lock(entries_path, site_label):
+    """Validate and return this site's active lock, or None when no lock exists."""
+    lock_path = _gate_lock_path(entries_path, site_label)
+    if not os.path.exists(lock_path):
+        return None
+    try:
+        with open(lock_path, encoding='utf-8') as f:
+            lock = json.load(f)
+    except (OSError, ValueError) as exc:
+        _rewrite_entry_error(f'gate lock 無法讀取：{exc}')
+    if lock.get('site') != site_label:
+        _rewrite_entry_error(f'gate lock 站別是 {lock.get("site")}，不是 {site_label}。')
+    locked_entries = os.path.normcase(os.path.abspath(lock.get('entries_path') or ''))
+    requested_entries = os.path.normcase(os.path.abspath(entries_path))
+    if locked_entries != requested_entries:
+        _rewrite_entry_error('gate lock 記錄的 entries_path 與 --entries 不一致。')
+    return lock_path, lock
+
+
+def _cmd_rewrite_entry_patch(args, site_label):
+    """Apply patch schema v1 with partial-set semantics in lock and free modes."""
+    other_lock = _lock_owning_entries(args.entries)
+    if other_lock and str(other_lock[1].get('site') or '') != site_label:
+        lock_path, lock = other_lock
+        _rewrite_entry_error(
+            f'這份 entries.json 其實被 {lock.get("site", "?")} 站的 gate lock 鎖住'
+            f'（{lock_path}），但 --site 給的是 {site_label}，站別不一致。')
+    try:
+        document = patch_file.load_patch(
+            args.patch_file,
+            expected_site=args.site,
+            canonicalize=lambda item_id: str(item_id).strip(),
+            allowed_fields=_REWRITE_FREE_FIELDS,
+        )
+        if not document.changes:
+            raise patch_file.PatchFileError(
+                'changes 是空陣列；請先填入至少一筆 change 再 apply。')
+        patch_file.require_target_sha(args.entries, document.target_sha256)
+    except patch_file.PatchFileError as exc:
+        _rewrite_entry_error(str(exc))
+
+    entries = load_json(args.entries)
+    if not isinstance(entries, dict):
+        _rewrite_entry_error('entries.json 頂層必須是 object。')
+    requested_ids = [change.canonical_id for change in document.changes]
+    reserved = sorted(item_id for item_id in requested_ids if item_id.startswith('_'))
+    if reserved:
+        _rewrite_entry_error(f'patch change 不可指向底線開頭的保留鍵：{", ".join(reserved)}')
+    missing = sorted(set(requested_ids) - set(entries))
+    if missing:
+        _rewrite_entry_error(f'entries.json 找不到 ID：{", ".join(missing)}')
+
+    lock_info = _load_active_rewrite_lock(args.entries, site_label)
+    lint_contexts = {}
+    remaining = None
+    if lock_info:
+        _lock_path, lock = lock_info
+        reasons = lock.get('reasons') or []
+        try:
+            counts = [int(reason.get('count', 0)) for reason in reasons]
+        except (TypeError, ValueError):
+            _rewrite_entry_error('gate lock 的 reason count 格式不合法；請重跑 build --dry-run。')
+        # 舊 --id/--set 路徑在 >=5 項時仍要求整批 Write；file-backed patch 的
+        # 目的正是安全承接大量 ID，所以不套該數量上限，改由 SHA＋全批 lint＋
+        # 一次 atomic write 保護。lock 的 reason-items 權限邊界仍完整保留。
+        allowed_ids = {
+            str(item_id) for reason in reasons for item_id in (reason.get('items') or [])
+        }
+        if not allowed_ids:
+            _rewrite_entry_error('gate lock 沒有 reason items；請先重跑 build --dry-run 更新 lock。')
+        unauthorized = sorted(set(requested_ids) - allowed_ids)
+        if unauthorized:
+            _rewrite_entry_error(
+                f'ID 不在 gate lock 的 reason items 清單：{", ".join(unauthorized)}')
+        lint_contexts = lock.get('lint_contexts') or {}
+
+    before_counts = _hard_gate_counts_for_entries(entries, site_label, lint_contexts)
+    for change in document.changes:
+        entries[change.canonical_id] = _apply_free_patch(
+            entries[change.canonical_id], change.values)
+    after_counts = _hard_gate_counts_for_entries(entries, site_label, lint_contexts)
+    _reject_if_lint_regressed(before_counts, after_counts, args.entries)
+    if lock_info:
+        all_remaining = _hard_gate_reasons_for_entries(entries, site_label, lint_contexts)
+        remaining = _remaining_active_lock_reasons(
+            lock_info[1], {reason['reason_code']: reason for reason in all_remaining})
+
+    summary = {
+        'site': args.site,
+        'dry_run': bool(args.dry_run),
+        'changed': [
+            {'id': change.canonical_id, 'fields': list(change.fields)}
+            for change in document.changes
+        ],
+        'lint_reason_counts_before': before_counts,
+        'lint_reason_counts_after': after_counts,
+        'target_sha256_before': document.target_sha256,
+        'target_sha256_after': patch_file.sha256_json(entries),
+    }
+    print(json.dumps(summary, ensure_ascii=False, indent=2), file=sys.stderr)
+    if args.dry_run:
+        return
+    try:
+        patch_file.require_target_sha(args.entries, document.target_sha256)
+        patch_file.atomic_write_json(args.entries, entries)
+    except (OSError, patch_file.PatchFileError) as exc:
+        _rewrite_entry_error(f'batch patch 寫入失敗，target 未被部分寫入：{exc}')
+
+    if lock_info:
+        if not remaining:
+            _clear_gate_lock(args.entries, site_label)
+        else:
+            _update_active_lock(lock_info[0], lock_info[1], remaining)
+    print(f'✅ rewrite-entry --patch-file 已一次更新 {len(document.changes)} 則：'
+          f'{", ".join(requested_ids)}', file=sys.stderr)
+    print('ℹ️ 下一步：重跑原本的 `build --dry-run`；reason code 歸零後再跑正式 build。',
+          file=sys.stderr)
+
+
 def cmd_rewrite_entry(args):
     """精準改少量 ID 的受控修補，分兩種模式：
 
@@ -928,6 +1048,32 @@ def cmd_rewrite_entry(args):
         落檔前擋「把 lint 改爛到達硬閘門檻」。
     """
     site_label = args.site.upper()
+    if getattr(args, 'init_patch', None):
+        if (getattr(args, 'patch_file', None) or getattr(args, 'ids', None)
+                or getattr(args, 'sets', None) or getattr(args, 'new_ids', None)
+                or getattr(args, 'new_topics', None) is not None
+                or getattr(args, 'dry_run', False)):
+            _rewrite_entry_error(
+                '--init-patch 不可與 --patch-file／--id／--set／--new-id／'
+                '--new-topics／--dry-run 併用。')
+        try:
+            patch_file.write_scaffold(args.init_patch, site=args.site, target=args.entries)
+        except patch_file.PatchFileError as exc:
+            _rewrite_entry_error(str(exc))
+        print(f'✅ patch scaffold 已建立：{args.init_patch}\n'
+              f'ℹ️ 填完 changes 後執行：python scripts/s2_batch_prep.py rewrite-entry '
+              f'--site {args.site} --entries "{args.entries}" '
+              f'--patch-file "{args.init_patch}"', file=sys.stderr)
+        return
+    if getattr(args, 'patch_file', None):
+        if (getattr(args, 'ids', None) or getattr(args, 'sets', None)
+                or getattr(args, 'new_ids', None)
+                or getattr(args, 'new_topics', None) is not None):
+            _rewrite_entry_error(
+                '--patch-file 與舊的 --id／--set／--new-id／--new-topics 互斥。')
+        return _cmd_rewrite_entry_patch(args, site_label)
+    if getattr(args, 'dry_run', False):
+        _rewrite_entry_error('--dry-run 只和 --patch-file 併用。')
     lock_path = _gate_lock_path(args.entries, site_label)
     if not os.path.exists(lock_path):
         return _cmd_rewrite_entry_free(args, site_label)
@@ -1074,21 +1220,17 @@ def _enforce_build_hard_gate(warnings, site=None, dry_run=False, entries_path=No
     status_desc = ('--dry-run 預檢未通過，batch.json 尚未寫入！'
                    if dry_run else
                    '正式 build 已中斷，batch.json 尚未寫入！')
-    reason_total = sum(r['count'] for r in hard_gate_reasons)
-    if reason_total < HARD_GATE_THRESHOLD:
-        fix_steps = [
-            f'    1. 請用 `rewrite-entry` 精準修補 gate lock 列出的 ID（此次共 {reason_total} 項）：',
-            f'       python scripts/s2_batch_prep.py rewrite-entry --site {site_label.lower()} '
-            f'--entries <entries.json路徑> --id <ID> --set <ID>=<新內容>',
-            f'    2. 指令會立刻重跑同一套 lint；白名單 reason count 全部降到 0 才自動解鎖。',
-        ]
-    else:
-        fix_steps = [
-            f'    1. 必須使用一次 `Write` 整批重寫 {site_label} entries.json（修正上述格式問題）。',
-            f'    2. 嚴格禁止逐筆使用 Edit / patch-entry 修補這類機械格式問題！'
-            f'（此次已技術性鎖定 Edit，逐筆修補會被工具層拒絕，見 gate lock）',
-            f'    3. 重寫後請先重跑 `build --dry-run` 預檢，直到該 reason code 計數降到 0 才能跑正式 build。',
-        ]
+    entries_abs = os.path.abspath(entries_path)
+    patch_path = os.path.splitext(entries_abs)[0] + '.patch.json'
+    fix_steps = [
+        f'    1. 先建立綁定目前 SHA 的空白 patch（可直接貼上執行）：',
+        f'       python scripts/s2_batch_prep.py rewrite-entry --site {site_label.lower()} '
+        f'--entries "{entries_abs}" --init-patch "{patch_path}"',
+        f'    2. 把本批全部 ID／欄位填進 changes，再一次 apply：',
+        f'       python scripts/s2_batch_prep.py rewrite-entry --site {site_label.lower()} '
+        f'--entries "{entries_abs}" --patch-file "{patch_path}"',
+        f'    3. apply 會一次驗證 lock 權限與 lint；完成後重跑原本的 build --dry-run。',
+    ]
     lines.extend([
         f'  • 狀態：{status_desc}',
         f'  • 處置要求：',
@@ -3731,6 +3873,11 @@ def main():
                            '"big":"大分類","aliases":["別名"]}}；逐題逐欄合併，'
                            '合併後每題都要有非空 charter 與 big。'
                            '`{}` ＝只確保這個頂層鍵存在。可單獨使用（不給 --id）')
+    p_rw.add_argument('--patch-file', help='patch schema v1 JSON；與既有 --id/--set 路徑互斥')
+    p_rw.add_argument('--init-patch', metavar='OUT',
+                      help='依目前 entries SHA 建立 changes=[] 的空白 patch scaffold')
+    p_rw.add_argument('--dry-run', action='store_true',
+                      help='驗證 patch、lock、lint 並列出預期 hash，但不寫檔／不清 lock')
     p_rw.set_defaults(func=cmd_rewrite_entry_cli)
 
     p_af = sub.add_parser('autofix-tags', help='R43層1治本：機械修補entries.json草稿裡「有錨點可插」的'

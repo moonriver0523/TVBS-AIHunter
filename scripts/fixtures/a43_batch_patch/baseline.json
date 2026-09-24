@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "sanitization": {
+    "contains_real_ids": false,
+    "contains_real_paths": false,
+    "contains_source_text": false,
+    "id_namespace": "A43 synthetic fixture IDs only",
+    "tool_input_bytes_definition": "UTF-8 bytes of the compact JSON tool input; content was discarded"
+  },
+  "expected_totals": {
+    "targeted_edit_turns": 48,
+    "targeted_cache_read_input_tokens": 25002406,
+    "round_tool_turns": 474,
+    "round_edit_calls": 65,
+    "source_log_bytes": 7393439
+  },
+  "sessions": [
+    {
+      "label": "0922-1700-sanitized",
+      "site": "enex",
+      "id_prefix": "ENEXF",
+      "id_width": 4,
+      "targeted_file_kind": "platform entries",
+      "round": {
+        "tool_turns": 257,
+        "edit_calls": 53,
+        "cache_read_input_tokens": 114109550,
+        "output_tokens": 193390,
+        "source_log_bytes": 4202950
+      },
+      "field_groups": [
+        {"from": 1, "through": 25, "fields": ["entry", "category"]},
+        {"from": 26, "through": 39, "fields": ["entry"]}
+      ],
+      "cache_read_input_tokens": [
+        487832, 496961, 497568, 498075, 498664, 499249, 499796, 500943,
+        506911, 507405, 508138, 508751, 509312, 510179, 512620, 513182,
+        513910, 514470, 515678, 518769, 519348, 519985, 521147, 526856,
+        527505, 531087, 532270, 532636, 532971, 533319, 533664, 534017,
+        534364, 534707, 535090, 535427, 535797, 536194, 536537
+      ],
+      "output_tokens": [
+        8, 16, 16, 16, 16, 16, 16, 20, 5, 16, 16, 16, 8, 16, 4, 16,
+        16, 16, 16, 16, 16, 16, 16, 16, 16, 6, 16, 16, 16, 16, 16, 16,
+        16, 16, 16, 16, 16, 16, 16
+      ],
+      "tool_input_bytes": [
+        952, 778, 923, 913, 872, 974, 816, 709, 727, 930, 879, 471, 539,
+        813, 933, 891, 876, 1059, 936, 1056, 877, 847, 1038, 936, 827,
+        343, 349, 363, 362, 364, 363, 345, 415, 336, 402, 460, 355, 372, 450
+      ],
+      "lint_runs": [
+        {"required_fixes": 38, "clean": false, "output_bytes": 3291},
+        {"required_fixes": 14, "clean": false, "output_bytes": 933},
+        {"required_fixes": 0, "clean": true, "output_bytes": 496}
+      ]
+    },
+    {
+      "label": "0922-2359-sanitized",
+      "site": "abc",
+      "id_prefix": "ABC0101",
+      "id_width": 5,
+      "targeted_file_kind": "platform entries",
+      "round": {
+        "tool_turns": 217,
+        "edit_calls": 12,
+        "cache_read_input_tokens": 90618809,
+        "output_tokens": 135140,
+        "source_log_bytes": 3190489
+      },
+      "field_groups": [
+        {"from": 1, "through": 8, "fields": ["entry"]},
+        {"from": 9, "through": 9, "fields": ["skip"]}
+      ],
+      "cache_read_input_tokens": [
+        522402, 528659, 530759, 532195, 532726, 533276, 534901, 536474, 539680
+      ],
+      "output_tokens": [3, 20, 20, 17, 17, 20, 3, 20, 17],
+      "tool_input_bytes": [3610, 3448, 750, 743, 3077, 2864, 2245, 677, 1578],
+      "lint_runs": [
+        {"required_fixes": 1, "clean": false, "output_bytes": 1646},
+        {"required_fixes": 0, "clean": true, "output_bytes": 374}
+      ]
+    }
+  ]
+}

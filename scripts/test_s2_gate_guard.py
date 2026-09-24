@@ -148,7 +148,8 @@ platform_reason = gate_guard.decide_edit(platform_entries) or ''
 check('platform entries：無 lock 仍 deny Edit', bool(platform_reason))
 check('platform entries：deny 訊息引導 bridge rewrite-entry',
       's2_platform_bridge.py rewrite-entry' in platform_reason
-      and '--skeleton' in platform_reason and '--entries' in platform_reason)
+      and '--skeleton' in platform_reason and '--entries' in platform_reason
+      and '--init-patch' in platform_reason)
 
 candidate_json = os.path.join(d2, '0923-ABC-state.json')
 with open(candidate_json, 'w', encoding='utf-8') as f:
@@ -215,7 +216,8 @@ check('NS entries：無 lock 仍 deny Edit', bool(site_reason))
 check('NS entries：deny 訊息引導 s2_batch_prep.py rewrite-entry 且列齊參數',
       's2_batch_prep.py rewrite-entry' in site_reason
       and '--site' in site_reason and '--entries' in site_reason
-      and '--id' in site_reason and '--set' in site_reason, ascii(site_reason))
+      and '--init-patch' in site_reason
+      and '--id' not in site_reason and '--set' not in site_reason, ascii(site_reason))
 check('NS entries：deny 訊息講明是「自由模式」（跟 lock 解鎖訊息區分得開）',
       '自由模式' in site_reason and '沒有' in site_reason, ascii(site_reason))
 check('NS entries：無 lock 時不混入 gate-clear 解鎖訊息（兩段訊息互斥）',
