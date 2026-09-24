@@ -151,3 +151,12 @@
 - 已merge回main（合併commit見git log）。`rewrite-entry skip`誤改與bulk`topic-register --entries`原子性問題**未修**，留待另案。
 - 下一步：未啟用canary觀察，若要驗證真實成本與安全性，需另外決定是否切canary觀察排程。
 
+## 2026-09-24 — A43 file-backed batch patch Phase 0＋1＋1b 完成（未 merge main）
+
+- **交接位置**：隔離 worktree `E:\GitHub\TVBS-AIHunter\.worktrees\a43-batchpatch`；branch `feat/a43-batch-patch`；實作 commit `58e5683f93951f1ad51601d8e1e1b3e867e9530b`。
+- **Phase 0**：新增 sanitized 0922-1700 ENEX 39 則＋0922-2359 ABC 9 則 fixture 與 replay，只保留合成 ID／欄位／數值遺測，不含真實 ID、路徑或素材。腳本可重算 48 次 targeted Edit、25,002,406 cache-read tokens、474 全輪 tool turns、65 全輪 Edit calls、7,393,439 source-log bytes 與 lint 結果；規格固化於 `common/plans/A43-file-backed-batch-patch.md`。
+- **Phase 1**：`s2_platform_bridge.py rewrite-entry` 與 `s2_batch_prep.py rewrite-entry` 均支援 schema v1 `--patch-file [--dry-run]` 與 `--init-patch`。契約含 `entry/category/tc/skip` 全域白名單（core seam 依既有契約只收 `entry/category/tc`）、前綴 ID canonicalization、SHA stale-write 防線、lock/lint 全批驗證、局部 set 與原子替換，失敗不留半套。platform `tc` 已從 skeleton 帶到 entries、candidate 與 merge。
+- **Phase 1b**：build/lint/gate 錯誤改為輸出可直接執行的 scaffold／apply 路徑；13c 只加窄幅一句，沒有新增懲罰規則。`s2_token_metrics.py` 新增 targeted Edit、platform/core patch apply 及 legacy rewrite 獨立桶與採用率。
+- **驗證**：A43 unittest 15/15、batch prep 266/266、gate guard 221/221、platform 77/77、token metrics 靜態分桶全過；`py_compile`、`git diff --check`、`s2_rules_check.py` 全過。含多則 apply、錯站、裸／前綴 ID、canonical duplicate、未知／機械欄位、stale SHA、lock 權限、lint regression、單檔與 platform pair 寫入中斷／rollback。
+- **邊界**：未 merge main、未啟用排程、未碰 `s2_round_manifest.py`／`-SplitSession`，`add-batch` 仍是 add-only，正式 state 更新仍走 `update-entry --batch`。D23 與 `TVBS-AIHunter-s2-parallel` worktree 未動。
+
