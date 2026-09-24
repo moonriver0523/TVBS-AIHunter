@@ -19,7 +19,7 @@ from pathlib import Path
 from unittest import mock
 
 try:
-    from scripts import s2_patch_file as patch_file
+    import s2_patch_file as patch_file
 except ImportError:
     patch_file = None
 
@@ -244,8 +244,8 @@ class PlatformPatchCliTests(unittest.TestCase):
         self.assertEqual(output["ENEX1002"]["category"], "國際/新題")
 
     def test_platform_tc_survives_build_extract_and_merge(self):
-        from scripts.s2_platform_extract import extract_enex
-        from scripts.s2_platform_merge import build as merge_build
+        from s2_platform_extract import extract_enex
+        from s2_platform_merge import build as merge_build
 
         entries = {
             "ENEX1001": {
@@ -317,7 +317,7 @@ class PlatformPatchCliTests(unittest.TestCase):
                 self.assertEqual((skeleton.read_bytes(), entries.read_bytes()), before)
 
     def test_platform_second_replace_failure_rolls_back_first_output(self):
-        from scripts import s2_platform_bridge as bridge
+        import s2_platform_bridge as bridge
 
         skeleton, entries = self.make_enex_target("interrupt")
         patch = _write(
@@ -512,7 +512,7 @@ class SanitizedBaselineFixtureTests(unittest.TestCase):
         )
 
     def test_fixture_recomputes_historical_totals_and_replays_39_plus_9(self):
-        from scripts import s2_batch_patch_baseline as baseline
+        import s2_batch_patch_baseline as baseline
 
         fixture = baseline.load_fixture()
         summary = baseline.summarize(fixture)
@@ -548,7 +548,7 @@ class SanitizedBaselineFixtureTests(unittest.TestCase):
 
 class BatchPatchMetricsTests(unittest.TestCase):
     def test_metrics_separate_targeted_edits_patch_applies_and_legacy_rewrite(self):
-        from scripts import s2_token_metrics as metrics
+        import s2_token_metrics as metrics
 
         with tempfile.TemporaryDirectory() as temp:
             transcript = Path(temp) / "fixture.jsonl"
