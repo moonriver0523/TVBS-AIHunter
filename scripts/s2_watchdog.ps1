@@ -414,7 +414,7 @@ Write-Log "接手 [$checkpoint]（該輪已過 $([Math]::Round($minutesSince,1))
 $scanArgs = @(
     '-NoProfile', '-File', "$Repo\scripts\s2_scan.ps1",
     '-Checkpoint', $checkpoint,
-    '-Model', 'sonnet'      # 跟主排程一致（2026-08-09 由 opus 改）——兩邊不一樣，代打輪就會用錯 model
+    '-Model', 'opus'        # 跟主排程一致（2026-09-25 由 sonnet 改回 opus）——兩邊不一樣，代打輪就會用錯 model
 )
 if ($TestMode) { $scanArgs += @('-TestMode', '-TestLimit', $TestLimit) }
 

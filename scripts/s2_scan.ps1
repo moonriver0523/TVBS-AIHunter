@@ -35,10 +35,13 @@ param(
 
     [string]$CheckpointLabel,
 
-    # 2026-08-09 由 opus 改 sonnet（使用者指定）。改的時候**三個地方要一起改**：
-    # 這裡的預設值、工作排程器 `S2掃帶` 的 -Model 引數、`s2_watchdog.ps1` 代打時帶的值。
-    # 只改一處會變成「手動跑是 sonnet、排程跑是 opus」這種查半天的不一致。
-    [string]$Model = 'sonnet',
+    # 2026-08-09 由 opus 改 sonnet（使用者指定）。
+    # 2026-09-25 由 sonnet 改回 opus（使用者依 0924-2000/2200、0925-0100 三輪 opus 實測
+    # 效率明顯優於同期 sonnet 樣本而裁定；三輪樣本均有 confound（範圍/量體/模板未完全對齊），
+    # 屬初步證據下的裁決，非嚴謹 A/B 結論，若後續劣化需重新評估）。
+    # 改的時候**三個地方要一起改**：這裡的預設值、工作排程器 `S2掃帶` 的 -Model 引數、
+    # `s2_watchdog.ps1` 代打時帶的值。只改一處會變成「手動跑跟排程跑不一致」這種查半天的問題。
+    [string]$Model = 'opus',
 
     # 2026-08-12 明寫 effort。**不要拿掉改回繼承全域預設**——全域 `effortLevel` 會被
     # 使用者在互動 session 打 `/effort` 順手改掉（0812 就發生過，掃帶其實一直跑在 high
@@ -69,7 +72,9 @@ param(
     # 一輪換班輪）耗時全面拉長（0.45~0.49分/則 vs medium 0.33~0.39分/則），
     # 成本方向不穩定（1700貴62%、2000持平略快、2200則數多攤薄後單則反而划算）——
     # 訊號雜但「變慢」這點四輪一致，先改回 medium，樣本留檔比對。
-    [string]$Effort = 'medium',
+    # 2026-09-25 改 low（跟隨上面 opus 裁定同批）：0925-0100 opus+low 對比 0924-2000
+    # opus+medium，量體調整後每則 calls/花費/時間均約省一半，唯一 low 樣本，同上仍待驗證。
+    [string]$Effort = 'low',
 
     # 開工 prompt 範本；{CHECKPOINT} 會被代換掉。
     [string]$PromptFile = "$PSScriptRoot\s2_scan_prompt.md",
