@@ -44,6 +44,7 @@ from s2_platform_extract import (  # noqa: E402
     bare_enex_id,
     truncate,
 )
+import s2_patch_file as patch_file  # noqa: E402
 import s2_state  # noqa: E402  from-raw 讀狀態檔（唯讀，D12 已在庫標記）
 
 for _s in (sys.stdout, sys.stderr):
@@ -402,6 +403,8 @@ def _build_entries(rows):
         value = {
             "raw_entry": entry_text,
             "category": row.get("category") if row.get("category") is not None else "",
+            # A43：tc 是人工判斷欄位，不能只留在骨架後於 build 靜默消失。
+            "tc": row.get("tc") if row.get("tc") is not None else "",
             "sb_count": _as_int_sb(row.get("sb_count")),
         }
         if skip:
@@ -483,6 +486,138 @@ def _parse_rewrite_sets(site, raw_sets):
     return parsed, display_ids
 
 
+def _atomic_write_platform_pair(skeleton_path, rows, entries_path, entries):
+    """Stage both outputs, replace entries then skeleton, and roll back on failure.
+
+    No filesystem offers a portable two-file atomic rename.  The skeleton is the
+    authoritative target, so it is replaced last.  A caught interruption while
+    replacing either file restores every path already replaced before surfacing the
+    error; callers therefore never observe a successful return with a half-applied
+    pair.
+    """
+    targets = [os.path.abspath(os.fspath(entries_path)),
+               os.path.abspath(os.fspath(skeleton_path))]
+    payloads = [entries, rows]
+    originals = {}
+    staged = {}
+    replaced = []
+    try:
+        # Stage every payload before either target is replaced.  The outer finally
+        # also covers failures while creating/writing the *second* temporary.
+        for target, payload in zip(targets, payloads):
+            directory = os.path.dirname(target) or os.getcwd()
+            try:
+                with open(target, "rb") as handle:
+                    originals[target] = handle.read()
+            except FileNotFoundError:
+                originals[target] = None
+            fd, temp_path = tempfile.mkstemp(
+                dir=directory, prefix=".s2pb_patch_", suffix=".json")
+            staged[target] = temp_path
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(patch_file.json_bytes(payload))
+                handle.flush()
+                os.fsync(handle.fileno())
+        try:
+            for target in targets:
+                os.replace(staged[target], target)
+                staged[target] = None
+                replaced.append(target)
+        except Exception:
+            for target in reversed(replaced):
+                original = originals[target]
+                if original is None:
+                    try:
+                        os.remove(target)
+                    except FileNotFoundError:
+                        pass
+                    continue
+                directory = os.path.dirname(target) or os.getcwd()
+                fd, restore_path = tempfile.mkstemp(
+                    dir=directory, prefix=".s2pb_rollback_", suffix=".json")
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(original)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                try:
+                    os.replace(restore_path, target)
+                finally:
+                    if os.path.exists(restore_path):
+                        os.remove(restore_path)
+            raise
+    finally:
+        for temp_path in staged.values():
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+
+
+def _platform_display_id(site, canonical):
+    return ("ENEX" + canonical) if site == "enex" else _abc_id(canonical)
+
+
+def _cmd_rewrite_patch(args, rows):
+    try:
+        document = patch_file.load_patch(
+            args.patch_file,
+            expected_site=args.site,
+            canonicalize=lambda item_id: _canonical_platform_id(args.site, item_id),
+            allowed_fields=_REWRITE_FIELDS,
+        )
+        if not document.changes:
+            raise patch_file.PatchFileError(
+                "changes 是空陣列；請先填入至少一筆 change 再 apply。")
+        patch_file.require_target_sha(args.skeleton, document.target_sha256)
+    except patch_file.PatchFileError as exc:
+        _rewrite_error(str(exc))
+
+    row_by_id = {}
+    for row in rows:
+        canonical = _canonical_platform_id(args.site, row.get("id"))
+        if canonical:
+            if canonical in row_by_id:
+                _rewrite_error(f"骨架有重複 ID：{row.get('id')}")
+            row_by_id[canonical] = row
+    missing = [change.supplied_id for change in document.changes
+               if change.canonical_id not in row_by_id]
+    if missing:
+        _rewrite_error(f"骨架找不到 ID：{', '.join(missing)}")
+
+    changed = []
+    for change in document.changes:
+        row_by_id[change.canonical_id].update(change.values)
+        changed.append({
+            "id": _platform_display_id(args.site, change.canonical_id),
+            "fields": list(change.fields),
+        })
+    entries, dup_ids, _missing_entries = _build_entries(rows)
+    if dup_ids:
+        _rewrite_error(f"骨架有重複 ID：{', '.join(dup_ids)}")
+    summary = {
+        "site": args.site,
+        "dry_run": bool(args.dry_run),
+        "changed": changed,
+        "target_sha256_before": document.target_sha256,
+        "target_sha256_after": patch_file.sha256_json(rows),
+        "entries_sha256_after": patch_file.sha256_json(entries),
+    }
+    print(json.dumps(summary, ensure_ascii=False, indent=2), file=sys.stderr)
+    if args.dry_run:
+        return
+    try:
+        # Close the preparation/apply race immediately before the first replace.
+        patch_file.require_target_sha(args.skeleton, document.target_sha256)
+        _atomic_write_platform_pair(args.skeleton, rows, args.entries, entries)
+    except (OSError, patch_file.PatchFileError) as exc:
+        _rewrite_error(f"batch patch 寫入失敗，未保留半套結果：{exc}")
+    print(
+        f"✅ platform rewrite-entry --patch-file 已一次更新 {len(changed)} 則骨架"
+        "並整批重建 entries。",
+        file=sys.stderr,
+    )
+    print("ℹ️ 下一步：用原本參數重跑 s2_platform_extract.py，再跑 "
+          "s2_platform_lint.py；不要 Edit 候選 JSON/TXT。", file=sys.stderr)
+
+
 def cmd_rewrite_entry(args):
     """修骨架的少量編輯欄位，再由完整骨架整批重建 entries。"""
     if os.path.normcase(os.path.realpath(args.skeleton)) == os.path.normcase(
@@ -497,6 +632,27 @@ def cmd_rewrite_entry(args):
         _rewrite_error(
             f"骨架含非 {args.site.upper()} 列：{', '.join(wrong_site[:10])}"
             + ("…" if len(wrong_site) > 10 else ""))
+
+    if getattr(args, "init_patch", None):
+        if (getattr(args, "patch_file", None) or getattr(args, "ids", None)
+                or getattr(args, "sets", None) or getattr(args, "dry_run", False)):
+            _rewrite_error("--init-patch 不可與 --patch-file／--id／--set／--dry-run 併用。")
+        try:
+            patch_file.write_scaffold(args.init_patch, site=args.site, target=args.skeleton)
+        except patch_file.PatchFileError as exc:
+            _rewrite_error(str(exc))
+        print(f"✅ patch scaffold 已建立：{args.init_patch}\n"
+              f"ℹ️ 填完 changes 後執行：python scripts/s2_platform_bridge.py "
+              f"rewrite-entry --site {args.site} --skeleton \"{args.skeleton}\" "
+              f"--entries \"{args.entries}\" --patch-file \"{args.init_patch}\"",
+              file=sys.stderr)
+        return
+    if getattr(args, "patch_file", None):
+        if args.ids or args.sets:
+            _rewrite_error("--patch-file 與舊的 --id／--set 互斥。")
+        return _cmd_rewrite_patch(args, rows)
+    if getattr(args, "dry_run", False):
+        _rewrite_error("--dry-run 只和 --patch-file 併用。")
 
     requested = [_canonical_platform_id(args.site, item_id) for item_id in (args.ids or [])]
     if not requested or any(not item_id for item_id in requested):
@@ -570,10 +726,15 @@ def main(argv=None):
     p_rw.add_argument("--site", required=True, choices=["enex", "abc"])
     p_rw.add_argument("--skeleton", required=True, help="from-raw 產生的完整骨架 JSON")
     p_rw.add_argument("--entries", required=True, help="重建後的 platform entries 輸出路徑")
-    p_rw.add_argument("--id", dest="ids", action="append", required=True,
+    p_rw.add_argument("--id", dest="ids", action="append",
                       help="要修的 ID；多筆時重複帶 --id")
-    p_rw.add_argument("--set", dest="sets", action="append", required=True,
+    p_rw.add_argument("--set", dest="sets", action="append",
                       help='`<ID>={"entry":"…","category":"…"}`；只允許 entry/category/tc/skip')
+    p_rw.add_argument("--patch-file", help="patch schema v1 JSON；與 --id/--set 互斥")
+    p_rw.add_argument("--init-patch", metavar="OUT",
+                      help="依目前 skeleton SHA 建立 changes=[] 的空白 patch scaffold")
+    p_rw.add_argument("--dry-run", action="store_true",
+                      help="驗證 patch、列出 changed IDs/fields 與預期 hash，但不寫檔")
     p_rw.set_defaults(func=cmd_rewrite_entry)
 
     args = ap.parse_args(argv)

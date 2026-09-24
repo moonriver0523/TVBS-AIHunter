@@ -174,7 +174,8 @@ S2_STATE_SUBCOMMANDS = (
 BATCH_PREP_SUBCOMMANDS = (
     'dump', 'build', 'from-raw', 'unwrap', 'inspect', 'search', 'snapshot',
     'timeline', 'fill-src-text', 'collate-category', 'concat',
-    'compare', 'dedup-check', 'rename-field',
+    'compare', 'dedup-check', 'check-entries', 'rename-field', 'gate-clear',
+    'rewrite-entry', 'autofix-tags',
 )
 
 
@@ -264,9 +265,23 @@ def classify_bash_tool(cmd):
         if m:
             sub = m.group(1)
             if sub in BATCH_PREP_SUBCOMMANDS:
+                if sub == 'rewrite-entry' and _has_subcommand_token(cmd, '--patch-file'):
+                    return 's2_batch_prep:rewrite-entry:patch-file'
                 return f's2_batch_prep:{sub}'
             return f's2_batch_prep:?{sub}'
         return 's2_batch_prep.py'
+    if 's2_platform_bridge' in cmd:
+        match = re.search(
+            r'(?<![\w-])s2_platform_bridge\.py["\']?\s+'
+            r'(from-raw|build|rewrite-entry)\b',
+            cmd,
+        )
+        if not match:
+            return 's2_platform_bridge.py'
+        sub = match.group(1)
+        if sub == 'rewrite-entry' and _has_subcommand_token(cmd, '--patch-file'):
+            return 'platform_bridge:rewrite-entry:patch-file'
+        return f'platform_bridge:{sub}'
     if 's2_render' in cmd:
         return 's2_render.py'
     # 2026-09-05：ENEX／ABC 的整併三件套，原本全落在「Bash（其他）」，
@@ -353,6 +368,8 @@ def measure(session_path):
     last_usage = {}  # message.id -> usage dict（保留最後一筆）
     tool_calls = 0
     tool_by_name = {}
+    targeted_edit_calls = 0
+    patch_apply_calls = 0
     events = []  # (timestamp_iso, phase, is_direct) 每個 tool_use 一筆，for 分段遙測
     n = 0
     last_ts = None
@@ -382,14 +399,30 @@ def measure(session_path):
                 tool_calls += 1
                 name = block.get('name') or '?'
                 inp = block.get('input') or {}
+                original_name = name
                 raw_input = json.dumps(inp, ensure_ascii=False)
                 # 只取路徑／指令這種「用字」給檔名 token 判站，不要把 Write
                 # 的 content 全文（組稿正文）也丟進去——摘要正文提到「美聯社」
                 # 這類字樣一樣會誤判站別（見 classify_phase／_site_from_filename）。
                 file_hint = inp.get('command') or inp.get('file_path') or ''
+                if original_name in ('Edit', 'MultiEdit'):
+                    paths = [inp.get('file_path') or inp.get('path') or '']
+                    for edit in (inp.get('edits') or []):
+                        if isinstance(edit, dict):
+                            paths.append(edit.get('file_path') or edit.get('path') or '')
+                    if any(re.search(
+                            r'(?:^|[_-])(ns|ap|rt|enex|abc)[_-]'
+                            r'(?:[a-z0-9]+[_-])*(entries|skeleton)'
+                            r'(?:[_-][^.]+)?\.json$',
+                            os.path.basename(str(path)), re.IGNORECASE)
+                           for path in paths if path):
+                        targeted_edit_calls += 1
                 if name == 'Bash':
                     cmd = (block.get('input') or {}).get('command', '')
                     name = classify_bash_tool(cmd)
+                    if name in ('platform_bridge:rewrite-entry:patch-file',
+                                's2_batch_prep:rewrite-entry:patch-file'):
+                        patch_apply_calls += 1
                 tool_by_name[name] = tool_by_name.get(name, 0) + 1
                 if ts:
                     # Task 類工具（TaskCreate/TaskUpdate/TaskList/TaskGet/
@@ -458,6 +491,7 @@ def measure(session_path):
     # 'tool_calls_by_name' 底下的 's2_batch_prep:<sub>' 等桶則是同一次 Bash
     # 工具呼叫裡「呼叫了哪個 shell 子指令」的分類，跟 'tool_calls' 是不同層級
     # 的計數（不要拿子指令桶的次數去對 tool_calls 或 requests）。
+    adoption_denominator = targeted_edit_calls + patch_apply_calls
     return {
         'session_file': os.path.basename(session_path),
         'requests': len(last_usage),
@@ -472,6 +506,12 @@ def measure(session_path):
         # 就是唯一會叫出來的訊號。
         'classified_total': sum(tool_by_name.values()),
         'phase_calls_total': sum(v['calls'] for v in phase_stat.values()),
+        'batch_patch': {
+            'targeted_edit_calls': targeted_edit_calls,
+            'patch_apply_calls': patch_apply_calls,
+            'adoption_rate': (patch_apply_calls / adoption_denominator
+                              if adoption_denominator else None),
+        },
         'phases': phase_stat,
         'tool_calls_by_name': dict(sorted(tool_by_name.items(), key=lambda kv: -kv[1])),
     }
@@ -526,6 +566,19 @@ def measure_manifest(manifest_path, transcript_dir=None):
         'phases': {name: phases[name] for name in PHASES if name in phases},
         'tool_calls_by_name': dict(sorted(tools.items(), key=lambda kv: -kv[1])),
     })
+    targeted = sum(
+        int((segment.get('batch_patch') or {}).get('targeted_edit_calls') or 0)
+        for segment in segments
+    )
+    applies = sum(
+        int((segment.get('batch_patch') or {}).get('patch_apply_calls') or 0)
+        for segment in segments
+    )
+    result['batch_patch'] = {
+        'targeted_edit_calls': targeted,
+        'patch_apply_calls': applies,
+        'adoption_rate': applies / (targeted + applies) if targeted + applies else None,
+    }
     return result
 
 

@@ -106,6 +106,10 @@ def build(data):
             e["src_text"] = it["src_text"]
         else:
             no_src.append(i)
+        # A43：platform skeleton 的 tc 已由 agent 判斷；一路帶進 add-batch，
+        # 讓 s2_state.py 既有批次 T/C 驗證與寫入接手，不再於 bridge 後靜默遺失。
+        if it.get("tc"):
+            e["tc"] = it["tc"]
         # 站台專屬 metadata（`enex`／`abc` 那包：newslinkId／partner／時長／slug…）
         # 🔴 2026-09-01 實錯：這裡原本只組固定幾個欄位，那包**整個沒帶過去**，
         # 於是 extract 量到的東西一路活到候選檔就消失。AP／RT 沒事是因為它們的

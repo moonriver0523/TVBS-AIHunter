@@ -689,15 +689,15 @@ check('build --dry-run：壞 entry 仍印出警告',
       codeLD == 0 and 'RT2001:' in outLD and '--dry-run' in outLD, outLD[-600:])
 check('build --dry-run：不寫 batch 輸出檔', not os.path.exists(LINT_DRY_OUT), LINT_DRY_OUT)
 
-# 同一站同一原因達門檻才給整批重寫提示，少量不過度提示。
+# 同一站同一原因達門檻才給 patch-file 批次提示，少量不過度提示。
 out_summary, _ = run(lambda pair: bp._print_build_lint_warnings(*pair),
                       (['RT300%d: 第一備註寫了 BITE' % i for i in range(5)], 'rt'))
 out_small_summary, _ = run(lambda pair: bp._print_build_lint_warnings(*pair),
                            (['RT300%d: 第一備註寫了 BITE' % i for i in range(4)], 'rt'))
 check('lint 匯總提示：同類問題達 5 則時出現',
-      '整批重寫 RT entries.json' in out_summary and '不要逐筆 Edit' in out_summary,
+      'rewrite-entry --patch-file' in out_summary and '一次 apply' in out_summary,
       out_summary)
-check('lint 匯總提示：少於 5 則時不出現', '整批重寫' not in out_small_summary,
+check('lint 匯總提示：少於 5 則時不出現', '--patch-file' not in out_small_summary,
       out_small_summary)
 
 # --skeleton 分支同樣要跑同一套 lint（A24 骨架路徑，共用 _lint_row）
@@ -751,9 +751,12 @@ check('build 硬閘：正式 build 被擋時絕不寫入 batch 輸出檔', not o
 check('build 硬閘：錯誤訊息含 ⛔ 攔截警示', '⛔' in outG5, outG5[-600:])
 check('build 硬閘：錯誤訊息點名站別與 reason code', 'RT' in outG5 and 'FMT_FIRST_NOTE_BITE' in outG5, outG5[-600:])
 check('build 硬閘：錯誤訊息指明 batch.json 尚未寫入', 'batch.json 尚未寫入' in outG5, outG5[-600:])
-check('build 硬閘：錯誤訊息要求一次 Write 整批重寫', '一次 `Write` 整批重寫' in outG5, outG5[-600:])
-check('build 硬閘：錯誤訊息禁止逐筆 Edit', '禁止逐筆' in outG5 and 'Edit' in outG5, outG5[-600:])
-check('build 硬閘：錯誤訊息要求重跑 --dry-run 至 0 則', '重跑 `build --dry-run`' in outG5 and '降到 0' in outG5, outG5[-600:])
+check('build 硬閘：錯誤訊息給出可直接貼上的 patch scaffold 指令',
+      'rewrite-entry --site rt' in outG5 and '--init-patch' in outG5, outG5[-1000:])
+check('build 硬閘：錯誤訊息給出唯一 patch apply 路徑',
+      '--patch-file' in outG5 and '--id' not in outG5 and '--set' not in outG5, outG5[-1000:])
+check('build 硬閘：錯誤訊息要求 apply 後重跑 build --dry-run',
+      '完成後重跑原本的 build --dry-run' in outG5, outG5[-1000:])
 
 # 2. --dry-run 模式達門檻：回傳非 0 exit code（exit 2），同樣印 ⛔ 訊息且不寫檔
 GATE_DRY_OUT_5 = os.path.join(TMP, 'gate_dry_batch_5.json')

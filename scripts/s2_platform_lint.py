@@ -374,6 +374,23 @@ def main():
     if err:
         print(f"\n❌ 交件前必修 {len(err)} 項：")
         print("\n".join("  " + x for x in err))
+        try:
+            with open(args.candidate, encoding="utf-8-sig") as handle:
+                candidate = json.load(handle)
+        except (OSError, ValueError):
+            candidate = {}
+        site = str(candidate.get("source") or "").lower()
+        checkpoint = str(candidate.get("checkpoint") or "")
+        hhmm = checkpoint.rsplit("-", 1)[-1] if "-" in checkpoint else "HHMM"
+        if site in ("enex", "abc"):
+            directory = os.path.dirname(os.path.abspath(args.candidate))
+            skeleton = os.path.join(directory, f"{site}_skeleton_{hhmm}.json")
+            entries = os.path.join(directory, f"{site}_entries_{hhmm}.json")
+            patch = os.path.join(directory, f"{site}_patch_{hhmm}.json")
+            print("\n下一步（建立 SHA-bound patch scaffold；建好後工具會印唯一 apply 指令）：")
+            print("  python scripts/s2_platform_bridge.py rewrite-entry "
+                  f'--site {site} --skeleton "{skeleton}" --entries "{entries}" '
+                  f'--init-patch "{patch}"')
     if warn:
         print(f"\n⚠️ 提醒 {len(warn)} 項：")
         print("\n".join("  " + x for x in warn))
