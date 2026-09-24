@@ -177,3 +177,13 @@
 - **根因與 confound**：RT雖0 error，仍有大量零散inspect/search與3次rewrite＋build鏈；ENEX有5 errors、3次整份Write、`entry/raw_entry`改名後反覆extract、補26筆dropped再重建。AP仍是最大單站且先於RT/ENEX，把後兩站每-turn cache推到歷史約2.5×，所以AP是直接主因兼context放大器，但非唯一工作量。A42新防呆只明確對到4次壞指令早拒（3 quote＋1 JS syntax），RT 0 error仍膨脹，沒有主要A42 computational regression證據。背景Codex可能對75.2秒目錄`ls`有小幅影響，但排除AP/ABC後相對基準多出的26.19分僅2.54分是tool-wait增量，約23.65分是model/agent gap；不支持本機資源競爭為主因。A43 commits在獨立branch/worktree，main於本輪全程仍是A42 merge `804a55a`，沒有跑到一半換production code。
 - **後續量測建議**：A43 batch-patch canary要以RT/ENEX calls是否從38/35降回約14/12及整份Write次數為驗收；split-session另看platform每-turn cache是否回落，兩者效益不可混算。若要再判背景任務，下一輪需同步採CPU／disk queue遙測，不能只靠時間重疊推因果。
 
+## 2026-09-24 — 存進度快照（截至本次session結束）
+
+- **main目前狀態**：HEAD `8b7f037`（ahead origin/main 27，未push）。A42、A43均已merge進main並驗證乾淨：`test_s2_patch_file.py` 15/15、`test_s2_batch_prep.py` 266/266、`test_s2_gate_guard.py` 221/221、`test_s2_token_metrics.py` 78/78、`test_s2_a42_regressions.py` 16/16、`test_s2_bash_guard.py` 51/51、`s2_rules_check.py`全過。
+- **A43-fix worktree已清理**（merge完刪除）。仍存在的既有worktree：`TVBS-AIHunter-d23-youtube`、`TVBS-AIHunter-s2-parallel`（T14 canary，目前切回V8，未merge main）、`TVBS-AIHunter-bite`、`TVBS-AIHunter-d21-anchor`、`TVBS-AIHunter-s2-scoped-1259`、`TVBS-AIHunter-side-precut`，以及另一個Claude session在跑的`.../TVBS-AIHunter-s2-codex-gate`（S2轉Codex CLI adapter，Phase 4進行中，跟本次S2效能修復無關）。
+- **T14（一次多筆Bash平行呼叫）結論**：已測1輪canary，確認prompt引導對此問題無效（部分遵守但遠不足），已切回V8。根因是模型層機率性遵守，非runtime硬限制。**未再繼續**，判定放棄prompt路線。
+- **A41/A42/A43/A44這條主線的最終判斷**：9/22起變慢變貴主因是逐筆Edit塞單一長session（非A41鎖本身，A41只佔5-10%）。A42（成本優先放寬＋操作失誤修復）已merge但0924-1100真實輪測出RT/ENEX仍有零散inspect/rebuild/重複整份Write問題，且被AP backlog的context放大效應加乘。A43（file-backed batch patch）已merge main，是目前對這個根因最直接的解法，**尚未經過任何真實排程輪驗證**——下一步待觀察輪次比對RT/ENEX calls是否真的降到約14/12。
+- **AP資料缺口**：0924凌晨0100/0430/0700三輪AP整站因登入/fetch問題失守約9小時，1100輪已一次性補齊backlog（163則），但22:00-07:00那段窗口本身的原始缺口手動補掃任務已被使用者裁決放棄，四筆needs-review記錄（AP0924-0100/0430/0700/0700-audit）保留原樣未清除。
+- **看門狗狀態**：已關閉（旗標與排程任務都停用）。S2掃帶主排程7個trigger（04:30/07:00/11:00/17:00/20:00/22:00/01:00）已全部確認為啟用狀態。
+- **下一步待辦**：①觀察下一個正常量體輪次的A43效果（RT/ENEX calls數）②視結果決定是否需要接續做split-session canary（A43報告Phase 3）③AP登入穩定性未深入排查根因，只是這次手動介入後暫時恢復④main目前27個commit未push，尚未詢問使用者是否要push。
+
