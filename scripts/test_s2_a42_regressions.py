@@ -176,6 +176,56 @@ class StickyLockTests(unittest.TestCase):
 
 
 class OperatorUxTests(unittest.TestCase):
+    def test_quote_guard_handles_multiline_commands_conservatively(self):
+        cases = [
+            ('single-line unclosed double quote', 'echo "oops', True),
+            ('multiline unclosed double quote',
+             'printf "%s\\n" "first"\nprintf "%s" "oops', True),
+            ('multiline unclosed single quote with CRLF',
+             "printf '%s' 'first'\r\nprintf '%s' 'oops", True),
+            ('balanced quote may span lines', 'printf "%s" "first\nsecond"', False),
+            ('balanced quotes on separate lines',
+             "printf '%s' 'first'\nprintf \"%s\" \"second\"", False),
+            ('unmatched quote characters in comments are ignored',
+             'echo ok # user\'s note\n# "documentation only\npwd', False),
+            ('escaped quotes remain balanced', 'printf "%s" "a\\\"b"\npwd', False),
+            ('heredoc remains outside quote detection',
+             "python - <<'PY'\nprint(\"not shell quoting)\nPY", False),
+        ]
+        for name, command, expected in cases:
+            with self.subTest(name=name):
+                self.assertEqual(expected, bash_guard._has_unclosed_quote(command))
+
+    def test_inspect_ids_accept_comma_whitespace_and_mixed_forms(self):
+        raw = os.path.join(self.tmpdir(), 'ns_ids.json')
+        with open(raw, 'w', encoding='utf-8') as f:
+            json.dump({
+                'NS1': {'entry': 'one'},
+                'NS2': {'entry': 'two'},
+                'NS3': {'entry': 'three'},
+            }, f)
+        cases = [
+            ('comma separated', ['NS1,NS3'], {'NS1', 'NS3'}),
+            ('whitespace separated', ['NS1', 'NS3'], {'NS1', 'NS3'}),
+            ('mixed comma and whitespace', ['NS1,NS2', 'NS3'], {'NS1', 'NS2', 'NS3'}),
+            ('empty comma segments ignored', ['NS1,,NS3'], {'NS1', 'NS3'}),
+            ('index aliases remain accepted', ['#0', '#2'], {'NS1', 'NS3'}),
+        ]
+        for name, ids, expected in cases:
+            with self.subTest(name=name):
+                proc = subprocess.run(
+                    [sys.executable, os.path.join(HERE, 's2_batch_prep.py'),
+                     'inspect', raw, '--site', 'ns', '--ids', *ids,
+                     '--fields', 'entry'],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
+                stdout = proc.stdout.decode('utf-8', 'replace')
+                stderr = proc.stderr.decode('utf-8', 'replace')
+                self.assertEqual(0, proc.returncode, stderr)
+                for item_id in {'NS1', 'NS2', 'NS3'}:
+                    assertion = self.assertIn if item_id in expected else self.assertNotIn
+                    assertion(item_id, stdout)
+                self.assertNotIn('找不到這些 id', stderr)
+
     def test_flat_map_is_inspectable_and_offset_is_applied(self):
         loaded = batch._raw_from_payload('entries.json', {
             'NS1': {'entry': '一'}, 'NS2': {'entry': '二'},

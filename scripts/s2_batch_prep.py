@@ -64,10 +64,10 @@ batch 檔），實測發現三站清單原始檔各包一層不同的站方外�
         的裸陣列，寫回同目錄、檔名加 `_unwrapped`（或用 --out 指定）。
         偵測不出已知殼型時，回報實際看到的頂層型別／鍵，不靜默假裝成功。
 
-    inspect <檔> [--ids A,B] [--fields f1,f2] [--limit N] [--index i]
+    inspect <檔> [--ids A,B | --ids A B] [--fields f1,f2] [--limit N] [--index i]
         讀取（會自動卸殼，不必先跑 unwrap）並精準印出指定項目／欄位。
         不給 --ids/--index/--fields 時預設印摘要：筆數＋每筆 id＋標題行。
-        🔴 **`--ids` 請一次帶多則**（`--ids A,B,C,…`）。全文總長吃得下
+        🔴 **`--ids` 請一次帶多則**（`--ids A,B,C,…` 或 `--ids A B C …`）。全文總長吃得下
         28,000 字元就**整批印全文**；塞不下才退回 200 字元預覽，並明講、
         附上前 N 筆的分批指令。一次只查一則跟一次查 20 則**成本一樣**
         （每次呼叫都要重付整個 context ≈ $0.089），所以逐則翻是純浪費。
@@ -2215,6 +2215,18 @@ def _plan_full_detail(shown, fields, site):
         f'   --ids {",".join(fit_ids)}')
 
 
+def _inspect_ids(values):
+    """Normalize inspect's comma- and whitespace-separated ``--ids`` forms."""
+    if not values:
+        return set()
+    if isinstance(values, str):
+        values = [values]
+    return {item.strip()
+            for value in values
+            for item in value.split(',')
+            if item.strip()}
+
+
 def cmd_inspect(args):
     try:
         loaded = _load_raw_any(args.raw)
@@ -2238,7 +2250,7 @@ def cmd_inspect(args):
             sys.exit(1)
         indexed = [indexed[args.index]]
     elif args.ids:
-        want = set(x.strip() for x in args.ids.split(','))
+        want = _inspect_ids(args.ids)
         # `#N` 序號定址一律受理：id 撲空時本工具自己就是印 `#0…#N`，只認真 id
         # 會讓自己印出來的東西貼不回去（RT detail 補了 `edit` 之後實測到的回歸）。
         indexed = [(i, it) for i, it in indexed
@@ -3597,7 +3609,8 @@ def main():
 
     p_inspect = sub.add_parser('inspect', help='精準印出 raw 檔的指定項目/欄位')
     p_inspect.add_argument('raw')
-    p_inspect.add_argument('--ids', help='逗號分隔的 id 清單')
+    p_inspect.add_argument('--ids', nargs='+',
+                           help='id 清單；可用逗號或空白分隔')
     p_inspect.add_argument('--fields', help='逗號分隔的欄位名清單')
     p_inspect.add_argument('--limit', type=int, help='最多顯示幾筆，預設 100')
     p_inspect.add_argument('--offset', type=_nonnegative_int, default=0,

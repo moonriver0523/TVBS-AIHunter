@@ -285,12 +285,21 @@ def _command_tail(command, start):
 
 
 def _has_unclosed_quote(command):
-    """Conservative single-line quote check; heredocs/multiline commands are skipped."""
-    if not isinstance(command, str) or '\n' in command or '\r' in command or '<<' in command:
+    """Conservatively find a quote left open at the end of a non-heredoc command.
+
+    Quotes may legally span physical lines, so newlines do not reset the state.  Shell
+    comments are skipped to avoid treating prose apostrophes/quotes as syntax.
+    """
+    if not isinstance(command, str) or '<<' in command:
         return False
     quote = None
     escaped = False
-    for ch in command:
+    in_comment = False
+    for index, ch in enumerate(command):
+        if in_comment:
+            if ch in ('\n', '\r'):
+                in_comment = False
+            continue
         if escaped:
             escaped = False
             continue
@@ -300,6 +309,10 @@ def _has_unclosed_quote(command):
         if quote:
             if ch == quote:
                 quote = None
+            continue
+        if ch == '#' and (index == 0 or command[index - 1].isspace()
+                          or command[index - 1] in ';|&()'):
+            in_comment = True
             continue
         if ch in ('"', "'"):
             quote = ch
