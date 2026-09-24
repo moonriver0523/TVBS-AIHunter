@@ -53215,6 +53215,20 @@
       "last_seen": "2026-09-24",
       "resident": false,
       "auto": true
+    },
+    {
+      "name": "歐洲歌唱大賽",
+      "charter": "荷蘭公視主席德拉尼茲證實荷蘭將回歸明年歐洲歌唱大賽，改由多家公廣集團聯合參與，N",
+      "aliases": [],
+      "big": "娛樂",
+      "tc": {
+        "T": [],
+        "C": []
+      },
+      "first_seen": "2026-09-24",
+      "last_seen": "2026-09-24",
+      "resident": false,
+      "auto": true
     }
   ]
 }
