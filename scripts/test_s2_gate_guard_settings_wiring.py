@@ -61,6 +61,14 @@ post_write_cmds = hooks_for(post, 'Write')
 check('s2_guard_settings.json：PostToolUse 新增 Write matcher 指到 s2_gate_guard.py',
       any('s2_gate_guard.py' in c for c in post_write_cmds), str(post_write_cmds))
 
+post_edit_cmds = hooks_for(post, 'Edit|MultiEdit')
+check('s2_guard_settings.json：PostToolUse Edit|MultiEdit 強制跑 lint hook',
+      any('s2_gate_guard.py' in c for c in post_edit_cmds), str(post_edit_cmds))
+
+browser_cmds = hooks_for(pre, 'mcp__browser__browser_evaluate')
+check('s2_guard_settings.json：browser_evaluate 參數／語法防呆已接線',
+      any('s2_browser_guard.py' in c for c in browser_cmds), str(browser_cmds))
+
 # ── .claude/settings.json（互動 session 共用設定，任務B新掛的）─────────
 claude = load(CLAUDE_SETTINGS)
 check('.claude/settings.json：JSON 合法', isinstance(claude, dict))
@@ -100,6 +108,8 @@ check('s2_guard_settings.json 的 Edit deny hook 指到真實存在的 s2_gate_g
 # 腳本本身真的存在（設定檔指到的路徑不是空話）
 GATE_GUARD_PATH = os.path.join(REPO_ROOT, 'scripts', 's2_gate_guard.py')
 check('s2_gate_guard.py 檔案真的存在於設定檔指到的路徑', os.path.exists(GATE_GUARD_PATH), GATE_GUARD_PATH)
+check('s2_browser_guard.py 檔案真的存在於設定檔指到的路徑',
+      os.path.exists(os.path.join(REPO_ROOT, 'scripts', 's2_browser_guard.py')))
 
 print(f'\n共 {len(results)} 項，通過 {sum(results)}，失敗 {len(results) - sum(results)}')
 import sys

@@ -27,14 +27,13 @@
 少於通用門檻時，改走 `s2_batch_prep.py rewrite-entry`；**有 lock** 時該指令
 只接受 lock reason items 列出的 ID，並在寫入後用 build 共用 lint 歸零才清鎖。
 
-2026-09-23（A41 續辦）：NS/AP/RT 的 `{site}_entries_{checkpoint}.json` 比照
-ENEX/ABC，**不管有沒有 gate lock 一律技術性擋下逐筆 Edit/MultiEdit**——0923-0430
-輪實測到 agent 在完全沒觸發 gate lock 的情況下，自發對 `ns_entries_0430.json`
-連打 10 次 Edit（AP/RT 各 1 次），turns 124→224、cache read 37.7M→105.9M、
-成本 $10.52→$26.32，新增則數卻完全一樣。沒有 lock 時的修補管道改走
-`s2_batch_prep.py rewrite-entry` 的**自由模式**（見該檔 `cmd_rewrite_entry`）。
-訊息優先序：有 lock → 維持原本 lock 解鎖訊息（更精確）；沒 lock → 才顯示
-自由模式訊息，兩者不會同時出現。
+2026-09-24（A42 成本優先）：A41 對 NS/AP/RT entries 的無條件鎖改成窄例外：
+**沒有 active lock**、能在寫入前證明只改既有 ID 的 `entry`、且共用 lint 不退步時，
+同一 session／同一檔案前 2 次 Edit/MultiEdit 放行；PreToolUse 明示警告，PostToolUse
+自動跑共用 lint 並強制提示完整 `build --dry-run`。第 3 次起硬擋，改走一次 Write／
+批次重寫。category／tc、ID 增刪、保留鍵與其他欄位不在例外內；有 active lock 時
+仍沿用原本的 lock 硬擋，ENEX/ABC 鎖亦完全不變。無 session id 時因無法執行第 3 次
+門檻，安全退回原本 `rewrite-entry` 路徑。
 
 2026-09-23（A41 第三種攔截）：`*_batch_*.json` 草稿（`build` 產的 add-batch
 輸入）**只鎖 category／tc 兩個欄位**的逐筆 Edit/MultiEdit，其餘欄位（entry、
@@ -229,6 +228,162 @@ def _site_edit_reason(file_path):
         '要整份大改就用一次 `Write` 整批重寫，不要換個包法'
         '（MultiEdit、先 Read 再 Write 單一小段…）繞過去。'
     )
+
+
+def _site_name_from_kind(kind):
+    if not kind:
+        return None
+    first = str(kind).split('/', 1)[0].split(' ', 1)[0].upper()
+    return first if first in ('NS', 'AP', 'RT') else None
+
+
+def _tool_edits(tool_input):
+    """Normalize Edit/MultiEdit input to one list; unknown shapes are unsafe."""
+    if not isinstance(tool_input, dict):
+        return None
+    edits = tool_input.get('edits')
+    if edits is None:
+        edits = [tool_input]
+    if not isinstance(edits, list) or not edits:
+        return None
+    return edits if all(isinstance(edit, dict) for edit in edits) else None
+
+
+def _simulate_text_edits(text, tool_input):
+    """Apply Claude Edit semantics without writing, returning (candidate, error)."""
+    edits = _tool_edits(tool_input)
+    if edits is None:
+        return None, 'Edit 參數不完整，無法在寫入前證明修改安全。'
+    candidate = text
+    for index, edit in enumerate(edits, 1):
+        old = edit.get('old_string')
+        new = edit.get('new_string')
+        if not isinstance(old, str) or not old or not isinstance(new, str):
+            return None, f'第 {index} 筆 Edit 缺少非空 old_string/new_string。'
+        matches = candidate.count(old)
+        if matches == 0:
+            return None, f'第 {index} 筆 old_string 在目前檔案找不到。'
+        if edit.get('replace_all'):
+            candidate = candidate.replace(old, new)
+        elif matches == 1:
+            candidate = candidate.replace(old, new, 1)
+        else:
+            return None, (f'第 {index} 筆 old_string 命中 {matches} 處且未帶 replace_all，'
+                          '無法確定實際修改範圍。')
+    return candidate, None
+
+
+def _entry_only_candidate(file_path, tool_input):
+    """Prove an Edit changes only existing IDs' ``entry`` values.
+
+    This deliberately rejects additions/deletions, reserved top-level keys, category/tc,
+    and every other field.  Failure to parse or prove safety is a hard denial.
+    """
+    try:
+        with open(file_path, encoding='utf-8-sig') as f:
+            original_text = f.read()
+        original = json.loads(original_text)
+    except (OSError, ValueError, TypeError) as exc:
+        return None, None, f'entries.json 無法讀取或解析：{exc}'
+    candidate_text, error = _simulate_text_edits(original_text, tool_input)
+    if error:
+        return None, None, error
+    try:
+        candidate = json.loads(candidate_text)
+    except ValueError as exc:
+        return None, None, f'修改後不是合法 JSON：{exc}'
+    if not isinstance(original, dict) or not isinstance(candidate, dict):
+        return None, None, 'entries.json 頂層必須是 object。'
+    if set(original) != set(candidate):
+        return None, None, '既有 ID 集合或頂層保留鍵發生增刪。'
+
+    changed = []
+    for item_id in original:
+        before, after = original[item_id], candidate[item_id]
+        if before == after:
+            continue
+        if str(item_id).startswith('_'):
+            return None, None, f'頂層保留鍵 {item_id} 不可用 Edit 修改。'
+        if isinstance(before, str) and isinstance(after, str):
+            changed.append(str(item_id))
+            continue
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            return None, None, f'{item_id} 的資料形狀發生變更。'
+        if set(before) != set(after):
+            return None, None, f'{item_id} 的欄位集合發生增刪。'
+        changed_fields = {key for key in before if before[key] != after[key]}
+        if not changed_fields or changed_fields - {'entry'}:
+            fields = '、'.join(sorted(changed_fields - {'entry'})) or '未知'
+            return None, None, (f'{item_id} 動到非 entry 欄位：{fields}；'
+                                'category／tc 等機械欄位仍維持鎖定。')
+        changed.append(str(item_id))
+    if not changed:
+        return None, None, '修改前後沒有可辨識的 entry 變更。'
+    return original, candidate, None
+
+
+def _site_lint_regression(original, candidate, site):
+    """Run the same mechanical lint used by build before allowing the Edit."""
+    try:
+        import s2_batch_prep as batch_prep
+        before = batch_prep._hard_gate_counts_for_entries(original, site, {})
+        after = batch_prep._hard_gate_counts_for_entries(candidate, site, {})
+    except Exception as exc:
+        return f'共用 lint 無法執行（{exc}），為避免未驗證寫入已拒絕。'
+    bad = []
+    for code, count in sorted(after.items()):
+        threshold = batch_prep.HARD_GATE_THRESHOLD_OVERRIDES.get(
+            code, batch_prep.HARD_GATE_THRESHOLD)
+        if count > before.get(code, 0) and count >= threshold:
+            bad.append(f'{code}: {before.get(code, 0)}→{count}（門檻 {threshold}）')
+    if bad:
+        return '修改會讓共用 lint 新增硬閘錯誤：' + '、'.join(bad)
+    return None
+
+
+def _edit_limit_reason(file_path, count, threshold):
+    return (
+        f'⛔ 【同檔逐筆 Edit 次數上限】這一輪已對同一份檔案發出第 {count} 次 '
+        f'Edit／MultiEdit，達到上限；第 {threshold} 次（含）起硬擋：{file_path}\n'
+        '請改用一次 `Write` 整批重寫，或使用該檔案對應的批次子指令；'
+        '不要改用 MultiEdit 或拆更小段繞過。'
+    )
+
+
+def _site_cost_priority_decision(file_path, tool_input, session_id):
+    kind = _site_artifact_kind(file_path)
+    if not kind:
+        return None
+    # Without a session id the third-attempt limit cannot be enforced.  Keep the old
+    # safe route and its actionable rewrite-entry instructions.
+    if not session_id:
+        return {'reason': _site_edit_reason(file_path), 'warning': None}
+    original, candidate, unsafe = _entry_only_candidate(file_path, tool_input)
+    if unsafe:
+        return {'reason': _site_edit_reason(file_path) + f'\nℹ️ 本次不能放寬：{unsafe}',
+                'warning': None}
+    site = _site_name_from_kind(kind)
+    lint_error = _site_lint_regression(original, candidate, site)
+    if lint_error:
+        return {'reason': _site_edit_reason(file_path) + f'\nℹ️ 本次不能放寬：{lint_error}',
+                'warning': None}
+    # A42 policy is fixed: attempts 1-2 warn/allow, attempt 3 hard-denies.  Keep the
+    # older environment override scoped to the generic fallback only.
+    threshold = _EDIT_TALLY_DEFAULT_THRESHOLD
+    try:
+        count = _bump_edit_tally(session_id, file_path)
+    except Exception as exc:
+        return {'reason': _site_edit_reason(file_path)
+                + f'\nℹ️ Edit 次數計數器失敗（{exc}），無法安全套用成本優先例外。',
+                'warning': None}
+    if count >= threshold:
+        return {'reason': _edit_limit_reason(file_path, count, threshold), 'warning': None}
+    warning = (
+        f'⚠️ 【A42 成本優先】第 {count}/{threshold - 1} 次既有 ID `entry` Edit 已放行。'
+        'PostToolUse 會強制執行共用 lint；完成後仍必須立即跑完整 `build --dry-run`。'
+        f'第 {threshold} 次起硬擋並改走一次 Write／批次重寫。'
+    )
+    return {'reason': None, 'warning': warning}
 
 
 _BATCH_DRAFT_NAME_RE = re.compile(
@@ -546,12 +701,13 @@ def _generic_edit_reason(file_path, session_id):
 def decide_edit(file_path, tool_input=None, session_id=None):
     """PreToolUse／Edit 專用：回傳 None＝放行；否則回傳 deny 理由字串。
 
-    判斷順序刻意固定為「gate lock → ENEX/ABC → NS/AP/RT → batch 草稿欄位
+    判斷順序刻意固定為「gate lock → ENEX/ABC → NS/AP/RT 成本優先例外 → batch 草稿欄位
     → 通用次數上限」：
       1. 有 active gate lock 時一律優先回 lock 訊息（帶站別／reason code／
          `gate-clear` 逃生路徑，比泛用訊息精確），行為跟 2026-09-18 上線版完全相同。
       2. ENEX/ABC 既有判斷擺第二，結果不受後面新增分支影響。
-      3. 沒有 lock 的 NS/AP/RT entries 走自由模式訊息。
+      3. 沒有 lock 的 NS/AP/RT entries 僅允許前兩次、既有 ID、entry-only、lint
+         不退步的 Edit；其他情況走自由模式／Write 指路。
       4. batch 草稿的 category／tc 欄位鎖擺**最後、優先度最低**（2026-09-23）：
          它是唯一「要看 Edit 內容才決定」的條件式分支，前三條都是純檔名／lock
          的無條件鎖。擺最後可以保證就算哪天命名規則撞在一起，前三條的行為
@@ -565,6 +721,16 @@ def decide_edit(file_path, tool_input=None, session_id=None):
     ⚠️ `session_id` 可略（預設 None）：不給就等於關掉第 5 條（不計數、不擋），
     所有既有呼叫端與既有測試的行為一個字都不會變。
     """
+    return evaluate_edit(file_path, tool_input, session_id)['reason']
+
+
+def evaluate_edit(file_path, tool_input=None, session_id=None):
+    """Return both a denial reason and an allow-warning for hook callers.
+
+    ``decide_edit`` remains the compatibility API for callers that only understand
+    deny/allow.  The hook uses this richer result so the first two cost-priority edits
+    cannot silently skip the mandatory lint reminder.
+    """
     found = _find_lock_for_path(file_path)
     if found:
         lock_path, lock = found
@@ -573,20 +739,47 @@ def decide_edit(file_path, tool_input=None, session_id=None):
         reason_str = '、'.join(
             f'{r.get("code")}（{r.get("count")}則）' for r in reasons
         ) or '（reason 記錄缺失）'
-        return (
+        return {'reason': (
             f'⛔ 【Edit 技術鎖定】{site} 站的 gate lock 仍 active（{lock_path}），'
             f'觸發原因：{reason_str}。' + _UNLOCK_HINT
-        )
+        ), 'warning': None}
     platform_reason = _platform_edit_reason(file_path)
     if platform_reason:
-        return platform_reason
-    site_reason = _site_edit_reason(file_path)
-    if site_reason:
-        return site_reason
+        return {'reason': platform_reason, 'warning': None}
+    site_decision = _site_cost_priority_decision(file_path, tool_input, session_id)
+    if site_decision:
+        return site_decision
     batch_reason = _batch_edit_reason(file_path, tool_input)
     if batch_reason:
-        return batch_reason
-    return _generic_edit_reason(file_path, session_id)
+        return {'reason': batch_reason, 'warning': None}
+    return {'reason': _generic_edit_reason(file_path, session_id), 'warning': None}
+
+
+def post_edit_lint_message(file_path):
+    """Run shared entries lint after an allowed NS/AP/RT Edit and return context."""
+    kind = _site_artifact_kind(file_path)
+    if not kind or _find_lock_for_path(file_path):
+        return None
+    site = _site_name_from_kind(kind)
+    try:
+        with open(file_path, encoding='utf-8-sig') as f:
+            entries = json.load(f)
+        if not isinstance(entries, dict):
+            raise ValueError('頂層不是 object')
+        import s2_batch_prep as batch_prep
+        counts = batch_prep._hard_gate_counts_for_entries(entries, site, {})
+    except Exception as exc:
+        return (f'⛔ A42 PostToolUse 共用 lint 無法完成：{exc}。'
+                '請停止後續寫入，先用 `build --dry-run` 完整預檢。')
+    detail = ('、'.join(f'{code}={count}' for code, count in sorted(counts.items()))
+              or '白名單機械格式 reason=0')
+    return (
+        f'✅ A42 PostToolUse 共用 lint 已執行：{detail}。'
+        '這個快速 lint 不含 skeleton/raw 的完整上下文；現在必須立即跑原本的 '
+        '`build --dry-run` 完整預檢，例如：'
+        f'`s2_batch_prep.py build --site {site.lower()} --entries "{file_path}" '
+        '--raw <raw.json> --checkpoint <MMDD-HHMM> --skeleton <skeleton.json> --dry-run`。'
+    )
 
 
 def _write_looked_successful(tool_response):
@@ -627,6 +820,7 @@ def main():
         tool_name = payload.get('tool_name', '')
         tool_input = payload.get('tool_input') or {}
         file_path = tool_input.get('file_path', '')
+        hook_event = payload.get('hook_event_name', '')
         # 官方 hook 協定的共同欄位（PreToolUse/PostToolUse 都有）；舊版 CLI 沒有
         # 這個欄位時值是 None，第 5 條規則會整條跳過。
         session_id = payload.get('session_id')
@@ -643,13 +837,35 @@ def main():
     if tool_name not in ('Edit', 'MultiEdit'):
         return 0
 
-    reason = decide_edit(file_path, tool_input, session_id)
+    if hook_event == 'PostToolUse':
+        if _write_looked_successful(payload.get('tool_response')):
+            message = post_edit_lint_message(file_path)
+            if message:
+                print(json.dumps({
+                    'hookSpecificOutput': {
+                        'hookEventName': 'PostToolUse',
+                        'additionalContext': message,
+                    }
+                }, ensure_ascii=True))
+        return 0
+
+    outcome = evaluate_edit(file_path, tool_input, session_id)
+    reason = outcome['reason']
     if reason:
         print(json.dumps({
             'hookSpecificOutput': {
                 'hookEventName': 'PreToolUse',
                 'permissionDecision': 'deny',
                 'permissionDecisionReason': reason,
+            }
+        }, ensure_ascii=True))
+    elif outcome['warning']:
+        print(json.dumps({
+            'hookSpecificOutput': {
+                'hookEventName': 'PreToolUse',
+                'permissionDecision': 'allow',
+                'permissionDecisionReason': outcome['warning'],
+                'additionalContext': outcome['warning'],
             }
         }, ensure_ascii=True))
     return 0

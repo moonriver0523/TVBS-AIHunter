@@ -782,16 +782,22 @@ check('build --skeleton 硬閘：白名單格式錯誤≥5則時 exit 2', codeGS
 check('build --skeleton 硬閘：不寫入 batch 輸出檔', not os.path.exists(GATE_SKEL_OUT_5), GATE_SKEL_OUT_5)
 
 # 4. 回歸測試：內容/語意類警告即使 >= 5 則，也絕不觸發硬閘（exit 0、正常產出 batch）
-SEM_RAW_5 = write_json('sem_raw_5.json', [
+SEM_DIR = os.path.join(TMP, 'semantic_only')
+os.makedirs(SEM_DIR, exist_ok=True)
+SEM_RAW_5 = os.path.join(SEM_DIR, 'raw.json')
+with open(SEM_RAW_5, 'w', encoding='utf-8') as _f:
+    json.dump([
     {'code': f'RT320{i}', 'head': f'head {i}', 'story': f'story {i}', 'sb_count': 1}
     for i in range(5)
-])
+    ], _f, ensure_ascii=False)
 # 觸發「BITE 引言疑似未翻譯成中文」內容警告（英文字元多於中文字元，非白名單機械格式）
-SEM_ENTRIES_5 = write_json('sem_entries_5.json', {
+SEM_ENTRIES_5 = os.path.join(SEM_DIR, 'entries.json')
+with open(SEM_ENTRIES_5, 'w', encoding='utf-8') as _f:
+    json.dump({
     f'RT320{i}': f'RT320{i} (地方) (BITE) ▎測試摘要。▎畫面：資料畫面。▎BITE：拜登「This is an English soundbite without translation.」'
     for i in range(5)
-})
-SEM_OUT_5 = os.path.join(TMP, 'sem_batch_5.json')
+    }, _f, ensure_ascii=False)
+SEM_OUT_5 = os.path.join(SEM_DIR, 'batch.json')
 outSEM, codeSEM = run(bp.cmd_build, Args(site='rt', raw=SEM_RAW_5, entries=SEM_ENTRIES_5,
                                          checkpoint='0914-1200', out=SEM_OUT_5))
 check('build 回歸測試：內容類原因≥5則絕不觸發硬閘（維持 exit 0）', codeSEM == 0, str(codeSEM))

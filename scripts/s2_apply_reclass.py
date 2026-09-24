@@ -53,6 +53,18 @@ MOVE = re.compile(r"^MOVE\s+(.+?)=(.+?)/(.+?)(?:/(.*))?$")
 ORDER = re.compile(r"^ORDER\s+(.+?)=(.+)$")
 
 
+def _default_suggest_path(state_path):
+    """Derive the documented sibling suggestion file from an S2 state filename."""
+    path = os.path.abspath(state_path or s2_state.DEFAULT_FILE)
+    match = re.match(r'^(\d{4})-', os.path.basename(path))
+    if not match:
+        raise ValueError(
+            '無法從狀態檔名推導 MMDD；請明確帶 '
+            '`--suggest <_待整併/MMDD-分類收斂建議.txt>`。')
+    return os.path.join(os.path.dirname(path), '_待整併',
+                        f'{match.group(1)}-分類收斂建議.txt')
+
+
 def parse(path):
     """回傳 (moves, orders, 壞行)。moves=[(id, 大, 中, 小)]、orders=[(大, [中主題…])]"""
     moves, orders, bad = [], [], []
@@ -88,9 +100,18 @@ def parse(path):
 def main():
     ap = argparse.ArgumentParser(description="套用分類收斂建議檔")
     ap.add_argument("--file", help="狀態檔路徑（省略＝預設今天那份）")
-    ap.add_argument("--suggest", required=True, help="建議檔路徑")
+    ap.add_argument("--suggest", help="建議檔路徑；省略時由 --file 自動推導同層 "
+                                      "_待整併/{MMDD}-分類收斂建議.txt")
     ap.add_argument("--dry-run", action="store_true", help="只檢查不寫檔")
     args = ap.parse_args()
+
+    if not args.suggest:
+        try:
+            args.suggest = _default_suggest_path(args.file)
+        except ValueError as exc:
+            print(f'ERROR {exc}', file=sys.stderr)
+            return 2
+        print(f'ℹ️ 未帶 --suggest，已自動使用：{args.suggest}', file=sys.stderr)
 
     if not os.path.exists(args.suggest):
         print(f"ERROR 找不到建議檔：{args.suggest}", file=sys.stderr)

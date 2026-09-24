@@ -2173,12 +2173,35 @@ def cmd_topic_register(state, args):
           + (f"（{t['big']}）" if t.get("big") else ""))
 
 
+def _normalize_topic_alias_args(name, alias, add=None):
+    """Normalize canonical/alias args, including the common ``alias=canonical`` form."""
+    if add:
+        left, sep, right = str(add).partition('=')
+        left, right = left.strip(), right.strip()
+        if not sep or not left or not right:
+            raise ValueError('--add 格式必須是 `<別名>=<canonical 名>`。')
+        if name or alias:
+            raise ValueError('--add 不可與 --name/--alias 混用。')
+        return right, left
+    if not name or not alias:
+        raise ValueError(
+            '請用 `--name <canonical> --alias <別名>`；或相容寫法 '
+            '`--add "<別名>=<canonical>"`。')
+    return name, alias
+
+
 def cmd_topic_alias(state, args):
     """替既有中主題追加別名（不改 canonical，只併不改名）。
 
     對登記簿沒有的中主題明確失敗——⛔ 不靜默造出一筆空 charter 的格，
     那樣「有登記但沒 charter」比「沒登記」更容易被誤以為已經處理過。
     """
+    try:
+        args.name, args.alias = _normalize_topic_alias_args(
+            args.name, args.alias, getattr(args, 'add', None))
+    except ValueError as exc:
+        print(f'ERROR {exc}', file=sys.stderr)
+        sys.exit(2)
     reg = load_registry(args.registry)
     t = find_topic(reg, args.name)
     if t is None:
@@ -3277,7 +3300,12 @@ def cmd_needs_review(state, args):
             sys.exit(2)
         idle = [i for i in ids if not state["items"][i].get("needs_review")]
         if idle:
-            print(f"ERROR: 這些本來就沒有待人工標記：{','.join(idle)}（全部未處理）")
+            active = [i for i, value in sorted(state["items"].items())
+                      if value.get("needs_review")]
+            active_text = ','.join(active) if active else '（目前沒有）'
+            print(f"ERROR: 這些本來就沒有待人工標記：{','.join(idle)}（全部未處理）。"
+                  f"目前可結案 ID：{active_text}。先跑 `needs-review list` 核對，"
+                  "再把正確 ID 貼進 `needs-review done --ids ...`。")
             sys.exit(2)
         dropped, cleared = [], []
         for i in ids:
@@ -3457,8 +3485,9 @@ def main():
     ta = sub.add_parser("topic-alias",
                         help="替既有中主題追加別名（不改 canonical，只併不改名；"
                              "對象要先 topic-register 過，否則明確失敗）")
-    ta.add_argument("--name", required=True, help="canonical 名（要已登記）")
-    ta.add_argument("--alias", required=True, help="要追加的別名，逗號／分號分隔可多個")
+    ta.add_argument("--name", help="canonical 名（要已登記）")
+    ta.add_argument("--alias", help="要追加的別名，逗號／分號分隔可多個")
+    ta.add_argument("--add", help='相容防呆：`<別名>=<canonical 名>`；不可與 --name/--alias 混用')
     tc = sub.add_parser("set-tc", help="寫 T（議題）／C（地緣）標籤；名單只認 TC-字典.md")
     tc.add_argument("--id")
     tc.add_argument("--tc", help="T1,T2/C1,C2（單側可留空，例：/臺灣）")
