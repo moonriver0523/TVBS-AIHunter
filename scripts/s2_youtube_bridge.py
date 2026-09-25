@@ -1513,6 +1513,12 @@ def _apply_batch_command(args: argparse.Namespace) -> int:
     next_cursor = advance_cursor_for_candidate(current, candidate)
     if next_cursor != current:
         save_cursor_atomic(args.cursor, next_cursor, expected_revision=current["revision"])
+    # 候選檔只在 add-batch 成功後才歸檔（跟 finalize --apply 那條路徑同款慣例，3.7）；
+    # 套用失敗直接 raise，走不到這裡，候選檔原樣保留給下一輪重試。
+    _archive_pending_candidate(args.batch)
+    manifest_path = re.sub(r"\.apply-batch\.json$", ".manifest.json", args.batch, flags=re.IGNORECASE)
+    if manifest_path != args.batch and os.path.exists(manifest_path):
+        _archive_pending_candidate(manifest_path)
     print(json.dumps(candidate.get("receipt", {}), ensure_ascii=False))
     return 0
 
