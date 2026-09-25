@@ -8,7 +8,8 @@
  * 用法：
  *   node s2_relogin_daily.js                 # 依序嘗試 NS/AP/ENEX/ABC
  *   node s2_relogin_daily.js --site NS,AP    # 只重登指定站（逗號分隔）
- *   node s2_relogin_daily.js --headed        # 顯示視窗（預設 headless）
+ *   node s2_relogin_daily.js --headed        # 顯示視窗（預設 headless；有 AP 時預設顯示視窗）
+ *   node s2_relogin_daily.js --headless      # 強制 headless（AP 可能回 state-unknown）
  *   node s2_relogin_daily.js --profile <dir> # 覆寫成別的 profile 路徑
  */
 'use strict';
@@ -17,7 +18,7 @@ const { run } = require('./s2_relogin_lib');
 
 const DAILY_PROFILE = 'C:/Users/User/.playwright-daily-profile';
 
-run(process.argv.slice(2), DAILY_PROFILE).catch((e) => {
+run(process.argv.slice(2), DAILY_PROFILE, { apHeadedDefault: true }).catch((e) => {
   console.error('ERR ' + String(e.message || e).split('\n')[0]);
   process.exit(1);
 });

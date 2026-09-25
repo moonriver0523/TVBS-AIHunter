@@ -39,6 +39,33 @@ function loadCredentials() {
   return creds;
 }
 
+// AP 登入態判定（2026-09-25 修正誤判）：
+//   - 登出時不是伺服器端立即轉址，而是前端 JS 載入後才導到 login.newsroom.ap.org；
+//     只看 goto 當下的網址會把「已登出」誤判成 already-logged-in。
+//   - headless 下 AP 前端常常根本不跑（頁面只剩「Skip to main content」、不打任何 API；
+//     全新 profile 甚至直接吃 Cloudflare 封鎖頁），轉址永遠不會發生。
+//   所以改成等「正面證據」：出現 Sign out 連結＝已登入；被導到登入網域、或停在
+//   公開首頁出現 Sign in 按鈕＝未登入；逾時都沒有＝無法判定，丟錯誤讓呼叫端回報，
+//   不再默認已登入。
+async function apLoginState(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (/login\.newsroom\.ap\.org/i.test(page.url())) return 'logged-out';
+    const title = await page.title().catch(() => '');
+    if (/Attention Required|Cloudflare/i.test(title)) throw new Error('cloudflare-blocked');
+    // Sign out 連結收在帳號選單裡、平常是隱藏的，getByRole 會略過隱藏元素，所以直接查 DOM。
+    const signOut = await page.evaluate(() => [...document.querySelectorAll('a,button')]
+      .some((e) => /^\s*sign\s*out\s*$/i.test(e.textContent || ''))).catch(() => false);
+    if (signOut) return 'logged-in';
+    // 從沒登入過的 profile 不會轉址，而是停在公開首頁（「Do you have an AP Newsroom
+    // account?」＋ Sign in 按鈕），這也算未登入。
+    const signIn = await page.getByRole('button', { name: 'Sign in' }).count().catch(() => 0);
+    if (signIn > 0) return 'logged-out';
+    await page.waitForTimeout(500);
+  }
+  throw new Error('state-unknown(page-not-rendered)');
+}
+
 // 每站：alreadyOk 判斷是否已登入（免重登）；login 執行實際填表；verify 登入後複查。
 const SITES = {
   NS: {
@@ -60,18 +87,24 @@ const SITES = {
   },
   AP: {
     startUrl: 'https://newsroom.ap.org/',
-    alreadyOk: async (page) => !/login\.newsroom\.ap\.org/i.test(page.url()),
+    // 判定邏輯見上方 apLoginState() 註解；有跑 AP 時 run() 預設開有視窗模式。
+    alreadyOk: async (page) => (await apLoginState(page, 25000)) === 'logged-in',
     login: async (page, cred) => {
-      await page.getByRole('button', { name: 'Sign in' }).click();
-      await page.waitForTimeout(1500);
-      await page.getByRole('textbox', { name: 'Username or Email address' }).fill(cred.user);
+      // 被 JS 導到 login.newsroom.ap.org/u/login/identifier 時已經是帳號輸入頁，
+      // 沒有首頁那顆「Sign in」可按；只有停在首頁時才先按。
+      const userBox = page.getByRole('textbox', { name: 'Username or Email address' });
+      if (!(await userBox.isVisible().catch(() => false))) {
+        await page.getByRole('button', { name: 'Sign in' }).click();
+        await page.waitForTimeout(1500);
+      }
+      await userBox.fill(cred.user);
       await page.getByRole('button', { name: 'Sign in' }).click();
       await page.waitForTimeout(1500);
       await page.getByRole('textbox', { name: 'Enter your password' }).fill(cred.pass);
       await page.getByRole('button', { name: 'Sign in' }).click();
       await page.waitForTimeout(3000);
     },
-    verify: async (page) => !/login\.newsroom\.ap\.org/i.test(page.url()),
+    verify: async (page) => (await apLoginState(page, 25000)) === 'logged-in',
   },
   ENEX: {
     startUrl: 'https://members.enex.news/user/login?destination=/',
@@ -108,8 +141,8 @@ function resolvePlaywright() {
   throw new Error('找不到 playwright——npx 快取被清掉了？跑一次 npx @playwright/mcp 重建');
 }
 
-function parseArgs(argv, defaultProfile) {
-  const opts = { sites: Object.keys(SITES), profile: defaultProfile, headless: true };
+function parseArgs(argv, defaultProfile, apHeadedDefault) {
+  const opts = { sites: Object.keys(SITES), profile: defaultProfile, headless: null };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--site' && argv[i + 1]) {
       opts.sites = argv[++i].split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
@@ -117,15 +150,21 @@ function parseArgs(argv, defaultProfile) {
       opts.profile = argv[++i];
     } else if (argv[i] === '--headed') {
       opts.headless = false;
+    } else if (argv[i] === '--headless') {
+      opts.headless = true;
     }
   }
+  // 沒明講時：daily 版有跑 AP 就開視窗（headless 下 AP 前端不跑、無法判定登入態）；
+  // S2 版（s2_keepalive.ps1 無人值守呼叫、v4 profile 開視窗在本機有已知問題）維持 headless，
+  // AP 判定不了會回 ERR(state-unknown…) 交給人工，不再誤報已登入。
+  if (opts.headless === null) opts.headless = !(apHeadedDefault && opts.sites.includes('AP'));
   return opts;
 }
 
 // 離開碼：0＝全部成功（或該站已在登入態、不需重登）；3＝有站重登失敗（需人工介入）；
 //         1＝其他錯誤（例如讀不到帳密檔）。
-async function run(argv, defaultProfile) {
-  const opts = parseArgs(argv, defaultProfile);
+async function run(argv, defaultProfile, { apHeadedDefault = false } = {}) {
+  const opts = parseArgs(argv, defaultProfile, apHeadedDefault);
   const unknown = opts.sites.filter((s) => !SITES[s]);
   if (unknown.length) {
     console.error(`未知站別（RT 刻意不支援自動重登）：${unknown.join(',')}`);
