@@ -1236,10 +1236,14 @@ def _collect_pending_candidates(pending_dir: str, site: str) -> list[dict[str, A
 
 
 def _archive_pending_candidate(path: str) -> None:
+    # 慣例跟 common/13「_待整併/」節、common/18 §merge 一致：原地改名加
+    # `已入庫_` 前綴，不是搬進子資料夾——2026-08-16 `_待整併/` 那次「已整併 {原檔名}」
+    # 誤改名的教訓就是這個，跟 `s2_mark_ingested.py` 認的前綴對不上等於沒改。
     parent = os.path.dirname(path)
-    archive_dir = os.path.join(parent, "已整併")
-    os.makedirs(archive_dir, exist_ok=True)
-    dest = os.path.join(archive_dir, os.path.basename(path))
+    basename = os.path.basename(path)
+    if basename.startswith("已入庫_"):
+        return
+    dest = os.path.join(parent, "已入庫_" + basename)
     try:
         os.replace(path, dest)
     except OSError:
@@ -1569,7 +1573,7 @@ def build_parser() -> argparse.ArgumentParser:
                                "手動觸發不得帶此旗標、也不得 --apply（計畫書 3.7）")
     finalize.add_argument("--pending-dir",
                           help="--in-round --apply 時掃這個目錄裡待套用的 YNA/CNA 候選 batch"
-                               "（3.7；通常是 _待整併/），套用成功一併歸檔到其 已整併/ 子目錄")
+                               "（3.7；通常是 _待整併/），套用成功原地改名加 已入庫_ 前綴")
     apply_batch = sub.add_parser("apply-batch", help="在排定輪次鎖窗口套用既成候選 envelope")
     apply_batch.add_argument("--batch", required=True, help="*.apply-batch.json 候選檔")
     apply_batch.add_argument("--file", required=True, help="目標 state 路徑")

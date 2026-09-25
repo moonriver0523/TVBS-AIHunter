@@ -313,7 +313,8 @@ def test_cursor_write_failure_is_recoverable_by_idempotent_retry():
 
 def test_in_round_apply_picks_up_pending_candidate_and_archives_it():
     """3.7：排定輪次 --in-round --apply 時，先掃 --pending-dir 把候選 batch 一併套用、
-    成功後搬進 已整併/ 子目錄；候選檔內容單獨也要能通過去重（同 ID 不重複入庫）。
+    成功後原地改名加 `已入庫_` 前綴（跟 common/13「_待整併/」節、`s2_mark_ingested.py`
+    認的慣例一致，不是搬進子資料夾）；候選檔內容單獨也要能通過去重（同 ID 不重複入庫）。
     """
     with tempfile.TemporaryDirectory(prefix="d23-pending-") as td:
         manifest_path = os.path.join(td, "manifest.json")
@@ -363,7 +364,7 @@ def test_in_round_apply_picks_up_pending_candidate_and_archives_it():
         assert "CNA-PendingVid1" in ids
 
         assert not os.path.exists(pending_path)
-        archived = os.path.join(pending_dir, "已整併", "0920-YNA_CNA候選-CNA.apply-batch.json")
+        archived = os.path.join(pending_dir, "已入庫_0920-YNA_CNA候選-CNA.apply-batch.json")
         assert os.path.exists(archived)
 
 
