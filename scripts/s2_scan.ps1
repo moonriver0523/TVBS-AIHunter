@@ -574,12 +574,13 @@ try {
         Write-Host "*** TestMode：每站上限 $TestLimit 則 ***"
     }
 
-    # A41：固定只在原本就是五站的輪次拆。01:00／20:00 沒有交換平台工作，
+    # A41：固定只在原本就是五站的輪次拆。01:00／09:00／20:00 沒有交換平台工作
+    # （2026-09-26 起 09:00 恢復排程，比照 01:00／20:00 三站輪），
     # 開第二個 session 只有固定成本，且會讓「Split」名不副實，所以明確拒絕。
     $splitSessions = @()
     if ($SplitSession) {
-        if ($hhmm -notin @('0430', '0700', '1100', '1700', '2200')) {
-            throw "-SplitSession 只適用五站輪（04:30／07:00／11:00／17:00／22:00）；本輪是 $hhmm"
+        if ($hhmm -notin @('0430', '0730', '1100', '1700', '2200')) {
+            throw "-SplitSession 只適用五站輪（04:30／07:30／11:00／17:00／22:00）；本輪是 $hhmm"
         }
         if ($EffectiveProvider -ne 'claude') {
             throw "-SplitSession/-ResumeManifest 是刻意限定 Claude 的實驗路徑；Gemini 尚未實作『每一分段各自遇 429 時的 fallback／重試歸屬』，請改傳 -Provider claude"

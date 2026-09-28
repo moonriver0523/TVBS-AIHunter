@@ -15,7 +15,7 @@
 - 清單主路徑：YouTube Data API `playlistItems.list`，每頁最多 50 則並可分頁；`videos.list` 補時長與影片狀態等 metadata。
 - 字幕：CNA 取英文自動字幕；YNA 先取 YouTube 自動翻譯 `zh-Hant` 作初判，需要精確判斷時再回取 `ko` 原文精翻。
 - 固定站序：`NS → AP → RT → ENEX → ABC → CNA → YNA`。
-- 01:00／20:00 不掃 CNA／YNA，其餘 04:30／07:00／11:00／17:00／22:00 共五輪掃描。
+- 01:00／20:00 不掃 CNA／YNA，其餘 04:30／07:30／11:00／17:00／22:00 共五輪掃描。
 - 跳過輪不查、不寫候選；下次掃描把窗口往前順延，以穩定 ID 去重，素材只延後、不漏收。
 - 不把 YouTube 塞進 `s2_batch_prep.py` 的 `SITE_SPEC`；另建 `scripts/s2_youtube_bridge.py`，沿用 D19「獨立 platform 前置 adapter」的隔離原則。
 
@@ -33,7 +33,7 @@ YNA／CNA 的正式輪次表應沿用同一張表的四欄格式，而不是另�
 |---|---|---|---|
 | 01:00 | ⬜ 跳過 | ⬜ 跳過 | NS→AP→RT；沿用 V7-5 的 ABC 收工觸碰，但不算掃 ABC／YouTube |
 | 04:30 | ✅ 窗回 22:00–04:30 | ✅ 窗回 22:00–04:30 | NS→AP→RT→ENEX→ABC→CNA→YNA |
-| 07:00 | ✅ | ✅ | NS→AP→RT→ENEX→ABC→CNA→YNA |
+| 07:30 | ✅ | ✅ | NS→AP→RT→ENEX→ABC→CNA→YNA |
 | 11:00 | ✅ | ✅ | NS→AP→RT→ENEX→ABC→CNA→YNA |
 | 17:00 | ✅ | ✅ | NS→AP→RT→ENEX→ABC→CNA→YNA |
 | 20:00 | ⬜ 跳過 | ⬜ 跳過 | NS→AP→RT |
