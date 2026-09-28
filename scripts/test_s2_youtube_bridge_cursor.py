@@ -220,6 +220,24 @@ def test_d24_apply_batch_flags_category_missing_when_topic_gated():
         assert "CATEGORY_MISSING" in result.stderr
 
 
+def test_d24_apply_batch_overlapping_id_already_in_state_still_verifies():
+    """審查 blocker 回歸：同一支影片已由本輪入庫（沒有 candidate_checkpoint），
+    稍後的手動候選又含它 → add-batch 跳過已存在，verify 不可因簿記欄差異失敗。"""
+    with tempfile.TemporaryDirectory(prefix="d24-overlap-") as td:
+        paths = _apply_batch_fixture(td, candidate_cp="0927-0100")
+        first = _run_apply_batch(paths, extra_args=("--ingest-checkpoint", "0927-0100"))
+        assert first.returncode == 0, (first.stdout, first.stderr)
+        assert "candidate_checkpoint" not in (_state_item(paths[0], READY["id"])["platform"])
+        # 第二份候選：收集於 0927-0030、含同一支影片，在 0927-0430 輪套用
+        sub = os.path.join(td, "b")
+        os.makedirs(sub)
+        second = _apply_batch_fixture(sub, candidate_cp="0927-0030")
+        paths2 = (paths[0], paths[1], paths[2], second[3])
+        result = _run_apply_batch(paths2, {"S2_CHECKPOINT": "0927-0430"})
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        assert not os.path.exists(second[3])   # 候選已歸檔，不會每輪重撿
+
+
 def test_apply_batch_rejects_malformed_envelope_before_writing_state():
     """2026-09-21 稽核抓到：envelope 驗證曾晚於 add-batch 寫入 state。
 
@@ -504,6 +522,7 @@ def main():
              test_d24_apply_batch_stamps_ingest_round_not_candidate_round,
              test_d24_apply_batch_without_ingest_checkpoint_refuses_before_write,
              test_d24_apply_batch_flags_category_missing_when_topic_gated,
+             test_d24_apply_batch_overlapping_id_already_in_state_still_verifies,
              test_apply_batch_rejects_malformed_envelope_before_writing_state,
              test_candidate_write_uses_next_available_number_without_overwrite,
              test_manual_apply_without_in_round_is_rejected,

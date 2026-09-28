@@ -1146,8 +1146,17 @@ def _verify_applied_state(state_path: str, entries: list[Mapping[str, Any]]) -> 
         stored = by_id[row["id"]]
         if stored.get("source") != row["source"] or stored.get("src_text") != row["src_text"]:
             raise BridgeError(f"add-batch 後 state 欄位不符：{row['id']}")
-        if stored.get("platform") != row.get("platform"):
+        # D24②：`candidate_checkpoint` 是入庫時才補的簿記欄，不是站方 provenance。
+        # 已在庫的 id 會被 add-batch 跳過（保留舊版本），兩邊有無此欄可能不同，
+        # 比對時兩邊都剔除，否則重疊候選／重試會永久驗證失敗、候選每輪重撿。
+        if _provenance(stored.get("platform")) != _provenance(row.get("platform")):
             raise BridgeError(f"add-batch 後 platform provenance 不符：{row['id']}")
+
+
+def _provenance(platform: Any) -> Any:
+    if isinstance(platform, Mapping):
+        return {k: v for k, v in platform.items() if k != "candidate_checkpoint"}
+    return platform
 
 
 def _finalize_command(args: argparse.Namespace) -> int:
@@ -1560,6 +1569,7 @@ def _flag_category_missing(state_path: str, entries: list[Mapping[str, Any]],
     missing = [row["id"] for row in entries
                if isinstance(by_id.get(row.get("id")), Mapping) and not by_id[row["id"]].get("category")]
     for item_id in missing:
+        # 已有別的待人工備註（如 BITE 疑慮）就不蓋掉；這種只出現在 WARN 行與收據。
         if by_id[item_id].get("needs_review"):
             continue
         cmd = [sys.executable, os.path.join(HERE, "s2_state.py"), "--file", state_path]
@@ -1567,7 +1577,9 @@ def _flag_category_missing(state_path: str, entries: list[Mapping[str, Any]],
             cmd += ["--registry", registry]
         cmd += ["needs-review", "add", "--id", item_id, "--note",
                 "D24②：候選入庫後 category 未落地（新題閘門擋下或名稱被拒），請 set-category 補分類"]
-        subprocess.run(cmd, capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+        res = subprocess.run(cmd, capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+        if res.returncode != 0:
+            print(f"WARN needs-review add 失敗（rc={res.returncode}）：{item_id}", file=sys.stderr)
     if missing:
         print(f"WARN CATEGORY_MISSING {len(missing)} 則入庫但未分類（已掛 needs-review）："
               f"{','.join(missing)}", file=sys.stderr)
