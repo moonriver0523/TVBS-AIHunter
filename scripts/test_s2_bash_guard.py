@@ -109,6 +109,16 @@ check('A40：echo 內完整提到呼叫範例也不是實際 invocation → 放�
 check('A40：echo 的未加引號參數提到腳本也不是實際 invocation → 放行',
       d('PowerShell', 'echo python scripts/s2_mark_ingested.py --apply') is None)
 
+# ── D24①：唯讀 --help 不必帶 --file；--apply 仍必須帶 ──
+check('D24①：mark-ingested --help → 放行',
+      d('Bash', 'python scripts/s2_mark_ingested.py --help') is None)
+check('D24①：mark-ingested -h 串 head → 放行',
+      d('Bash', 'python scripts/s2_mark_ingested.py -h 2>&1 | head -20') is None)
+check('D24①：--help 夾帶 --apply 仍缺 --file → deny',
+      d('Bash', 'python scripts/s2_mark_ingested.py --help --apply') is not None)
+check('D24①：--help 在後段別的指令，不能替 mark-ingested 解套 → deny',
+      d('Bash', 'python scripts/s2_mark_ingested.py --apply && python scripts/s2_state.py --help') is not None)
+
 # ── deny：臨場寫／跑一次性 .py 腳本（2026-08-30 補，A9③繞道變體）───
 check('跑存檔的臨時 .py（相對路徑，非 -c）→ deny，帶檔名',
       (r := d('Bash', 'python _mk_ns_snapshot.py'))

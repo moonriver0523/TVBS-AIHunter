@@ -89,6 +89,6 @@ def warn(hours=24, where="", pend_dir=None):
         print("   🔴 這是**收工前的最後一道**：現在補整併，補完要**重跑 render**。")
     print("   整併方式看來源：ABC／ENEX 走 `s2_platform_merge.py`；"
           "側錄候選走 `s2_state.py add-side`；韓聯社／CNA 照 `common/17` 交件端判 T/C。")
-    print("   ⛔ 整併完才跑 `s2_mark_ingested.py --apply` 改名——"
+    print("   ⛔ 整併完才跑 `s2_mark_ingested.py --file <今日state> --apply` 改名——"
           "它會先逐筆比對狀態檔，缺一筆就整份不動。")
     return len(rows)

@@ -47,29 +47,92 @@ SIDE_BARE = re.compile(r"^\(?(\d{1,2}:\d{2}:\d{2})")
 CODE = re.compile(r"^(?:[🔴🟡△▲◇■◆●]\s*)*([A-Z]{2,6}[-\d][\w-]*)\s")
 
 
+def _load_state_module():
+    """延遲載入 s2_state（只有檔案裡真的有側錄行才需要），重用 add-side 的解析器。"""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import s2_state
+    return s2_state
+
+
+def _side_hints_from_name(path):
+    """檔名推 (來源, MM-DD)：`0926-側錄候選.txt` → (None, '09-26')；`0926-CNN側錄.txt` → ('CNN', '09-26')。
+    檔內行自帶的來源／日期優先（normalize_side 的既有規則），這裡只補裸 TC 行。"""
+    base = os.path.basename(path)
+    upper = base.upper()
+    src = None
+    if "CNN" in upper and "NHK" not in upper:
+        src = "CNN"
+    elif "NHK" in upper and "CNN" not in upper:
+        src = "NHK"
+    m = re.match(r"(?:已入庫_)?(\d{2})(\d{2})", base)
+    return src, (f"{m.group(1)}-{m.group(2)}" if m else None)
+
+
+def side_keys_in_file(path, text=None):
+    """D24③（2026-09-28）：側錄改用**完整 canonical ID**（`CNN 09-26 150227`）比對。
+
+    舊版只取 TC6、丟掉來源與日期——不同來源（CNN／NHK）或不同日期剛好同一個 TC 時，
+    會被誤認成已入庫而改名，那批側錄就此消失。現在直接重用 add-side 的
+    `parse_side_txt()` 產 ID（與入庫時同一套規則），任何一段湊不齊「來源＋日期＋TC」
+    就回報問題、整份不改名，**不准退回只比 TC6**。
+
+    回傳 (完整側錄 ID 集合, 問題清單)。
+    """
+    if text is None:
+        with open(path, encoding="utf-8-sig", errors="replace") as f:
+            text = f.read()
+    side_lines = 0
+    for raw in text.splitlines():
+        s = raw.strip()
+        if s and not s.startswith(("#", "擬歸位", "======", "【")) and (
+                SIDE_PREFIXED.match(s) or SIDE_BARE.match(s)):
+            side_lines += 1
+    if not side_lines:
+        return set(), []
+    st = _load_state_module()
+    src, tc_date = _side_hints_from_name(path)
+    try:
+        parsed = st.parse_side_txt(text, src, None, True, tc_date)
+    except st.SideHomeError as e:
+        return set(), [f"側錄擬歸位行格式不對，無法解析：{e}"]
+    ids, problems = set(), []
+    for pid, *_ in parsed:
+        if len(pid.split()) != 3:
+            problems.append(f"{pid} 缺來源或日期，湊不出完整 ID")
+        else:
+            ids.add(pid)
+    if len(parsed) < side_lines:
+        problems.append(f"側錄 TC 行 {side_lines} 行只解析出 {len(parsed)} 段"
+                        "（多半是裸 TC 沒寫 CNN／NHK，檔名也看不出來源）")
+    return ids, problems
+
+
 def keys_in_file(path):
-    """回傳檔案裡出現的 (側錄TC6 集合, 素材代碼集合)。"""
-    tcs, codes = set(), set()
+    """回傳檔案裡出現的 (側錄完整 ID 集合, 素材代碼集合)。"""
+    codes = set()
     with open(path, encoding="utf-8-sig", errors="replace") as f:
-        for raw in f:
-            s = raw.strip()
-            if not s or s.startswith(("#", "擬歸位", "======", "【")):
-                continue
-            m = SIDE_PREFIXED.match(s) or SIDE_BARE.match(s)
-            if m:
-                tcs.add(m.group(1).replace(":", "").zfill(6)[-6:])
-                continue
-            m = CODE.match(s)
-            if m:
-                codes.add(m.group(1))
-    return tcs, codes
+        text = f.read()
+    for raw in text.splitlines():
+        s = raw.strip()
+        if not s or s.startswith(("#", "擬歸位", "======", "【")):
+            continue
+        if SIDE_PREFIXED.match(s) or SIDE_BARE.match(s):
+            continue
+        m = CODE.match(s)
+        if m:
+            codes.add(m.group(1))
+    side_ids, _problems = side_keys_in_file(path, text)
+    return side_ids, codes
 
 
 def keys_in_state(state_path):
     j = json.load(open(state_path, encoding="utf-8-sig"))
-    ids = {it["id"] for it in j.get("items", [])}
-    side_tc = {i.split()[-1] for i in ids if i[:3] in ("CNN", "NHK")}
-    return side_tc, ids
+    items = j.get("items", [])
+    ids = set(items) if isinstance(items, dict) else {it["id"] for it in items}
+    side_ids = {i for i in ids if i[:3] in ("CNN", "NHK")}
+    return side_ids, ids
 
 
 def companion_candidate_json(txt_path):
@@ -105,7 +168,7 @@ def main():
     if not os.path.isdir(args.pending):
         print(f"ERROR 找不到交件夾：{args.pending}", file=sys.stderr)
         return 2
-    side_tc, ids = keys_in_state(args.file)
+    side_ids, ids = keys_in_state(args.file)
 
     done, todo, skip = [], [], []
     for fn in sorted(os.listdir(args.pending)):
@@ -125,13 +188,18 @@ def main():
                 continue
         else:
             ftcs, fcodes = keys_in_file(p)
+            _ids, side_problems = side_keys_in_file(p)
+            if side_problems:
+                # D24③：身分湊不齊就整份不動，交人工——寧可晚改名，不可誤改名
+                skip.append((fn, "側錄身分不完整，不改名：" + "；".join(side_problems[:3])))
+                continue
         total = len(ftcs) + len(fcodes)
         if total == 0:
             skip.append((fn, "解析不到任何代碼／TC——格式不認得，人工看"))
             continue
         companion = companion_candidate_json(p)
         skipped_ids = skipped_ids_in_candidate(companion) if companion else set()
-        missing = [t for t in ftcs if t not in side_tc] + [
+        missing = [t for t in ftcs if t not in side_ids] + [
             c for c in fcodes if c not in ids and c not in skipped_ids
         ]
         if missing:

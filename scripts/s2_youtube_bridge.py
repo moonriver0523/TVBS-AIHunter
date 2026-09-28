@@ -1177,6 +1177,9 @@ def _finalize_command(args: argparse.Namespace) -> int:
     combined_entries = list(wrapper["entries"])
     for cand in pending:
         combined_entries.extend(cand["wrapper"].get("entries", []))
+    # D24②：一起撿進來的舊候選帶的是它們自己的收集輪次，統一換成本輪入庫 checkpoint。
+    ingest_cp = _resolve_ingest_checkpoint(args, fallback=manifest.get("checkpoint"))
+    combined_entries = rebase_entries_to_ingest(combined_entries, ingest_cp)
     current_cursor = load_cursor(cursor_path)
     next_cursor = None
     if manifest.get("status") != "skipped":
@@ -1200,6 +1203,7 @@ def _finalize_command(args: argparse.Namespace) -> int:
         if result.returncode != 0:
             raise BridgeError(f"s2_state.py add-batch 失敗，游標不得前進（rc={result.returncode}）")
         _verify_applied_state(args.file, combined_entries)
+        _flag_category_missing(args.file, combined_entries, args.registry)
     # 候選檔只在整批 add-batch 成功後才歸檔；套用失敗的候選檔原樣保留，下一輪重試。
     for cand in pending:
         _archive_pending_candidate(cand["path"])
@@ -1501,6 +1505,75 @@ def _run_add_batch(state_path: str, wrapper_path: str, registry: Optional[str] =
         raise BridgeError(f"s2_state.py add-batch 失敗（rc={result.returncode}）")
 
 
+def _resolve_ingest_checkpoint(args: argparse.Namespace, fallback: Optional[str] = None) -> str:
+    """D24②（2026-09-28）：候選「入庫」的輪次，跟候選「收集」的輪次是兩回事。
+
+    手動 collect 產的候選帶 collect 當下的 checkpoint（例：0927-0030），但真正寫進 state
+    的是下一個排定輪次（0927-0100，`S2_RUN_ID` 也是那一輪的）。原本照抄候選的 checkpoint，
+    `first_seen_checkpoint` 與 `first_seen_run_id` 分屬兩輪 → launcher `Get-RunItems`
+    兩欄對不上，9 輪都記 RUN_ITEM_TUPLE_MISMATCH、計帳差 5 則。
+    來源優先序：`--ingest-checkpoint` > launcher 設的 `S2_CHECKPOINT` > fallback；
+    都沒有就拒絕，**不准默默沿用候選自己的 checkpoint**。
+    """
+    cp = (_trim(getattr(args, "ingest_checkpoint", None))
+          or _trim(os.environ.get("S2_CHECKPOINT"))
+          or _trim(fallback))
+    if not cp:
+        raise FinalizeError("找不到本輪入庫 checkpoint：請帶 --ingest-checkpoint，"
+                            "或由 launcher 設好 S2_CHECKPOINT 環境變數")
+    if schema.CHECKPOINT_RE.fullmatch(cp) is None:
+        raise FinalizeError(f"入庫 checkpoint 格式錯誤（需 MMDD-HHMM）：{cp!r}")
+    return cp
+
+
+def rebase_entries_to_ingest(entries: list[Mapping[str, Any]], ingest_checkpoint: str) -> list[dict[str, Any]]:
+    """把候選 entries 的 checkpoint 換成本輪入庫 checkpoint，原收集輪次留在
+    `platform.candidate_checkpoint`（`new_item` 只會保存 `platform` 這個 dict）。
+    重試時已經有 `candidate_checkpoint` 就不覆寫，保留最初的收集輪次。"""
+    out: list[dict[str, Any]] = []
+    for row in entries:
+        new = dict(row)
+        src_cp = _trim(row.get("checkpoint"))
+        if src_cp and src_cp != ingest_checkpoint:
+            plat = dict(row.get("platform") or {})
+            plat.setdefault("candidate_checkpoint", src_cp)
+            new["platform"] = plat
+        new["checkpoint"] = ingest_checkpoint
+        out.append(new)
+    return out
+
+
+def _flag_category_missing(state_path: str, entries: list[Mapping[str, Any]],
+                           registry: Optional[str] = None) -> list[str]:
+    """D24②：add-batch 成功不代表分類有落地——新題閘門擋下或收容式名稱被拒時，
+    素材照收但 `category` 留空（實例 CNA-djFHI4Hxbqo），最後只靠自然語言摘要沒人會發現。
+    這裡機械列出並掛 needs_review，讓 resume／待人工清單看得到。
+    ⛔ 不 raise：state 已寫入，raise 會讓候選檔不歸檔、下一輪反覆撿同一批。"""
+    state = read_json(state_path)
+    items = state.get("items", []) if isinstance(state, Mapping) else []
+    if isinstance(items, list):
+        by_id = {row.get("id"): row for row in items if isinstance(row, Mapping)}
+    elif isinstance(items, Mapping):
+        by_id = dict(items)
+    else:
+        by_id = {}
+    missing = [row["id"] for row in entries
+               if isinstance(by_id.get(row.get("id")), Mapping) and not by_id[row["id"]].get("category")]
+    for item_id in missing:
+        if by_id[item_id].get("needs_review"):
+            continue
+        cmd = [sys.executable, os.path.join(HERE, "s2_state.py"), "--file", state_path]
+        if registry:
+            cmd += ["--registry", registry]
+        cmd += ["needs-review", "add", "--id", item_id, "--note",
+                "D24②：候選入庫後 category 未落地（新題閘門擋下或名稱被拒），請 set-category 補分類"]
+        subprocess.run(cmd, capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+    if missing:
+        print(f"WARN CATEGORY_MISSING {len(missing)} 則入庫但未分類（已掛 needs-review）："
+              f"{','.join(missing)}", file=sys.stderr)
+    return missing
+
+
 def _apply_batch_command(args: argparse.Namespace) -> int:
     if not args.in_round:
         raise FinalizeError("apply-batch 只能由排定輪次的 --in-round 呼叫使用")
@@ -1510,10 +1583,23 @@ def _apply_batch_command(args: argparse.Namespace) -> int:
     if not isinstance(candidate, Mapping) or not isinstance(candidate.get("entries"), list):
         raise FinalizeError("apply-batch candidate 必須是 bridge envelope")
     validate_candidate_envelope(candidate)  # 2026-09-21：寫 state 前先擋畸形 envelope
+    ingest_cp = _resolve_ingest_checkpoint(args)   # D24②：寫 state 前先定好入庫輪次
     current = load_cursor(args.cursor)
-    # The original candidate is already a wrapper acceptable to s2_state add-batch.
-    _run_add_batch(args.file, args.batch, args.registry)
-    _verify_applied_state(args.file, candidate["entries"])
+    # D24②：送進 add-batch 的是 checkpoint 換成本輪的副本；原候選檔不動（游標、歸檔照舊用它）。
+    # 副本放系統暫存夾，⛔ 不放 `_待整併/`——那裡的 .json 會被 mark_ingested／下一輪當候選撿。
+    rebased = rebase_entries_to_ingest(candidate["entries"], ingest_cp)
+    fd, rebased_path = tempfile.mkstemp(prefix="d24-rebased-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({**candidate, "entries": rebased}, fh, ensure_ascii=False)
+        _run_add_batch(args.file, rebased_path, args.registry)
+    finally:
+        try:
+            os.remove(rebased_path)
+        except OSError:
+            pass
+    _verify_applied_state(args.file, rebased)
+    category_missing = _flag_category_missing(args.file, rebased, args.registry)
     next_cursor = advance_cursor_for_candidate(current, candidate)
     if next_cursor != current:
         save_cursor_atomic(args.cursor, next_cursor, expected_revision=current["revision"])
@@ -1523,7 +1609,14 @@ def _apply_batch_command(args: argparse.Namespace) -> int:
     manifest_path = re.sub(r"\.apply-batch\.json$", ".manifest.json", args.batch, flags=re.IGNORECASE)
     if manifest_path != args.batch and os.path.exists(manifest_path):
         _archive_pending_candidate(manifest_path)
-    print(json.dumps(candidate.get("receipt", {}), ensure_ascii=False))
+    receipt = dict(candidate.get("receipt") or {})
+    receipt.update({
+        "candidate_checkpoint": _trim(candidate.get("checkpoint")) or None,
+        "ingest_checkpoint": ingest_cp,
+        "ingest_run_id": _trim(os.environ.get("S2_RUN_ID")) or None,
+        "category_missing": category_missing,
+    })
+    print(json.dumps(receipt, ensure_ascii=False))
     return 0
 
 
@@ -1568,6 +1661,8 @@ def build_parser() -> argparse.ArgumentParser:
     finalize.add_argument("--file", help="add-batch 目標 state；僅 --apply 必填")
     finalize.add_argument("--registry", help="測試／沙箱用 topic registry")
     finalize.add_argument("--cursor", help="apply 用每站 YouTube cursor；省略時取 state 同目錄")
+    finalize.add_argument("--ingest-checkpoint",
+                          help="--apply 時本輪入庫 checkpoint；省略取 S2_CHECKPOINT，再省略取 manifest 的（D24②）")
     finalize.add_argument("--in-round", action="store_true",
                           help="只有排定輪次在自己的 .s2-scan.lock 鎖窗口內才可帶此旗標並 --apply；"
                                "手動觸發不得帶此旗標、也不得 --apply（計畫書 3.7）")
@@ -1580,6 +1675,8 @@ def build_parser() -> argparse.ArgumentParser:
     apply_batch.add_argument("--cursor", required=True, help="YouTube cursor 路徑")
     apply_batch.add_argument("--registry", help="測試／沙箱用 topic registry")
     apply_batch.add_argument("--in-round", action="store_true", help="排定輪次自己的鎖窗口")
+    apply_batch.add_argument("--ingest-checkpoint",
+                             help="本輪入庫 checkpoint（MMDD-HHMM）；省略時取 S2_CHECKPOINT（D24②）")
     return parser
 
 
