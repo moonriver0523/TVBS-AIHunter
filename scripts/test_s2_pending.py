@@ -108,7 +108,8 @@ report("warn 逐檔列名", all(x in out_resume for x in
                             ("0830-ENEX.txt", "0830-ABC-pairs.txt", "0830-側錄候選_2237.txt")))
 report("warn 指出整併方式（三條產線）",
        all(x in out_resume for x in ("s2_platform_merge.py", "add-side", "common/17")))
-report("warn 提醒 mark_ingested 是整併「之後」才跑", "s2_mark_ingested.py --apply" in out_resume)
+report("warn 提醒 mark_ingested 是整併「之後」才跑（D24①：範例帶 --file）",
+       "s2_mark_ingested.py --file <今日state> --apply" in out_resume)
 
 n_render, out_render = cap(where="render", pend_dir=D)
 report("⑤ render 分支多印「重跑 render」", "重跑 render" in out_render)

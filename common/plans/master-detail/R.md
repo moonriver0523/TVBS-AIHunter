@@ -432,3 +432,34 @@ P1b-2 把「不登記就開名」堵住了，但它堵的是**登記與否**，�
 - 驗收：三輪獨立複核（blocker 1＋should-fix 7 已修）；424 份真實 raw 新舊 `_load_raw_any` 逐份一致；測試 batch_prep 130／rename_field 52／token_metrics 77／from_raw 37／bash_guard 41 全綠。
 - **尚待觀察**：V9 首 3 輪看 `set-category`／`set-tc` 是否降為修補用、build 警告是否減少事後 `update-entry`（淨省＝取消量－新增量），勿用單輪平均推估。
 - **已知後續（未改，非 V9 分叉範圍）**：`13c3` 收工清單 5.5 仍把 `set-tc` 寫成必做；`13f` 約 156／287 行暗示每輪下 `set-category`——與 V9 口徑衝突，需另案處理。
+
+## R46–R50：D24 窄幅修正（2026-09-28 使用者裁決，來源 [../2026-09-27-S2優化必要性再評估.md](../2026-09-27-S2優化必要性再評估.md)）
+
+### R46 收工指令／guard 對齊（D24①）
+- **證據**：17/17 輪都有 `s2_mark_ingested.py 必須帶 --file` 攔截；10 次是 `--apply` 沒帶 `--file`（該擋），7 次是單純 `--help`（誤攔）。13c3 收工表範例本身就缺 `--file`。
+- **修法**：`s2_bash_guard._mark_ingested_missing_file()` 同一段指令帶 `--help`／`-h` 且沒帶 `--apply` 時放行；`--help --apply` 仍擋。範例改成 `s2_mark_ingested.py --file <今日state> --apply`：`13c3` 步驟 0、`13`「消費端義務」段、`s2_pending.py` 待整併提示。
+- **測試**：`test_s2_bash_guard.py` 新增 4 例（`--help` 放行、`-h | head` 放行、`--help --apply` 擋、後段別的指令的 `--help` 不能替前段解套），55/55；`test_s2_pending.py` 斷言跟著改成新範例，全過。
+
+### R47 候選入庫的收集輪次與入庫輪次分開（D24②）
+- **證據**：9 輪 CNA/YNA 記 `RUN_ITEM_TUPLE_MISMATCH`；例 `CNA-INo7yqNvovA` 的 `first_seen_checkpoint=0927-0030`（手動 collect 輪）但 `first_seen_run_id` 是 0927-0100 掃帶輪 → launcher `Get-RunItems` 兩欄對不上，render +77 vs ledger +72 差 5 則。另 `CNA-djFHI4Hxbqo` `category=None`，final audit 仍嚴重 0。
+- **根因**：`apply-batch` 把候選 envelope 原樣餵 `add-batch`，entry 的 `checkpoint` 是候選自己的收集輪次；`first_seen_run_id` 卻取當下環境 `S2_RUN_ID`。新題閘門擋下時素材照收、`category` 留空，只有自然語言摘要提到。
+- **修法**（`s2_youtube_bridge.py`）：
+  - `_resolve_ingest_checkpoint()`：`--ingest-checkpoint` > `S2_CHECKPOINT` 環境變數（launcher 已設）> fallback；`apply-batch` 無 fallback，都沒有就在寫 state 前拒絕。`finalize --apply` fallback 為 manifest 自己的 checkpoint。
+  - `rebase_entries_to_ingest()`：送 `add-batch` 的副本（系統暫存夾，不放 `_待整併/`）把 `checkpoint` 換成入庫輪次，原收集輪次存 `platform.candidate_checkpoint`（重試不覆寫）；原候選檔不改，游標與歸檔照舊用原件。`finalize --apply --pending-dir` 一起撿的舊候選也走同一套。
+  - `_flag_category_missing()`：`add-batch` 後逐筆查 `category`，空的自動 `needs-review add`（不 raise，避免候選不歸檔、每輪重撿），stderr 印 `WARN CATEGORY_MISSING`，收據加 `category_missing`／`candidate_checkpoint`／`ingest_checkpoint`／`ingest_run_id`。
+  - `13c3` 步驟 4.7 範例加 `--ingest-checkpoint {CHECKPOINT}`，並寫明 `category_missing` 要在步驟 5 前 `set-category` 補掉。
+- **不做**：不回頭改歷史 ID／歷史 state（報告明示）。
+- **測試**：`test_s2_youtube_bridge_cursor.py` 新增 3 例（入庫輪次＋run_id 同輪、原收集輪次保留、原候選檔不變；沒有入庫 checkpoint 拒寫；閘門擋題 → `category_missing`＋needs_review），16/16；`test_s2_youtube_bridge.py`／`_finalize`／`_id_paths`／`test_s2_material_schema.py`／`test_s2_run_identity.py`／`test_s2_youtube_launcher.py` 全過。
+- **真實資料 smoke**（scratch 副本，正式 state 未動）：`0928-0700-YNA` 候選 14 則以 `--ingest-checkpoint 0928-0730` 套用 → 14 則 `first_seen_checkpoint=0928-0730`、`candidate_checkpoint=0928-0700`、分類全落地。
+
+### R48 側錄候選「已入庫」標記改用完整 ID（D24③）
+- **證據**：`s2_mark_ingested.keys_in_file()`／`keys_in_state()` 只比 TC6，丟掉 CNN／NHK 與日期（亦見 [../2026-09-27-側錄候選整併優化評估-Codex-sol.md](../2026-09-27-側錄候選整併優化評估-Codex-sol.md)）。尚未證實已釀成漏段，屬設計漏洞。
+- **修法**：新增 `side_keys_in_file()`，直接重用 `s2_state.parse_side_txt(normalize=True)` 產完整 ID（`CNN 09-26 150227`），與 add-side 入庫同一套規則；裸 TC 行的來源／日期從檔名推（`0926-CNN側錄候選.txt`），檔內自帶的優先。任何一段湊不齊「來源＋日期＋TC」、解析段數少於 TC 行數、或擬歸位行格式錯 → 整份列「❓ 略過」不改名，**不退回只比 TC6**。
+- **已知限制（沿用舊行為，未擴大）**：無冒號的裸 6 碼 TC 行（`150227（主播）`）舊版就不會被認成側錄行，本次未擴大偵測範圍。
+- **測試**：`test_s2_mark_ingested.py` 新增 5 例（完整 ID 在庫改名；同 TC 不同日期不改；同 TC 不同來源不改；裸 TC 由檔名補齊可改；裸 TC 看不出來源列略過），9/9；`test_s2_youtube_id_paths.py` 全過。
+
+### R49 RT 跨輪補收調查（D24④）— ⬜ 使用者 2026-09-28 指示稍後處理
+- 9/26 22:00 補 10 則（含 RT5534）、9/27 01:00 補 3 則（RT5586／RT5574／RT6624）。先唯讀查「上一輪清單當時是否真的有該項」與 ID／版本對照，再決定窗口／清單策略；不宜盲目加大 PageSize，D21 覆蓋憑證仍有價值。
+
+### R50 程序完成 vs 品質完成分開（D24⑤）— ⬜ 使用者 2026-09-28 指示稍後處理
+- 多輪以嚴重稽核項或 needs-review 收尾仍記 DONE（9/26 20:00 分類待修、9/26 22:00 BITE／跨日判斷待人工）。建議結構化區分「完整／帶缺口完成／失敗」；分類／原文告警需核對真假，避免重啟舊 R7 清洗案或把站方原文誤報當污染。

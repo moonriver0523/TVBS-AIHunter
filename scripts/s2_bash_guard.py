@@ -356,6 +356,13 @@ def _mark_ingested_missing_file(command):
                 return False
             has_file = re.search(
                 r'(?:^|\s)--file(?:\s+[^\s|&;]+|=[^\s|&;]+)', tail)
+            # D24①（2026-09-28）：17 輪裡有 7 次是單純 `--help` 被攔——那是唯讀
+            # 查用法，不碰狀態檔也不改名，攔下只是白費一次呼叫。只要同一段沒帶
+            # `--apply` 就放行；`--help --apply` 仍照舊擋，防線不因此鬆掉。
+            if (not has_file
+                    and re.search(r'(?:^|\s)(?:--help|-h)(?=\s|$)', tail)
+                    and not re.search(r'(?:^|\s)--apply(?=\s|=|$)', tail)):
+                continue
             if not has_file:
                 return True
     except Exception:

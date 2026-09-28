@@ -124,12 +124,118 @@ def test_apply_batch_cli_applies_entries_but_leaves_gapped_cursor_unchanged():
         result = subprocess.run([
             sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "apply-batch",
             "--batch", batch_path, "--file", state_path, "--cursor", cursor_path,
-            "--registry", registry_path, "--in-round",
+            "--registry", registry_path, "--in-round", "--ingest-checkpoint", "0920-0430",
         ], capture_output=True, text=True, encoding="utf-8")
         assert result.returncode == 0, (result.stdout, result.stderr)
         with open(state_path, encoding="utf-8-sig") as f:
             assert any(row["id"] == READY["id"] for row in json.load(f)["items"])
         assert bridge.load_cursor(cursor_path) == before
+
+
+def _apply_batch_fixture(td, candidate_cp="0927-0030", topic_registered=True):
+    state_path = os.path.join(td, "0927-s2-state.json")
+    cursor_path = os.path.join(td, "s2-youtube-cursors.json")
+    registry_path = os.path.join(td, "registry.json")
+    batch_path = os.path.join(td, f"{candidate_cp}-YNA_CNA候選-yna.apply-batch.json")
+    with open(state_path, "w", encoding="utf-8") as f:
+        json.dump({"date": "0927", "checkpoint": "0926-2200", "items": []}, f)
+    topics = [{"name": "韓聯測試", "big": "國際", "charter": "既有"}] if topic_registered else []
+    with open(registry_path, "w", encoding="utf-8") as f:
+        json.dump({"topics": topics}, f, ensure_ascii=False)
+    bridge.save_cursor_atomic(cursor_path, cursor(revision=0), expected_revision=0)
+    candidate = bridge.finalize_manifest(manifest(
+        checkpoint=candidate_cp, cursor_revision=1,
+        window={"lower_exclusive": "2026-09-20T02:00:00Z",
+                "upper_inclusive": "2026-09-20T03:00:00Z"},
+    ), decisions())
+    with open(batch_path, "w", encoding="utf-8") as f:
+        json.dump(candidate, f, ensure_ascii=False)
+    return state_path, cursor_path, registry_path, batch_path
+
+
+def _run_apply_batch(paths, env_extra=None, extra_args=()):
+    state_path, cursor_path, registry_path, batch_path = paths
+    env = {k: v for k, v in os.environ.items() if k not in ("S2_CHECKPOINT", "S2_RUN_ID")}
+    env.update(env_extra or {})
+    return subprocess.run([
+        sys.executable, os.path.join(HERE, "s2_youtube_bridge.py"), "apply-batch",
+        "--batch", batch_path, "--file", state_path, "--cursor", cursor_path,
+        "--registry", registry_path, "--in-round", *extra_args,
+    ], capture_output=True, text=True, encoding="utf-8", env=env)
+
+
+def _state_item(state_path, item_id):
+    with open(state_path, encoding="utf-8-sig") as f:
+        items = json.load(f)["items"]
+    if isinstance(items, dict):
+        return items.get(item_id)
+    for row in items:
+        if row.get("id") == item_id:
+            return row
+    return None
+
+
+def test_d24_apply_batch_stamps_ingest_round_not_candidate_round():
+    """D24②：候選 0927-0030 在 0927-0100 輪入庫 → first_seen_checkpoint 與 run_id 同一輪。"""
+    rid = "3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b"
+    with tempfile.TemporaryDirectory(prefix="d24-ingest-") as td:
+        paths = _apply_batch_fixture(td)
+        result = _run_apply_batch(paths, {"S2_CHECKPOINT": "0927-0100", "S2_RUN_ID": rid})
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        row = _state_item(paths[0], READY["id"])
+        assert row["first_seen_checkpoint"] == "0927-0100", row
+        assert row.get("first_seen_run_id") == rid, row
+        assert row["platform"]["candidate_checkpoint"] == "0927-0030", row["platform"]
+        receipt = json.loads(result.stdout.strip().splitlines()[-1])
+        assert receipt["candidate_checkpoint"] == "0927-0030"
+        assert receipt["ingest_checkpoint"] == "0927-0100"
+        assert receipt["ingest_run_id"] == rid
+        assert receipt["category_missing"] == []
+        # 原候選檔內容不得被改（游標與歸檔依原件）
+        archived = os.path.join(td, "已入庫_" + os.path.basename(paths[3]))
+        with open(archived, encoding="utf-8") as f:
+            assert json.load(f)["entries"][0]["checkpoint"] == "0927-0030"
+
+
+def test_d24_apply_batch_without_ingest_checkpoint_refuses_before_write():
+    with tempfile.TemporaryDirectory(prefix="d24-noingest-") as td:
+        paths = _apply_batch_fixture(td)
+        result = _run_apply_batch(paths)
+        assert result.returncode != 0
+        assert "入庫 checkpoint" in result.stderr, result.stderr
+        assert _state_item(paths[0], READY["id"]) is None
+        assert os.path.exists(paths[3])
+
+
+def test_d24_apply_batch_flags_category_missing_when_topic_gated():
+    with tempfile.TemporaryDirectory(prefix="d24-catmiss-") as td:
+        paths = _apply_batch_fixture(td, topic_registered=False)
+        result = _run_apply_batch(paths, extra_args=("--ingest-checkpoint", "0927-0100"))
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        row = _state_item(paths[0], READY["id"])
+        assert not row.get("category"), row
+        assert "D24②" in (row.get("needs_review") or ""), row
+        receipt = json.loads(result.stdout.strip().splitlines()[-1])
+        assert receipt["category_missing"] == [READY["id"]]
+        assert "CATEGORY_MISSING" in result.stderr
+
+
+def test_d24_apply_batch_overlapping_id_already_in_state_still_verifies():
+    """審查 blocker 回歸：同一支影片已由本輪入庫（沒有 candidate_checkpoint），
+    稍後的手動候選又含它 → add-batch 跳過已存在，verify 不可因簿記欄差異失敗。"""
+    with tempfile.TemporaryDirectory(prefix="d24-overlap-") as td:
+        paths = _apply_batch_fixture(td, candidate_cp="0927-0100")
+        first = _run_apply_batch(paths, extra_args=("--ingest-checkpoint", "0927-0100"))
+        assert first.returncode == 0, (first.stdout, first.stderr)
+        assert "candidate_checkpoint" not in (_state_item(paths[0], READY["id"])["platform"])
+        # 第二份候選：收集於 0927-0030、含同一支影片，在 0927-0430 輪套用
+        sub = os.path.join(td, "b")
+        os.makedirs(sub)
+        second = _apply_batch_fixture(sub, candidate_cp="0927-0030")
+        paths2 = (paths[0], paths[1], paths[2], second[3])
+        result = _run_apply_batch(paths2, {"S2_CHECKPOINT": "0927-0430"})
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        assert not os.path.exists(second[3])   # 候選已歸檔，不會每輪重撿
 
 
 def test_apply_batch_rejects_malformed_envelope_before_writing_state():
@@ -413,6 +519,10 @@ def main():
              test_candidate_cursor_only_moves_for_contiguous_or_overlapping_window,
              test_candidate_cursor_bootstraps_when_site_has_no_prior_success,
              test_apply_batch_cli_applies_entries_but_leaves_gapped_cursor_unchanged,
+             test_d24_apply_batch_stamps_ingest_round_not_candidate_round,
+             test_d24_apply_batch_without_ingest_checkpoint_refuses_before_write,
+             test_d24_apply_batch_flags_category_missing_when_topic_gated,
+             test_d24_apply_batch_overlapping_id_already_in_state_still_verifies,
              test_apply_batch_rejects_malformed_envelope_before_writing_state,
              test_candidate_write_uses_next_available_number_without_overwrite,
              test_manual_apply_without_in_round_is_rejected,

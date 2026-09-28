@@ -77,3 +77,9 @@ A33 要「分派給記者」需要記者名單／專長／班別／每日上限�
 
 ### D19 把 A24 骨架收斂機制擴展到 ABC／ENEX（2026-09-08，0908-1700 token 體檢提出）
 `s2_batch_prep.py` 的 `SITE_SPEC`（`from-raw`／`build --skeleton`）只登記 `ns/ap/rt`；ABC／ENEX 走獨立的 `s2_platform_extract.py {abc|enex} → lint → merge` 三件套，沒有共用骨架收斂，逐則 `inspect` 仍是唯一查內容手段（0908-1700 ABC `abc_detail` inspect 11 次，屬工具 28,000 字元預算正常拆批，非重複浪費）。擬定：`SITE_SPEC` 加 `abc`／`enex` 條目，讓 `from-raw --site abc` 吃 platform 管線 raw 快照出提示表＋骨架，agent 判完接 `s2_platform_extract.py abc --entries <骨架>`。風險：①`SITE_SPEC` 是三站共用核心結構，ABC/ENEX 欄位形狀（無 CSV 標準殼、`script_html`／`synopsis_html` 全文）差異大，硬塞可能牽動既有 `dump`／`inspect`／`compare`／`snapshot` 對三站的行為；②`from-raw` 骨架格式能否無縫接上 platform 管線的 `--entries` schema 尚未逐欄驗證；③`test_s2_from_raw.py`／`test_s2_batch_prep.py` 假設站別只有三種，擴充要新增測試組，屬架構級任務不宜掃帶輪順手改。前提：先讀 `s2_platform_extract.py` 的 `--entries`／`--raw` schema 比對相容性。待使用者裁決。
+
+### D24 S2 優化必要性再評估（2026-09-27 Codex 二次查證；2026-09-28 使用者裁決）
+- **來源**：[../2026-09-27-S2優化必要性再評估.md](../2026-09-27-S2優化必要性再評估.md)（原檔在 `C:\Users\User\s2-audit-20260927\`，含 17 輪 log 解析 `summary.json`）。
+- **報告結論**：9/24 20:00–9/27 01:00 共 17 輪（11 輪五站、6 輪三站），Opus 已持續恢復速度，不建議整套重寫／60–100 小時核心重構；只做 5 項窄幅修正。
+- **2026-09-28 使用者裁決**：5 項全部排入列管；**①②③ 先做、④⑤ 稍後處理**。對應 R46（①guard 對齊）、R47（②入庫輪次分開＋未分類攔截）、R48（③側錄完整 ID 比對）、R49（④RT 跨輪補收調查）、R50（⑤程序完成 vs 品質完成）。報告「延後／不建議做」清單維持不做。
+- **2026-09-28 實作**：①②③ 在 worktree `E:\GitHub\TVBS-AIHunter-d24`（branch `feat/d24-narrow-fixes`，基於 `74c065a`）完成，細節見 `R.md` 的 R46–R48 節。

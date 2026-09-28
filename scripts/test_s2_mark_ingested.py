@@ -125,6 +125,40 @@ rc3, out3 = run_main(["--file", main_state, "--pending", pending, "--apply"])
 renamed = os.path.exists(os.path.join(pending, "已入庫_0826-ABC.txt"))
 check("--apply 實際改名成功（排除清單不再擋改名）", renamed, out3)
 
+
+# --- D24③：側錄用完整 canonical ID（來源＋日期＋TC6）比對，不准只比 TC6 ---
+SIDE_TXT = (
+    "擬歸位：======國際====== → 【側錄測試】 → 測試小題\n"
+    "CNN 09-26 150227（主播）\n"
+    "側錄內容一。\n"
+)
+
+
+def side_case(tag, state_ids, txt=SIDE_TXT, fname="0926-側錄候選.txt"):
+    pdir = os.path.join(TMP, f"_待整併_{tag}")
+    os.makedirs(pdir, exist_ok=True)
+    write(os.path.join(pdir, fname), txt)
+    sp = os.path.join(TMP, f"state_{tag}.json")
+    write_json(sp, {"items": [{"id": i} for i in state_ids]})
+    rc, out = run_main(["--file", sp, "--pending", pdir, "--apply"])
+    return os.path.exists(os.path.join(pdir, "已入庫_" + fname)), out
+
+
+ok, out = side_case("exact", ["CNN 09-26 150227"])
+check("D24③：完整 ID 在庫 → 改名", ok, out)
+ok, out = side_case("otherdate", ["CNN 09-25 150227"])
+check("D24③：同 TC6 但日期不同 → 不改名", not ok and "CNN 09-26 150227" in out, out)
+ok, out = side_case("othersrc", ["NHK 09-26 150227"])
+check("D24③：同 TC6 但來源不同（NHK vs CNN）→ 不改名", not ok and "CNN 09-26 150227" in out, out)
+ok, out = side_case("bare_dated_by_name", ["CNN 09-26 150227"],
+                    txt="擬歸位：======國際====== → 【側錄測試】\n15:02:27（主播）\n內容。\n",
+                    fname="0926-CNN側錄候選.txt")
+check("D24③：裸 TC 由檔名補來源＋日期 → 完整 ID 在庫即改名", ok, out)
+ok, out = side_case("bare_nosrc", ["CNN 09-26 150227", "NHK 09-26 150227"],
+                    txt="擬歸位：======國際====== → 【側錄測試】\n15:02:27（主播）\n內容。\n")
+check("D24③：裸 TC 看不出來源 → 列略過、不改名（不退回只比 TC6）",
+      not ok and "側錄身分不完整" in out, out)
+
 shutil.rmtree(TMP, ignore_errors=True)
 print(f"\nPASS={sum(results)} FAIL={len(results) - sum(results)}")
 sys.exit(0 if all(results) else 1)
