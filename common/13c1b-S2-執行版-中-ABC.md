@@ -254,6 +254,11 @@ ABC 一輪可能上百則，**幾乎一定會被卸載**。⛔ 這不是錯誤�
 `Write` 整份骨架，不要逐則 `Edit`**（2026-09-19，同 R43 精神：逐筆 Edit 是同一批判斷拆成 N 次工具
 回合，思考量不變但耗時倍增；先在心裡／草稿走完全部 18 則左右的判斷，一次寫齊）。填完後若有多則修正，
 先累積到 `rewrite-entry --patch-file`，一次 apply。
+🔴 **骨架檔（`abc_skeleton_*.json`）本身一律不准 `Edit`——不論改幾格**（2026-09-29 0929-1700 實錯：
+對骨架連 Edit 11 次，第 3～11 次全被「同檔逐筆 Edit 次數上限」hook 擋掉，9 次白費，才改走
+`rewrite-entry`）。硬規則：要改骨架內容只有兩條路——① 一次 `Write` 整份；② 局部修改一律
+`rewrite-entry --init-patch <patch>` 建補丁檔 → `Write` 補丁 → `--patch-file <patch>` 一次 apply。
+被 hook 擋第 1 次就立刻改走②，不要重試 `Edit`。
 `python scripts/s2_platform_bridge.py build --skeleton <skeleton> --out <entries>`
 轉成下面 `check-entries` 吃的格式，再接原本 extract→lint→merge。`--help` 有完整範例。
 
