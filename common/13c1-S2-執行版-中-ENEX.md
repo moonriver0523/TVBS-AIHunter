@@ -171,7 +171,8 @@ python scripts/s2_batch_prep.py search  "<scratch>/enex_raw_{HHMM}.json" --conta
 （`src_text` 已機械帶好），骨架每列只填 `entry`／`category`／`tc`／`skip` 四格。⛔ **全部候選項判斷完再一次
 `Write` 整份骨架，不要逐則 `Edit`**（2026-09-19，同 R43 精神：逐筆 Edit 是同一批判斷拆成 N 次工具回合，
 思考量不變但耗時倍增，先走完全部候選判斷再一次寫齊）。填完後若有多則修正，先累積到
-`rewrite-entry --patch-file`，一次 apply。
+`rewrite-entry --patch-file`，一次 apply。補丁格式：`{"schema_version":1,"site":"enex","target_sha256":"…","changes":[{"id":"932843","set":{"skip":"理由"}}]}`；
+`--init-patch` 只給 `changes=[]` 空殼，要 `Write` 填；只改 1～2 則直接 `--id 932843 --set '932843={"skip":"理由"}'`，⛔ 不要 grep 原始碼查 schema（0930-0430 摸索 7 次）。
 `python scripts/s2_platform_bridge.py build --skeleton <skeleton> --out <entries>`
 一次轉成下面 platform 吃的格式，再接 `s2_platform_extract.py enex`。`--help` 有完整範例；
 出錯不要自己重寫邏輯，直接照訊息處理或回報。

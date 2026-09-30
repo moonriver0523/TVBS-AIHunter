@@ -331,7 +331,7 @@ lint 擋下來改完 entries 重跑 extract 時，txt 也會跟著重出（不�
 - `category` 物件或 `"大分類/中主題/小分題"` 字串都收；`sb_count` **整數**、⛔ 不要寫 `"1"`；
   `raw_entry` 行首直接是代碼，🔴🟡⭐🔖 可帶在代碼前面，
   ⛔ 時段標記 `△▲◇◆`（舊符號 `■●`）不准帶——render 依收錄時間自己補。
-- 排除的只要 `{"skip": "理由"}`，其餘免填。
+- 排除的只要 `{"skip": "理由"}`，其餘免填。慣例標籤（⛔ 不用翻舊檔查）：`主播TEASE／INTRO／HEADNOD片段（非獨立素材）`、`外電層：POOL／AP轉供／C-SPAN POOL／路透轉供`、`節目宣傳（第0層）`、`OTRC例行娛樂（第0層）`。
 - ⛔ `--checkpoint` 與每筆的 `first_seen_checkpoint` 一律 `{MMDD}-{HHMM}` 完整格式（A14 實錯）。
 
 ### 去重：鍵是 `Story Number`，不是 `detailId`
