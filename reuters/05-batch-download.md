@@ -43,10 +43,11 @@
 **核心**：定位、文稿全走 API；**影片下載＝AP 可 API 直連、RT 只能真點按鈕、NS 走 UI**（見各站）。**API 失敗兩次就退回下一節的 UI 舊做法**，不要死磕。**每筆下載後必查檔案大小**（見「下載驗證」）——「Downloaded」事件會騙人。
 
 **共同前提**
-- **一律用 Playwright 工具組**（`mcp__browser__*`），不是 claude-in-chrome（NS 的 localStorage 在 claude-in-chrome 會被 extension 隱私防護擋死）。
+- **定位／文稿／transcript 等 API 呼叫用 Playwright 工具組**（`mcp__browser__*`），不是 claude-in-chrome（NS 的 localStorage 在 claude-in-chrome 會被 extension 隱私防護擋死）。
+- 🔴 **但「點下載」這一步一律改用 Claude in Chrome（`mcp__claude-in-chrome__*`）**（2026-09-30「無人空投2200」實測、使用者裁示）：Playwright MCP 在 RT detail 頁真點 `Download`，`download` 事件一觸發**整個瀏覽器就關掉重開、分頁只剩 `about:blank`，檔案沒落地**，連 3 次同結果；`waitForEvent('download')` 後 `saveAs` 也報 `Target page, context or browser has been closed`。Claude in Chrome 是使用者真實 Chrome、共用人工登入態，下載正常。適用所有要點瀏覽器下載的站（RT／NS／AP UI 退路／ABC 導航下載）；AP `ClientMediaUrl`、ENEX、X／YT 等 curl／yt-dlp 直鏈不受影響。
 - **開工前檢查 profile 殘留**（多 agent 並行會互鎖；0803 曾害 RT 三輪誤判「全站 0 素材」）：
   `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ? { $_.CommandLine -like "*playwright*profile*" }`，閒置就 `Stop-Process -Force`；**自己收工也要關**。（2026-09-07 訂正：本流程用的是 `~/.claude.json` 裡 `browser` MCP 的 `.playwright-daily-profile`，舊字串 `*playwright-mcp-profile*` 比對不到任何實際 profile；S2 掃帶用的 `.playwright-s2-profile-v4` 不共用登入態，⛔ 不要拿它來做批次下載。）
-- ⚠️ **下載落點是 `D:\Downloads\PlaywrightMCP\`，不是 `D:\Downloads\`**（2026-08-03 實測）。改名時從這裡取檔；Playwright 會把檔名裡的 `_`／空格換成 `-`，**別假設檔名原樣保留**。
+- ⚠️ **下載落點**：Claude in Chrome（真實 Chrome）下載落在 **`D:\Downloads\`**，下載中是 `尚未確認的 {數字}.crdownload`，完成後才變原始檔名（RT 原始檔名內含 `_{Edit No}-{SLUG}`，例 `…_RTRWNEV_D_6196-UKRAINE-CRISIS-…MP4`，用 Edit No 對回 `#XX` 改名）。舊 Playwright 下載落點是 `D:\Downloads\PlaywrightMCP\`（2026-08-03 實測，且會把 `_`／空格換成 `-`），現已不用它點下載。
 - **費用：不必事前把關、不必為此停下來**（2026-08-03 使用者訂正）——**使用者提交清單時已人工確認過都是免費素材**，本流程照單全收即可，不要因為費用欄位而卡住或反覆確認。
   - 但**看到就順手回報**：費用欄位本來就在你已經取回的回應裡（RT 的 `points`／`free` 就在文稿那份 item 回應；AP 的 `Term` 在 `downloadnr/check`，而 check 本來就是拿 `ContentId` 的必要步驟），**零額外呼叫**。若發現某筆不是免費（RT `points` 非 0，或 AP `AppliedPrice` 非 0／`IsAlaCarte: true`），**照樣下載**，但在回報裡列出該筆與數值，當人工核對的備援。
 
@@ -54,11 +55,20 @@
 
 1. **定位**：照 `13b` §1b DOM 直撈 `a[href*="detail?id="]` 拿 guid。Edit No 可從 guid 的 `newsml_RW{4碼}` 推出、與清單值互相校驗。
 2. **文稿**：`GET /api/item/{guid}?hash={hash}&live=false`（同源 fetch＋`credentials:'include'`）→ SCRIPT＋SHOTLIST＋Restrictions 一次到手。`hash` **照抄當下頁面請求**（實測 `klwn20`，但那是前端 build hash、改版會變，不要硬編）。
-3. **費用（只記錄不擋）**：同一份 item 回應裡的 `~:points`／`~:free` 順手看一眼；非 0 照樣下載，但列進回報。
-4. **影片下載**：⚠️ **不能用 `a.click()` 合成觸發下載**（2026-08-03 工作 agent 端到端實測抓到、經根因驗證）——
+   - item 回應是 transit+json（`["^ ","~:key",value,…]`，重複 key 會被快取成 `^N`），腳本要能解 transit；0930 實測 `~:shotlist` 為空、分鏡／SOUNDBITE／STORY 全在 `~:story`（HTML，要去標籤＋解實體），`~:restrictions` 在巢狀內要遞迴找。
+3. **Video Transcript → `{SLUG} #XX RT.vtt`（必抓，2026-09-30 使用者訂定）**：RT 詳情頁右側 Video Transcript 面板＝帶逐句 TC 的機器轉錄＋多語翻譯，是 SOT 寫稿掐 BITE 的 TC 來源，**有了它 RT 素材不必再跑 ASR**（對齊 [`06`](../common/06-auto-script-sot.md) 「RT transcript 已有 TC 就不跑 ASR」）。
+   - **來源**：item 回應裡的 `~:vtt-file-url`／`~:srt-file-url` 實測是 `null`，不能用。面板實際載入的是 `GET /api/preview/video-shot-list/{guid}/tag:reuters.com,{年}:binary_LOV{guid 中 RW 後那段，去掉 :N}-STREAM:SHOTLIST:JSON`（例 guid `…newsml_RW619629092026RP1:6` → `binary_LOV619629092026RP1-STREAM:SHOTLIST:JSON`），會 **302 到跨網域 CDN**。
+   - 🔴 **抓法**：頁內 `fetch` 會被 CORS 擋（`Failed to fetch`）；Playwright `page.request.get` 直接打回 **403**。**可行做法**＝`browser_run_code_unsafe` 對每筆 `page.waitForResponse(r => /SHOTLIST/i.test(r.url()) && r.status()===200)` 後 `page.goto(detail頁)`，讓頁面自己載入、攔它收到的 JSON body（0930 實測 5 筆一次拿齊）。結果先掛到 `window` 再用 `browser_evaluate` 的 `filename` 參數落地（`run_code_unsafe` 的 `filename` 是「讀程式檔」，不是存結果）。
+   - **JSON 結構**：`audioAnalysis.transcriptions[]` 每句有 `startTime`／`endTime`（`H:MM:SS.mmm`）、`transcript.native.{language,text}`、`transcript.translations.en`、`speaker.personIndex`（對應頂層 `people[].name`，常是 `Unknown N`，有時會認出人名如 `Dmitry Peskov`）。
+   - **輸出 VTT**：每 cue 一行 `[講者] (語言) 原文`，原文非英文時加一行 `EN: 英譯`；檔頭 `NOTE` 註明「機器轉錄＋翻譯，未經人工校對」。存 `SOT自動寫稿測試\{SLUG}\{SLUG} #XX RT.vtt`。**無人聲的 RAW 畫面 0 句是正常的**（仍產空 VTT 標示已查過）。
+   - ⚠️ 機器轉錄／翻譯只拿來**定位 TC**；BITE 引言文字仍以 RT 官方 STORY 裡的 SOUNDBITE 為準（同 AP／CNN 原則）。
+4. **費用（只記錄不擋）**：同一份 item 回應裡的 `~:points`／`~:free` 順手看一眼；非 0 照樣下載，但列進回報。
+5. **影片下載**：⚠️ **不能用 `a.click()` 合成觸發下載**（2026-08-03 工作 agent 端到端實測抓到、經根因驗證）——
    - **現象**：在 `browser_evaluate` 內 `a.href={download-url}; a.click()`，Playwright 照樣回報「Downloaded file X」**沒有任何錯誤**，但落地的其實是 **~8KB 的帳號 JSON**（`application/transit+json`），不是影片。**22 筆全中招**。
    - **根因**：合成點擊是 untrusted click、缺 `Sec-Fetch-User: ?1`，RT 的 `/api/download/video` 端點對「真人手勢觸發」與「腳本觸發」做內容協商——URL 完全相同（同 guid／binaryId／hash／`purchase-type=ayce`），真點按鈕回真影片、腳本點回帳號資料。這是瀏覽器規格層行為，不是 Reuters 的 bug，**這個端點就是不吃合成點擊**。
-   - **正確做法**：定位／文稿／費用全走 API 不變（guid 已確定，省掉開新分頁看 Restrictions／捲動找 Transcript），**只有下載這步**回到 detail 頁 → `browser_find` 找 label 恰為 `Download` 的按鈕 → **`browser_click` 真點**（不是 JS click）。
+   - **正確做法**：定位／文稿／費用全走 API 不變（guid 已確定，省掉開新分頁看 Restrictions／捲動找 Transcript），**只有下載這步**回到 detail 頁真點 `Download`（不是 JS click）。
+   - 🔴 **2026-09-30 起真點改在 Claude in Chrome 做**（Playwright 點下載會整個瀏覽器當掉，見「共同前提」）：`navigate` 到 detail 頁 → 等 4 秒 → 截圖確認 `Download` 橘色按鈕位置 → **用座標 `left_click`**。⚠️ **分頁要在最上層（前景作用中分頁）、頁面捲在最上方**再點（使用者提醒；背景分頁點了不會開始下載）。0930 實測：用 `find` 拿到的 `ref` 點下去**沒有觸發下載**，改座標點才開始；按鈕 y 座標隨標題行數與是否有「Download Audio (WAV split)」選項浮動（1456×817 畫面實測 y≈227 或 267），**每筆都先截圖再點**。可以點完一筆直接 `navigate` 下一筆，真實 Chrome 的下載不會因換頁中斷。
+   - **備援（Claude in Chrome 不可用時）**：Playwright `browser_run_code_unsafe` 內 `const p = page.waitForEvent('download'); await btn.click(); const d = await p; return d.url();` ——**只拿 `d.url()`，不要 `saveAs`**（會碰上瀏覽器關閉）。拿到的是 `videobroadcast.cdn.thomsonreuters.com/…MP4?…Expires=…&Signature=…` 簽章直鏈（效期約 5 分鐘），立刻 `curl -sL -o "D:\Downloads\{SLUG} #XX RT.mp4" "{url}"`（0930 #07 用此法成功、大小與 CDN `content-length` 一致）。
    - ⚠️ **`filename` 自訂優化失效**：按鈕觸發的下載套不上自訂 query-string 檔名，會用 Reuters 原始檔名，**下載完仍要照原 UI 流程手動改名**。
    - 為什麼不再嘗試純 API：download 端點回的 transit JSON 裡 `download-url`／`status-url` 兩欄都是 `null`，看不出兩段式流程的下一步；深挖 CP 值低，先用真點按鈕。
    - ✅ **下載後必查檔案大小**（見本節末「下載驗證」硬規則）——這正是這次踩雷的教訓。
@@ -101,7 +111,8 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
 1. reutersconnect.com，Video 分頁，搜尋 Edit No.——搜尋方式（優先直接帶網址、My Subscription 維持預設 **ON**）一律依 [`搜尋外電素材(RT)`](01-search-workflow.md)，本文件不另訂。
 2. Edit No. 可能撞號到不相關舊新聞——核對標題/主題是否符合這批清單脈絡，不要無腦點第一筆結果。
 3. 開詳情頁，記錄右側 **Restrictions** 面板完整內容＋複製 **Video Transcript**／逐字稿全文，合併存成該筆的文稿 txt。
-4. 點 **Download**（HD 60fps (MP4) 是預設選項，不用另外選）。
+4. 點 **Download**（HD 60fps (MP4) 是預設選項，不用另外選）——在 Claude in Chrome 點，分頁置頂、座標點擊，見上方 API 直取 RT 第 5 步。
+5. 另存 Video Transcript 成 `{SLUG} #XX RT.vtt`，見上方 API 直取 RT 第 3 步。
 
 **AP：**
 1. 用純數字 ID 搜尋，媒體類型選對 Video 或 Photo（不要照抄「AP」字首去搜，那只是站台判斷標記）。
@@ -174,7 +185,7 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
 ## 下載確認與卡住處理
 
 用 PowerShell 輪詢下載夾（`Get-ChildItem -File | Where-Object {LastWriteTime -gt (Get-Date).AddMinutes(-2)}`），確認檔案（.crdownload 或臨時檔）已完成、大小穩定。
-⚠️ **兩個落點不一樣**：`yt-dlp`／`curl` 系（YouTube／X／FB／DVIDS／**ENEX 直鏈**）落在 **`D:\Downloads`**；**瀏覽器下載（AP／RT／NS，含 API 直取；**ABC** 導航下載）落在 `D:\Downloads\PlaywrightMCP`**（2026-08-03 實測，ENEX／ABC 2026-09-07 補）。找不到檔案時先確認自己在看哪一個資料夾。
+⚠️ **落點**：`yt-dlp`／`curl` 系（YouTube／X／FB／DVIDS／**ENEX 直鏈**）與 **Claude in Chrome 點的下載（2026-09-30 起 RT／NS 等）** 都落在 **`D:\Downloads`**；只有仍走 Playwright 的瀏覽器下載（AP API 直取 `a.click()`；ABC 導航下載）落在 `D:\Downloads\PlaywrightMCP`（2026-08-03 實測，ENEX／ABC 2026-09-07 補）。找不到檔案時先確認自己在看哪一個資料夾。
 
 RT 詳情頁點連結後畫面還停在列表摘要、或 Download 點了 `D:\Downloads` 沒有新檔案等症狀，先查 [`common/09-known-issues.md`](../common/09-known-issues.md#瀏覽器自動化) 有沒有對應解法（通常是「再點一次」或「頁面要維持在最上方再點 Download」），再進入下方重試階梯。
 
