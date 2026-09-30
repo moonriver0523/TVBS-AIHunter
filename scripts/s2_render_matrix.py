@@ -17,6 +17,7 @@ T/C 來源優先序：**狀態檔已存的 → `tag_tc()` 關鍵詞兜底 → �
 import html as _html
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -176,6 +177,28 @@ def stats_line(rows):
     return f"收錄外電共 {len(rows)} 則（{'／'.join(head)}）"
 
 
+def next_scan_label(state):
+    """「下一輪掃帶：HH:MM」——照本輪 checkpoint 找排程表裡下一個時刻，過了最後一輪就回第一輪。
+
+    時刻表唯一來源是 `s2_watchdog.ps1` 的 `$Slots`（排程一致性檢查也讀它），
+    ⛔ 不要在這裡另存一份；讀不到或算不出來就回空字串，整顆標籤不顯示，不能拖垮渲染。
+    """
+    try:
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "s2_watchdog.ps1"), encoding="utf-8-sig").read()
+        m = re.search(r"\$Slots\s*=\s*@\(([^)]*)\)", src)
+        slots = sorted(set(re.findall(r"'(\d{2}:\d{2})'", m.group(1)))) if m else []
+        cp = str(state.get("checkpoint") or "")
+        hhmm = cp.split("-")[1]
+        cur = f"{hhmm[:2]}:{hhmm[2:4]}"
+        if not slots:
+            return ""
+        nxt = next((t for t in slots if t > cur), slots[0])
+        return f"下一輪掃帶：{nxt}"
+    except Exception:
+        return ""
+
+
 def build_html(state, base_mmdd, window, datebar_html=""):
     """跟 `s2_render_html.build_html()` **同一組參數**，可直接替換。
 
@@ -256,6 +279,8 @@ def build_html(state, base_mmdd, window, datebar_html=""):
             .replace("__FLAGS__", json.dumps(BASE.FLAGS, ensure_ascii=False))
             .replace("__TITLE__", title)
             .replace("__WINDOW__", window_line)
+            .replace("__NEXT__", (f'<span class="next">{_html.escape(next_scan_label(state))}</span>'
+                                  if next_scan_label(state) else ""))
             .replace("__STATS__", stats_line(rows))
             .replace("__META__", meta_html)
             .replace("__LOGO__", logo_html)
