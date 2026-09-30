@@ -190,7 +190,12 @@ def next_scan_label(state):
         slots = sorted(set(re.findall(r"'(\d{2}:\d{2})'", m.group(1)))) if m else []
         cp = str(state.get("checkpoint") or "")
         hhmm = cp.split("-")[1]
-        cur = f"{hhmm[:2]}:{hhmm[2:4]}"
+        # 參考時刻取「checkpoint」與「現在」較晚者：重新渲染（例如 14:30 重出 11:00 輪的檔）
+        # 時，「下一輪」要接在現在之後，不能還停在已過去的 13:00。
+        cp_dt = datetime(datetime.now().year, int(cp[:2]), int(cp[2:4]),
+                         int(hhmm[:2]), int(hhmm[2:4]))
+        ref = max(cp_dt, datetime.now())
+        cur = ref.strftime("%H:%M")
         if not slots:
             return ""
         nxt = next((t for t in slots if t > cur), slots[0])
