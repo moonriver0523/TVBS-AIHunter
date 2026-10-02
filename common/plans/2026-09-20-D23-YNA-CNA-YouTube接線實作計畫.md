@@ -205,7 +205,7 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 | `videos.snippet.channelId` | 第二次頻道身分檢查 | 不符即 blocking，避免 uploads playlist／設定接錯 |
 | `videos.snippet.publishedAt` | 發布時間交叉檢查／fallback | 與主值差異超過容許值時列 needs_review，不自動改窗 |
 | `videos.snippet.title` | `title`／hint；優先於 playlist snapshot | 保留原文；YNA 不以機器翻譯標題取代 provenance |
-| `videos.snippet.description` | `description`／fallback context | 不是字幕，不得冒充 `src_text` 正文 |
+| `videos.snippet.description` | `description`／`src_text` 優先來源 | 去掉純網址／▣ 導引行後 ≥60 字即直接當 `src_text`（`caption.source=description`、`precision=source-text`，不得標成字幕）；不足才改取字幕（2026-09-20 裁決，2026-10-02 文件對齊程式） |
 | `videos.snippet.liveBroadcastContent` | live／upcoming 篩選 | 非 `none` 明列 skipped 或 deferred；規則先定案再上線 |
 | `videos.contentDetails.duration` | ISO-8601 duration；轉 `duration_seconds` 與素材行 `MM:SS` | 無法解析記 known gap；不得填 `00:00` 佔位 |
 | `videos.status.privacyStatus`／`uploadStatus` | 可用性判斷 | 非公開／未處理完成列 deferred 或明確排除，不可靜默少一則 |
@@ -240,7 +240,7 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 - CNA：首選 `en` automatic captions，正規化 rolling captions 的重複片段、時間碼與斷句後存 `src_text`。
 - YNA：首選 `zh-Hant` auto-translated captions，`platform.caption.precision=triage-only`；不得在 metadata 或提示表把它稱為人工／官方翻譯。
 - 需要精判時，操作者可依 manifest 的 video ID 回取 `ko` 原文，另做精翻；這是例外路徑，不強迫每則都跑。
-- 字幕抓取失敗、空白或只有無意義片段時，列入 `deferred_video_ids`；不得用 description 偽裝成字幕後標 `has_script`。
+- description 去樣板後 ≥60 字時直接當 `src_text`（標 `source=description`，不冒充字幕）；不足 60 字才抓字幕。字幕抓取失敗、空白或只有無意義片段**且 description 也不足**時，列入 `deferred_video_ids`；不得把薄 description 偽裝成字幕後標 `has_script`。
 - raw manifest 可保存字幕正規化前後的檔案路徑與 checksum，避免在 batch／state 塞兩份長文；API key、cookie、完整 yt-dlp 命令列不得落檔。
 
 人工 decisions 檔沿用小型 keyed object：
@@ -253,7 +253,7 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
     "category": {"大分類": "政治", "中主題": "...", "小分題": "新聞標題式短句，不得超譯原文"},
     "tc": {"T": ["政治"], "C": ["南韓"]}
   },
-  "YNA-XyZ987_ab-c": {"skip": "具體排除理由（不得只寫片長；要講跨議題無單一主軸、與既有稿重複等實質理由）"}
+  "YNA-XyZ987_ab-c": {"skip": "具體排除理由（不得只寫片長、標題或「無 BITE」；要講整支棚內多題對談無單一主軸、與既有稿重複且「沒有新增什麼」等實質理由）"}
 }
 ```
 
@@ -271,8 +271,9 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 - **tc.T／tc.C**：**唯一依據 `common/plans/a10-p0-data/TC-字典.md`**，不得自造名稱（例：影劇類新聞要標 `娛樂藝文` 不是 `影劇`；「話題」不准收硬新聞；地緣 C 依字典專項規則，例如港澳併入「中國大陸」、賽事實際發生地是歐洲時南韓球員新聞要加掛「歐洲」）。字典若有更新，這條規則自動跟著字典走，不在本文件重複列舉。
 - **長篇不因片長排除，但棚訪／座談節目不收（雙判準，2026-09-21 Codex(gpt-5.6-sol) 稽核＋使用者裁決細化）**：
   1. **內容門檻**：必須是單一事件／單一主題，有可查證的完整來源文字。
-  2. **形式門檻**：以採訪、旁白、素材畫面編排構成的**敘事型**新聞專題可收（例如地方發展、產業現象等單一主題專題），收錄為「(媒體 專題)」，摘要／畫面／BITE 規則同上（含 150 字摘要上限，細節移畫面段）；以**棚內主持人與來賓來回對話為主體**構成的節目（如「여의도1번지」政論節目、「이슈ZIP」深度追蹤特輯這類節目式長片）**一律 skip**，不論是否單一主題——判準是形式（棚內對話 vs 敘事編排），不是主題數量；專題裡嵌入受訪 BITE 不算棚訪節目，只有整支片以棚內對話推進才算。`skip` 理由要寫實質原因（如「政論棚訪節目，橫跨N個議題無單一主軸」），不能只寫片長；skip 前先看是否已有其他更短則覆蓋了同一事件的核心事實，若有就在理由中註記「核心事實已由 {id} 收錄」。
-- **同主題重複只收一則（本規則限 YNA 站；CNA 更新頻率低、重複情況少見，暫不套用，之後若觀察到 CNA 也有同題重複再另行裁決是否比照）**：同一時間窗內、同一新聞事件若被切成多支 YNA 影片（跟播、後續反應、[속보]先行快報、[앵커리포트]短評等），**先做「實質新增資訊」測試**——若某一則比其他則多了新事實、新官方回應、新當事人說法、新可用 BITE 或不同關鍵畫面，視為**互補內容**，兩則都收，不算重複；只有核心事實與可用素材**實質相同**的才算真重複。判定為重複時，保留規則依序：①先排除字幕不完整或不具收錄資格的候選；②在剩餘候選裡選**核心事實最完整、可用畫面／BITE 最充分**的一則；③完整度相當才比 `published_at_utc` 較晚者；④**不得只用片長本身推定完整度**。其餘標 `skip`，理由寫「重複主題，已收於 {保留的id}」。**保留稿必須確定會形成可套用的 entry（或已存在 state）才能 skip 其餘**；若保留稿本身因字幕失敗等原因進了 `deferred`，其餘同事件候選**不得**因此被 skip 掉——改收次佳、但確定可用的一則，避免整個事件當輪零收錄。不同事件即使關鍵字重疊（如同人物、同機構的不同新聞）不算重複，仍要各自收錄。
+  2. **形式門檻**：以採訪、旁白、素材畫面編排構成的**敘事型**新聞專題可收（例如地方發展、產業現象等單一主題專題），收錄為「(媒體 專題)」，摘要／畫面／BITE 規則同上（含 150 字摘要上限，細節移畫面段）；以**棚內主持人與來賓來回對話為主體**構成的**完整多題節目／純棚內閒聊座談**（如「여의도1번지」政論節目、「이슈ZIP」深度追蹤特輯這類節目式長片）才 skip；**2026-10-02 使用者裁定有限開放：「單題訪談」只要有新增事實（新事實、新官方回應、新當事人說法）或可用 BITE（受訪者原話可引）就收**，收錄為「(媒體 專題)」或「(媒體 記者報導)」並依受訪內容寫 BITE，不因「棚內訪談」形式本身排除。判準是**有無新增事實／可用 BITE**，不是形式、片長或標題；專題裡嵌入受訪 BITE 本來就不算棚訪節目。`skip` 理由要寫實質原因（如「整支橫跨N個議題的棚內多題對談，無單一主軸、無可獨立引用的新事實」），**不得只寫片長、標題或「無 BITE」**；skip 前先看是否已有其他更短則覆蓋了同一事件的核心事實，若有就在理由中註記「核心事實已由 {id} 收錄」。
+- **YNA 專題／非即時／地方類一律可收（2026-10-02 使用者裁定，對帳顯示這類約占 YNA 編輯 skip 的 25%）**：地方首長招商專訪、梨泰院調查結案、特檢不起訴、程序性結案、常態性專題等，**不得以「專題」「非即時」「地方」「程序性結案」「常態／例行」為由排除**；仍維持排除的只有直播（含已成 VOD）、Shorts、完整多題節目／純閒聊集錦。
+- **同主題重複只收一則（本規則限 YNA 站；**CNA 一律不套用同題去重**，2026-10-02 使用者裁定明文化；**疑似重複先收**——判不準是不是真重複時一律兩則都收，只有能明確說出「後者沒有新增什麼」才可 skip）**：同一時間窗內、同一新聞事件若被切成多支 YNA 影片（跟播、後續反應、[속보]先行快報、[앵커리포트]短評等），**先做「實質新增資訊」測試**——若某一則比其他則多了新事實、新官方回應、新當事人說法、新可用 BITE 或不同關鍵畫面，視為**互補內容**，兩則都收，不算重複；只有核心事實與可用素材**實質相同**的才算真重複。判定為重複時，保留規則依序：①先排除字幕不完整或不具收錄資格的候選；②在剩餘候選裡選**核心事實最完整、可用畫面／BITE 最充分**的一則；③完整度相當才比 `published_at_utc` 較晚者；④**不得只用片長本身推定完整度**。其餘標 `skip`，理由寫「重複主題，已收於 {保留的id}；沒有新增什麼：{逐項列出核心事實、官方回應、當事人說法、BITE、關鍵畫面均與保留稿相同}」，**未能明列「沒有新增什麼」就不得 skip（疑似重複先收，2026-10-02 使用者裁定）**；不得只憑標題相似、片長或「無 BITE」判重複。**保留稿必須確定會形成可套用的 entry（或已存在 state）才能 skip 其餘**；若保留稿本身因字幕失敗等原因進了 `deferred`，其餘同事件候選**不得**因此被 skip 掉——改收次佳、但確定可用的一則，避免整個事件當輪零收錄。不同事件即使關鍵字重疊（如同人物、同機構的不同新聞）不算重複，仍要各自收錄。
 - **TC 字典缺值時**：不得自造新名稱，也不得為了通過驗證硬塞明顯不合的類別；先在現有 `TC-字典.md` 條目中選**最接近的既有值**填入完成 decisions，並在交接／回報時明確標註「此則暫用最接近值 X，需人工校正」，待使用者裁決後再回頭修正該筆與（必要時）更新字典本身。
 - **category／tc 必填、且 final batch 只接受物件形式**：只要 decisions 該筆是 `entry`（非 `skip`），`category`／`tc` 都是必填欄位；`finalize` 產出的 final batch 一律把兩者正規化為本節開頭範例的三層物件／`{"T":[...],"C":[...]}` 物件，3.6 表格所稱「可用路徑字串／字串」只能是人工輸入時的簡寫，`finalize` 必須解析、驗證後轉成物件寫入 final batch，不得原樣輸出字串。
 - **entry 與 skip 互斥（XOR）**：同一 ready item 的 decisions 必須恰有 `entry` 或 `skip` 其中之一，兩者同時出現或都缺，`finalize` 一律 blocking exit 2。重複 skip 理由裡引用的保留 id，`finalize` preflight 必須驗證其存在於同一批的 ready entries、或已存在於正式 state，否則同樣 blocking——不得引用被排除、deferred 或不存在的 id。
@@ -300,7 +301,7 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 | `checkpoint` | 本輪 run context | 嚴格 `MMDD-HHMM`；不把 `-YNA`／`-補掃` 接在此欄 |
 | `status` | 字幕可用性 | ready 固定 `has_script`；字幕暫時失敗不入此批，改列 deferred |
 | `entry` | 人工 decisions | 非空字串；首碼必須與 `id` 完全一致；不得自帶時段標記；撰寫細則見上方 3.5「2026-09-21 使用者裁決訂正」（畫面/BITE不得空泛、BITE不得夾原文、150字摘要上限、URL 必加、category/tc 依字典） |
-| `src_text` | 正規化字幕 | CNA 英文 ASR；YNA `zh-Hant` 初判字幕；不可缺、不可用 description 代替 |
+| `src_text` | description（≥60 字）或正規化字幕 | description 夠完整優先；否則 CNA 英文 ASR／YNA `zh-Hant` 初判字幕；不可缺、薄 description 不得冒充字幕 |
 | `category` | 人工 decisions | entry 存在時必填；人工可簡寫字串，`finalize` 必須解析驗證後正規化為三層物件寫入，不得原樣輸出字串 |
 | `tc` | 人工 decisions | entry 存在時必填；人工可簡寫字串，`finalize` 必須解析驗證後正規化為 `{"T":[...],"C":[...]}` 物件寫入；YNA／CNA 來源預設仍由現行 pretag 輔助，不代替人工確認 |
 | `sb_count` | 字幕機械分析（若可靠）或省略 | 不可把未知硬填 0；若字幕格式不足以可靠計數就省略 |
@@ -459,7 +460,7 @@ python scripts/s2_youtube_bridge.py finalize `
 | API key 洩漏 | 憑證風險 | env only；錯誤與 manifest 遮罩；測試檢查輸出不含 key |
 | YNA 高頻超過預估 | 單輪頁數、字幕時間、人工作業量暴增 | 分頁到邊界、不截尾；記錄量與耗時；必要時調整「收錄判準」須另案裁決，不能暗中丟資料 |
 | API quota／429／暫時失敗 | 當輪不完整 | exponential backoff 有上限；失敗不前進游標；下一輪 catch-up |
-| 字幕 track 改名／缺失 | 無法形成可靠 `src_text` | deferred queue；description 不冒充字幕；YNA 可另取 ko 作精判 |
+| 字幕 track 改名／缺失 | 無法形成可靠 `src_text` | description ≥60 字則直接用；否則 deferred queue；薄 description 不冒充字幕；YNA 可另取 ko 作精判 |
 | `yt-dlp` 被 YouTube bot 偵測擋下（`Sign in to confirm you're not a bot`，`common/17-網址素材整併.md` 記過的既有坑，抓文稿說明欄時曾發生；本次 D23 查證階段抓字幕當下未觸發，但正式環境高頻率／不同 IP 下風險未知） | 字幕階段整批失敗，`collect` 卡住或大量 deferred | 短期：字幕抓取失敗率超過閾值時整站降級為只出清單（無 `src_text`）、留 needs-review，不得整輪 abort；中期備援：改走已登入瀏覽器同源存取（比照 17 的 `fetch('/watch?v=…')` 手法），可用 claude-in-chrome 或既有 Playwright profile 執行，但**這是 bridge 從無瀏覽器依賴退化成有瀏覽器依賴的架構變動，需另案評估與使用者裁決，不在本次 Phase 0-5 範圍內先做**|
 | auto-translate 誤譯 | TC／摘要誤判 | 明標 triage-only；重大／語意可疑項回 ko 精翻；保留 video URL/provenance |
 | 發布時間欄位混用 | 窗口漏收或舊片混入 | 固定 precedence；timezone-aware；fixture 覆蓋 DST 無關但跨日／跨班必測 |
@@ -533,7 +534,7 @@ D23 的站序與五輪安排可以採用；`playlistItems.list`＋`videos.list`�
 
 1. **`playlistItems.list` 修正**：Codex 腳手架誤用 `channelId` 參數（該端點無此參數），改用官方慣例推導 `playlistId`（`UC`→`UU`）。
 2. **regionRestriction 排除**：`allowed` 不含 `TW` 或 `blocked` 含 `TW` 一律歸 `skipped`（reason=`region-restricted`），不進 `deferred` 重試佇列。真實測試中 CNA 頻道抓到多筆僅開放 `SG` 的影片，已正確排除。
-3. **直播／Shorts 排除**（使用者 2026-09-20 裁定：只收一般影片）：
+3. **直播／Shorts 排除**（使用者 2026-09-20 裁定：只收一般影片；**2026-10-02 使用者再裁定維持全部排除、不鬆綁**，含已成 VOD 的往日直播錄影）：
    - 直播（含已結束、`liveBroadcastContent` 已變回 `none` 的往日直播錄影，用 `liveStreamingDetails.actualStartTime` 判斷）一律 `skipped`（reason=`livestream-excluded`）。
    - Shorts 用 `youtube.com/shorts/<id>` 可達性判斷，一律 `skipped`（reason=`short-excluded`）；查不到時 fail-open（留 warning，當作不是 Shorts），不中斷整批。
 4. **yt-dlp 字幕真實接通**：本機已裝 yt-dlp（`2026.08.18.122307`），CNA 用 `en/auto`、YNA 用 `zh-Hant/auto-translated`，VTT 解析與去重驗證正常，暫存字幕檔用畢即刪。
