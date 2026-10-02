@@ -17,6 +17,8 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from s2_source_meta import parse_rt_guid
+
 from s2_material_schema import (
     canonicalize_id_for_lookup, classify_source_for_read,
     SCHEDULED_YOUTUBE_ID_RE, YOUTUBE_VIDEO_ID_RE,
@@ -171,7 +173,10 @@ def source_link(item, family):
     video = match["video_id"] if match else mid[3:] if mid.startswith("YT:") else platform.get("video_id")
     if family in ("YNA", "CNA", "OTH", "YT") and video and YOUTUBE_VIDEO_ID_RE.fullmatch(video):
         url, kind, basis = f"https://www.youtube.com/watch?v={video}", "permalink", "youtube.video_id"
-    elif family == "RT" and re.fullmatch(r"urn:newsml:reuters\.com:[A-Za-z0-9:._-]+", str(platform.get("guid", ""))):
+    elif family == "RT" and re.fullmatch(
+            r"(?:tag:reuters\.com,[0-9]{4}:newsml_|urn:newsml:reuters\.com:)[A-Za-z0-9:._-]+",
+            str(platform.get("guid", ""))):
+        # 原生 GUID 是不透明來源鍵；可產連結不代表可解析建立日。
         url = f"https://www.reutersconnect.com/all?id={url_encode(platform['guid'])}&media-types=vid"
         kind, basis = "permalink", "reuters.guid"
     elif family == "AP" and re.fullmatch(r"AP\d{7}", mid):
@@ -317,7 +322,7 @@ def source_times(item, family):
         "ENEX": [("sortDate", "source_published_at_utc", "epoch_ms"),
                  ("publishedDate", "source_published_at_utc", "epoch_ms")],
         "ABC": [("DeliveryAvailableDateTime", "source_transmitted_at_utc", "Asia/Taipei"),
-                ("DeliveryCompletedDateTime", "source_arrived_at_utc", "Asia/Taipei")],
+                ("DeliveryCompleteDateTime", "source_arrived_at_utc", "Asia/Taipei")],
     }
     for key, column, tz_name in contracts.get(family, []):
         raw = platform.get(key, item.get(key))
@@ -395,6 +400,20 @@ def extract_dates(item, shift_date):
                 time_ev.append({"semantic": "material_date", "from_field": column,
                                 "extractor_version": EXTRACTOR_VERSION})
                 break
+    # A48：由完整原值重解析，不信任手填衍生日期；建立日只作退路，不造時刻。
+    if family == "RT":
+        guid = (item.get("platform") or {}).get("guid")
+        parsed = parse_rt_guid(guid)
+        guid_date = parsed["guid_created_date"]
+        if guid is not None:
+            time_ev.append({"field": "guid", "raw_value": guid, "semantic": "source_created_date",
+                            "precision": "date", "source_timezone": None, "at_utc": None,
+                            "date_value": guid_date, "extractor_version": EXTRACTOR_VERSION})
+            if parsed["meta_missing_reason"]:
+                issues.append("RT GUID 建立日未採用：" + parsed["meta_missing_reason"][0]["detail"])
+        if result["material_date"] is None and guid_date and not any("衝突" in issue for issue in issues):
+            result.update(material_date=guid_date, material_date_basis="source_created_fallback",
+                          date_quality="inferred", date_confidence="medium")
     if result["material_date"] is None and first:
         result.update(material_date=first.date().isoformat(), material_date_basis="ingestion_fallback",
                       date_quality="ingestion_fallback", date_confidence="low")

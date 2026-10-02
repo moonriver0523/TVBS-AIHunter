@@ -1324,6 +1324,24 @@ def _rt_code_or_edit(it):
     return ''
 
 
+def _rt_extra(it):
+    """A48：S2_SOURCE_META 預設 off；只在既有機械路徑附加 platform。"""
+    extra = {'sb_count': it.get('sb_count', 0)}
+    if os.environ.get('S2_SOURCE_META', 'off').strip().lower() != 'on':
+        return extra
+    # import 也在隔離範圍內；保存器故障不得阻塞整輪或觸發補抓。
+    try:
+        from s2_source_meta import rt_source_meta
+        extra['platform'] = rt_source_meta(it)
+    except Exception as exc:
+        extra['platform'] = {
+            'meta_schema_version': 1, 'site': 'RT', 'guid': it.get('guid'),
+            'meta_missing_reason': [{'field': 'guid', 'code': 'extractor_error',
+                                     'detail': f'RT 保存器失敗（{type(exc).__name__}）；原值保留，正文照舊'}],
+        }
+    return extra
+
+
 SITE_SPEC = {
     'ns': {
         'source': 'NS',
@@ -1359,7 +1377,7 @@ SITE_SPEC = {
         'id_of': _rt_code_or_edit,
         'skip_of': lambda it: '',
         'status_of': lambda it: 'pending' if it.get('early') else 'has_script',
-        'extra_of': lambda it: {'sb_count': it.get('sb_count', 0)},
+        'extra_of': _rt_extra,
         'src_text_of': lambda it: truncate(
             f"HEAD: {it.get('head', '')}\nSTORY: {it.get('story', '')}"
         ),

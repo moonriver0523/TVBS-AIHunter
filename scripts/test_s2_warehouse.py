@@ -119,7 +119,7 @@ class DatesTest(unittest.TestCase):
 
     def test_abc_already_taipei_and_completion_separate(self):
         dates = self.dates(item("ABC093026020", "ABC", platform={"DeliveryAvailableDateTime": "2026-10-01T00:30:00",
-                               "DeliveryCompletedDateTime": "2026-10-01T01:00:00"}))
+                               "DeliveryCompleteDateTime": "2026-10-01T01:00:00"}))
         self.assertEqual(dates["material_date"], "2026-10-01")
         self.assertEqual(dates["source_transmitted_at_utc"], "2026-09-30T16:30:00Z")
         self.assertEqual(dates["source_arrived_at_utc"], "2026-09-30T17:00:00Z")
@@ -131,6 +131,54 @@ class DatesTest(unittest.TestCase):
         for raw in ("2026-11-01T01:30:00", "2026-03-08T02:30:00"):
             with self.assertRaises(ValueError):
                 W.parse_timestamp(raw, "America/New_York")
+
+    def test_rt_guid_date_fallback_never_makes_a_time(self):
+        guid = "tag:reuters.com,2026:newsml_RW643129092026RP1:0004"
+        dates = self.dates(item("RT6431", "RT", platform={"guid": guid, "guid_created_date": "1999-01-01"}))
+        self.assertEqual(dates["material_date"], "2026-09-29")
+        self.assertEqual(dates["material_date_basis"], "source_created_fallback")
+        self.assertIsNone(dates["material_at_utc"])
+        self.assertIsNone(dates["source_created_at_utc"])
+        ev = next(e for e in dates["time_evidence"] if e.get("field") == "guid")
+        self.assertEqual(ev["precision"], "date")
+        self.assertIsNone(ev["at_utc"])
+        self.assertEqual(W.source_link(item("RT6431", "RT", platform={"guid": guid}), "RT")["url"],
+                         "https://www.reutersconnect.com/all?id=" + W.url_encode(guid) + "&media-types=vid")
+
+    def test_rt_guid_does_not_override_main_or_published(self):
+        platform = {"guid": "tag:reuters.com,2026:newsml_RW643129092026RP1:4",
+                    "published_at_utc": "2026-09-30T01:00:00Z"}
+        dates = self.dates(item("RT6431", "RT", platform=platform))
+        self.assertEqual(dates["material_date_basis"], "source_published")
+        dates = self.dates(item("RT6431", "RT", platform=platform,
+                               src_text="STORY: SHOWS: KYIV, UKRAINE (SEPTEMBER 28, 2026) (REUTERS - Access all)\n1. City"))
+        self.assertEqual(dates["material_date"], "2026-09-28")
+        self.assertEqual(dates["material_date_basis"], "source_content_date")
+
+    def test_rt_missing_or_malformed_guid_uses_ingestion(self):
+        for guid in (None, "", "tag:reuters.com,2026:newsml_RW643131022026RP1:4", 7):
+            with self.subTest(guid=guid):
+                dates = self.dates(item("RT6431", "RT", platform={"guid": guid}))
+                self.assertEqual(dates["material_date_basis"], "ingestion_fallback")
+                link = W.source_link(item("RT6431", "RT", platform={"guid": guid}), "RT")
+                self.assertEqual(link["kind"], "permalink" if isinstance(guid, str) and guid else "unavailable")
+
+    def test_rt_opaque_guid_can_link_without_a_created_date(self):
+        guid = "tag:reuters.com,2026:newsml_RWOS2QB1L:2"
+        row = item("RT3603", "RT", platform={"guid": guid})
+        self.assertEqual(W.source_link(row, "RT")["kind"], "permalink")
+        self.assertEqual(self.dates(row)["material_date_basis"], "ingestion_fallback")
+        for wrong in ('https://example.com/item', 'tag:evil.com,2026:newsml_RW615029092026RP1:4',
+                      'tag:reuters.com,2026:newsml_RW615029092026RP1:4?key=x'):
+            self.assertEqual(W.source_link(item("RT6431", "RT", platform={"guid": wrong}), "RT")["kind"], "unavailable")
+
+    def test_abc_correct_complete_spelling_is_the_only_field_read(self):
+        dates = self.dates(item("ABC093026020", "ABC", platform={
+            "DeliveryCompleteDateTime": "2026-10-01T01:00:00",
+            "DeliveryCompletedDateTime": "2026-10-02T01:00:00"}))
+        self.assertEqual(dates["source_arrived_at_utc"], "2026-09-30T17:00:00Z")
+        dates = self.dates(item("ABC093026020", "ABC", platform={"DeliveryCompletedDateTime": "2026-10-02T01:00:00"}))
+        self.assertIsNone(dates["source_arrived_at_utc"])
 
     def test_enex_epoch_and_conflict(self):
         ms = int(W.parse_timestamp("2026-09-30T22:30:00Z").timestamp()*1000)
