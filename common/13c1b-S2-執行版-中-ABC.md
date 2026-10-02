@@ -254,6 +254,11 @@ ABC 一輪可能上百則，**幾乎一定會被卸載**。⛔ 這不是錯誤�
 `Write` 整份骨架，不要逐則 `Edit`**（2026-09-19，同 R43 精神：逐筆 Edit 是同一批判斷拆成 N 次工具
 回合，思考量不變但耗時倍增；先在心裡／草稿走完全部 18 則左右的判斷，一次寫齊）。填完後若有多則修正，
 先累積到 `rewrite-entry --patch-file`，一次 apply。
+🔴 **骨架檔（`abc_skeleton_*.json`）本身一律不准 `Edit`——不論改幾格**（2026-09-29 0929-1700 實錯：
+對骨架連 Edit 11 次，第 3～11 次全被「同檔逐筆 Edit 次數上限」hook 擋掉，9 次白費，才改走
+`rewrite-entry`）。硬規則：要改骨架內容只有兩條路——① 一次 `Write` 整份；② 局部修改一律
+`rewrite-entry --init-patch <patch>` 建補丁檔 → `Write` 補丁 → `--patch-file <patch>` 一次 apply。
+被 hook 擋第 1 次就立刻改走②，不要重試 `Edit`。
 `python scripts/s2_platform_bridge.py build --skeleton <skeleton> --out <entries>`
 轉成下面 `check-entries` 吃的格式，再接原本 extract→lint→merge。`--help` 有完整範例。
 
@@ -326,7 +331,7 @@ lint 擋下來改完 entries 重跑 extract 時，txt 也會跟著重出（不�
 - `category` 物件或 `"大分類/中主題/小分題"` 字串都收；`sb_count` **整數**、⛔ 不要寫 `"1"`；
   `raw_entry` 行首直接是代碼，🔴🟡⭐🔖 可帶在代碼前面，
   ⛔ 時段標記 `△▲◇◆`（舊符號 `■●`）不准帶——render 依收錄時間自己補。
-- 排除的只要 `{"skip": "理由"}`，其餘免填。
+- 排除的只要 `{"skip": "理由"}`，其餘免填。慣例標籤（⛔ 不用翻舊檔查）：`主播TEASE／INTRO／HEADNOD片段（非獨立素材）`、`外電層：POOL／AP轉供／C-SPAN POOL／路透轉供`、`節目宣傳（第0層）`、`OTRC例行娛樂（第0層）`。
 - ⛔ `--checkpoint` 與每筆的 `first_seen_checkpoint` 一律 `{MMDD}-{HHMM}` 完整格式（A14 實錯）。
 
 ### 去重：鍵是 `Story Number`，不是 `detailId`

@@ -43,8 +43,9 @@
 - **D23 YouTube 尾端**：五站瀏覽器收工硬步驟後才看 D23；Phase 5 只准執行
   `python scripts/s2_youtube_launcher.py --checkpoint {CHECKPOINT} --state <state> --cursor <cursor> --out-dir <scratch> --dry-run`。
   dry-run 只列 CNA → YNA 的命令計畫，不呼叫 bridge、不碰 state／cursor、不連外；不改 `s2_scan.ps1` 或另建 Windows 排程。
-- 若 `{CHECKPOINT}` 是 01:00／09:00／20:00，D23 只回報「本輪不掃 CNA／YNA（D23）」；其他五輪按 CNA → YNA 順序列出各站結果，單站失敗各自留警告，不中止五站收工。
-- ⛔ 上面 dry-run 限制只管「D23 主動去抓新資料」，跟收工步驟 4.7（`13c3`：撿 `_待整併/` 現成 `*.apply-batch.json` 候選套用入庫）是兩件事，**每輪都要做，不受 01:00／09:00／20:00 限制**。
+- 若 `{CHECKPOINT}` 是 01:00／20:00（以程式 `SKIPPED_HHMM` 為準；09:00 照常），D23 只回報「本輪不掃 CNA／YNA（D23）」；其他五輪按 CNA → YNA 順序列出各站結果，單站失敗各自留警告，不中止五站收工。
+- D23 YNA／CNA 收錄判準（2026-10-02 使用者裁定）：YNA 專題／非即時／地方／程序性結案類一律可收，不得以此為由 skip；有新增事實或 BITE 的單題訪談可收；疑似重複先收（skip 須明列「沒有新增什麼」）；CNA 不套 YNA 同題去重；直播（含已成 VOD）、Shorts、完整多題節目／純閒聊集錦才排除。規則全文見 D23 計畫書 3.5。
+- ⛔ 上面 dry-run 限制只管「D23 主動去抓新資料」，跟收工步驟 4.7（`13c3`：撿 `_待整併/` 現成 `*.apply-batch.json` 候選套用入庫）是兩件事，**每輪都要做（含 D23 跳過輪 01:00／20:00，及非 D23 輪次）**。
 - 若是當天第一輪（狀態檔不存在）：先確認真的是建檔輪（只有 17:00），
   照 `13c3` §5a 建檔輪七項做，`window_start`／機動格兩項最容易錯，細節看該節。
 

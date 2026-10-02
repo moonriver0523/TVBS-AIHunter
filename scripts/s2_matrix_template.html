@@ -37,6 +37,9 @@ h1{font-size:18px;margin:0;font-weight:800;letter-spacing:-.01em}
 .note{font-size:12px;color:var(--mut);flex:1 0 100%}
 .note b{color:var(--warn);font-weight:700}
 .win{font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+/* 下一輪掃帶時刻（2026-09-30 使用者要求）：緊接在時間窗右邊，粗體＋淺灰底。 */
+.next{font-size:12.5px;font-weight:700;color:var(--chipfg);background:var(--chip);
+  padding:2px 9px;border-radius:10px;white-space:nowrap;font-variant-numeric:tabular-nums}
 /* 產出時間要**永遠看得到**：資料若停在幾小時前，編輯一眼就該察覺，
    而不是照著舊清單發稿。掃帶最長間隔是 3 小時（13:00→16:00），超過就代表
    管線停了或 html 沒更新，而 Apps Script 會**無聲**退回昨天那份。 */
@@ -192,7 +195,7 @@ table.mx td.on,table.mx th.on{background:var(--cellon);color:#fff}
 <body>
 <header class="top">
   <h1>__TITLE__</h1>
-  <span class="win">__WINDOW__</span>
+  <span class="win">__WINDOW__</span>__NEXT__
   <span class="stamp" id="stamp"></span>
   <div class="meta" id="meta">__META__</div>
 </header>

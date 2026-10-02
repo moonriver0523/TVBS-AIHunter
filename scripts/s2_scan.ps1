@@ -41,6 +41,7 @@ param(
     # 屬初步證據下的裁決，非嚴謹 A/B 結論，若後續劣化需重新評估）。
     # 改的時候**三個地方要一起改**：這裡的預設值、工作排程器 `S2掃帶` 的 -Model 引數、
     # `s2_watchdog.ps1` 代打時帶的值。只改一處會變成「手動跑跟排程跑不一致」這種查半天的問題。
+    # 2026-09-29 試 sonnet 5.5+medium（1100/1700 兩輪每則貴約 20~27%）後，使用者裁定改回 opus+low，三處已同步。
     [string]$Model = 'opus',
 
     # 2026-08-12 明寫 effort。**不要拿掉改回繼承全域預設**——全域 `effortLevel` 會被
@@ -74,6 +75,7 @@ param(
     # 訊號雜但「變慢」這點四輪一致，先改回 medium，樣本留檔比對。
     # 2026-09-25 改 low（跟隨上面 opus 裁定同批）：0925-0100 opus+low 對比 0924-2000
     # opus+medium，量體調整後每則 calls/花費/時間均約省一半，唯一 low 樣本，同上仍待驗證。
+    # 2026-09-29 隨 Model 改回 opus，effort 回 low。
     [string]$Effort = 'low',
 
     # 開工 prompt 範本；{CHECKPOINT} 會被代換掉。

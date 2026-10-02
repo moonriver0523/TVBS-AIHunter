@@ -44,9 +44,10 @@ param(
     # 2026-09-02：補回 01:00（救 RT 空窗漏收，01:00/20:00 不掛 ENEX）；07:30 改回 07:00；
     # 10:00/12:00 取消，改新增 09:00/11:00（同樣不掛 ENEX）。
     # 2026-09-26：07:00 改回 07:30。
+    # 2026-09-30：新增 13:00（使用者指定，預設開啟；比照 09:00 只跑三站不掛 ENEX/ABC）。
     # ⚠️ 這裡沒同步改的話，看門狗會在已取消的時段判定「這輪沒開」而去代打，
     #    等於把取消的輪次又跑回來。
-    [string[]]$Slots = @('01:00','04:30','07:30','09:00','11:00','17:00','20:00','22:00'),
+    [string[]]$Slots = @('01:00','04:30','07:30','09:00','11:00','13:00','17:00','20:00','22:00'),
 
     # 過了幾分鐘還沒開始才算「沒開」
     [int]$GraceMinutes = 30,
@@ -415,7 +416,7 @@ Write-Log "接手 [$checkpoint]（該輪已過 $([Math]::Round($minutesSince,1))
 $scanArgs = @(
     '-NoProfile', '-File', "$Repo\scripts\s2_scan.ps1",
     '-Checkpoint', $checkpoint,
-    '-Model', 'opus'        # 跟主排程一致（2026-09-25 由 sonnet 改回 opus）——兩邊不一樣，代打輪就會用錯 model
+    '-Model', 'opus'        # 跟主排程一致（2026-09-29 由 sonnet 改回 opus，effort low 走 s2_scan 預設）——兩邊不一樣，代打輪就會用錯 model
 )
 if ($TestMode) { $scanArgs += @('-TestMode', '-TestLimit', $TestLimit) }
 
