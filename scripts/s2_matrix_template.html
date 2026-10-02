@@ -130,6 +130,12 @@ body{display:grid;grid-template-columns:232px 1fr;
 .off{display:none!important}
 .tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
 .ptag{font-size:11px;padding:1px 7px;border-radius:999px;background:var(--chip);color:var(--chipfg);display:inline-flex;align-items:center;gap:4px}
+/* 2026-10-02 使用者要求：T/C 標籤可複選篩選，旗幟維持純顯示。 */
+.ptag[role="button"]{cursor:pointer;user-select:none;border:1px solid transparent}
+.ptag.t[aria-pressed="true"]{background:var(--t);color:#fff;border-color:var(--t)}
+.ptag.c[aria-pressed="true"]{background:var(--c);color:#fff;border-color:var(--c)}
+.ptag[role="button"]:hover{border-color:var(--accent)}
+.ptag[role="button"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .em{font-family:"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif}
 .flg{width:1.25em;height:.84em;object-fit:cover;vertical-align:-.12em;border-radius:2px;
      display:inline-block;box-shadow:0 0 0 1px rgba(0,0,0,.18);flex:none}
@@ -488,14 +494,37 @@ function renderExtra(){
 }
 function tagPills(r){
   const d=document.createElement("div"); d.className="tags";
-  (r.T||[]).forEach(t=>{
-    const s=document.createElement("span"); s.className="ptag";
-    s.innerHTML=fmtTag("T",t); d.append(s);
-  });
-  (r.C||[]).forEach(c=>{
-    const s=document.createElement("span"); s.className="ptag";
-    s.innerHTML=fmtTag("C",c); d.append(s);
-  });
+  // 2026-10-02 使用者要求：共用側欄的 F，多選只切換本值，不清除其他條件。
+  ["T","C"].forEach(kind=>(r[kind]||[]).forEach(value=>{
+    const s=document.createElement("span"); s.className="ptag "+kind.toLowerCase();
+    s.innerHTML=fmtTag(kind,value);
+    s.setAttribute("role","button"); s.tabIndex=0;
+    s.setAttribute("aria-pressed",String(F[kind].has(value)));
+    s.title=`${F[kind].has(value)?"取消":"加選"}篩選「${value}」`;
+    s.dataset.kind=kind; s.dataset.value=value;
+    const toggle=e=>{
+      e.stopPropagation();
+      const item=s.closest(".item");
+      const top=item.getBoundingClientRect().top;
+      const focused=document.activeElement===s;
+      F[kind].has(value)?F[kind].delete(value):F[kind].add(value);
+      draw();
+      // 重繪後以同一則定位；若取消篩選使該則消失，就不強制捲動。
+      const next=document.querySelector(`.item[data-id="${CSS.escape(String(r.id))}"]`);
+      if(next){
+        if(focused) next.querySelector(`.ptag[data-kind="${kind}"][data-value="${CSS.escape(value)}"]`)?.focus({preventScroll:true});
+        window.scrollBy(0,next.getBoundingClientRect().top-top);
+      }
+    };
+    s.onclick=toggle;
+    s.onkeydown=e=>{
+      if(e.key==="Enter" || e.key===" "){
+        e.preventDefault(); e.stopPropagation();
+        if(!e.repeat) toggle(e);
+      }
+    };
+    d.append(s);
+  }));
   if(r.flags&&r.flags.length){
     const s=document.createElement("span"); s.className="ptag";
     s.innerHTML=r.flags.map(flagImg).join(""); d.append(s);
@@ -505,6 +534,7 @@ function tagPills(r){
 function itemEl(r){
   const d=document.createElement("div");
   d.className="item"+(r.kind==="side"?" side":"")+(r.kind==="url"?" url":"");
+  d.dataset.id=r.id;
   const mk=document.createElement("span"); mk.className="mark"; mk.textContent=r.mark||"";
   const tx=document.createElement("div");
   const t=document.createElement("div"); t.className="txt";
