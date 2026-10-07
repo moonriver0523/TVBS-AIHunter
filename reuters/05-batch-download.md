@@ -44,7 +44,7 @@
 
 **共同前提**
 - **定位／文稿／transcript 等 API 呼叫用 Playwright 工具組**（`mcp__browser__*`），不是 claude-in-chrome（NS 的 localStorage 在 claude-in-chrome 會被 extension 隱私防護擋死）。
-- 🔴 **但「點下載」這一步一律改用 Claude in Chrome（`mcp__claude-in-chrome__*`）**（2026-09-30「無人空投2200」實測、使用者裁示）：Playwright MCP 在 RT detail 頁真點 `Download`，`download` 事件一觸發**整個瀏覽器就關掉重開、分頁只剩 `about:blank`，檔案沒落地**，連 3 次同結果；`waitForEvent('download')` 後 `saveAs` 也報 `Target page, context or browser has been closed`。Claude in Chrome 是使用者真實 Chrome、共用人工登入態，下載正常。適用所有要點瀏覽器下載的站（RT／NS／AP UI 退路／ABC 導航下載）；AP `ClientMediaUrl`、ENEX、X／YT 等 curl／yt-dlp 直鏈不受影響。
+- 🔴 **但「點下載」這一步一律改用 Claude in Chrome（`mcp__claude-in-chrome__*`）**（2026-09-30「無人空投2200」實測、使用者裁示）：Playwright MCP 在 RT detail 頁真點 `Download`，`download` 事件一觸發**整個瀏覽器就關掉重開、分頁只剩 `about:blank`，檔案沒落地**，連 3 次同結果；`waitForEvent('download')` 後 `saveAs` 也報 `Target page, context or browser has been closed`。Claude in Chrome 是使用者真實 Chrome、共用人工登入態，下載正常。適用所有要點瀏覽器下載的站（RT／NS／AP UI 退路）；AP `ClientMediaUrl`、ENEX、ABC（2026-10-07 起改「攔下載事件取直鏈＋curl」，見各站）、X／YT 等 curl／yt-dlp 直鏈不受影響。
 - **開工前檢查 profile 殘留**（多 agent 並行會互鎖；0803 曾害 RT 三輪誤判「全站 0 素材」）：
   `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ? { $_.CommandLine -like "*playwright*profile*" }`，閒置就 `Stop-Process -Force`；**自己收工也要關**。（2026-09-07 訂正：本流程用的是 `~/.claude.json` 裡 `browser` MCP 的 `.playwright-daily-profile`，舊字串 `*playwright-mcp-profile*` 比對不到任何實際 profile；S2 掃帶用的 `.playwright-s2-profile-v4` 不共用登入態，⛔ 不要拿它來做批次下載。）
 - ⚠️ **下載落點**：Claude in Chrome（真實 Chrome）下載落在 **`D:\Downloads\`**，下載中是 `尚未確認的 {數字}.crdownload`，完成後才變原始檔名（RT 原始檔名內含 `_{Edit No}-{SLUG}`，例 `…_RTRWNEV_D_6196-UKRAINE-CRISIS-…MP4`，用 Edit No 對回 `#XX` 改名）。舊 Playwright 下載落點是 `D:\Downloads\PlaywrightMCP\`（2026-08-03 實測，且會把 `_`／空格換成 `-`），現已不用它點下載。
@@ -125,8 +125,11 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
 
 1. **登入態＋文稿**：`POST https://members.enex.news/elasticsearch/news/_search`，body `{"size":1,"query":{"ids":{"values":["{6 碼}"]}},"_source":[…白名單]}`（0907 實測 `ids` 與 `term:{_id}` 兩種寫法都回 `total: 1`）；`hits.hits[0]._source` 的 `description` 就是完整 dopesheet（STORYLINE／SHOTLIST／SOUNDBITE／限制語），加 `title`／`partner`／`location`／`sortDate`／`filename` 一起存成 `{SLUG} #XX ENEX (外電文稿).txt`。⛔ `description` 逐字保留。欄位白名單與 CCTV 授權樣板剝除照 [`common/13c1`](../common/13c1-S2-執行版-中-ENEX.md) V5-2 的 `slimEnex()`，不要自己發明。回 `hits.total` 為 0 或 fetch 被導到登入頁＝未登入，停下來請使用者登入。
 2. **影片直鏈**：`https://members.enex.news/download/{6 碼}` 會 **302 到 `enexfeed.s3.eu-west-1.amazonaws.com` 的 SigV4 簽章直鏈**（`X-Amz-Expires=600`，**10 分鐘**到期），就是全解析度 mp4（實測 929921 → 522MB `video/mp4`）。
-   - 🔴 **不能用頁內 `fetch('/download/…')` 取**：轉址跨到 S3、S3 沒開 CORS，會直接拋 `Failed to fetch`（0907 實測）。要用 **`browser_navigate` 開這個網址**——導航不受 CORS 限制，分頁會停在 S3 網址上（畫面是 403 XML，這是正常的，見下一點），然後 `browser_evaluate` 回 `location.href` 就是簽章直鏈；或用 `browser_network_requests`（filter `amazonaws`）抄。
-   - 🔴 **落地前一定要把尾巴的 `&check_logged_in=1` 拿掉**（Drupal 轉址時附加的，不在簽章範圍內，帶著打就是那個 `403 SignatureDoesNotMatch`）：`url.replace(/[?&]check_logged_in=1$/, '')`。拿掉後同一條網址 0907 實測 `206 bytes 0-0/522565697`。
+   - 🔴 **不能用頁內 `fetch('/download/…')` 取**：轉址跨到 S3、S3 沒開 CORS，會直接拋 `Failed to fetch`（0907 實測）。
+   - ✅ **取直鏈做法（2026-10-07「抗議康校2200」三支全檔實測）**：開一個新分頁、先 `waitForEvent('download')` 再導航到 `/download/{6 碼}`，下載事件的 `download.url()` 就是 S3 簽章直鏈；**只取 url，不要 `saveAs`**，取到後立刻用 curl 下載。Playwright MCP 寫法：`browser_run_code_unsafe` → `const p2 = await page.context().newPage(); const ev = p2.waitForEvent('download'); p2.goto('https://members.enex.news/download/{id}').catch(()=>{}); return (await ev).url();`
+     - 0907 寫的「導航後分頁停在 S3 的 403 頁、讀 `location.href`」在 1007 **沒有重現**：導航直接變成下載事件（`page.goto: Download is starting`），`location.href` 讀不到直鏈。
+     - 🔴 **攔到下載事件後瀏覽器會整個關掉**（同 RT 的 0930 症狀），**一次呼叫只取一支**，下一支重開（MCP 下一次呼叫會自動重開；自寫 node 腳本要每支開一個程序）。
+   - 🔴 **落地前一定要把尾巴的 `&check_logged_in=1` 拿掉**（Drupal 轉址時附加的，不在簽章範圍內，帶著打就是那個 `403 SignatureDoesNotMatch`）：`url.replace(/[?&]check_logged_in=1$/, '')`。拿掉後同一條網址 0907 實測 `206 bytes 0-0/522565697`；1007 取到的直鏈尾巴沒有這個參數，照樣 `replace` 一次無妨。1007 實測 curl 全檔三支 `http=200`，1080p，長度與 dopesheet 相符（52–133MB）。
    - 直鏈是純簽章 S3，**不需 cookie、不吃真人手勢**，用 `curl -L -o "D:\Downloads\{SLUG} #XX ENEX.mp4" "{url}"` 從本機下載即可，不要在頁面裡 `a.click()`。**10 分鐘內要開始下載**，過期就重開一次 `/download/{id}` 換新鏈。⚠️ 簽章只綁 `GET`，`HEAD` 會 403，探測用 `Range: bytes=0-0` 的 GET。
    - ⛔ ES 回應裡的 `videoLowResCdn` 是低解析度預覽（量時長用），**不是**要交件的檔案。
 3. **落點在 `D:\Downloads`**（curl 系，同 yt-dlp），不是 `PlaywrightMCP`。照下方「下載驗證」查大小（ENEX 全解析度多為數百 MB）。
@@ -137,11 +140,16 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
 1. **登入態**：頁面沒有 `input[name=__RequestVerificationToken]`、或有 `input[type=password]`、或 fetch 直接拋 `Failed to fetch`＝未登入（`ss-tok` 約 1 小時到期，見 [`common/13c1b`](../common/13c1b-S2-執行版-中-ABC.md) V7-2）。停下來請使用者登入，⛔ 不准輸入帳密。
 2. **Story Number → detailId**：`GET /Delivery/NewsSearch?deliveryDateStart={M/D/YYYY}&deliveryDateEnd={M/D/YYYY}&pageSize=1000&page=1`（**不加** `getCSV`）回 HTML，每列 `tr` 裡 `a[href*="/Delivery/Detail/"]` 的 `Detail/(\d+)` 是 detailId、`span.smallText` 是 Story Number；日期窗給素材上架日前後各一天。對映寫法照 `13c1b` V7-2 那段，⛔ 不要用「附近第一串 9 位數」近似抓。
 3. **文稿**：`GET /adbridge/news/Delivery/Detail/{detailId}?includeCategories=True`（HTML 約 35KB），取 `Script` 欄（🔴 換行是 `&#10;`，要解 HTML 實體全套），連同 Slug／Story Number／Length／Synopsis／`ADVISORIES/RESTRICTIONS/EMBARGOES` 段存成 `{SLUG} #XX ABC (外電文稿).txt`。同一份 HTML 裡有 `a[href^="/Delivery/ApproveNews/"]`（`title="Approve this news story for download"`），把 href 記下來給第 4 步。
-4. **核准（真實副作用，只對清單上的素材做）**：`GET /Delivery/ApproveNews/{MediaGuid}?g=…&d=…&returnUrl=…`（href 照抄，`&amp;` 要還原成 `&`）。這一步會把該筆 delivery 狀態改成核准、ABC 端看得到，**是不可逆動作**：⛔ 只對使用者清單上明列的 `ABC` 編號做，⛔ 不准為了「先看看」核准清單外的素材；依 [`common/08`](../common/08-execution-efficiency.md) 額度鐵則，也不准拿它做測試。做之前先確認該筆狀態確實是 `Awaiting Approval`（已經 `Ready For Download` 的就跳過這步）。
-5. **等 `Ready For Download`**：`GET /Delivery/NewsDeliveries?pageSize=200` 回 HTML 表格（欄位 Date／News Story／Slug／Length／Destination／Status／Delivery Date／Actions）；找 Story Number 那列，Status 變成 `Ready For Download` 時，Actions 裡會多出 `a[title="Download local delivery"]`，href 形如 `/Delivery/Download/{GUID}?c=…&mpid=…&did={detailId}&d=…`。核准後多久會轉態尚未計時（0907 觀察：上午 10:29 上架、人工核准的一則在下午已是 Ready）；輪詢間隔 1–2 分鐘、上限依重試階梯，超時先跳過做下一筆。
+4. **核准（真實副作用，只對清單上的素材做）**：`GET /Delivery/ApproveNews/{MediaGuid}?g=…&d=…&returnUrl=…`（href 照抄，`&amp;` 要還原成 `&`）。這一步會把該筆 delivery 狀態改成核准、ABC 端看得到，**是不可逆動作**：⛔ 只對使用者清單上明列的 `ABC` 編號做，⛔ 不准為了「先看看」核准清單外的素材；依 [`common/08`](../common/08-execution-efficiency.md) 額度鐵則，也不准拿它做測試。做之前先確認該筆狀態確實是 `Awaiting Approval`（已經 `Ready For Download`／`Complete` 的就跳過這步）。
+   - ✅ **1007 實測**：用 `browser_navigate` 開 href（照抄、`&amp;` 還原）會導回 `returnUrl`（Detail 頁），Detail 頁上的 Approve 連結隨即消失；**立刻**查 NewsSearch，該列已是 `Ready For Download`，**不用等**。
+   - ⚠️ 同一 Story Number 可能有兩列 delivery（1007 #11：一列核准後轉 Ready、另一列仍 `Awaiting Approval`），核准一列就有下載鏈，另一列不必再按。
+   - ⚠️ 核准會改外部站台狀態，Claude Code 自動模式的權限分類器可能擋下（1007 自寫 node 腳本打核准被擋），**使用者當次明確指示後**改用 Playwright MCP 照做即可，不要繞過。
+5. **等 `Ready For Download`**：⚠️ **1007 改用第 2 步同一支 `NewsSearch` 查**——每列就有 Status 與 Actions（`/Delivery/Download/…`、`RequeuePendingDelivery`、`Acknowledge` 連結都在列內）；`NewsDeliveries?pageSize=200` 1007 查不到這三則（只列最近的），不要再用它當主查。舊寫法留存：`GET /Delivery/NewsDeliveries?pageSize=200` 回 HTML 表格（欄位 Date／News Story／Slug／Length／Destination／Status／Delivery Date／Actions）；找 Story Number 那列，Status 變成 `Ready For Download` 時，Actions 裡會多出 `a[title="Download local delivery"]`，href 形如 `/Delivery/Download/{GUID}?c=…&mpid=…&did={detailId}&d=…`。核准後多久會轉態尚未計時（0907 觀察：上午 10:29 上架、人工核准的一則在下午已是 Ready）；輪詢間隔 1–2 分鐘、上限依重試階梯，超時先跳過做下一筆。
 6. **下載**：`/Delivery/Download/…` 會 **302 到 `s3.amazonaws.com/fs2.extremereach.com/media/…/{StoryNumber}.mp4` 的簽章直鏈**（SigV2 `Expires`，實測效期約 **2 天**；`response-content-disposition=attachment;fileName={StoryNumber}.mp4`）。**跨網域，頁內 `fetch` 會被 CORS 擋（`Failed to fetch`），不要在 evaluate 裡抓它。** 做法二選一：
-   - **A（首選）**：`browser_navigate` 直接開 `https://abcnews.extremereach.com{Download href}`，瀏覽器跟著 302 落地成下載，檔案進 **`D:\Downloads\PlaywrightMCP\`**，檔名 `{StoryNumber}.mp4`。
-   - **B**：開完 A 之後用 `browser_network_requests`（filter `s3.amazonaws.com`）把最終 S3 網址抄下來，之後同一筆要重下就 `curl -L -o … "{url}"`，不必再過站台。
+   - ✅ **唯一做法（2026-10-07「抗議康校2200」三支全檔實測）**：同 ENEX——`browser_run_code_unsafe` 開新分頁、先 `waitForEvent('download')` 再導航到 `https://abcnews.extremereach.com{Download href}`，回傳 `download.url()`（`s3.amazonaws.com/fs2.extremereach.com/…/{StoryNumber}.mp4?…Expires=…`，效期約 2 天），立刻 `curl -L -o "D:\Downloads\{SLUG} #XX ABC.mp4" "{url}"`。**只取 url，不要 `saveAs`。** 1007 三支 `http=200`，720p，129–214MB，長度與清單相符。
+   - 🔴 **攔到下載事件後瀏覽器會整個關掉**，同一次呼叫排第二支會拿到 `Target page, context or browser has been closed`——**一次呼叫只打一支 Download**。注意這時第二支的 Download 端點可能還沒被打到（1007 #10 第一次失敗時分頁停在 `about:blank`，重開後照常取到直鏈）。
+   - ⛔ **舊 A 法（`browser_navigate` 直接開 Download 讓瀏覽器落地）不要再用**：Playwright 下載事件會關掉瀏覽器、檔案不落地，而 Download 端點已被打到、站方照樣登記 `Complete`。
+   - **已是 `Complete` 的素材仍可下載**（1007 #09／#10 當天早上已被打過、Download 連結仍在列內，重新攔一次照常拿到新簽章直鏈且全檔正常）。下方「只准打一次」指的是**自己剛打過、懷疑沒落地**時不要重打；別人先打過的照常走本步。
    - ⛔ 頁面上的 `View Low-Res Proxy`（`app.extremereach.com/Media/Stream/…`）是串流預覽，不是交件檔。
    - 🔴 **`/Delivery/Download/{guid}` 這個端點只要被打到就會登記 `Complete`，不管檔案有沒有真的落地**（2026-09-07 實測：監督者頁內 `fetch('/Delivery/Download/{guid}')` 因 CORS 被擋、檔案完全沒抓到，但 ER 端仍把同一 GUID 底下所有 delivery 一次全部標成 `Complete`，`Delivery Date` 蓋成打的那個時間點；S3 簽章網址的 `Expires` 也對得上「打的時間 + 2 天」）。**這代表 Download 只准打一次**——打了就視同「站方已認定完成」，⛔ 不要因為懷疑沒下載成功就對同一 GUID 重打 `/Delivery/Download/…`（不會有第二次機會，站方不會因此重新產生檔案）。每次打之前務必先照下方「下載驗證」查真的落地的檔案大小；懷疑沒下載成功時改用 Actions 裡的 `Requeue` 連結（`/Delivery/RequeuePendingDelivery/{id}?...`）走站方的補送流程，不要重打 Download 端點。
    - 🔴 **同一 GUID 常對應多筆 delivery 記錄**（同一支影片被重複派送/redeliver 過），Download／Acknowledge 這類「登記」動作看起來是**以 GUID（`mediaObjectId`）為單位一次套用到所有相關 delivery**，不是只改你點的那一列（2026-09-07 實測兩案都是如此，見下方 Acknowledge 段）。
@@ -155,8 +163,6 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
 9. **費用**：站上沒有計價欄位；若有計量點就是第 4 步的核准。首批照「看到就回報」在彙整表註明「ABC 無計價資訊、已核准 N 則」。
 
 > 兩站共同：**本流程只做「已編號清單上的素材」**。掃帶輪（S2）擷取 ENEX／ABC 只讀清單與文稿、從不核准也不下載，那套規則在 `13c1`／`13c1b`；這裡是 S6 下載，兩邊不要互抄。
-
-**ENEX／ABC 尚未實測的部分（2026-09-07 記錄，首次真跑時補）**：ENEX 直鏈的 curl 全檔落地（只驗到 `206 bytes 0-0/522565697`）；ABC 第 4 步用頁內 `fetch` 打 `ApproveNews` 是否真的把該列轉成 `Ready For Download`（0907 只看了連結、沒按）、核准→Ready 的等待時間、導航下載在 Playwright 的落地檔名。（Acknowledge 已於 2026-09-07 實測並寫入第 7 步，從本清單移除。）首次跑到時把結果回寫本節並刪掉這一段。
 
 **YouTube：** 用 `yt-dlp` 下載影片到 `D:\Downloads`（選合理可用的最高畫質 mp4）。沒有教「文稿」的抓取方式，若使用者要文稿，先問。**清單裡有多支彼此獨立的 YouTube 影片時，可以平行/背景執行多個 `yt-dlp` 下載，不用一支一支排隊等**，這是效率最好的一種下載方式。若同時下載官方/自動字幕，通常只需保留 `-orig`（原始語言）那一份即可，不必把翻譯版字幕也一起留著。
 
@@ -185,7 +191,7 @@ Get-ChildItem "D:\Downloads\PlaywrightMCP" -File | Sort LastWriteTime -Desc |
 ## 下載確認與卡住處理
 
 用 PowerShell 輪詢下載夾（`Get-ChildItem -File | Where-Object {LastWriteTime -gt (Get-Date).AddMinutes(-2)}`），確認檔案（.crdownload 或臨時檔）已完成、大小穩定。
-⚠️ **落點**：`yt-dlp`／`curl` 系（YouTube／X／FB／DVIDS／**ENEX 直鏈**）與 **Claude in Chrome 點的下載（2026-09-30 起 RT／NS 等）** 都落在 **`D:\Downloads`**；只有仍走 Playwright 的瀏覽器下載（AP API 直取 `a.click()`；ABC 導航下載）落在 `D:\Downloads\PlaywrightMCP`（2026-08-03 實測，ENEX／ABC 2026-09-07 補）。找不到檔案時先確認自己在看哪一個資料夾。
+⚠️ **落點**：`yt-dlp`／`curl` 系（YouTube／X／FB／DVIDS／**ENEX／ABC 直鏈**，2026-10-07 起 ABC 也改 curl）與 **Claude in Chrome 點的下載（2026-09-30 起 RT／NS 等）** 都落在 **`D:\Downloads`**；只有仍走 Playwright 的瀏覽器下載（AP API 直取 `a.click()`）落在 `D:\Downloads\PlaywrightMCP`（2026-08-03 實測）。找不到檔案時先確認自己在看哪一個資料夾。
 
 RT 詳情頁點連結後畫面還停在列表摘要、或 Download 點了 `D:\Downloads` 沒有新檔案等症狀，先查 [`common/09-known-issues.md`](../common/09-known-issues.md#瀏覽器自動化) 有沒有對應解法（通常是「再點一次」或「頁面要維持在最上方再點 Download」），再進入下方重試階梯。
 
