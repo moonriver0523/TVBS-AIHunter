@@ -86,7 +86,7 @@ def test_bot_blocked_caption_is_distinct_manifest_deferred_reason():
         def is_short(self, video_id):
             return False
 
-    result = bridge.collect_manifest(
+    result = bridge.collect_manifest(description_only=False, 
         site="CNA", checkpoint="0920-0430",
         cursor_data={"revision": 1, "sites": {"CNA": {"last_complete_end_utc": "2026-09-20T12:00:00Z"}}},
         state_data={"items": []}, client=BlockedClient(),
@@ -133,7 +133,7 @@ def test_rate_limited_caption_is_deferred_not_treated_as_missing():
         def is_short(self, video_id):
             return False
 
-    result = bridge.collect_manifest(
+    result = bridge.collect_manifest(description_only=False, 
         site="CNA", checkpoint="0920-0430",
         cursor_data={"revision": 1, "sites": {"CNA": {"last_complete_end_utc": "2026-09-20T12:00:00Z"}}},
         state_data={"items": []}, client=RateLimitedClient(),

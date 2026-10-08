@@ -136,7 +136,7 @@ def report(name, passed, detail=""):
 
 def test_collect_paginates_and_accounts():
     client = cna_client()
-    manifest = bridge.collect_manifest(
+    manifest = bridge.collect_manifest(description_only=False, 
         site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
         client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
     )
@@ -183,7 +183,7 @@ def test_deferred_queue_retries_even_when_playlist_no_longer_contains_video():
     cur = cursor()
     cur["sites"]["CNA"]["deferred_video_ids"] = [deferred_id]
     cur["sites"]["CNA"]["recent_video_ids"] = [deferred_id]
-    result = bridge.collect_manifest(
+    result = bridge.collect_manifest(description_only=False, 
         site="CNA", checkpoint="0920-0430", cursor_data=cur, state_data={"items": []},
         client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
     )
@@ -225,7 +225,7 @@ def test_yna_uses_zh_hant_and_marks_triage_only():
                          "segments": [{"text": "南韓政府今天表示"}, {"text": "南韓政府今天表示"}]},
          "ZyX321_ko-a": {"language": "zh-Hant", "kind": "auto-translated", "segments": []}},
     )
-    manifest = bridge.collect_manifest(
+    manifest = bridge.collect_manifest(description_only=False, 
         site="YNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
         client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
     )
@@ -426,7 +426,7 @@ def test_thin_description_falls_back_to_captions():
     client.videos["AbCd_ef-123"] = video(
         "AbCd_ef-123", channel, "2026-09-20T14:55:02Z", description="太短了"
     )
-    manifest = bridge.collect_manifest(
+    manifest = bridge.collect_manifest(description_only=False, 
         site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
         client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
     )
@@ -435,6 +435,45 @@ def test_thin_description_falls_back_to_captions():
     assert row["src_text"] == "Leaders met today\nto discuss the plan."
     assert row["platform"]["caption"]["kind"] == "auto"
     assert ("AbCd_ef-123", "en", "auto") in client.caption_calls
+
+
+def test_default_description_only_never_fetches_captions_and_never_defers_thin():
+    """2026-10-05 使用者裁定「一律改用 description」：正式預設完全不抓字幕
+    （YNA 字幕頻繁撞 429），description 太薄也照收、標 description-thin，不進 deferred。"""
+    client = cna_client()
+    channel = bridge.SITE_SPECS["CNA"]["channel_id"]
+    client.videos["AbCd_ef-123"] = video(
+        "AbCd_ef-123", channel, "2026-09-20T14:55:02Z", description="太短了"
+    )
+    manifest = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert client.caption_calls == []
+    assert not [d for d in manifest["deferred"] if d["reason"].startswith("caption")]
+    row = manifest["items"][0]
+    assert row["src_text"] == "太短了"
+    assert row["platform"]["caption"] == {
+        "source": "description", "kind": "description", "precision": "description-thin"
+    }
+
+
+def test_default_description_only_falls_back_to_title_when_description_empty():
+    client = cna_client()
+    channel = bridge.SITE_SPECS["CNA"]["channel_id"]
+    client.videos["AbCd_ef-123"] = video(
+        "AbCd_ef-123", channel, "2026-09-20T14:55:02Z",
+        description="▣ 연합뉴스TV 유튜브 채널 구독\nhttps://www.youtube.com/@yonhapnewstv23\n",
+    )
+    manifest = bridge.collect_manifest(
+        site="CNA", checkpoint="0920-0430", cursor_data=cursor(), state_data={"items": []},
+        client=client, collect_started_at_utc="2026-09-20T15:00:00Z",
+    )
+    assert client.caption_calls == []
+    assert not [d for d in manifest["deferred"] if d["reason"].startswith("caption")]
+    row = manifest["items"][0]
+    assert row["src_text"] == "AbCd_ef-123 metadata title"
+    assert row["platform"]["caption"]["precision"] == "title-only"
 
 
 def test_description_boilerplate_lines_are_stripped_before_sufficiency_check():

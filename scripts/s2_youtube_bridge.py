@@ -652,7 +652,8 @@ def collect_manifest(*, site: str, checkpoint: str, cursor_data: Mapping[str, An
                      state_data: Mapping[str, Any], client: YouTubeClient,
                      collect_started_at_utc: Optional[str] = None,
                      bootstrap_start_utc: Optional[str] = None,
-                     max_pages: int = DEFAULT_MAX_PLAYLIST_PAGES) -> dict[str, Any]:
+                     max_pages: int = DEFAULT_MAX_PLAYLIST_PAGES,
+                     description_only: bool = True) -> dict[str, Any]:
     site = _trim(site).upper()
     if site not in SITE_SPECS:
         raise BridgeError(f"site 只接受 CNA/YNA：{site!r}")
@@ -852,12 +853,26 @@ def collect_manifest(*, site: str, checkpoint: str, cursor_data: Mapping[str, An
             if isinstance(metadata.get("contentDetails"), Mapping) else None
         )
         # D23 裁決（2026-09-20）：description 是 videos.list metadata 的一部分，
-        # 不吃 yt-dlp 配額也不受字幕限流影響；description 夠完整時直接當
-        # src_text 用，字幕留給 description 太薄的情況再抓。
+        # 不吃 yt-dlp 配額也不受字幕限流影響。
+        # 2026-10-05 使用者裁定「一律改用 description」：YNA 抓字幕頻繁撞 YouTube 429，
+        # 正式掃帶（description_only=True，預設）完全不抓字幕、也不因字幕失敗進 deferred。
+        # description 去樣板後不足 60 字仍照收，precision 標 description-thin 提醒人工；
+        # 連 description 都空才退用標題（標 title-only），一樣不 deferred。
         cleaned_description = _clean_description(snippet.get("description"))
         if _description_is_sufficient(cleaned_description):
             src_text = cleaned_description
             caption_meta = {"source": "description", "kind": "description", "precision": "source-text"}
+        elif description_only:
+            title_text = _trim(snippet.get("title")) or _trim((row.get("raw") or {}).get("snippet", {}).get("title"))
+            if cleaned_description:
+                src_text = cleaned_description
+                caption_meta = {"source": "description", "kind": "description", "precision": "description-thin"}
+            else:
+                src_text = title_text
+                caption_meta = {"source": "description", "kind": "description", "precision": "title-only"}
+            if not src_text:
+                base["skipped"].append({"video_id": video_id, "id": mid, "reason": "no-description-no-title"})
+                continue
         else:
             try:
                 caption_payload = client.get_captions(

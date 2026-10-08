@@ -620,6 +620,9 @@ try {
     # 2026-08-13 硬排除 Task 系列工具＋Agent：0812-1600 輪呼叫 26 次、0813-0430 輪 12 次，
     # 全部是開待辦清單（TaskCreate/TaskUpdate...），零產出。靠 prompt 自律會漂移，
     # 這裡用 --disallowedTools 在工具層擋掉。-NoToolBan 可關掉此排除做回退對照。
+    # 2026-10-05（使用者裁定）：MCP 啟動時限 30s→90s。1005-1100 輪 browser MCP（npx @playwright/mcp）
+    # 撞上本機重負載，30s 內沒起來，五站整輪沒掃；平常 1.6–1.8s 就連上，90s 只是保險。
+    $env:MCP_TIMEOUT = '90000'
     $claudeArgs = @(
         '-p', $prompt,
         '--permission-mode', 'bypassPermissions',
@@ -943,6 +946,7 @@ s2_render.py 與最終通知；殼層會在兩段 manifest 都成功後統一 fi
     $statePath = $null
     $topStale = $false
     $topStaleAutoFixed = $false
+    $topStaleSiteless = $false
     foreach ($f in Get-ChildItem $StateDir -Filter '*-s2-state.json' -File |
                    Sort-Object LastWriteTime -Descending) {
         try {
@@ -956,6 +960,15 @@ s2_render.py 與最終通知；殼層會在兩段 manifest 都成功後統一 fi
                 # 純警告顯然不夠——這裡的值本來就是唯一正確答案（$Checkpoint 本身），
                 # 沒有歧義可判斷，直接在殼層自動補跑，不再等 agent 或人工回頭處理。
                 $statePath = $f.FullName; $st = $j; $topStale = $true
+                # 2026-10-05（使用者裁定）：1005-1100 輪 browser MCP 啟動逾時，五站全沒掃，
+                # 只進了 YNA／CNA／側錄；agent 刻意不推進，殼層卻照樣補 set-top，
+                # 09:00–11:00 的窗差點永久漏收。本輪五站（瀏覽器站）0 則時不補，留給下一輪補掃。
+                $browserSrc = @('NS', 'AP', 'RT', 'ENEX', 'ABC')
+                $browserCount = @($sel.Items | Where-Object { $browserSrc -contains [string]$_.source }).Count
+                if ($browserCount -eq 0) {
+                    $topStaleSiteless = $true
+                    break
+                }
                 try {
                     python "$PSScriptRoot\s2_state.py" --file $statePath set-top checkpoint $Checkpoint
                     $st.checkpoint = $Checkpoint
@@ -1019,7 +1032,11 @@ s2_render.py 與最終通知；殼層會在兩段 manifest 都成功後統一 fi
     # 素材有進來、頂層卻沒推進：東西沒丟，但 render 的對帳查核會去查上一輪的紀錄
     # 而誤放行（0809-0800 實錯）。單獨列一條，不要跟「整輪沒跑」混在一起。
     if ($topStale) {
-        if ($topStaleAutoFixed) {
+        if ($topStaleSiteless) {
+            $bad += "本輪 NS／AP／RT／ENEX／ABC 五站 0 則（只有 YNA／CNA／側錄進來）——" +
+                    "殼層**刻意不補** ``set-top``，頂層停在上一輪，下一輪會從那裡補掃；" +
+                    "若確認五站真的沒素材，再人工補跑 ``s2_state.py set-top checkpoint $Checkpoint``"
+        } elseif ($topStaleAutoFixed) {
             $bad += "本輪素材有寫入但**頂層 checkpoint 沒推進**（agent 忘了 set-top）——" +
                     "已由殼層自動補跑 ``set-top checkpoint $Checkpoint`` 修正，僅記錄提醒 agent 這步別再漏"
         } else {
