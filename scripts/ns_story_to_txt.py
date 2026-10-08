@@ -136,7 +136,9 @@ def main(argv=None) -> int:
         return 2
 
     txt = build_txt(chosen)
-    Path(a.out).write_text(txt, encoding="utf-8")
+    # 2026-10-08: CTV TXT = CRLF + UTF-8 BOM
+    with open(a.out, "w", encoding="utf-8-sig", newline="\r\n") as f:
+        f.write(txt.replace("\r\n", "\n"))
 
     created = parse_dt(chosen.get("createdDate"))
     age_days = (datetime.now(timezone.utc) - created).days if created else None

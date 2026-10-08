@@ -15,6 +15,10 @@
 - **使用者有明確提到 SLUG**（例如「幽浮檔案1600」）：以該 SLUG 作為檔名前綴（例如 `幽浮檔案1600 原始文稿.txt`、`幽浮檔案1600.mp4`、`幽浮檔案1600 完成文稿.txt`），**不使用 CNN 素材編號命名**。
 - **使用者未提到 SLUG**：沿用原本規則，以 CNN Newsource story ID 作為檔名前綴（例如 `WE-018FR 原始文稿.txt`）。
 
+## TXT 輸出編碼規格（2026-10-08 訂定）
+
+CTV 寫稿流程產出的**所有 `.txt`**（`<ID> 原始文稿.txt`、`<ID> ASR.txt`、`<ID> 完成文稿.txt`）一律為 **Windows CRLF 分行 + UTF-8 BOM（`utf-8-sig`）**，不再「BOM 可有可無」。Python 寫檔用 `open(path, "w", encoding="utf-8-sig", newline="\r\n")`（內容用 `\n` 分行即可）；`ns_story_to_txt.py` 已照此輸出。用 Write/Edit 工具改過的 TXT，上傳前須確認仍是 CRLF+BOM（工具可能寫成 LF/無 BOM）。此條優先於 `common/08` 對原始文稿/ASR 的「BOM 可有可無」。
+
 ## 省 Token 核心流程（優先遵守）
 
 1. **官方稿只抓一次、立刻落地**：步驟 1a 的 API 回應用 `filename` 直接落檔、`ns_story_to_txt.py` 轉成 `"<ID> 原始文稿.txt"`（退路 1b 才是 ≡Q Preview 抓全文）。後續只讀這個檔，不要重打 API、不要重開 Preview、不要把 SUPER／LEAD IN／全稿貼進對話。
