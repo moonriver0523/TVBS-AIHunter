@@ -316,6 +316,68 @@ function Write-Run {
     return [bool](Write-Line $runsLog $line)
 }
 
+function Get-S2ProfileProcs {
+    # 命令列含 S2 v4 profile 路徑的行程（chrome／node／cmd）。比對路徑不比行程名，
+    # 不會碰到使用者自己的 Chrome。查詢失敗回傳 $null（與「真的 0 個」區分）。
+    $key = '.playwright-s2-profile-v4'
+    try {
+        return ,@(Get-CimInstance Win32_Process -ErrorAction Stop |
+                 Where-Object { $_.CommandLine -and $_.CommandLine.Contains($key) -and
+                                $_.Name -in 'chrome.exe', 'node.exe', 'cmd.exe' -and
+                                $_.ProcessId -ne $PID })
+    } catch { return $null }
+}
+
+function Get-S2ProcId($p) { return "$($p.ProcessId)|$($p.CreationDate.Ticks)" }
+
+function Write-S2ProcCleanup {
+    # 2026-10-11：收尾清理本輪自己留下的 MCP 孤兒（claude 退出後 npx→playwright→chrome 鏈沒被帶走）。
+    # 只殺「開跑前不存在、且祖先鏈不含任何開跑前行程」的 profile 行程：
+    # 開跑前就在的（使用者手開視窗等）與其新生子行程一律不動，守住 13b §5「不殺別人在用的進程」。
+    # 開跑前快照失敗（$null）就整個略過清理。先溫和關閉 chrome、等 4 秒再 -Force，免得 cookie 沒 flush。
+    param($Before, [string]$Tag = '')
+    try {
+        if ($null -eq $Before) {
+            $null = Write-Run -Event DIAG -Detail "收尾清理$Tag：開跑前快照失敗，略過（不冒險誤殺）"
+            return
+        }
+        $now = Get-S2ProfileProcs
+        if ($null -eq $now) {
+            $null = Write-Run -Event DIAG -Detail "收尾清理$Tag：收尾查詢失敗，略過"
+            return
+        }
+        $beforeIds = @($Before | ForEach-Object { Get-S2ProcId $_ })
+        $beforePids = @($Before | ForEach-Object { [int]$_.ProcessId })
+        $all = @{}
+        foreach ($q in (Get-CimInstance Win32_Process -ErrorAction Stop)) { $all[[int]$q.ProcessId] = $q }
+        $mine = @()
+        foreach ($p in $now) {
+            if ($beforeIds -contains (Get-S2ProcId $p)) { continue }
+            $under = $false; $cur = [int]$p.ParentProcessId; $hop = 0
+            while ($cur -and $all.ContainsKey($cur) -and $hop -lt 32) {
+                if ($beforePids -contains $cur) { $under = $true; break }
+                $cur = [int]$all[$cur].ParentProcessId; $hop++
+            }
+            if (-not $under) { $mine += $p }
+        }
+        $mb = [Math]::Round((($now | Measure-Object WorkingSetSize -Sum).Sum) / 1MB)
+        foreach ($p in $mine | Where-Object { $_.Name -eq 'chrome.exe' }) {
+            try { $gp = Get-Process -Id $p.ProcessId -ErrorAction Stop; [void]$gp.CloseMainWindow() } catch { }
+        }
+        if ($mine.Count -gt 0) { Start-Sleep -Seconds 4 }
+        $killed = 0
+        foreach ($p in ($mine | Sort-Object CreationDate -Descending)) {
+            if (Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue) {
+                try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop; $killed++ } catch { }
+            }
+        }
+        $freeGB = [Math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 1)
+        $null = Write-Run -Event DIAG -Detail "收尾清理$Tag：profile行程 收尾前=$(@($now).Count)個/${mb}MB，本輪新增=$(@($mine).Count)個，已清=$killed，系統可用記憶體=${freeGB}GB"
+    } catch {
+        $null = Write-Run -Event DIAG -Detail "收尾清理$Tag失敗，不影響本輪：$($_.Exception.Message)"
+    }
+}
+
 function Write-Skip([string]$why) {
     # 跳過紀錄維持 3 欄、沒有 run_id。撞鎖查 SKIP；收工異常查 DONE detail。
     $null = Write-Line $skipLog "$stamp`t$Checkpoint`t$why"
@@ -733,6 +795,7 @@ try {
         #    不再因 set-top 收工才下而記到上一輪。
         $env:S2_CHECKPOINT = $Checkpoint
         $t0 = Get-Date
+        $s2ProcBefore = Get-S2ProfileProcs
         if ($SplitSession) {
             $manifestPath = if ($ResumeManifest) { $ResumeManifest } else { Join-Path $LogDir "round-$Checkpoint-$RunId.json" }
             $stateForSplit = if ($liveState) { $liveState.FullName } else { $null }
@@ -856,6 +919,7 @@ s2_render.py 與最終通知；殼層會在兩段 manifest 都成功後統一 fi
             $code = $LASTEXITCODE
         }
     } finally {
+        Write-S2ProcCleanup -Before $s2ProcBefore
         if ($geminiEnvSet) {
             Remove-Item Env:\ANTHROPIC_BASE_URL      -ErrorAction SilentlyContinue
             Remove-Item Env:\ANTHROPIC_API_KEY       -ErrorAction SilentlyContinue
@@ -923,6 +987,7 @@ s2_render.py 與最終通知；殼層會在兩段 manifest 都成功後統一 fi
                 } catch {
                     $null = Write-Run -Event DIAG -Detail "Claude 補跑也失敗：$($_.Exception.Message)"
                 }
+                Write-S2ProcCleanup -Before $s2ProcBefore -Tag '(補跑後)'
             }
         }
     }
