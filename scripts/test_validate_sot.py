@@ -241,7 +241,7 @@ SOT_QA = SOT_OK + "\n" + SOT_QA_BLOCK + "\n\n記者收尾。\n"
 SOT_CONSECUTIVE = SOT_OK + "\n" + SOT_QA_BLOCK + "\n" + SOT_OFFICIAL_BLOCK + "\n\n記者收尾。\n"
 SOT_CONSECUTIVE_1SEC = SOT_CONSECUTIVE.replace("#04 0030-0039", "#04 0030-0031")
 
-# SOL4：原文取滿即停，無空行的後續旁白仍須計入 OS。
+# SOL4：一般 SB 單行原文後，無空行的後續旁白仍須計入 OS。
 SOT_SINGLE_ORIGINAL = """SB
 官員 Taylor
 我們會繼續推動。
@@ -249,6 +249,11 @@ SOT_SINGLE_ORIGINAL = """SB
 We will continue."""
 SOT_OVERLONG = SOT_OK.replace(
     "記者旁白第二句", SOT_SINGLE_ORIGINAL + "\n" + "應計入旁白的中文字。" * 100,
+)
+SOT_SOL5_OVERLONG = SOT_OK.replace(
+    "記者旁白第二句",
+    "SB\n記者 A vs. 官員 B\n會繼續嗎？\n會。\n一直繼續。"
+    "\n#03 0117-0124\nWill you continue?\nYes.\n" + "應計入旁白的中文字。" * 100,
 )
 
 
@@ -340,9 +345,15 @@ def main() -> int:
         ("單行 SB 後無空行接中文 OS", test_sot_single_original_zh_os),
         ("單行 SB 後無空行接英文 OS", test_sot_single_original_en_os),
         ("日文原文後無空行接中文 OS", test_sot_japanese_original_zh_os),
-        ("問答原文取滿後無空行接 OS", test_sot_qa_original_os_boundary),
-        ("問答原文不足須回報格式問題", test_sot_qa_original_shortage),
+        ("問答原文停止邊界與講者辨識", test_sot_qa_original_os_boundary),
+        ("問答缺原文須回報格式問題", test_sot_qa_original_shortage),
         ("SOL4 超長整稿必須 FAIL", test_sot_overlong),
+        ("SOL5 原文行數與中文不同仍須保留 OS", test_sot_qa_unequal_lines),
+        ("SOL5 完整單行問答原文應通過", test_sot_qa_single_line),
+        ("SOL5 英文數字範圍必須當原文", test_sot_qa_numeric_ranges),
+        ("SOL5 日文與韓文多行原文", test_sot_qa_japanese_korean),
+        ("SOL5 非問答講者維持單行原文", test_sot_non_qa_speakers),
+        ("SOL5 1007 字整稿必須 FAIL", test_sot_sol5_overlong),
     ]:
         try:
             check()
@@ -418,15 +429,17 @@ def test_sot_qa_original_os_boundary():
     original = "Will you continue this policy?\nYes, we will continue."
     for speaker in [
         "記者 Alex vs. 官員 Taylor", "記者VS.美國總統 川普 8.11",
+        "記者vs.美國總統 川普 8.11", "記者 vs. 川普", "記者 vS. 川普",
         "記者ｖｓ．美國總統 川普 8.11", "記者ＶＳ．美國總統 川普 8.11",
     ]:
         sb = SOT_QA_BLOCK.replace("記者 Alex vs. 官員 Taylor", speaker)
-        for os_text in ["記者旁白必須計入字數。", "The reporter continues."]:
-            assert_sot_original_os_boundary(sb, os_text, original, 7)
+        assert_sot_original_os_boundary(sb, "記者旁白必須計入字數。", original, 7)
+        assert_sot_original_os_boundary(sb, "\nThe reporter continues.", original, 7)
 
 
 def test_sot_qa_original_shortage():
-    partial = SOT_QA_BLOCK.rsplit("\n", 1)[0]
+    # 一行完整問答合法；不能再按中文行數推定缺原文。
+    partial = SOT_QA_BLOCK.rsplit("\n", 2)[0]
     for boundary in [
         "", "\n\n記者旁白。", '\n#01 TC0005 "畫面"\n記者旁白。',
         "\nNS #01 0005-0010 環境音\n記者旁白。", "\n==AICG==\n記者旁白。",
@@ -435,15 +448,68 @@ def test_sot_qa_original_shortage():
     ]:
         text = partial + boundary
         blk = v.parse_sot_sb_blocks(text)[0]
-        assert blk["english"] == "Will you continue this policy?", "原文不足時誤吞邊界"
-        assert blk["line_span"] == (0, 6), "原文不足時區間未正確結束"
+        assert blk["english"] == "", "缺原文時誤吞邊界"
+        assert blk["line_span"] == (0, 5), "缺原文時區間未正確結束"
         problems = v.validate(SOT_OK + "\n" + text, 120.0, None)[0]
-        assert any("問答 SB 原文行數不足" in p and "預期2行" in p and "實際1行" in p for p in problems), str(problems)
+        assert any("缺少英文原句" in p for p in problems), str(problems)
         if "記者旁白。" in boundary:
             assert v.count_sot_os_chars(text) == v.full_width_len("記者旁白。"), "格式問題後的 OS 漏算"
-    no_original = partial.rsplit("\n", 1)[0]
-    problems = v.validate(SOT_OK + "\n" + no_original, 120.0, None)[0]
-    assert any("問答 SB 原文行數不足" in p and "實際0行" in p for p in problems), str(problems)
+    text = partial + "\n記者旁白。"
+    assert not v.parse_sot_sb_blocks(text)[0]["english"], "中文旁白被當原文"
+    assert any("缺少英文原句" in p for p in v.validate(SOT_OK + "\n" + text, 120.0, None)[0])
+    assert v.count_sot_os_chars(text) == v.full_width_len("記者旁白。")
+
+
+def test_sot_qa_unequal_lines():
+    for zh, original in [
+        ("會繼續嗎？\n會。", "Will you continue?"),
+        ("會繼續嗎？\n會。\n一直繼續。", "Will you continue?\nYes."),
+        ("會繼續嗎？\n會。", "Will you\ncontinue?\nYes."),
+    ]:
+        sb = f"SB\n記者 A vs. 官員 B\n{zh}\n#03 0117-0124\n{original}"
+        assert_sot_original_os_boundary(sb, "記者旁白必須計入字數。", original, len(sb.splitlines()))
+
+
+def test_sot_qa_single_line():
+    sb = SOT_QA_BLOCK.rsplit("\n", 2)[0] + "\nWill you continue? Yes."
+    assert_sot_original_os_boundary(sb, "\n記者旁白。", "Will you continue? Yes.", 6)
+    problems = v.validate(SOT_OK + "\n" + sb + "\n\n記者旁白。", 120.0, None)[0]
+    assert not problems, str(problems)
+
+
+def test_sot_qa_numeric_ranges():
+    for first in ["Did it run from 2019-2026?", "About 1000-2000 people."]:
+        original = first + "\nYes, it did."
+        sb = SOT_QA_BLOCK.rsplit("\n", 2)[0] + "\n" + original
+        assert_sot_original_os_boundary(sb, "記者旁白。", original, 7)
+        assert not v.validate(SOT_OK + "\n" + sb + "\n記者旁白。", 120.0, None)[0]
+
+
+def test_sot_qa_japanese_korean():
+    for original in ["政策を続けますか？\nはい、続けます。", "政策을 계속합니까?\n네, 계속합니다."]:
+        sb = SOT_QA_BLOCK.rsplit("\n", 2)[0] + "\n" + original
+        assert_sot_original_os_boundary(sb, "記者旁白。", original, 7)
+        assert not v.validate(SOT_OK + "\n" + sb + "\n記者旁白。", 120.0, None)[0]
+
+
+def test_sot_non_qa_speakers():
+    for speaker in ["官員 Ivs.", "官員 vs", "官員 A vs B", "vs. 官員 B", "官員 A vs."]:
+        sb = SOT_SINGLE_ORIGINAL.replace("官員 Taylor", speaker).replace(
+            "我們會繼續推動。", "我們會繼續\n推動這項政策。",
+        )
+        assert_sot_original_os_boundary(sb, "記者旁白。", "We will continue.", 6)
+    sb = SOT_SINGLE_ORIGINAL.replace("我們會繼續推動。", "A vs. B 的結果\n仍待確認。")
+    assert_sot_original_os_boundary(sb, "記者旁白。", "We will continue.", 6)
+    # 一般 SB 即使原文另有第二行，也維持基準的只取一行行為。
+    assert_sot_original_os_boundary(SOT_SINGLE_ORIGINAL, "Second original line.", "We will continue.", 5)
+
+
+def test_sot_sol5_overlong():
+    for text in [SOT_SOL5_OVERLONG, SOT_SOL5_OVERLONG.replace("記者 A vs. 官員 B", "官員 Ivs.")]:
+        assert v.count_sot_os_chars(v.extract_section(text, "記者OS內文")) >= 1007, "SOL5 旁白漏算"
+        problems, notes, _ = v.validate(text, 120.0, None)
+        assert any("超過目標" in p for p in problems), str(problems)
+    assert "總長度約248.7秒" in v.validate(SOT_SOL5_OVERLONG, 120.0, None)[1][-1]
 
 
 def test_sot_overlong():
