@@ -115,13 +115,17 @@ def parse_sot_sb_blocks(text: str):
         if i < len(lines) and is_sot_tc_candidate(lines[i].strip()):
             tc = lines[i].strip()
             i += 1
-        # 原文欄位可多行（P-051 問答合一）；讀到空行或下一個格式區塊。
-        # line_span 與 raw_lines 因此涵蓋完整原文，OS 計字不會漏排答句。
+        # 一般 SB 維持只取一行原文；P-051 問答合一才按中文行數取原文。
+        # NFKC 容忍全半形，忽略大小寫與講者名稱前後是否留空格。
+        is_qa = bool(re.search(r"vs\.", unicodedata.normalize("NFKC", speaker), re.IGNORECASE))
+        expected_original_lines = len(zh_lines) if is_qa else 1
         english_lines = []
-        while i < len(lines):
+        while i < len(lines) and len(english_lines) < expected_original_lines:
             s = lines[i].strip()
-            if (not s or s == "SB" or s.startswith(SECTION_MARKERS)
-                    or TC_RE.match(s) or _OS_SKIP_RE.match(s)):
+            if not s or s == "SB":
+                break
+            if is_qa and (s.startswith(SECTION_MARKERS)
+                    or is_sot_tc_candidate(s) or _OS_SKIP_RE.match(s)):
                 break
             english_lines.append(s)
             i += 1
@@ -131,6 +135,7 @@ def parse_sot_sb_blocks(text: str):
             "zh_lines": zh_lines,
             "tc": tc,
             "english": english,
+            "original_lines_missing": expected_original_lines - len(english_lines) if is_qa else 0,
             "raw_lines": [l.strip() for l in lines[start:i] if l.strip()],
             # 半開區間 [start, i)，供 OS 計字精準跳過整個區塊，見 count_sot_os_chars()
             "line_span": (start, i),
@@ -185,7 +190,8 @@ def count_sot_os_chars(os_block: str) -> float:
     舊版是「先把所有行加起來，再把 SB 的講者／中文／英文逐行扣掉」，只要
     `parse_sot_sb_blocks()` 少認一行（例如中文翻譯換行、英文原句缺漏）就會有殘留，
     害總長度虛胖。改成用 `line_span` 直接跳過整個 SB 區塊（含全部原文行），
-    不會再有加減不對稱。SB 與後續 OS 以空行或下一區塊標記分隔。
+    不會再有加減不對稱。一般 SB 原文一行；問答 SB 原文與中文行數相同，
+    取滿即停，後續 OS 即使沒有空行也照常計字。
     """
     if not os_block:
         return 0
@@ -435,6 +441,13 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
             problems.append(f"第{sb_count}段 SB 缺少中文翻譯口白")
         if not blk["english"]:
             problems.append(f"第{sb_count}段 SB 缺少英文原句")
+        if blk["original_lines_missing"]:
+            expected = len(blk["zh_lines"])
+            actual = expected - blk["original_lines_missing"]
+            problems.append(
+                f"第{sb_count}段問答 SB 原文行數不足：預期{expected}行（與中文譯文相同），"
+                f"實際{actual}行；空行、區塊標記或文稿結束使原文提早結束，請補齊原文"
+            )
         if not tc_field:
             problems.append(f"第{sb_count}段 SB 找不到 TC 欄位")
             continue

@@ -135,7 +135,7 @@
   Those who came in through the window in an illegal manner, in an irregular and clandestine manner, sooner rather than later, will be outside our country.
   ```
 
-  **問答合一標準例外（2026-10-12，`P-051`）**：提問決定回答意義時可用。講者行寫「A vs. B」，中文問答各一行，原文完整、可多行；TC 仍在中文之後，取共同連續起訖，不得拼接非連續片段。接回 OS 前留空行。例：
+  **問答合一標準例外（2026-10-12，`P-051`）**：提問決定回答意義時可用。講者行寫「A vs. B」，中文問答各一行，原文完整、行數與中文譯文非空行數相同；TC 仍在中文之後，取共同連續起訖，不得拼接非連續片段。驗證器容忍 `vs.` 大小寫與全半形，原文取滿即停，後續 OS 即使無空行也計字；原文因空行／標記或文稿結束而不足須回報格式問題。一般 SB 原文只取 TC 後一行。例：
 
   ```text
   SB

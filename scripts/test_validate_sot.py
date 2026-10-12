@@ -241,6 +241,16 @@ SOT_QA = SOT_OK + "\n" + SOT_QA_BLOCK + "\n\n記者收尾。\n"
 SOT_CONSECUTIVE = SOT_OK + "\n" + SOT_QA_BLOCK + "\n" + SOT_OFFICIAL_BLOCK + "\n\n記者收尾。\n"
 SOT_CONSECUTIVE_1SEC = SOT_CONSECUTIVE.replace("#04 0030-0039", "#04 0030-0031")
 
+# SOL4：原文取滿即停，無空行的後續旁白仍須計入 OS。
+SOT_SINGLE_ORIGINAL = """SB
+官員 Taylor
+我們會繼續推動。
+#03 0117-0124
+We will continue."""
+SOT_OVERLONG = SOT_OK.replace(
+    "記者旁白第二句", SOT_SINGLE_ORIGINAL + "\n" + "應計入旁白的中文字。" * 100,
+)
+
 
 # --- 測試表 -----------------------------------------------------------------
 # (名稱, 模式, 稿件, 官方稿, 期望)
@@ -327,6 +337,12 @@ def main() -> int:
     for name, check in [
         ("問答原文完整解析與 OS 排除", test_sot_multiline_original),
         ("非路人連發逐段解析與累計", test_sot_consecutive_blocks),
+        ("單行 SB 後無空行接中文 OS", test_sot_single_original_zh_os),
+        ("單行 SB 後無空行接英文 OS", test_sot_single_original_en_os),
+        ("日文原文後無空行接中文 OS", test_sot_japanese_original_zh_os),
+        ("問答原文取滿後無空行接 OS", test_sot_qa_original_os_boundary),
+        ("問答原文不足須回報格式問題", test_sot_qa_original_shortage),
+        ("SOL4 超長整稿必須 FAIL", test_sot_overlong),
     ]:
         try:
             check()
@@ -366,6 +382,76 @@ def test_sot_consecutive_blocks():
     total = expected / v.CHARS_PER_MINUTE * 60 + 16
     assert f"SB共16.0秒" in notes[-1], notes[-1]
     assert f"總長度約{total:.1f}秒" in notes[-1], notes[-1]
+
+
+def assert_sot_original_os_boundary(sb, os_text, original, end):
+    text = sb + "\n" + os_text
+    blk = v.parse_sot_sb_blocks(text)[0]
+    assert blk["english"] == original, "原文誤吞後續 OS"
+    assert blk["line_span"] == (0, end), "line_span 誤含 OS"
+    assert blk["raw_lines"] == sb.splitlines(), "raw_lines 誤含 OS 或遺失原文"
+    assert v.count_sot_os_chars(text) == v.full_width_len(os_text), "後續 OS 漏算"
+
+
+def test_sot_single_original_zh_os():
+    assert_sot_original_os_boundary(
+        SOT_SINGLE_ORIGINAL, "記者旁白必須計入字數。", "We will continue.", 5,
+    )
+    # 一般 SB 的中文可多行，原文仍只取一行（既有行為）。
+    multi_zh = SOT_SINGLE_ORIGINAL.replace("我們會繼續推動。", "我們會繼續\n推動這項政策。")
+    assert_sot_original_os_boundary(multi_zh, "記者旁白。", "We will continue.", 6)
+
+
+def test_sot_single_original_en_os():
+    assert_sot_original_os_boundary(
+        SOT_SINGLE_ORIGINAL, "The reporter continues with the next development.", "We will continue.", 5,
+    )
+
+
+def test_sot_japanese_original_zh_os():
+    original = "私たちはこの政策を続けます。"
+    sb = SOT_SINGLE_ORIGINAL.replace("We will continue.", original)
+    assert_sot_original_os_boundary(sb, "記者旁白必須計入字數。", original, 5)
+
+
+def test_sot_qa_original_os_boundary():
+    original = "Will you continue this policy?\nYes, we will continue."
+    for speaker in [
+        "記者 Alex vs. 官員 Taylor", "記者VS.美國總統 川普 8.11",
+        "記者ｖｓ．美國總統 川普 8.11", "記者ＶＳ．美國總統 川普 8.11",
+    ]:
+        sb = SOT_QA_BLOCK.replace("記者 Alex vs. 官員 Taylor", speaker)
+        for os_text in ["記者旁白必須計入字數。", "The reporter continues."]:
+            assert_sot_original_os_boundary(sb, os_text, original, 7)
+
+
+def test_sot_qa_original_shortage():
+    partial = SOT_QA_BLOCK.rsplit("\n", 1)[0]
+    for boundary in [
+        "", "\n\n記者旁白。", '\n#01 TC0005 "畫面"\n記者旁白。',
+        "\nNS #01 0005-0010 環境音\n記者旁白。", "\n==AICG==\n記者旁白。",
+        "\nTVBS 許岱軒", "\n【其他區塊】", "\n#05 0010-0020",
+        "\n" + SOT_OFFICIAL_BLOCK,
+    ]:
+        text = partial + boundary
+        blk = v.parse_sot_sb_blocks(text)[0]
+        assert blk["english"] == "Will you continue this policy?", "原文不足時誤吞邊界"
+        assert blk["line_span"] == (0, 6), "原文不足時區間未正確結束"
+        problems = v.validate(SOT_OK + "\n" + text, 120.0, None)[0]
+        assert any("問答 SB 原文行數不足" in p and "預期2行" in p and "實際1行" in p for p in problems), str(problems)
+        if "記者旁白。" in boundary:
+            assert v.count_sot_os_chars(text) == v.full_width_len("記者旁白。"), "格式問題後的 OS 漏算"
+    no_original = partial.rsplit("\n", 1)[0]
+    problems = v.validate(SOT_OK + "\n" + no_original, 120.0, None)[0]
+    assert any("問答 SB 原文行數不足" in p and "實際0行" in p for p in problems), str(problems)
+
+
+def test_sot_overlong():
+    os_block = v.extract_section(SOT_OVERLONG, "記者OS內文")
+    assert v.count_sot_os_chars(os_block) == 1007, "SOL4 的 1000 字旁白漏算"
+    problems, notes, _ = v.validate(SOT_OVERLONG, 120.0, None)
+    assert any("超過目標" in p for p in problems), str(problems)
+    assert "總長度約248.7秒" in notes[-1], notes[-1]
 
 
 if __name__ == "__main__":
