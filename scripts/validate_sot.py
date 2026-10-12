@@ -78,6 +78,10 @@ HEADLINE_MAX = 18.5
 # 不到而**靜默消失**，錯誤反而被吃掉（違反 common/08 的驗證紀律第 1、2 點）。
 CJK_RE = re.compile(r"[㐀-鿿豈-﫿]")
 TC_CANDIDATE_RE = re.compile(r"^(?=.*\d{3,6}\s*-\s*\d{3,6})[^㐀-鿿豈-﫿]+$")
+# 問答原文邊界專用：含擴展 B 起及相容補充漢字；舊 TC 候選範圍維持。
+QA_HAN_RE = re.compile(r"[㐀-鿿豈-﫿\U00020000-\U0003ffff]")
+QA_ORIGINAL_MAX_LINES = 4
+QA_SPEAKER_SUFFIX_RE = re.compile(r"(?:\s*\d+(?:[./-]\d+)*)+\s*$")
 KANA_HANGUL_RE = re.compile(
     r"[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f\U0001b000-\U0001b16f"
     r"\u1100-\u11ff\u3130-\u318f\ua960-\ua97f\uac00-\ud7af\ud7b0-\ud7ff]"
@@ -92,6 +96,28 @@ def is_sot_tc_candidate(line: str) -> bool:
     if "無TC" in s or "無 TC" in s:
         return True
     return bool(TC_CANDIDATE_RE.match(s))
+
+
+def is_sot_qa_speaker(speaker: str) -> bool:
+    """vs. 須分隔講者；Unicode 字母／組合符號內部不算，漢字例外。"""
+    normalized = unicodedata.normalize("NFKC", speaker)
+    for match in re.finditer(r"vs\.", normalized, re.IGNORECASE):
+        before = normalized[:match.start()]
+        if not before.strip():
+            continue
+        previous = before[-1]
+        if unicodedata.category(previous).startswith(("L", "M")) and not QA_HAN_RE.fullmatch(previous):
+            continue
+        after = QA_SPEAKER_SUFFIX_RE.sub("", normalized[match.end():]).strip()
+        if any(unicodedata.category(char).startswith("L") for char in after):
+            return True
+    return False
+
+
+def is_sot_qa_han_boundary(line: str) -> bool:
+    """語系判斷用 NFKC 副本，實際原文仍保留原字。"""
+    normalized = unicodedata.normalize("NFKC", line)
+    return bool(QA_HAN_RE.search(normalized) and not KANA_HANGUL_RE.search(normalized))
 
 
 def parse_sot_sb_blocks(text: str):
@@ -120,20 +146,20 @@ def parse_sot_sb_blocks(text: str):
             tc = lines[i].strip()
             i += 1
         # 一般 SB 維持 TC 後一行；問答原文依邊界讀取，與中文行數無關。
-        # vs. 必須分隔兩位講者，不可命中英文字內部（例如 Ivs.）。
-        normalized_speaker = unicodedata.normalize("NFKC", speaker)
-        is_qa = any(
-            normalized_speaker[:m.start()].strip() and normalized_speaker[m.end():].strip()
-            for m in re.finditer(r"(?<![A-Za-z])vs\.", normalized_speaker, re.IGNORECASE)
-        )
+        is_qa = is_sot_qa_speaker(speaker)
         english_lines = []
+        format_problem = ""
         while i < len(lines) and (is_qa or not english_lines):
             s = lines[i].strip()
             if not s or s == "SB":
                 break
             if is_qa and (s.startswith(SECTION_MARKERS)
                     or TC_RE.fullmatch(s) or _OS_SKIP_RE.match(s)
-                    or (CJK_RE.search(s) and not KANA_HANGUL_RE.search(s))):
+                    or is_sot_qa_han_boundary(s)):
+                break
+            # 先檢查停止邊界；四行後已遇到邊界或段落結束就不誤報。
+            if is_qa and len(english_lines) >= QA_ORIGINAL_MAX_LINES:
+                format_problem = "問答 SB 原文後須空一行"
                 break
             english_lines.append(s)
             i += 1
@@ -147,6 +173,11 @@ def parse_sot_sb_blocks(text: str):
             # 半開區間 [start, i)，供 OS 計字精準跳過整個區塊，見 count_sot_os_chars()
             "line_span": (start, i),
         })
+        # 僅異常問答附加診斷欄位，一般 SB 的完整回傳維持原樣。
+        if format_problem:
+            blocks[-1]["format_problem"] = format_problem
+        if is_qa and not english_lines and i < len(lines) and is_sot_qa_han_boundary(lines[i]):
+            blocks[-1]["original_han_boundary"] = True
     return blocks
 
 # TC field: "#XX MMSS-MMSS" (numbered material), "{來源} [M/D] HHMMSS-HHMMSS"
@@ -197,9 +228,9 @@ def count_sot_os_chars(os_block: str) -> float:
     舊版是「先把所有行加起來，再把 SB 的講者／中文／英文逐行扣掉」，只要
     `parse_sot_sb_blocks()` 少認一行（例如中文翻譯換行、英文原句缺漏）就會有殘留，
     害總長度虛胖。改成用 `line_span` 直接跳過整個 SB 區塊（含全部原文行），
-    不會再有加減不對稱。一般 SB 原文一行；問答 SB 原文讀至空行、標記、
+    不會再有加減不對稱。一般 SB 原文一行；問答 SB 原文最多四行，讀至空行、標記、
     嚴格 TC 欄位或中文旁白（含漢字、無假名與韓文），後續 OS 照常計字。
-    問答原文後若緊接旁白，旁白須為中文，或以空行分隔。
+    問答原文後一律空一行再接旁白；外語旁白無空行時可能被誤認為原文。
     """
     if not os_block:
         return 0
@@ -448,7 +479,10 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
         if not blk["zh_lines"]:
             problems.append(f"第{sb_count}段 SB 缺少中文翻譯口白")
         if not blk["english"]:
-            problems.append(f"第{sb_count}段 SB 缺少英文原句")
+            hint = "；若原文為中文／全漢字，請確認後人工放行" if blk.get("original_han_boundary") else ""
+            problems.append(f"第{sb_count}段 SB 缺少英文原句{hint}")
+        if blk.get("format_problem"):
+            problems.append(f"第{sb_count}段 SB 格式問題：{blk['format_problem']}")
         if not tc_field:
             problems.append(f"第{sb_count}段 SB 找不到 TC 欄位")
             continue

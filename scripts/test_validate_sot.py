@@ -354,6 +354,13 @@ def main() -> int:
         ("SOL5 日文與韓文多行原文", test_sot_qa_japanese_korean),
         ("SOL5 非問答講者維持單行原文", test_sot_non_qa_speakers),
         ("SOL5 1007 字整稿必須 FAIL", test_sot_sol5_overlong),
+        ("SOL6 漢字補充平面差分與超長稿", test_sot_sol6_han),
+        ("SOL6 Unicode 姓名與日期不得誤認問答", test_sot_sol6_speakers),
+        ("SOL6 半形韓文與片假名等價且保留原字", test_sot_sol6_halfwidth),
+        ("SOL6 問答四行上限與第五行 OS", test_sot_sol6_line_limit),
+        ("SOL6 四行後各種停止邊界不誤報", test_sot_sol6_limit_boundaries),
+        ("SOL6 純漢字原文人工放行提示", test_sot_sol6_han_original_hint),
+        ("SOL6 外語旁白空行分隔與單行限制", test_sot_sol6_language_limit),
     ]:
         try:
             check()
@@ -518,6 +525,113 @@ def test_sot_overlong():
     problems, notes, _ = v.validate(SOT_OVERLONG, 120.0, None)
     assert any("超過目標" in p for p in problems), str(problems)
     assert "總長度約248.7秒" in notes[-1], notes[-1]
+
+
+def sol6_qa(original):
+    return SOT_QA_BLOCK.rsplit("\n", 2)[0] + "\n" + original
+
+
+def test_sot_sol6_han():
+    sb = sol6_qa("Will you continue? Yes.")
+    for han in ["吉", "𠮷", "\U0002f800", "\U00030000", "\U0003ffff"]:
+        assert_sot_original_os_boundary(sb, han, "Will you continue? Yes.", 6)
+        text = SOT_OK.replace("記者旁白第二句", sb + "\n" + han * 1000)
+        assert v.count_sot_os_chars(v.extract_section(text, "記者OS內文")) == 1007
+        assert any("超過目標" in p for p in v.validate(text, 120.0, None)[0])
+    # 補充平面停止判斷不得改動既有 TC 候選行契約。
+    assert v.is_sot_tc_candidate("𠮷 0117-0124")
+
+
+def test_sot_sol6_speakers():
+    for speaker in [
+        "官員 Levs. 8.11", "官員 Lévs. 8.11", "官員 Le\u0301vs. 8.11",
+        "官員 A vs. 8.11", "官員 A vs. 123", "官員 L\u0301vs. 8.11",
+        "官員 Αvs. 8.11", "官員 Жvs. 8.11", "官員 한vs. 8.11",
+    ]:
+        sb = SOT_SINGLE_ORIGINAL.replace("官員 Taylor", speaker)
+        os_text = "The reporter continues. " * 100
+        assert_sot_original_os_boundary(sb, os_text, "We will continue.", 5)
+        text = SOT_OK.replace("記者旁白第二句", sb + "\n" + os_text)
+        assert any("超過目標" in p for p in v.validate(text, 120.0, None)[0]), speaker
+    for speaker in ["記者vs.川普 8.11", "記者vs.美國總統 川普", "記者𠮷vs.川普 8.11"]:
+        sb = SOT_QA_BLOCK.replace("記者 Alex vs. 官員 Taylor", speaker)
+        assert_sot_original_os_boundary(
+            sb, "記者旁白。", "Will you continue this policy?\nYes, we will continue.", 7,
+        )
+        assert not v.validate(SOT_OK + "\n" + sb + "\n\n記者旁白。", 120.0, None)[0]
+
+
+def test_sot_sol6_halfwidth():
+    for standard, half in [("政策가?", "政策ﾡￂ?"), ("政策カ?", "政策ｶ?")]:
+        results = []
+        for first in [standard, half]:
+            original = first + "\nYes."
+            sb = sol6_qa(original)
+            assert_sot_original_os_boundary(sb, "\n記者旁白。", original, 7)
+            text = SOT_OK.replace("記者旁白第二句", sb + "\n\n記者旁白。")
+            results.append(v.validate(text, 120.0, None))
+            assert not results[-1][0], str(results[-1][0])
+        assert results[0] == results[1], "正規與半形原文驗證結果不同"
+
+
+def test_sot_sol6_line_limit():
+    original = "Will you\ncontinue this\npolicy?\nYes."
+    for os_text in ["The reporter continues.\n" * 100, "記者旁白說這叫かわいい。\n" * 100]:
+        sb = sol6_qa(original)
+        text = sb + "\n" + os_text
+        blk = v.parse_sot_sb_blocks(text)[0]
+        assert blk["english"] == original, "四行上限未保留恰好四行"
+        assert blk["line_span"] == (0, 9), "第五行被排除 OS"
+        assert blk["raw_lines"] == sb.splitlines(), "第五行混入 raw_lines"
+        assert v.count_sot_os_chars(text) == sum(v.full_width_len(s) for s in os_text.splitlines())
+        full = SOT_OK.replace("記者旁白第二句", text)
+        problems = v.validate(full, 120.0, None)[0]
+        assert any("問答 SB 原文後須空一行" in p for p in problems), str(problems)
+        assert any("超過目標" in p for p in problems), str(problems)
+    # 行數上限本身即報格式問題，不依是否超長。
+    assert any("問答 SB 原文後須空一行" in p for p in v.validate(
+        SOT_OK + "\n" + sol6_qa(original + "\nStill speaking."), 120.0, None,
+    )[0])
+    # 加空行後，第五行開始正確算 OS，且不再報行數問題。
+    separated = SOT_OK + "\n" + sol6_qa(original) + "\n\n記者收尾。"
+    assert not v.validate(separated, 120.0, None)[0]
+
+
+def test_sot_sol6_limit_boundaries():
+    original = "Will you\ncontinue this\npolicy?\nYes."
+    sb = sol6_qa(original)
+    for boundary in [
+        "", "\n", "\n記者旁白。", "\n𠮷", '\n#01 TC0005 "畫面"',
+        "\nNS #01 0005-0010 環境音", "\n==AICG==", "\nTVBS 許岱軒",
+        "\n【其他區塊】", "\n## 其他區塊", "\n#05 0010-0020", "\n" + SOT_OFFICIAL_BLOCK,
+    ]:
+        blk = v.parse_sot_sb_blocks(sb + boundary)[0]
+        assert blk["english"] == original, boundary
+        assert "format_problem" not in blk, f"遇到停止邊界仍誤報上限：{boundary}"
+        problems = v.validate(SOT_OK + "\n" + sb + boundary, 120.0, None)[0]
+        assert not any("問答 SB 原文後須空一行" in p for p in problems), str(problems)
+
+
+def test_sot_sol6_han_original_hint():
+    for original in ["東京？\n東京。", "會繼續嗎？\n會。", "Is it in 臺灣?"]:
+        sb = sol6_qa(original) + "\n\n記者旁白。"
+        assert not v.parse_sot_sb_blocks(sb)[0]["english"]
+        problems = v.validate(SOT_OK + "\n" + sb, 120.0, None)[0]
+        assert any("缺少英文原句" in p and "若原文為中文／全漢字，請確認後人工放行" in p
+                   for p in problems), str(problems)
+
+
+def test_sot_sol6_language_limit():
+    # 既定語言停止法無法辨認單行外語旁白；只實作行數上限，不另設字數上限。
+    sb = sol6_qa("Will you continue? Yes.")
+    for os_text in ["The reporter continues. " * 100, "記者旁白說這叫かわいい。" * 100]:
+        assert v.parse_sot_sb_blocks(sb + "\n" + os_text)[0]["english"].endswith(os_text.strip())
+        separated = SOT_OK.replace("記者旁白第二句", sb + "\n\n" + os_text)
+        assert any("超過目標" in p for p in v.validate(separated, 120.0, None)[0])
+    # NS 起始原句仍屬標記限制，不能藉此放寬 NS 檢查。
+    problems = v.validate(SOT_OK + "\n" + sol6_qa("NS is a railway company."), 120.0, None)[0]
+    assert any("缺少英文原句" in p for p in problems), str(problems)
+    assert any("NS" in p and "TC" in p for p in problems), str(problems)
 
 
 if __name__ == "__main__":
