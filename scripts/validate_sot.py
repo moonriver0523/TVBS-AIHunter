@@ -115,12 +115,17 @@ def parse_sot_sb_blocks(text: str):
         if i < len(lines) and is_sot_tc_candidate(lines[i].strip()):
             tc = lines[i].strip()
             i += 1
-        english = ""
-        if i < len(lines):
+        # 原文欄位可多行（P-051 問答合一）；讀到空行或下一個格式區塊。
+        # line_span 與 raw_lines 因此涵蓋完整原文，OS 計字不會漏排答句。
+        english_lines = []
+        while i < len(lines):
             s = lines[i].strip()
-            if s and s != "SB":
-                english = s
-                i += 1
+            if (not s or s == "SB" or s.startswith(SECTION_MARKERS)
+                    or TC_RE.match(s) or _OS_SKIP_RE.match(s)):
+                break
+            english_lines.append(s)
+            i += 1
+        english = "\n".join(english_lines)
         blocks.append({
             "speaker": speaker,
             "zh_lines": zh_lines,
@@ -179,7 +184,8 @@ def count_sot_os_chars(os_block: str) -> float:
 
     舊版是「先把所有行加起來，再把 SB 的講者／中文／英文逐行扣掉」，只要
     `parse_sot_sb_blocks()` 少認一行（例如中文翻譯換行、英文原句缺漏）就會有殘留，
-    害總長度虛胖。改成用 `line_span` 直接跳過整個 SB 區塊，不會再有加減不對稱。
+    害總長度虛胖。改成用 `line_span` 直接跳過整個 SB 區塊（含全部原文行），
+    不會再有加減不對稱。SB 與後續 OS 以空行或下一區塊標記分隔。
     """
     if not os_block:
         return 0

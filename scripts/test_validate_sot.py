@@ -224,12 +224,32 @@ _SOT_SB_4SEC_BLOCK = _SOT_SB_SINGLE_BLOCK.replace("#03 0033-0044", "#03 0033-003
 SOT_SB_1SEC = SOT_OK.replace("記者旁白第二句", _SOT_SB_1SEC_BLOCK)
 SOT_SB_4SEC = SOT_OK.replace("記者旁白第二句", _SOT_SB_4SEC_BLOCK)
 
+# 2026-10-12：問答合一與非路人連發，原文行不得混入 OS 字數。
+SOT_QA_BLOCK = """SB
+記者 Alex vs. 官員 Taylor
+你會繼續推動這項政策嗎？
+會，我們會繼續推動。
+#03 0117-0124
+Will you continue this policy?
+Yes, we will continue."""
+SOT_OFFICIAL_BLOCK = """SB
+專家 Morgan
+這項政策需要更多資源。
+#04 0030-0039
+This policy needs more resources."""
+SOT_QA = SOT_OK + "\n" + SOT_QA_BLOCK + "\n\n記者收尾。\n"
+SOT_CONSECUTIVE = SOT_OK + "\n" + SOT_QA_BLOCK + "\n" + SOT_OFFICIAL_BLOCK + "\n\n記者收尾。\n"
+SOT_CONSECUTIVE_1SEC = SOT_CONSECUTIVE.replace("#04 0030-0039", "#04 0030-0031")
+
 
 # --- 測試表 -----------------------------------------------------------------
 # (名稱, 模式, 稿件, 官方稿, 期望)
 #   期望 True            → 必須完全沒有 problems
 #   期望 "某關鍵字"       → problems 裡必須有一條含這個關鍵字
 CASES = [
+    ("SOT/問答合一多行原文應通過", "sot", SOT_QA, None, True),
+    ("SOT/非路人 SB 連發應通過", "sot", SOT_CONSECUTIVE, None, True),
+    ("SOT/連發中 1 秒 SB 仍須 FAIL", "sot", SOT_CONSECUTIVE_1SEC, None, "秒下限"),
     # ---- 本案核心：SB 中文可多行 ----
     ("CTV/SB 中文多行應通過", "ctv", ctv(SB_MULTILINE), None, True),
     ("CTV/SB 中文單行也應通過", "ctv", ctv(SB_SINGLE_LINE), None, True),
@@ -304,8 +324,48 @@ def main() -> int:
     print(f"  [{'PASS' if ok else 'FAIL'}] 官方稿/引號式引言要抓得到\n         {detail}")
     passed, failed = (passed + 1, failed) if ok else (passed, failed + 1)
 
+    for name, check in [
+        ("問答原文完整解析與 OS 排除", test_sot_multiline_original),
+        ("非路人連發逐段解析與累計", test_sot_consecutive_blocks),
+    ]:
+        try:
+            check()
+            ok, detail = True, "通過"
+        except AssertionError as exc:
+            ok, detail = False, str(exc)
+        print(f"  [{'PASS' if ok else 'FAIL'}] {name}\n         {detail}")
+        passed, failed = (passed + 1, failed) if ok else (passed, failed + 1)
+
     print(f"\n{passed} 通過，{failed} 失敗。")
     return 1 if failed else 0
+
+
+def test_sot_multiline_original():
+    blocks = v.parse_sot_sb_blocks(SOT_QA_BLOCK)
+    assert len(blocks) == 1, "問答應是一段 SB"
+    assert blocks[0]["english"] == "Will you continue this policy?\nYes, we will continue.", "第二行原文遺失"
+    assert blocks[0]["line_span"] == (0, 7), "line_span 未涵蓋全部原文"
+    assert blocks[0]["raw_lines"][-1] == "Yes, we will continue.", "raw_lines 未保留答句"
+    assert v.count_sot_os_chars(SOT_QA_BLOCK + "\n\n記者收尾。") == v.full_width_len("記者收尾。"), "原文被計入 OS"
+    # 下一區塊沒有空行時，也不得吞掉畫面、NS、圖卡、署名或章節標題。
+    for marker in ['#01 TC0005 "畫面"', 'NS #01 0005-0010 環境音', '==AICG==', 'TVBS 許岱軒', '【其他區塊】']:
+        blk = v.parse_sot_sb_blocks(SOT_QA_BLOCK + "\n" + marker)[0]
+        assert blk["line_span"] == (0, 7), f"原文誤吞下一區塊：{marker}"
+
+
+def test_sot_consecutive_blocks():
+    blocks = v.parse_sot_sb_blocks(SOT_CONSECUTIVE)
+    assert [b["tc"] for b in blocks] == ["#03 0117-0124", "#04 0030-0039"], "連發 SB 未逐段解析"
+    problems, notes, _ = v.validate(SOT_CONSECUTIVE, 120.0, None)
+    assert not problems, str(problems)
+    assert any("第1段 SB：#03 0117-0124 = 7秒" in n for n in notes), str(notes)
+    assert any("第2段 SB：#04 0030-0039 = 9秒" in n for n in notes), str(notes)
+    expected = v.count_sot_os_chars(v.extract_section(SOT_OK, "記者OS內文")) + v.full_width_len("記者收尾。")
+    os_block = v.extract_section(SOT_CONSECUTIVE, "記者OS內文")
+    assert v.count_sot_os_chars(os_block) == expected, "連發原文混入 OS"
+    total = expected / v.CHARS_PER_MINUTE * 60 + 16
+    assert f"SB共16.0秒" in notes[-1], notes[-1]
+    assert f"總長度約{total:.1f}秒" in notes[-1], notes[-1]
 
 
 if __name__ == "__main__":
