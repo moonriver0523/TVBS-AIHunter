@@ -361,6 +361,7 @@ def main() -> int:
         ("SOL6 四行後各種停止邊界不誤報", test_sot_sol6_limit_boundaries),
         ("SOL6 純漢字原文人工放行提示", test_sot_sol6_han_original_hint),
         ("SOL6 外語旁白空行分隔與單行限制", test_sot_sol6_language_limit),
+        ("P-058 秒數直寫成 TC（≥60）必須 FAIL", test_sot_tc_sexagesimal),
     ]:
         try:
             check()
@@ -632,6 +633,21 @@ def test_sot_sol6_language_limit():
     problems = v.validate(SOT_OK + "\n" + sol6_qa("NS is a railway company."), 120.0, None)[0]
     assert any("缺少英文原句" in p for p in problems), str(problems)
     assert any("NS" in p and "TC" in p for p in problems), str(problems)
+
+
+def test_sot_tc_sexagesimal():
+    """2026-10-13 尼泊橋斷1200：抽格讀到「第 N 秒」直接寫成 TC（P-058）。"""
+    def probs(extra):
+        return v.validate(SOT_OK.replace("記者旁白第二句", extra), 120.0, None)[0]
+    # 合法樣本不得誤報（含 + 併寫與側錄六碼）。
+    ok = "#01 TC0120 \"橋身扭曲\"\n#02 TC0000 + 0148 \"空拍\"\nCNN 10/12 TC152115 \"山坡民眾\"\nNS #01 0120-0125 斷裂\n記者旁白第二句"
+    assert not any("≥60" in p for p in probs(ok)), str(probs(ok))
+    # 畫面標注、+ 併寫第二點、側錄六碼、NS、SB 各自都要抓到。
+    for bad in ["#01 TC0104 + 0080 \"x\"", "#04 TC0066 \"x\"", "CNN 10/12 TC152175 \"x\"",
+                "NS #01 0080-0085 斷裂"]:
+        assert any("≥60" in p for p in probs(bad + "\n記者旁白第二句")), bad
+    sb = _SOT_SB_SINGLE_BLOCK.replace("#03 0033-0044", "#03 0095-0099")
+    assert any("SB" in p and "≥60" in p for p in probs(sb)), str(probs(sb))
 
 
 if __name__ == "__main__":

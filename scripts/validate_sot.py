@@ -385,6 +385,32 @@ def parse_tc_field(tc: str):
     return to_seconds(start_s), to_seconds(end_s), m.group("num")
 
 
+def tc_digits_problem(digits: str) -> str | None:
+    """TC 數字串的六十進位檢查：MMSS／HHMMSS 的「分」「秒」都必須 < 60。
+
+    2026-10-13「尼泊橋斷1200」：抽格聯絡表上讀到的是「第 N 秒」，直接照抄成
+    `TC0080`／`TC0104`／`TC0155`（應為 0120／0144／0235），to_seconds() 會把
+    `0080` 默默當 80 秒收下、畫面標注行又完全不驗，整篇 7 處錯都沒被抓到。
+    """
+    if len(digits) == 4:
+        mm, ss = int(digits[:2]), int(digits[2:])
+    elif len(digits) == 6:
+        mm, ss = int(digits[2:4]), int(digits[4:])
+    else:
+        return f"「{digits}」不是 4 碼 MMSS 或 6 碼 HHMMSS"
+    if ss >= 60 or mm >= 60:
+        return (f"「{digits}」的分／秒 ≥60，不是合法的 MMSS／HHMMSS"
+                "——疑似把「第幾秒」直接寫成 TC，請換算（例：第 80 秒＝0120）")
+    return None
+
+
+# 畫面標注：`#02 TC0000 + 0006 "畫面"`（P-032／P-043）、`CNN 10/12 TC152115 "畫面"`（P-047）
+VISUAL_TC_RE = re.compile(
+    rf"^(?:#(?P<num>\d+)|{_TC_SRC}\s+(?:\d{{1,2}}/\d{{1,2}}\s+)?)\s*TC"
+    r"(?P<points>\d{4,6}(?:\s*\+\s*\d{4,6})*)"
+)
+
+
 def extract_section(text: str, marker: str) -> str | None:
     """Grab the block of text following a line containing `marker`, up to the
     next section marker or blank-line-then-marker boundary."""
@@ -491,6 +517,10 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
             problems.append(f"第{sb_count}段 SB 的 TC 欄位「{tc_field.strip()}」格式無法辨識")
             continue
         start_sec, end_sec, num = parsed
+        bad = [p for p in (tc_digits_problem(d) for d in re.findall(r"\d{4,6}(?=-|\s*$)", tc_field.strip())) if p]
+        if bad:
+            problems.append(f"第{sb_count}段 SB TC「{tc_field.strip()}」{bad[0]}")
+            continue
         if end_sec <= start_sec:
             problems.append(f"第{sb_count}段 SB TC「{tc_field.strip()}」結束時間不晚於開始時間")
             continue
@@ -538,6 +568,10 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
             ns_untimed += 1
             continue
         start_sec, end_sec, _num = parsed
+        bad = [p for p in (tc_digits_problem(d) for d in re.findall(r"\d{4,6}", ns_m.group("tc").split()[-1])) if p]
+        if bad:
+            problems.append(f"NS「{stripped}」{bad[0]}")
+            continue
         dur = end_sec - start_sec
         if dur <= 0:
             problems.append(f"NS「{stripped}」結束時間不晚於開始時間")
@@ -550,6 +584,29 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
             f"有 {ns_untimed} 段 NS 沒有可解析的 TC，無法計入總長度"
             "（NS 也要納入計時，格式如 `NS #01 0050-0053 說明`）"
         )
+
+    # --- 畫面標注 TC（不計時，但必須是合法 MMSS／HHMMSS 且不超過片長）---
+    for line in text.splitlines():
+        stripped = line.strip()
+        vm = VISUAL_TC_RE.match(stripped)
+        if not vm:
+            continue
+        points = re.findall(r"\d{4,6}", vm.group("points"))
+        bad = [p for p in (tc_digits_problem(d) for d in points) if p]
+        if bad:
+            problems.append(f"畫面標注「{stripped}」{bad[0]}")
+            continue
+        num = vm.group("num")
+        if videos_dir and num:
+            video_path = find_video_for_material(videos_dir, num)
+            vdur = video_duration_seconds(video_path) if video_path else None
+            if vdur is not None:
+                for d in points:
+                    sec = int(d[:2]) * 60 + int(d[2:]) if len(d) == 4 else None
+                    if sec is not None and sec > vdur:
+                        problems.append(
+                            f"畫面標注「{stripped}」TC{d}({sec}秒)超過 #{num} 影片實際長度({vdur:.1f}秒)"
+                        )
 
     # --- OS reading time ---
     os_block = extract_section(text, "記者OS內文") or extract_section(text, "記者OS")
