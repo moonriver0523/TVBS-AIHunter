@@ -33,6 +33,7 @@ import html
 import json
 import os
 import re
+import shlex
 import sys
 import tempfile
 from argparse import Namespace
@@ -425,15 +426,68 @@ def _build_entries(rows):
 def cmd_build(args):
     """骨架陣列 → platform `--entries` 要的 `{id: {raw_entry, category, …}}`。
 
-    `entry` 空字串的列印警告但仍輸出（讓下游 extract 自己記 known_gaps），
-    除非該筆 `skip` 有填（排除列不要求 raw_entry）。
+    未填的列仍輸出並列警告；已填的 ABC 稿必須有原文，既有判斷不可被空值清掉。
     """
     rows = load_json(args.skeleton)
+    if not isinstance(rows, list):
+        _build_entries(rows)  # 沿用既有的骨架型別錯誤訊息。
+    if getattr(args, 'entries', None):
+        # 已寫成 entries 的判斷可直接接回同一骨架，機械欄位仍由骨架提供。
+        judgments = load_json(args.entries)
+        if not isinstance(judgments, dict):
+            _build_error('--entries 必須是 ID 對應判斷內容的 object。')
+        row_ids = {str(row.get('id')) for row in rows if isinstance(row, dict)}
+        unknown = set(judgments) - row_ids
+        if unknown:
+            _build_error(f'骨架找不到 entries ID：{", ".join(sorted(unknown))}')
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            judgment = judgments.get(str(row.get('id')))
+            if judgment is None:
+                continue
+            if not isinstance(judgment, dict):
+                _build_error(f'{row.get("id")} 的判斷必須是 object。')
+            for field in ('entry', 'category', 'tc', 'skip'):
+                key = 'raw_entry' if field == 'entry' and 'raw_entry' in judgment else field
+                if key in judgment:
+                    row[field] = judgment[key]
     entries, dup_ids, missing = _build_entries(rows)
+    no_source = [str(row.get('id')) for row in rows if isinstance(row, dict)
+                 and ((row.get('source') or '').upper() == 'ABC' or 'detailId' in row)
+                 and row.get('entry') and not row.get('skip') and not row.get('src_text')]
+    if no_source:
+        _build_error(f'{", ".join(no_source)}：同一骨架也缺 src_text，請先補齊 ABC detail 原文再 build。')
+
+    if args.out and os.path.exists(args.out) and not getattr(args, 'force', False):
+        existing = load_json(args.out)
+        if not isinstance(existing, dict):
+            _build_error('目標不是 platform entries object，拒絕覆寫；確認後可用 --force。')
+        lost = [str(item_id) for item_id, old in existing.items() if isinstance(old, dict)
+                and any(old.get(field) and not entries.get(item_id, {}).get(
+                            'raw_entry' if field == 'entry' else field)
+                        for field in ('raw_entry', 'entry', 'category', 'tc', 'skip'))]
+        if lost:
+            site = next((str(row.get('source')).lower() for row in rows
+                         if isinstance(row, dict) and row.get('source')), None)
+            hint = Namespace(site=site, skeleton=args.skeleton, entries=args.out)
+            command = _rewrite_command(hint)
+            refill = shlex.join(['python', 'scripts/s2_platform_bridge.py', 'build',
+                                 '--skeleton', str(args.skeleton), '--entries', str(args.out),
+                                 '--out', str(args.out)])
+            _build_error(f'拒絕用未填骨架覆寫已填內容：{", ".join(lost)}。'
+                         f'請用 patch 流程，或確認要丟棄舊稿後加 --force：\n{command}\n'
+                         f'若只缺 src_text，保留既有判斷並由同一骨架補齊：\n{refill}')
 
     out = json.dumps(entries, ensure_ascii=False, indent=2)
     if args.out:
-        _atomic_write_json(args.out, entries)
+        if getattr(args, 'entries', None):
+            # 判斷接回骨架，後續 patch 才不會又從未填骨架重建；兩份一起更新。
+            if os.path.normcase(os.path.realpath(args.skeleton)) == os.path.normcase(os.path.realpath(args.out)):
+                _build_error('--skeleton 與 --out 不能是同一檔案。')
+            _atomic_write_platform_pair(args.skeleton, rows, args.out, entries)
+        else:
+            _atomic_write_json(args.out, entries)
         print(f"已寫入 {args.out}（{len(entries)} 則）", file=sys.stderr)
     else:
         print(out)
@@ -446,6 +500,48 @@ def cmd_build(args):
 
 
 _REWRITE_FIELDS = frozenset(("entry", "category", "tc", "skip"))
+
+
+def _build_error(message):
+    print(f'⛔ platform build 拒絕執行：{message}', file=sys.stderr)
+    sys.exit(2)
+
+
+def _rewrite_command(args):
+    """由已知路徑補出可複製的指令；無從推導者明確標為待填。"""
+    skeleton = getattr(args, 'skeleton', None)
+    entries = getattr(args, 'entries', None)
+    if not skeleton:
+        skeleton = (os.path.join(os.path.dirname(str(entries)),
+                                 os.path.basename(str(entries)).replace('entries', 'skeleton'))
+                    if entries and 'entries' in os.path.basename(str(entries))
+                    else '<骨架JSON路徑>')
+    if not entries or os.path.normcase(os.path.realpath(skeleton)) == os.path.normcase(os.path.realpath(entries)):
+        parent, name = os.path.split(str(skeleton))
+        name = name.replace('skeleton', 'entries') if 'skeleton' in name else os.path.splitext(name)[0] + '_entries.json'
+        entries = os.path.join(parent, name)
+    site = getattr(args, 'site', None)
+    if not site:
+        try:
+            rows = load_json(skeleton)
+            sources = {str(row.get('source') or '').lower() for row in rows if isinstance(row, dict)}
+            if len(sources) == 1 and sources <= {'abc', 'enex'}:
+                site = sources.pop()
+        except (OSError, ValueError, TypeError):
+            pass
+        if not site:
+            match = re.search(r'(?:^|[_-])(abc|enex)(?:[_-]|$)', os.path.basename(str(skeleton)), re.I)
+            site = match.group(1).lower() if match else '<站別abc或enex>'
+    command = ['python', 'scripts/s2_platform_bridge.py', 'rewrite-entry', '--site', site,
+               '--skeleton', str(skeleton), '--entries', str(entries)]
+    if getattr(args, 'patch_file', None):
+        command += ['--patch-file', str(args.patch_file)]
+        if getattr(args, 'dry_run', False):
+            command.append('--dry-run')
+    else:
+        patch = getattr(args, 'init_patch', None) or os.path.splitext(str(entries))[0] + '_patch.json'
+        command += ['--init-patch', str(patch)]
+    return shlex.join(command)
 
 
 def _rewrite_error(message):
@@ -620,9 +716,14 @@ def _cmd_rewrite_patch(args, rows):
 
 def cmd_rewrite_entry(args):
     """修骨架的少量編輯欄位，再由完整骨架整批重建 entries。"""
+    missing = [flag for flag in ('site', 'skeleton', 'entries') if not getattr(args, flag, None)]
+    if missing:
+        _rewrite_error('缺 ' + '／'.join('--' + flag for flag in missing)
+                       + '；完整指令如下（<…> 請換成實際值）：\n' + _rewrite_command(args))
     if os.path.normcase(os.path.realpath(args.skeleton)) == os.path.normcase(
             os.path.realpath(args.entries)):
-        _rewrite_error('--skeleton 與 --entries 不能是同一個檔案。')
+        _rewrite_error('--skeleton 與 --entries 不能是同一個檔案。請改用不同輸出路徑：\n'
+                       + _rewrite_command(args))
     rows = load_json(args.skeleton)
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
         _rewrite_error("骨架頂層必須是 dict 陣列。")
@@ -717,15 +818,17 @@ def main(argv=None):
     )
     p_bd.add_argument("--skeleton", required=True)
     p_bd.add_argument("--out")
+    p_bd.add_argument("--entries", help="既有判斷 JSON；保留編輯內容並從同一骨架補機械欄位")
+    p_bd.add_argument("--force", action="store_true", help="允許未填骨架覆寫既有編輯內容")
     p_bd.set_defaults(func=cmd_build)
 
     p_rw = sub.add_parser(
         "rewrite-entry",
         help="受控修改骨架編輯欄位，並整批重建 platform entries",
     )
-    p_rw.add_argument("--site", required=True, choices=["enex", "abc"])
-    p_rw.add_argument("--skeleton", required=True, help="from-raw 產生的完整骨架 JSON")
-    p_rw.add_argument("--entries", required=True, help="重建後的 platform entries 輸出路徑")
+    p_rw.add_argument("--site", choices=["enex", "abc"], help="必填：平台站別")
+    p_rw.add_argument("--skeleton", help="必填：from-raw 產生的完整骨架 JSON")
+    p_rw.add_argument("--entries", help="必填：重建後的 platform entries 輸出路徑")
     p_rw.add_argument("--id", dest="ids", action="append",
                       help="要修的 ID；多筆時重複帶 --id")
     p_rw.add_argument("--set", dest="sets", action="append",

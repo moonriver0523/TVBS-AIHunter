@@ -366,6 +366,7 @@ def classify_phase(name, input_str, file_hint=''):
 
 def measure(session_path):
     last_usage = {}  # message.id -> usage dict（保留最後一筆）
+    seen_tool_ids = set()
     tool_calls = 0
     tool_by_name = {}
     targeted_edit_calls = 0
@@ -393,9 +394,18 @@ def measure(session_path):
                 n += 1
                 mid = msg.get('id') or f'_noid_{n}'
                 last_usage[mid] = usage
+            # request blob 會帶 assistant 工具副本；usage 維持原口徑，只有工具限正式紀錄。
+            if d.get('type') != 'assistant':
+                continue
             for block in (msg.get('content') or []):
                 if not isinstance(block, dict) or block.get('type') != 'tool_use':
                     continue
+                tool_id = block.get('id')
+                if tool_id:
+                    if tool_id in seen_tool_ids:
+                        continue
+                    seen_tool_ids.add(tool_id)
+                # 缺 id 無法可靠去重：正式紀錄的每個 block 各算一次，不以內容合併。
                 tool_calls += 1
                 name = block.get('name') or '?'
                 inp = block.get('input') or {}

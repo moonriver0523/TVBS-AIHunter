@@ -416,16 +416,17 @@ check('T9 5 筆共 25,000 字元吃得下預算 → 整批全文（舊制只有 
 
 o, c = run(bp.cmd_inspect, Args(raw=BUDGET_OVER, ids=None, fields='script',
                                 limit=None, index=None, site=None, lengths=False))
-check('T9 8 筆共 40,000 字元超預算 → 退回預覽', c == 0 and '...[略]' in o)
+check('T9 8 筆共 40,000 字元超預算 → 完整分頁計畫',
+      c == 0 and '第 1/2 頁' in o and '第 2/2 頁' in o and '...[略]' not in o)
 check('T9 超預算要**明講**，不是靜默截斷', '超過 28,000 字元預算' in o)
 check('T9 超預算要附可直接貼的分批指令', '--ids N0,N1,N2,N3,N4' in o)
 
 o, c = run(bp.cmd_inspect, Args(raw=BUDGET_HUGE, ids=None, fields='script',
                                 limit=None, index=None, site=None, lengths=False))
 # ⛔ 這裡掉到 200 字元預覽會是功能退步：舊制單則查是印全文的。
-check('T9 單則自己爆預算 → 截到預算為止（不是掉回 200 字元）',
-      c == 0 and o.count('y') > 20000)
-check('T9 單則爆預算也要明講截在哪', '自己就超過' in o)
+check('T9 單則自己爆預算 → 保留完整原文',
+      c == 0 and 'y' * 40000 in o and '...[略]' not in o)
+check('T9 單則爆預算也要明講例外', '單筆超過預算' in o)
 
 o, c = run(bp.cmd_inspect, Args(raw=BUDGET_OK, ids='N1', fields='script',
                                 limit=None, index=None, site=None, lengths=False))
@@ -470,9 +471,11 @@ check('T9-2 dedup-check 對退化值要 fail-loud（不可靜默拿第一個比�
 o, c = run(bp.cmd_inspect, Args(raw=RT_DIRTY, ids=None, fields='story',
                                 limit=None, index=None, site='rt', lengths=False))
 sug = [l for l in o.splitlines() if '--ids' in l]
-check('T9-2 撞名檔仍給得出建議（退化值已退回 #N，#N 也可貼回）', len(sug) == 1)
+check('T9-2 撞名檔仍給得出完整分頁（退化值已退回 #N）', len(sug) == 2)
 if sug:
-    _ids = sug[0].split('--ids ')[-1].strip()
+    import shlex
+    _cmd = shlex.split(sug[0].split('：', 1)[1])
+    _ids = _cmd[_cmd.index('--ids') + 1]
     o2, c2 = run(bp.cmd_inspect, Args(raw=RT_DIRTY, ids=_ids, fields='story',
                                       limit=None, index=None, site='rt', lengths=False))
     check('T9-2 建議指令 round-trip：貼回去筆數相符且不再爆預算',

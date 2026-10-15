@@ -122,6 +122,7 @@ import glob
 import json
 import os
 import re
+import shlex
 import sys
 import tempfile
 
@@ -2295,66 +2296,47 @@ def text_field(item, key):
     return (key, None, 'nontext')
 
 
-def _plan_full_detail(shown, fields, site):
-    """決定這批 `--fields` 查詢能不能**整批印全文**；塞不下就備妥可直接貼的分批指令。
-
-    回傳 `(cap, note)`：`cap` 是每個欄位的截斷長度，`None`＝不截斷（整批全文）。
-    `note` 不是 None 時，呼叫端要原樣印到 stderr。
-
-    為什麼要有這個（T9，2026-08-25）：原本的判準是
-    `fields is not None and len(indexed) <= 3`——**只有查 ≤3 筆才印全文**，於是
-    「我要看完整 script」在操作上就等於「一次只能查 3 筆」。0825-0100 實測 56 次
-    `inspect` 裡 **31 次是一次只看一則**（`ap_detail` 連續 11 次同 `--fields script`、
-    `rt_detail` 連續 15 次 `--index N --fields story`，其中兩次參數完全重複），
-    每次呼叫 ≈ 296k cache_read ≈ **$0.089**，光這一輪就 ≈ $2.5。
-
-    ⛔ 塞不下時**不靜默截斷**——會明講並印出下一步指令。R15 的教訓是靜默截斷
-    會讓 agent 合理地退回逐則查詢，那正是這一刀要消滅的形狀。
-    """
-    # ⚠️ 量的是**序列化後**的長度，不是 raw `len(v)` 總和——保證要落在真正印出去的
-    #    那串位元組上。JSON escape（`\n` 變兩字元、引號）實測讓 NS 型內容膨脹 4.9%，
-    #    近飽和時足以把「宣告整批全文」的輸出推破 Bash 的 30k 靜默截斷線。
-    #    順帶解掉 dict 欄位（AP 的 nitf 殼）被算成 0 的洞：`json.dumps` 會把整包算進去。
-    total_len, fit_ids = 0, []
+def _plan_full_detail(shown, fields, site, raw='<raw檔路徑>', all_rows=None):
+    """按實際序列化長度貪婪分頁；超大單筆獨立一頁，原文不截斷。"""
+    pages, page, size = [], [], 0
+    id_counts = {}
+    for i, it in (all_rows if all_rows is not None else shown):
+        item_id = _dedup_id(site, it, i)
+        id_counts[item_id] = id_counts.get(item_id, 0) + 1
     for i, it in shown:
         item_id = _dedup_id(site, it, i)
         one = len(json.dumps({k: it.get(k, '<無此欄位>') for k in fields},
-                             ensure_ascii=False)) + len(item_id) + 2  # id + \t + \n
-        if total_len + one > INSPECT_TEXT_BUDGET:
-            break
-        fit_ids.append(item_id)
-        total_len += one
-    if len(fit_ids) == len(shown):
+                             ensure_ascii=False)) + len(item_id) + 2
+        if page and size + one > INSPECT_TEXT_BUDGET:
+            pages.append((page, size))
+            page, size = [], 0
+        # 重複或含分隔符的 ID 改用原始索引，避免貼回後多取別頁或窗口外的資料。
+        selector = item_id if (id_counts[item_id] == 1
+                               and not re.search(r'[,\s]', item_id)
+                               and not item_id.startswith(('#', '-'))) else f'#{i}'
+        page.append(selector)
+        size += one
+        if size > INSPECT_TEXT_BUDGET:
+            pages.append((page, size))
+            page, size = [], 0
+    if page:
+        pages.append((page, size))
+    if not pages or (len(pages) == 1 and pages[0][1] <= INSPECT_TEXT_BUDGET):
         return None, None
-    if not fit_ids:
-        # 第一則自己就超過預算（RT 的 TIMELINE 長稿實測有 30,270 字元）。
-        # ⛔ 這裡**不能**掉到 200 字元預覽——舊制單則查是印全文的，掉下去等於
-        #    agent 再也拿不到這則的內容，是功能退步。改成截到預算為止，
-        #    拿到的量跟舊制被工具攔下時差不多，但這次有明講截在哪。
-        return INSPECT_TEXT_BUDGET, (
-            f'ℹ️ 第一則的 {",".join(fields)} 自己就超過 {INSPECT_TEXT_BUDGET:,} 字元預算，'
-            f'已截到預算為止（**不是**全文）。這種長稿逐則查是對的。')
-    head = (f'ℹ️ 這 {len(shown)} 筆的 {",".join(fields)} 全文超過 {INSPECT_TEXT_BUDGET:,} '
-            f'字元預算，已改印 {INSPECT_PREVIEW_CHARS} 字元預覽（**不是**全文）。')
-    # ⚠️ 沒帶 `--site` 時 `_dedup_id` 回退成 `#index`，那不是能貼回 `--ids` 的東西
-    #    ——印出來會變成一條**跑不動的**建議指令，比不給建議更糟。
-    # ⚠️ 認不出 id 的筆數會是 `#N` 序號——那**也是可以貼回 `--ids` 的**（`cmd_inspect`
-    #    一律受理 `#N`），所以不必因此拒絕給建議，照樣印出去就好。
-    # 🔴 建議指令必須 **round-trip**：貼回去要剛好撈到這幾筆，不能多。
-    #    id 撞名時貼回去會撈到一整群 → 再度爆預算 → 再印同一條壞建議，**不收斂**，
-    #    agent 照做只是白燒呼叫，正好是這一刀要救的那條路。寧可不給建議，
-    #    也不要給一條跑起來不對的指令。
-    want = set(fit_ids)
-    hit = sum(1 for i, it in shown if _dedup_id(site, it, i) in want)
-    if len(want) != len(fit_ids) or hit != len(fit_ids):
-        return INSPECT_PREVIEW_CHARS, (
-            f'{head}\n'
-            f'   ⚠️ 這個檔的 id 有重複，貼回 `--ids` 會撈到多餘的筆數，'
-            f'因此不給分批指令。請改用 `--limit`／`--index` 逐段取。')
-    return INSPECT_PREVIEW_CHARS, (
-        f'{head}\n'
-        f'   要全文請分批，前 {len(fit_ids)} 筆可一次取：\n'
-        f'   --ids {",".join(fit_ids)}')
+
+    note = [f'ℹ️ 這 {len(shown)} 筆的 {",".join(fields)} 全文超過 '
+            f'{INSPECT_TEXT_BUDGET:,} 字元預算；完整分頁計畫如下，請逐頁執行，不要自行再拆。']
+    for n, (ids, length) in enumerate(pages, 1):
+        command = ['python', 'scripts/s2_batch_prep.py', 'inspect', str(raw),
+                   '--fields', ','.join(fields), '--limit', str(len(ids))]
+        if site:
+            command.extend(['--site', site])
+        command.extend(['--ids', ','.join(ids)])
+        extra = '，單筆超過預算，仍保留全文' if length > INSPECT_TEXT_BUDGET else ''
+        note.append(f'第 {n}/{len(pages)} 頁（{length:,} 字元{extra}）：'
+                    + shlex.join(command))
+    # 多頁時只回計畫；單筆超大頁則直接印全文，確保依指令執行後可完整取到。
+    return None, '\n'.join(note)
 
 
 def _inspect_ids(values):
@@ -2385,6 +2367,7 @@ def cmd_inspect(args):
     # D9 步驟②的前置條件）。
     indexed = [(i, _dedup_view(it) if isinstance(it, dict) else {'value': it})
                for i, it in enumerate(items)]
+    all_indexed = indexed
 
     if args.index is not None:
         if not (0 <= args.index < len(items)):
@@ -2393,10 +2376,11 @@ def cmd_inspect(args):
         indexed = [indexed[args.index]]
     elif args.ids:
         want = _inspect_ids(args.ids)
+        named_ids = {value for value in want if not re.fullmatch(r'#\d+', value)}
         # `#N` 序號定址一律受理：id 撲空時本工具自己就是印 `#0…#N`，只認真 id
         # 會讓自己印出來的東西貼不回去（RT detail 補了 `edit` 之後實測到的回歸）。
         indexed = [(i, it) for i, it in indexed
-                   if _dedup_id(site, it, i) in want or f'#{i}' in want]
+                   if _dedup_id(site, it, i) in named_ids or f'#{i}' in want]
         found = set(_dedup_id(site, it, i) for i, it in indexed)
         found |= set(f'#{i}' for i, _ in indexed)
         missing = want - found
@@ -2408,14 +2392,19 @@ def cmd_inspect(args):
 
     total = len(indexed)
     shown = _slice_inspect_rows(indexed, args)
+    if fields and not lengths and not args.limit:
+        shown = indexed[(getattr(args, 'offset', 0) or 0):]
     offset = getattr(args, 'offset', 0) or 0
-    limit = args.limit or 100
 
     # 全文 vs 預覽改由**字元預算**決定，不再由筆數決定（T9，見 _plan_full_detail）。
     # `cap` 是每欄位截斷長度，None＝整批全文。
     cap, budget_note = (
-        _plan_full_detail(shown, fields, site) if (fields and not lengths)
+        _plan_full_detail(shown, fields, site, args.raw, all_indexed) if (fields and not lengths)
         else (INSPECT_PREVIEW_CHARS, None))
+
+    if budget_note and len(shown) > 1:
+        print(budget_note, file=sys.stderr)
+        return
 
     lines = []
     for i, it in shown:
@@ -2460,8 +2449,8 @@ def cmd_inspect(args):
             lines.append(f'{item_id}\t{_title_of_any(it)}')
 
     print('\n'.join(lines))
-    if total > offset + limit:
-        print(f'…另 {total - offset - limit} 筆略，用 --offset/--limit 調整', file=sys.stderr)
+    if total > offset + len(shown):
+        print(f'…另 {total - offset - len(shown)} 筆略，用 --offset/--limit 調整', file=sys.stderr)
     print(f'共 {len(items)} 筆，本次顯示 {len(shown)} 筆（offset={offset}）', file=sys.stderr)
     if budget_note:
         print(budget_note, file=sys.stderr)
