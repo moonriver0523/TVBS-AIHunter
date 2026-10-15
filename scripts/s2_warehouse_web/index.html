@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>外電資料庫｜線上 demo</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="app.css"><script defer src="app.js"></script>
+</head>
+<body>
+<header class="masthead"><div class="brand">TVBS <span>外電資料庫</span></div><div class="edition">本機線上化 demo</div><button id="theme" aria-label="切換深淺色模式">切換淺色</button></header>
+<nav class="tabs" aria-label="資料庫視圖"><button id="handoffTab" aria-pressed="true">晚班交接</button><button id="archiveTab" aria-pressed="false">跨日檢索</button></nav>
+<section class="context"><div><h1 id="title">晚班交接</h1><p id="subtitle">依班次回看收到的素材，從清單開始校閱。</p></div><div class="publication"><strong id="coverage">讀取發布清單中…</strong><p id="publicationInfo"></p></div></section>
+<main>
+<section id="shiftPanel" aria-label="班次選擇"><div class="section-head"><label for="shift">選擇班次 <select id="shift"></select></label><button id="timelineToggle" aria-expanded="false">展開全部班次</button></div><div id="timeline" class="timeline" aria-label="班次日期時間軸"></div><p class="hint" id="shiftHint"></p></section>
+<form id="searchForm">
+<div id="rangePanel" hidden><div class="range"><label>素材日起日<input type="date" id="from" required></label><span class="range-to">至</span><label>素材日迄日<input type="date" id="to" required></label><div class="presets"><button type="button" id="week">近 7 日</button><button type="button" id="month">近 30 日</button></div></div></div>
+<div class="searchbar"><label class="keyword">關鍵字<input id="keyword" type="search" placeholder="搜尋素材代碼、中文摘要、已存來源原文" autocomplete="off"></label><button type="submit" id="search">搜尋素材</button><button type="button" id="reset">清除條件</button></div>
+</form>
+<div class="layout"><aside><details id="filters" open><summary>篩選素材 <span id="filterCount"></span></summary><p class="hint">同一類可多選，類別之間取交集。</p><div id="filterGroups"></div><label class="check"><input id="notes" type="checkbox">包含備註素材</label><label class="check" id="unknownLabel" hidden><input id="unknown" type="checkbox">納入日期未知素材</label></details></aside>
+<section class="results-area" aria-label="素材查詢結果"><details id="matrix"><summary>T／C 素材矩陣 <span>展開檢視議題與地區交集</span></summary><div class="matrix-scroll" id="matrixBody"></div><p class="hint">以本次完整結果計數；點格子套用 T／C 篩選。僅列有交集的地區。</p></details>
+<div id="selection" class="selection"></div><div class="result-head"><h2 id="listTitle">本班素材</h2><strong id="resultCount"></strong></div>
+<div id="status" role="status" aria-live="polite">正在讀取發布資料…</div><button id="retry" hidden>重新載入</button><div id="results"></div><nav id="pagination" class="pagination" aria-label="結果分頁"></nav>
+</section></div>
+<footer><span>靜態分片唯讀瀏覽 · 不連接本機資料庫</span><span id="generation"></span></footer>
+</main>
+<noscript>請啟用 JavaScript，並雙擊 serve.cmd 後透過本機網址開啟。</noscript>
+</body></html>

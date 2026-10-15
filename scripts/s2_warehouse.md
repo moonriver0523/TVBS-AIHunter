@@ -75,3 +75,38 @@ txt 收據核對 hash、一般內容總數與標頭來源數；`last_render_sha`
 `receipts/<snapshot_sha256>.json` 是匯入收據；`reports/date-quality.md`、`.json` 是來源 × 日期品質／依據、ambiguous 與完整退路清單；`reports/phase0-measurements.md`、`.json` 保存實測筆數、日期分布、範例與五個數字開頭 video ID。
 
 CLI 路徑護欄與 `generated_by` 不是 OS 權限隔離。相同作業系統帳號仍有任意 SQL／檔案寫入能力，Phase 0 沒有發布端；正式服務帳號、未授權寫入監測、備份責任人與 Drive 發布需後續階段另行處理。
+
+## Archive 靜態分片與本機線上 demo（A47／D-候選23 A 案）
+
+```powershell
+python -X utf8 scripts/test_s2_warehouse_publish.py
+python -X utf8 scripts/test_s2_warehouse.py
+# 只匯出；不連網、不部署、不啟動正式掃帶
+python -X utf8 scripts/s2_warehouse_publish.py
+# 匯出並複製靜態網站與當前發布分片
+python -X utf8 scripts/s2_warehouse_publish.py --demo-dir D:\Downloads\外電資料庫_線上demo
+# 自訂母本根／分片大小（bytes，預設 2,000,000）
+python -X utf8 scripts/s2_warehouse_publish.py --warehouse-root D:\另一個外電庫 --max-shard-bytes 1000000
+```
+
+入口 `s2_warehouse_publish.py` 只以 SQLite `mode=ro`、`query_only` 和單一讀取交易讀取 `<warehouse-root>/archive/warehouse.sqlite`，schema／extractor 檢查沿用原工具。預設根與 `S2_WAREHOUSE_ROOT` 的優先序同原工具。輸出固定在 `archive/publish/`，不讀取 G: Archive，不碰 phase0／舊 demo 庫，不改掃帶、排程或原資料庫。
+
+- `manifest.json`：格式版本、generation、UTC 產生時間、完整年月日班次／素材日目錄、各組總筆數、來源／T／C 詞彙，以及各片 `path/count/bytes/sha256/oversized`。
+- `shifts/YYYY-MM-DD.json`：當日全部 observation（含 note），保留當時摘要、T/C、來源連結與日期推導；同日多快照全部保留，`snapshot_count` 註明數量，不能當成去重後新素材數。
+- `days/YYYY-MM-DD.json`：每筆 material 的目前版本，沿用 query 的素材日、日期品質及 note 語意；T/C 取原庫累積索引，對齊 CLI。日期未知獨立放在 `days/unknown.json`，不補假日期。
+- 超過上限拆成 `YYYY-MM-DD.json`、`YYYY-MM-DD.part002.json` 等，manifest `parts` 列出全部。每片是 `{"items":[...]}`。依實際 UTF-8 bytes 計算；單筆本身已超標時保持完整，明示 `oversized=true`。不截斷正文或偷偷丟列。
+
+公開欄位採明確白名單：基礎 metadata 完整沿用 `query` 投影，另為清單與篩選加 `id`、完整中文 `raw_entry`、`tc.T/C`；日期片另加 `search_text`（原 CLI 已存的 ID／完整中文摘要／來源原文／category／needs_review 文字串），班次片另加 `observation.shift_id/ordinal/revision_id`。**不發布** `platform`、`fields`、`compiled`、快照 bytes、完整 payload、原始路徑或收據。原文以搜尋文字串發布，並非完整平台 payload；搜尋採 SQLite 原 CLI 的 ASCII 英文字母忽略大小寫、中文字面子字串，不截成預覽。這個 demo 的跨日關鍵字範圍直接對齊 CLI，晚班關鍵字只查代碼／完整中文摘要。
+
+`generation` 是 manifest 內容（含全部分片 SHA-256、大小、筆數與設定，排除產生時間）的 SHA-256。相同內容重跑沿用時間與 generation；逐檔比較 bytes，完全相同不寫入、不改 mtime，只修復／改寫內容異動的片。每檔同目錄暫存、flush/fsync 後 `os.replace`，manifest 最後換名。不是跨檔案交易；前端逐片驗證 SHA-256，遇到中斷更新／混版／缺片時顯示搜尋未完成，禁止顯示假完整總數。舊的多餘片不自動刪除，manifest 不再引用即可；日後正式雲端發布仍需另外實作整代切換、權限及備份。
+
+網站原始碼位於 `scripts/s2_warehouse_web/`（純 HTML/CSS/JS，無框架、套件、外部字型或模型／圖片 API）。`--demo-dir` 只複製 manifest 引用的片到 `data/`，並複製靜態資產；同內容不覆寫。輸出後雙擊 `serve.cmd`，或執行：
+
+```powershell
+python -m http.server 8765 --bind 127.0.0.1 --directory D:\Downloads\外電資料庫_線上demo
+# 網址：http://127.0.0.1:8765/
+```
+
+晚班預設最新班次、包含備註、T/C 矩陣收合；跨日預設「最新班次日往前七日」（不是異常未來素材日）、排除備註，可另勾日期未知。同一維度多選 OR，不同維度 AND。只 fetch 選定班次或指定區間的分片，逐片讀取、最多快取 16 片，50 則分頁；搜尋中不提供精確總數，全部成功才顯示。縮小日期區間能控制手機的流量與記憶體；本機 demo 尚未實作計畫書的伺服端 8 MiB／5 秒 cursor，也沒有權限登入、議題包或 Drive／Apps Script 接線。
+
+日期品質直接保留母本推導結果；「入庫日代替」「多日期待確認」「側錄日期推定」「日期未知」均會顯示，未知日勾選時才讀 unknown 片。異常歷年／未來日期不擅自修正；標籤亦保留母本原值。這是發布方式驗證，不代表歷史日期已全面清洗。
