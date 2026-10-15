@@ -1,4 +1,4 @@
-# Phase 0 外電資料庫工具
+# 外電資料庫工具（Phase 0 單班／Phase 1 Archive 多班）
 
 固定入口為 `s2_warehouse.py`，schema v1、extractor `s2-warehouse-1.0.0`、連結模板 v1。只使用 Python 標準函式庫，並引用零 I/O 的 `s2_material_schema` 純函式；不 import `s2_state`，也沒有掃帶／render 接線、排程、網路或 Drive 發布。
 
@@ -16,9 +16,40 @@ python -X utf8 scripts/s2_warehouse.py query --from 2026-09-30 --to 2026-10-01 -
 python -X utf8 scripts/s2_warehouse.py query --date 2026-09-30 --overlap
 ```
 
-預設根目錄為 `D:\S2-外電資料庫\`；所有輸出均進入 `phase0\`。可設定 `S2_WAREHOUSE_ROOT`，或在子指令**之前**傳 `--warehouse-root D:\另一個外電庫`；CLI 優先於環境變數。輸出根不可位於 G:、本 repository 或輸入副本目錄及其祖先／子目錄。Windows 的 Python 需能取得 `Asia/Taipei` 與 `America/New_York` 的 IANA 時區資料；本機已驗證可用。
+預設根目錄為 `D:\S2-外電資料庫\`；單班輸出進入 `phase0\`，多班輸出進入 `archive\`。可設定 `S2_WAREHOUSE_ROOT`，或在子指令**之前**傳 `--warehouse-root D:\另一個外電庫`；CLI 優先於環境變數。輸出根不可位於 G:、本 repository 或輸入副本目錄及其祖先／子目錄。Windows 的 Python 需能取得 `Asia/Taipei` 與 `America/New_York` 的 IANA 時區資料；本機已驗證可用。
 
-CLI 只接受計畫書指定 scratchpad 下的 `0930-s2-state.json` 與 `0930晚班交接.txt`，不探索其他來源。每次將各檔完整讀一次 bytes，按 SHA-256 匯入，原檔不寫入。資料庫保存原始快照 bytes、班次頂層欄位及每列完整 payload；未知欄位不丟棄。公開查詢只回傳白名單投影，不輸出完整平台 payload。
+單班 `import` 只接受計畫書指定 scratchpad 下的 `0930-s2-state.json` 與 `0930晚班交接.txt`，不探索其他來源。每次將各檔完整讀一次 bytes，按 SHA-256 匯入，原檔不寫入。資料庫保存原始快照 bytes、班次頂層欄位及每列完整 payload；未知欄位不丟棄。公開查詢只回傳白名單投影，不輸出完整平台 payload。
+
+## Archive 多班匯入（2026-10-15 授權範圍）
+
+```powershell
+python -X utf8 scripts/s2_warehouse.py import-archive
+python -X utf8 scripts/s2_warehouse.py --dataset archive query --from 2026-07-31 --to 2026-10-14 --source RT --limit 20
+python -X utf8 scripts/s2_warehouse.py --dataset archive query --keyword YNA01 --include-notes
+# 可讀的唯讀副本亦可作來源；輸出仍固定為指定根下的 archive 子庫
+python -X utf8 scripts/s2_warehouse.py --warehouse-root D:\另一個外電庫 import-archive --archive-root D:\Archive唯讀副本
+```
+
+來源預設 `G:\我的雲端硬碟\Claude共用\自動掃帶系統\Archive`，只收日期資料夾直屬且月日相符的 `<YYYYMMDD>/<MMDD>-s2-state.json`，同層 `<MMDD>晚班交接.txt` 若存在則核對 hash／標頭；txt 不獨立復原、不讀 Archive 外的當日進行中檔。G: 僅列清冊、讀 bytes 與算 SHA-256，絕不建立、寫入、搬移、改名或刪除來源。符號連結與越出來源根的連結不追蹤；輸出與來源不可相互包含。
+
+排除 `_誤開新檔-*`、`*.bak*`、`*.prev.txt`、`_暫存`、`_s2_raw_*`、`_repo根清理*`、`晚班交接歷史範例` 與其他非標準路徑／檔名。排除目錄在清冊記一列「整棵略過」，不展開內容。日期資料夾缺標準 state 會列出，不把 txt-only 當零素材完整班次。
+
+`YYYYMMDD(1)`／`YYYYMMDD (1)` 內若有標準 state，先讀 bytes 比對同日標準資料夾 hash：相同者略過；不同、缺標準對照或無法讀完比對者，雙方均暫緩並列待人工判斷，回 `partial`，不自動選用其中一份。如果前次已匯入同日快照，保留既有資料，本次不新增爭議快照。非標準檔名不讀內容。
+
+班次日以 `window_start` 交叉核對資料夾；舊 schema 缺值時由資料夾推定，收據 `shift_date_quality=inferred_folder` 並註明原因，不把班次日當素材日。窗口與資料夾日期不同時暫緩該快照。無法解析的列保存原值與序號至快照收據 quarantine，其他列照常匯入，回 `partial`。同碼矛盾列另有衝突鍵保留，不靜默吞列。無 offset／無法解析的快照 `updated_at` 留原值並註記，不因此丟棄整班。
+
+每份不同快照有獨立 shift（`s2:<班次日>:<snapshot_sha256>`）、receipt 與 observation，同一班次日可保存多份快照。新制 YNA／CNA 強身份跨班只一筆 material、多筆 observation；其他沿用 `legacy:<班次日>:<SRC>:<local_id>`，跨班次日不合併。同來源同原 ID 跨班另列疑似素材報表，僅供人工裁決。完整 payload 不同則保留 revision；current 按帶 offset 的原始快照 `updated_at` 排序，舊快照不覆蓋新快照；無法判斷先後時保留既有 current 並在收據明示，兩版仍可追溯。全庫 first_seen 取最早可靠正式 checkpoint；T/C 索引保留各次觀測曾有的標籤，revision／observation 留每次原值。
+
+同 SHA-256 重匯，資料庫所有表均零新增；每班一個 `BEGIN IMMEDIATE` 交易，中斷後重跑續接已提交收據。snapshot 收據可從 DB 重建；每次執行另留 `receipts/archive-run-<run_hash>.json`，不增加 DB observation。exit 0＝本次完成，2＝隔離／待判斷／缺標準 state 等部分完成，1＝清冊不可讀或操作失敗；不表示全站候選覆蓋完整。讀清冊失敗仍輸出失敗報告，不建立空資料庫假稱匯入成功。
+
+所有新輸出在 `<warehouse-root>\archive\`，不碰 `phase0\`：
+
+- `warehouse.sqlite`：原始 bytes、素材、revision、observation 與班次。
+- `receipts/<snapshot_sha256>.json`：逐快照來源路徑／hash、班次日品質、txt 核對、逐班筆數與隔離原值。
+- `reports/archive-import.md`／`.json`：累計班次日／快照數、每班輸入／處理／隔離／內容／note、資料表總量、素材日期品質、班次日期品質、本次略過清單與原因／錯誤。
+- `reports/archive-possible-duplicates.json`：同來源同原 ID 的跨班疑似素材與全部暫定鍵；Markdown 報告也列出對照。
+
+報表將未匯入壞列與已保留衝突分開：`輸入＝已處理 observation＋未匯入壞列`；quarantine 包含兩類，不能再與 observation 直接相加。匯入不呼叫 API／模型、不連網、不接正式掃帶／排程／render／Drive 發布。
 
 ## 日期與身份契約
 

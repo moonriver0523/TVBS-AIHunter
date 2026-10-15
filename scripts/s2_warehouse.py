@@ -34,6 +34,8 @@ INPUT_ROOT = Path(
 )
 SNAPSHOT_PATH = INPUT_ROOT / "0930-s2-state.json"
 TXT_PATH = INPUT_ROOT / "0930晚班交接.txt"
+ARCHIVE_ROOT = Path(r"G:\我的雲端硬碟\Claude共用\自動掃帶系統\Archive")
+ARCHIVE_ADAPTER_VERSION = "s2-archive-1.0.0"
 TAIPEI = ZoneInfo("Asia/Taipei")
 ET = ZoneInfo("America/New_York")
 UTC = timezone.utc
@@ -150,12 +152,12 @@ def source_class(item):
     return family, "note" if item.get("script_status") == "note" else result.kind
 
 
-def canonical_identity(item, shift_date):
+def canonical_identity(item, shift_date, *, archive_mode=False):
     local_id = canonicalize_id_for_lookup(item["id"])
     match = SCHEDULED_YOUTUBE_ID_RE.fullmatch(local_id)
     if match:
         return local_id, "strong", [{"namespace": "youtube.video_id", "value": match["video_id"]}]
-    if local_id.startswith("YT:") and YOUTUBE_VIDEO_ID_RE.fullmatch(local_id[3:]):
+    if not archive_mode and local_id.startswith("YT:") and YOUTUBE_VIDEO_ID_RE.fullmatch(local_id[3:]):
         return local_id, "strong", [{"namespace": "youtube.video_id", "value": local_id[3:]}]
     family, _ = source_class(item)
     # Phase 0 不升格 AP Edit No、ENEX newslinkId、ABC detailId 的永久身份。
@@ -464,9 +466,19 @@ def counts(conn):
 def txt_crosscheck(raw, state):
     if raw is None:
         return {"quality": "unknown", "reason": "缺少對應 txt，無法證實完成交接"}
-    text = raw.decode("utf-8-sig")
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeError:
+        return {"sha256": sha(raw), "quality": "unknown", "reason": "txt 非 UTF-8，僅保存 hash"}
     header = text.splitlines()[2] if len(text.splitlines()) > 2 else ""
-    normal = sum(i.get("script_status") != "note" and not source_class(i)[0].startswith("SIDE_") for i in state["items"])
+    valid = []
+    for i in state["items"]:
+        try:
+            validate_item(i)
+            valid.append(i)
+        except (ValueError, TypeError):
+            pass
+    normal = sum(i.get("script_status") != "note" and not source_class(i)[0].startswith("SIDE_") for i in valid)
     m = re.search(r"收錄外電共(\d+)則.*?AP (\d+)則／RT (\d+)則／NS (\d+)則／其他 (\d+)則.*?側錄 (\d+)則", header)
     result = {"sha256": sha(raw), "last_render_sha_matches": sha(raw) == state.get("last_render_sha"),
               "state_general_content": normal, "header_raw": header, "quality": "provisional",
@@ -474,19 +486,57 @@ def txt_crosscheck(raw, state):
     if m:
         result["header_counts"] = dict(zip(("general", "AP", "RT", "NS", "other", "side_display_groups"), map(int, m.groups())))
         result["general_count_matches"] = int(m[1]) == normal
-        result["issues"] = ["txt 的 NS=301／其他=200 含 R51 誤歸；來源辨識結果 NS=296／其他=205",
-                            "側錄顯示群組不等同資料庫段數；未重建 renderer 完成證據"]
+        result["issues"] = ["側錄顯示群組不等同資料庫段數；未重建 renderer 完成證據"]
+        if result["header_counts"]["NS"] == 301 and result["header_counts"]["other"] == 200:
+            result["issues"].append("0930 R51 已知差異：txt NS=301／其他=200；來源辨識 NS=296／其他=205")
     return result
 
 
-def import_bytes(snapshot_bytes, output_dir, txt_bytes=None, source_name="0930-s2-state.json"):
+def validate_item(item):
+    """有契約的欄位先驗型別；未知欄位仍完整封存。"""
+    if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"].strip():
+        raise ValueError("缺有效 local ID")
+    for key in ("platform", "tc"):
+        if item.get(key) is not None and not isinstance(item[key], dict):
+            raise ValueError(key + " 須為物件")
+    for key in ("source", "src_text", "script_status", "first_seen_checkpoint",
+                "first_seen_run_id", "last_checked_checkpoint", "last_checked_run_id",
+                "entry_updated_ts", "needs_review"):
+        if item.get(key) is not None and not isinstance(item[key], str):
+            raise ValueError(key + " 須為字串")
+    for axis in ("T", "C"):
+        values = (item.get("tc") or {}).get(axis, [])
+        if not isinstance(values, list) or any(not isinstance(v, str) for v in values):
+            raise ValueError("tc." + axis + " 須為字串陣列")
+    for key in ("provider", "candidate_checkpoint"):
+        value = (item.get("platform") or {}).get(key)
+        if value is not None and not isinstance(value, str):
+            raise ValueError("platform." + key + " 須為字串")
+
+
+def import_bytes(snapshot_bytes, output_dir, txt_bytes=None, source_name="0930-s2-state.json",
+                 *, archive_mode=False, folder_date=None):
     """單一交易 writer；測試可用記憶體快照，CLI 僅接受固定唯讀副本。"""
     state = json.loads(snapshot_bytes.decode("utf-8-sig"))
     if not isinstance(state, dict) or not isinstance(state.get("items"), list):
         raise ValueError("快照須含 items 陣列；不接受字典轉換而吞掉同碼紀錄")
     if "schema_version" in state and state["schema_version"] != SCHEMA_VERSION:
         raise ValueError("輸入宣告的 schema 版本不支援，未寫入資料庫")
-    shift_date = date.fromisoformat(str(state.get("window_start", ""))[:10]).isoformat()
+    shift_quality = "window_start"
+    if archive_mode and not state.get("window_start"):
+        shift_date = date.fromisoformat(folder_date).isoformat()
+        shift_quality = "inferred_folder"
+    else:
+        shift_date = date.fromisoformat(str(state.get("window_start", ""))[:10]).isoformat()
+    if archive_mode and folder_date != shift_date:
+        raise ValueError("window_start 與 Archive 資料夾日期不符，待人工判斷")
+    observed_at = None
+    time_issue = None
+    if state.get("updated_at"):
+        try:
+            observed_at = utc_text(parse_timestamp(state["updated_at"]))
+        except (ValueError, TypeError):
+            time_issue = "updated_at 無可靠 offset／格式；不推定快照先後"
     snapshot_id = sha(snapshot_bytes)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -500,7 +550,7 @@ def import_bytes(snapshot_bytes, output_dir, txt_bytes=None, source_name="0930-s
             conn.rollback()
             write_json(output_dir / "receipts" / (snapshot_id+".json"), receipt)
             return {"snapshot_id": snapshot_id, "重複匯入": True, "新增": {k: 0 for k in before}, "總數": before}
-        if before["ingest_receipts"]:
+        if before["ingest_receipts"] and not archive_mode:
             raise ValueError("Phase 0 僅驗證單一快照；多班匯入留待 Phase 1，請另建輸出庫")
         started = utc_text(datetime.now(UTC))
         receipt = {"snapshot_id": snapshot_id, "source_relative_path": source_name,
@@ -510,24 +560,40 @@ def import_bytes(snapshot_bytes, output_dir, txt_bytes=None, source_name="0930-s
                    "registry_snapshot_id": None, "history_completeness": "final_snapshot_only",
                    "source_schema": state.get("schema_version", "legacy_no_version"),
                    "producer_completion_status": "unknown", "txt_crosscheck": txt_crosscheck(txt_bytes, state)}
+        receipt.update(shift_date=shift_date, shift_date_quality=shift_quality,
+                       snapshot_observed_at_utc=observed_at)
+        if archive_mode:
+            receipt["adapter_version"] = ARCHIVE_ADAPTER_VERSION
+            conn.execute("CREATE INDEX IF NOT EXISTS observation_material_idx ON material_observations(material_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS observation_local_idx ON material_observations(local_item_id,material_id)")
+        if shift_quality == "inferred_folder":
+            receipt["issues"].append("缺 window_start；班次日由 Archive 資料夾推定（非素材日）")
+        if time_issue:
+            receipt["issues"].append(time_issue)
         conn.execute("INSERT INTO ingest_receipts VALUES (?,?,?,?,?,?)",
                      (snapshot_id, SCHEMA_VERSION, EXTRACTOR_VERSION, "complete", encoded(receipt), snapshot_bytes))
-        shift_id = "s2:"+shift_date
+        shift_id = "s2:"+shift_date+(":"+snapshot_id if archive_mode else "")
         conn.execute("INSERT INTO shifts VALUES (?,?,?,?,?)", (shift_id, shift_date, state.get("window_start"),
                      state.get("checkpoint"), encoded({k:v for k,v in state.items() if k != "items"})))
         quarantine = []
+        seen = set()
         for ordinal, item in enumerate(state["items"]):
-            if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"].strip():
-                quarantine.append({"ordinal": ordinal, "reason": "缺有效 local ID", "raw": item})
+            try:
+                validate_item(item)
+                family, kind = source_class(item)
+                mid, identity, keys = canonical_identity(item, shift_date, archive_mode=archive_mode)
+                dates = extract_dates(item, shift_date)
+                link = source_link(item, family)
+            except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as exc:
+                quarantine.append({"ordinal": ordinal, "reason": str(exc), "raw": item})
                 continue
-            family, kind = source_class(item)
-            mid, identity, keys = canonical_identity(item, shift_date)
-            if conn.execute("SELECT 1 FROM materials WHERE material_id=?", (mid,)).fetchone():
+            if mid in seen:
                 # 保住同碼原始列；不靜默合併，送隔離等待判讀。
                 quarantine.append({"ordinal": ordinal, "local_item_id": item["id"], "reason": "同碼多筆，隔離保留"})
-                mid, identity = mid+f":ordinal:{ordinal}", "provisional_conflict"
-            dates = extract_dates(item, shift_date)
-            link = source_link(item, family)
+                mid, identity = mid+f":ordinal:{ordinal}"+(":"+snapshot_id if archive_mode else ""), "provisional_conflict"
+            else:
+                seen.add(mid)
+            existing = conn.execute("SELECT * FROM materials WHERE material_id=?", (mid,)).fetchone()
             revision_id = "rev:"+sha({"material_id": mid, "payload": item})
             material = dict(material_id=mid, schema_version=SCHEMA_VERSION, identity_status=identity,
                             provider=(item.get("platform") or {}).get("provider", family), publisher=family,
@@ -539,14 +605,34 @@ def import_bytes(snapshot_bytes, output_dir, txt_bytes=None, source_name="0930-s
             params = {k: encoded(v) if isinstance(v, (dict, list)) or k == "material_date_range" else v
                       for k,v in material.items()}
             columns = list(params)
-            conn.execute(f"INSERT INTO materials ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
-                         [params[k] for k in columns])
-            conn.execute("INSERT INTO material_revisions VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                         (revision_id, mid, None, None, sha(item.get("src_text")),
+            if existing is None:
+                conn.execute(f"INSERT INTO materials ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+                             [params[k] for k in columns])
+            else:
+                latest = conn.execute(
+                    "SELECT MAX(json_extract(r.receipt_json,'$.snapshot_observed_at_utc')) "
+                    "FROM material_observations o JOIN ingest_receipts r USING(snapshot_id) WHERE o.material_id=?",
+                    (mid,)).fetchone()[0]
+                # current 依快照原始時間；無法定先後則保留原指標並明示衝突。
+                if observed_at and latest and observed_at > latest:
+                    conn.execute("UPDATE materials SET "+",".join(k+"=?" for k in columns if k != "material_id")+
+                                 " WHERE material_id=?", [params[k] for k in columns if k != "material_id"]+[mid])
+                elif existing["current_revision_id"] != revision_id and (not observed_at or not latest or observed_at == latest):
+                    receipt["issues"].append(f"{mid}：快照版本先後未知／同時刻，保留既有 current，兩版均封存")
+                first = min(filter(None, (existing["first_seen_at_utc"], dates["first_seen_at_utc"])), default=None)
+                conn.execute("UPDATE materials SET first_seen_at_utc=?,first_seen_precision=? WHERE material_id=?",
+                             (first, "checkpoint_anchor" if first else "unknown", mid))
+                if first:
+                    first_day = datetime.fromisoformat(first.replace("Z", "+00:00")).astimezone(TAIPEI).date().isoformat()
+                    conn.execute("UPDATE materials SET material_date=? WHERE material_id=? AND material_date_basis='ingestion_fallback'",
+                                 (first_day, mid))
+            conn.execute("INSERT OR IGNORE INTO material_revisions VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                         (revision_id, mid, existing["current_revision_id"] if existing and existing["current_revision_id"] != revision_id else None,
+                          None, sha(item.get("src_text")),
                           sha({k:item.get(k) for k in ("raw_entry", "fields", "script_status")}),
                           sha({k:item.get(k) for k in ("category", "tc", "platform", "needs_review")}),
-                          "initial_snapshot", dates["source_updated_at_utc"],
-                          utc_text(parse_timestamp(state["updated_at"])) if state.get("updated_at") else None, encoded(item)))
+                          "observed_snapshot" if existing else "initial_snapshot", dates["source_updated_at_utc"],
+                          observed_at, encoded(item)))
             p = item.get("platform") or {}
             conn.execute("INSERT INTO material_observations VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                          (snapshot_id, item["id"], ordinal, mid, revision_id, shift_id,
@@ -567,8 +653,8 @@ def import_bytes(snapshot_bytes, output_dir, txt_bytes=None, source_name="0930-s
         receipt.update(status="partial" if quarantine else "complete", quarantine=quarantine,
                        counts=counts(conn), completed_at_utc=utc_text(datetime.now(UTC)))
         receipt["counts"].update(input_records=len(state["items"]),
-                                content_records=conn.execute("SELECT COUNT(*) FROM materials WHERE kind!='note'").fetchone()[0],
-                                note_records=conn.execute("SELECT COUNT(*) FROM materials WHERE kind='note'").fetchone()[0])
+                                content_records=conn.execute("SELECT COUNT(*) FROM material_observations o JOIN materials m USING(material_id) WHERE snapshot_id=? AND m.kind!='note'", (snapshot_id,)).fetchone()[0],
+                                note_records=conn.execute("SELECT COUNT(*) FROM material_observations o JOIN materials m USING(material_id) WHERE snapshot_id=? AND m.kind='note'", (snapshot_id,)).fetchone()[0])
         conn.execute("UPDATE ingest_receipts SET status=?, receipt_json=? WHERE snapshot_id=?",
                      (receipt["status"], encoded(receipt), snapshot_id))
         conn.commit()
@@ -693,22 +779,234 @@ def report(output_dir):
         conn.close()
 
 
-def output_path(root):
+def archive_inventory(root):
+    """只枚舉 Archive，絕不循符號連結；排除目錄只記目錄收據。"""
+    root = Path(root).resolve(strict=True)
+    candidates, skipped = [], []
+    excluded = ("_誤開新檔-", "_暫存", "_s2_raw_", "_repo根清理", "晚班交接歷史範例")
+    def skip(path, reason, kind="file"):
+        skipped.append({"path": path.relative_to(root).as_posix(), "reason": reason, "kind": kind})
+    def walk_error(exc):
+        raise exc
+    for base, dirs, files in os.walk(root, followlinks=False, onerror=walk_error):
+        base = Path(base)
+        if base.parent == root and re.fullmatch(r"\d{8}", base.name):
+            try:
+                folder_day = datetime.strptime(base.name, "%Y%m%d").date()
+            except ValueError:
+                folder_day = None
+            if folder_day and folder_day.strftime("%m%d")+"-s2-state.json" not in files:
+                skip(base, "缺標準 state；txt-only／空目錄不復原", "directory")
+        for name in sorted(dirs[:]):
+            path = base / name
+            if path.is_symlink() or not path.resolve().is_relative_to(root):
+                skip(path, "連結目錄不追蹤", "directory")
+                dirs.remove(name)
+            elif name.startswith(excluded):
+                skip(path, "排除目錄（整棵略過）", "directory")
+                dirs.remove(name)
+        for name in sorted(files):
+            path = base / name
+            rel = path.relative_to(root)
+            if path.is_symlink() or not path.resolve().is_relative_to(root):
+                skip(path, "連結檔案不讀取")
+                continue
+            folder = re.fullmatch(r"(\d{8})(\s*\(1\))?", rel.parts[0]) if len(rel.parts) == 2 else None
+            if not folder:
+                skip(path, "非 Archive 日期資料夾直屬檔案")
+                continue
+            try:
+                day = datetime.strptime(folder[1], "%Y%m%d").date()
+            except ValueError:
+                skip(path, "無效資料夾日期")
+                continue
+            mmdd = day.strftime("%m%d")
+            if name != mmdd + "-s2-state.json":
+                skip(path, "對應 txt 僅核對、不獨立匯入" if name == mmdd + "晚班交接.txt" else "非標準 state 檔名／備份")
+                continue
+            candidates.append({"path": path, "relative_path": rel.as_posix(),
+                               "shift_date": day.isoformat(), "duplicate_folder": bool(folder[2])})
+    return sorted(candidates, key=lambda c: (c["shift_date"], c["duplicate_folder"], c["relative_path"])), skipped
+
+
+def archive_report(output_dir, run):
+    """從庫內收據重建總量；清冊與本次處理結果另存，重跑仍可對帳。"""
+    output_dir = Path(output_dir)
+    db = output_dir / "warehouse.sqlite"
+    summary = dict(run)
+    summary.update(totals={}, shifts=[], date_quality={}, shift_date_quality={}, possible_duplicates=[])
+    if db.exists():
+        conn = connect_db(db)
+        try:
+            summary["totals"] = counts(conn)
+            summary["shift_count"] = conn.execute("SELECT COUNT(DISTINCT shift_date) FROM shifts").fetchone()[0]
+            for row in conn.execute("SELECT receipt_json FROM ingest_receipts ORDER BY json_extract(receipt_json,'$.shift_date'),snapshot_id"):
+                r = json.loads(row[0])
+                accepted = conn.execute("SELECT COUNT(*) FROM material_observations WHERE snapshot_id=?", (r["snapshot_id"],)).fetchone()[0]
+                q = r.get("quarantine", [])
+                skipped_rows = sum("raw" in entry for entry in q)
+                summary["shifts"].append({"date": r["shift_date"], "path": r["source_relative_path"],
+                    "snapshot_id": r["snapshot_id"], "quality": r["shift_date_quality"], "status": r["status"],
+                    "input": r["counts"]["input_records"], "accepted": accepted, "quarantine": len(q),
+                    "skipped_rows": skipped_rows, "conflict_preserved": len(q)-skipped_rows,
+                    "content": r["counts"]["content_records"], "notes": r["counts"]["note_records"]})
+            summary["date_quality"] = {r[0]: r[1] for r in conn.execute("SELECT date_quality,COUNT(*) FROM materials GROUP BY date_quality")}
+            for s in summary["shifts"]:
+                key = s["quality"]
+                summary["shift_date_quality"][key] = summary["shift_date_quality"].get(key, 0)+1
+            groups = conn.execute(
+                "SELECT m.source_family,o.local_item_id,COUNT(DISTINCT s.shift_date) AS shifts "
+                "FROM material_observations o JOIN materials m USING(material_id) JOIN shifts s USING(shift_id) "
+                "WHERE m.identity_status!='strong' GROUP BY m.source_family,o.local_item_id "
+                "HAVING COUNT(DISTINCT s.shift_date)>1 ORDER BY m.source_family,o.local_item_id").fetchall()
+            for g in groups:
+                matches = [dict(r) for r in conn.execute(
+                    "SELECT DISTINCT s.shift_date,o.material_id FROM material_observations o "
+                    "JOIN materials m USING(material_id) JOIN shifts s USING(shift_id) "
+                    "WHERE m.identity_status!='strong' AND m.source_family=? AND o.local_item_id=? ORDER BY s.shift_date,o.material_id",
+                    (g["source_family"], g["local_item_id"]))]
+                summary["possible_duplicates"].append(dict(g, matches=matches))
+        finally:
+            conn.close()
+    summary.setdefault("shift_count", 0)
+    summary["possible_duplicate_count"] = len(summary["possible_duplicates"])
+    reports = output_dir / "reports"
+    write_json(reports / "archive-import.json", summary)
+    write_json(reports / "archive-possible-duplicates.json", summary["possible_duplicates"])
+    lines = ["# Archive 多班匯入報告", "", f"狀態：{summary['status']}；來源：`{summary['source_root']}`。",
+             f"班次日 {summary['shift_count']}；快照 {len(summary['shifts'])}；資料表總數：{encoded(summary['totals'])}。",
+             f"素材日期品質：{encoded(summary['date_quality'])}。",
+             f"班次日期品質（快照數）：{encoded(summary['shift_date_quality'])}。",
+             f"疑似同素材 {summary['possible_duplicate_count']} 組（同來源同原 ID 跨班次日，不自動合併）。",
+             "", "僅證明已觀測庫存；缺候選收據，來源覆蓋未知。缺 state 的 txt 不復原。",
+             "隔離含已保留的同碼衝突列；輸入＝已處理＋未匯入壞列，衝突不重複加算。",
+             "", "| 班次日 | 來源快照 | 班次日期品質 | 輸入 | 已處理 | 隔離 | 未匯入壞列 | 保留衝突 | 內容 | note |",
+             "|---|---|---|---:|---:|---:|---:|---:|---:|---:|"]
+    if summary["status"] == "failed":
+        lines[3:3] = ["來源清冊讀取失敗；下列數字僅為已入庫量，Archive 實際班次／列數／品質與疑似素材數皆未能量測。", ""]
+    for s in summary["shifts"]:
+        lines.append(f"| {s['date']} | {s['path']} | {s['quality']} | {s['input']} | {s['accepted']} | {s['quarantine']} | {s['skipped_rows']} | {s['conflict_preserved']} | {s['content']} | {s['notes']} |")
+    lines.extend(["", "## 本次處理", ""])
+    for item in summary.get("processed", []):
+        lines.append(f"- `{item['path']}`：{encoded(item)}")
+    lines.extend(["", "## 略過檔案／目錄", ""])
+    for item in summary.get("skipped", []):
+        lines.append(f"- `{item['path']}`：{item['reason']}"+(f"；SHA-256 `{item['sha256']}`" if item.get("sha256") else ""))
+    lines.extend(["", "## 待人工判斷／錯誤", ""])
+    for item in summary.get("errors", []):
+        lines.append(f"- {encoded(item)}")
+    lines.extend(["", "## 疑似同素材", "", "完整對照亦存於 archive-possible-duplicates.json。", ""])
+    for g in summary["possible_duplicates"]:
+        lines.append(f"- {g['source_family']} `{g['local_item_id']}`："+"、".join(m["material_id"] for m in g["matches"]))
+    (reports / "archive-import.md").write_text("\n".join(lines)+"\n", encoding="utf-8")
+    return summary
+
+
+def archive_snapshots(candidates, run):
+    """每個班次日先比對 (1)；有差異時雙方暫緩，不自動選標準目錄。"""
+    groups = {}
+    for candidate in candidates:
+        groups.setdefault(candidate["shift_date"], []).append(candidate)
+    for group in groups.values():
+        loaded = []
+        for candidate in group:
+            try:
+                raw = candidate["path"].read_bytes()
+                loaded.append((candidate, raw, sha(raw)))
+            except OSError as exc:
+                run["errors"].append({"path": candidate["relative_path"], "reason": str(exc)})
+                run["status"] = "partial"
+        originals = {digest for c, raw, digest in loaded if not c["duplicate_folder"]}
+        conflict = any(c["duplicate_folder"] and digest not in originals for c, raw, digest in loaded)
+        conflict |= len(loaded) != len(group) and any(c["duplicate_folder"] for c in group)
+        for candidate, raw, digest in loaded:
+            entry = {"path": candidate["relative_path"], "sha256": digest, "bytes": len(raw)}
+            if conflict:
+                entry["reason"] = "(1) 快照 hash 不同／缺標準對照，雙方暫緩待人工判斷"
+                run["skipped"].append(entry)
+                run["errors"].append(entry)
+                run["status"] = "partial"
+            elif candidate["duplicate_folder"]:
+                run["skipped"].append(dict(entry, reason="(1) 快照 hash 重複"))
+            else:
+                yield candidate, raw, digest
+
+
+def import_archive(source_root, output_dir):
+    """G: 端僅 read_bytes；逐快照交易，失敗保留收據，重跑可續。"""
+    source_root, output_dir = Path(source_root).resolve(), Path(output_dir).resolve()
+    # 即使程式被直接呼叫，也不能把收據或 DB 寫進來源或 phase0。
+    if (output_dir.drive.upper() == "G:" or output_dir.name != "archive" or
+            any(output_dir == p or p in output_dir.parents or output_dir in p.parents
+                for p in (source_root, Path(__file__).resolve().parent.parent))):
+        raise ValueError("Archive 輸出須為來源與 repo 之外的 archive 子目錄")
+    run = {"source_root": str(source_root), "adapter_version": ARCHIVE_ADAPTER_VERSION,
+           "started_at_utc": utc_text(datetime.now(UTC)), "status": "complete",
+           "processed": [], "skipped": [], "errors": []}
+    try:
+        candidates, run["skipped"] = archive_inventory(source_root)
+    except OSError as exc:
+        run["status"] = "failed"
+        run["errors"].append({"path": str(source_root), "reason": str(exc)})
+        run["completed_at_utc"] = utc_text(datetime.now(UTC))
+        result = archive_report(output_dir, run)
+        write_json(output_dir / "receipts" / ("archive-run-"+sha(run)+".json"), result)
+        return result
+    for candidate, raw, digest in archive_snapshots(candidates, run):
+        path, day = candidate["path"], candidate["shift_date"]
+        entry = {"path": candidate["relative_path"]}
+        try:
+            entry.update(sha256=digest, bytes=len(raw))
+            txt_path = path.with_name(path.name[:4]+"晚班交接.txt")
+            txt = None
+            if txt_path.is_symlink() or not txt_path.resolve().is_relative_to(source_root):
+                run["errors"].append({"path": str(txt_path), "reason": "txt 連結不讀取"})
+                run["status"] = "partial"
+            elif txt_path.exists():
+                try:
+                    txt = txt_path.read_bytes()
+                except OSError as exc:
+                    run["errors"].append({"path": str(txt_path), "reason": str(exc)})
+                    run["status"] = "partial"
+            result = import_bytes(raw, output_dir, txt, candidate["relative_path"],
+                                  archive_mode=True, folder_date=day)
+            # 重匯仍沿用原收據 partial 狀態。
+            receipt = json.loads((output_dir / "receipts" / (digest+".json")).read_text(encoding="utf-8"))
+            entry.update(status=receipt["status"], repeated=result["重複匯入"], added=result["新增"])
+            run["processed"].append(entry)
+            if receipt["status"] == "partial":
+                run["status"] = "partial"
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            run["errors"].append(dict(entry, reason=str(exc)))
+            run["status"] = "partial"
+    if not candidates:
+        run["status"] = "partial"
+        run["errors"].append({"path": str(source_root), "reason": "未找到標準 state；不視為零素材完整匯入"})
+    run["completed_at_utc"] = utc_text(datetime.now(UTC))
+    result = archive_report(output_dir, run)
+    write_json(output_dir / "receipts" / ("archive-run-"+sha(run)+".json"), result)
+    return result
+
+
+def output_path(root, dataset="phase0"):
     root = Path(root).resolve()
     repo = Path(__file__).resolve().parent.parent
     # 工具參數護欄不是 OS 存取隔離；不允許 Drive、repo 或輸入副本成為輸出根。
     if root.drive.upper() == "G:" or any(root == p or p in root.parents or root in p.parents for p in (INPUT_ROOT.resolve(), repo)):
         raise ValueError("輸出根須在 Drive、git 與唯讀輸入副本之外")
-    return root / "phase0"
+    return root / dataset
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Phase 0 外電唯讀副本匯入／查詢／日期品質報告")
-    parser.add_argument("--warehouse-root", default=os.environ.get("S2_WAREHOUSE_ROOT", str(DEFAULT_ROOT)), help="外電庫根目錄；自動使用 phase0 子目錄")
+    parser = argparse.ArgumentParser(description="外電唯讀副本／Archive 多班匯入、查詢與日期品質報告")
+    parser.add_argument("--warehouse-root", default=os.environ.get("S2_WAREHOUSE_ROOT", str(DEFAULT_ROOT)), help="外電庫根目錄；單班 phase0、多班 archive 子目錄")
+    parser.add_argument("--dataset", choices=("phase0", "archive"), default="phase0", help="query／report 使用的子庫，預設 phase0")
     sub = parser.add_subparsers(dest="command", required=True)
     imp = sub.add_parser("import", help="匯入指定 0930 副本，重複快照零新增")
     imp.add_argument("--snapshot", default=str(SNAPSHOT_PATH), help="僅允許指定的 0930 唯讀副本")
     imp.add_argument("--txt", default=str(TXT_PATH), help="僅允許指定的 0930 交接 txt 副本")
+    arc = sub.add_parser("import-archive", help="唯讀匯入全部標準 Archive state 至 archive 子庫")
+    arc.add_argument("--archive-root", default=str(ARCHIVE_ROOT), help="Archive 來源根；亦可指定唯讀副本")
     q = sub.add_parser("query", help="按素材日、來源、關鍵字與 T/C 查詢")
     q.add_argument("--date", help="素材日 YYYY-MM-DD")
     q.add_argument("--from", dest="date_start", help="素材日起點 YYYY-MM-DD")
@@ -724,7 +1022,10 @@ def main(argv=None):
     sub.add_parser("report", help="輸出 Markdown＋JSON 日期品質與實測報告")
     args = parser.parse_args(argv)
     try:
-        out = output_path(args.warehouse_root)
+        dataset = "archive" if args.command == "import-archive" else args.dataset
+        if args.command == "import" and dataset != "phase0":
+            raise ValueError("單班 import 僅可使用 phase0 子庫")
+        out = output_path(args.warehouse_root, dataset)
         if args.command == "import":
             # 先檢查所有路徑，才讀任何檔案；絕不自動尋找 live 或 Archive。
             if Path(args.snapshot).resolve() != SNAPSHOT_PATH.resolve() or Path(args.txt).resolve() != TXT_PATH.resolve():
@@ -733,6 +1034,10 @@ def main(argv=None):
             txt = TXT_PATH.read_bytes()
             result = import_bytes(raw, out, txt)
             result.update(輸入sha256=sha(raw), txt_sha256=sha(txt), 輸出目錄=str(out))
+        elif args.command == "import-archive":
+            full = import_archive(args.archive_root, out)
+            result = {k: full[k] for k in ("status", "shift_count", "totals", "date_quality", "shift_date_quality", "possible_duplicate_count", "errors")}
+            result.update(狀態=full["status"], 輸出目錄=str(out), 處理快照數=len(full["processed"]), 略過數=len(full["skipped"]))
         elif args.command == "report":
             result = report(out)
         else:
@@ -748,7 +1053,7 @@ def main(argv=None):
             finally:
                 conn.close()
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 2 if result.get("狀態") == "partial" else 0
+        return 1 if result.get("狀態") == "failed" else 2 if result.get("狀態") == "partial" else 0
     except (ValueError, OSError, sqlite3.Error) as exc:
         print("外電庫操作失敗："+str(exc), file=sys.stderr)
         return 1

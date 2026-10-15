@@ -5,6 +5,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 
 import s2_warehouse as W
 
@@ -267,6 +268,225 @@ class IdentityLinksTest(unittest.TestCase):
             self.assertIsNone(W.source_link(item("PO-16WE", "NS", platform={"url": url}), "NS")["url"])
         url = "https://newsource.cnn.com/asset/123"
         self.assertEqual(W.source_link(item("PO-16WE", "NS", platform={"url": url}), "NS")["url"], url)
+
+
+class ArchiveImportTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.source = self.root / "Archive"
+        self.source.mkdir()
+        self.out = self.root / "warehouse" / "archive"
+
+    def put(self, day, rows, *, legacy=False, suffix="", **extra):
+        folder = self.source / (day.replace("-", "")+suffix)
+        folder.mkdir(exist_ok=True)
+        state = {"checkpoint": day[5:7]+day[8:]+"-1700", "items": rows,
+                 "updated_at": day+"T18:00:00+08:00", "notes": [], "rt_status": {}}
+        if not legacy:
+            state["window_start"] = day+" 13:00"
+        state.update(extra)
+        path = folder / (day[5:7]+day[8:]+"-s2-state.json")
+        path.write_bytes(json.dumps(state, ensure_ascii=False).encode())
+        return path
+
+    def connect(self):
+        conn = W.connect_db(self.out / "warehouse.sqlite")
+        self.addCleanup(conn.close)
+        return conn
+
+    def test_multishift_strong_identity_legacy_separate_and_idempotency(self):
+        for day, cp in (("2026-09-30", "0930-1700"), ("2026-10-01", "1001-1700")):
+            self.put(day, [item("YNA-buGW2sCr_do", "YNA", first_seen_checkpoint=cp),
+                           item("CNA-3SIb5qK0cqk", "CNA", first_seen_checkpoint=cp),
+                           item("YNA01", "YNA", first_seen_checkpoint=cp), item("RT6431", "RT", first_seen_checkpoint=cp)])
+        result = W.import_archive(self.source, self.out)
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(result["shift_count"], 2)
+        self.assertEqual(result["totals"]["materials"], 6)
+        self.assertEqual(result["totals"]["material_observations"], 8)
+        self.assertEqual(result["possible_duplicate_count"], 2)
+        conn = self.connect()
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM shifts").fetchone()[0], 2)
+        self.assertEqual(conn.execute("SELECT first_seen_at_utc FROM materials WHERE material_id='YNA-buGW2sCr_do'").fetchone()[0], "2026-09-30T09:00:00Z")
+        self.assertEqual(W.query(conn, "2026-09-30", "2026-10-01")["總筆數"], 6)
+        receipts = {p.name: p.read_bytes() for p in (self.out / "receipts").glob("*.json") if not p.name.startswith("archive-run-")}
+        repeated = W.import_archive(self.source, self.out)
+        self.assertEqual(result["totals"], repeated["totals"])
+        self.assertTrue(all(all(n == 0 for n in p["added"].values()) for p in repeated["processed"]))
+        self.assertEqual(receipts, {p.name: p.read_bytes() for p in (self.out / "receipts").glob("*.json") if not p.name.startswith("archive-run-")})
+
+    def test_old_schema_folder_inference_bad_rows_partial_and_txt(self):
+        path = self.put("2026-07-31", [item(first_seen_checkpoint="0731-1700"), {"source": "AP"},
+                                     item("RT1234", "RT", platform="bad"), item("RT2222", "RT", tc={"T": "bad"})], legacy=True,
+                        updated_at="2026-08-01T07:00:00")
+        txt = path.with_name("0731晚班交接.txt")
+        txt.write_bytes(b"\xffnon-utf8")
+        result = W.import_archive(self.source, self.out)
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["shift_date_quality"], {"inferred_folder": 1})
+        self.assertEqual((result["shifts"][0]["input"], result["shifts"][0]["accepted"], result["shifts"][0]["quarantine"]), (4, 1, 3))
+        receipt = json.loads(self.connect().execute("SELECT receipt_json FROM ingest_receipts").fetchone()[0])
+        self.assertEqual(receipt["shift_date"], "2026-07-31")
+        self.assertTrue(any("資料夾推定" in issue for issue in receipt["issues"]))
+        self.assertEqual(receipt["txt_crosscheck"]["sha256"], W.sha(txt.read_bytes()))
+        self.assertEqual(W.import_archive(self.source, self.out)["status"], "partial")
+
+    def test_duplicate_folder_hash_and_filtering(self):
+        path = self.put("2026-09-30", [item()])
+        duplicate = self.put("2026-09-30", [item()], suffix=" (1)")
+        self.assertEqual(path.read_bytes(), duplicate.read_bytes())
+        self.put("2026-10-01", [item()])
+        self.put("2026-10-01", [item(raw_entry="另一份")], suffix="(1)")
+        for relative in ("0930-s2-state.json.bak", "_誤開新檔-0930-s2-state.json", "0930晚班交接.prev.txt"):
+            (path.parent / relative).write_bytes(b"bad")
+        scratch = path.parent / "_暫存"
+        scratch.mkdir()
+        (scratch / "0930-s2-state.json").write_bytes(b"bad")
+        (duplicate.parent / "0930-s2-state (1).json").write_bytes(b"bad")
+        (self.source.parent / "1015-s2-state.json").write_bytes(b"live")
+        result = W.import_archive(self.source, self.out)
+        self.assertEqual(result["totals"]["ingest_receipts"], 1)
+        self.assertEqual(result["status"], "partial")
+        self.assertTrue(any(s["reason"] == "(1) 快照 hash 重複" for s in result["skipped"]))
+        self.assertTrue(any("hash 不同" in e["reason"] for e in result["errors"]))
+        self.assertEqual(len(result["skipped"]), 8)
+
+    def test_multiple_snapshots_same_shift_new_revisions_and_out_of_order(self):
+        path = self.put("2026-09-30", [item("YNA-buGW2sCr_do", "YNA", raw_entry="新版")], updated_at="2026-10-01T12:00:00+08:00")
+        W.import_archive(self.source, self.out)
+        self.put("2026-09-30", [item("YNA-buGW2sCr_do", "YNA", raw_entry="舊版")], updated_at="2026-09-30T18:00:00+08:00")
+        result = W.import_archive(self.source, self.out)
+        conn = self.connect()
+        self.assertEqual(result["totals"]["materials"], 1)
+        self.assertEqual(result["totals"]["material_revisions"], 2)
+        self.assertEqual(result["totals"]["material_observations"], 2)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM shifts").fetchone()[0], 2)
+        payload = conn.execute("SELECT r.payload_json FROM materials m JOIN material_revisions r ON r.revision_id=m.current_revision_id").fetchone()[0]
+        self.assertEqual(json.loads(payload)["raw_entry"], "新版")
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM ingest_receipts WHERE snapshot_bytes=?", (path.read_bytes(),)).fetchone()[0], 1)
+
+    def test_same_payload_reuses_revision_and_newer_snapshot_updates_current(self):
+        rows = [item("YNA-buGW2sCr_do", "YNA", first_seen_checkpoint="0930-1700")]
+        self.put("2026-09-30", rows)
+        W.import_archive(self.source, self.out)
+        self.put("2026-10-01", rows)
+        result = W.import_archive(self.source, self.out)
+        self.assertEqual(result["totals"]["material_revisions"], 1)
+        self.assertEqual(result["totals"]["material_observations"], 2)
+        self.put("2026-10-01", [dict(rows[0], raw_entry="較新摘要")], updated_at="2026-10-02T18:00:00+08:00")
+        result = W.import_archive(self.source, self.out)
+        self.assertEqual(result["totals"]["material_revisions"], 2)
+        conn = self.connect()
+        self.assertEqual(W.query(conn, keyword="較新摘要")["總筆數"], 1)
+        self.assertEqual(conn.execute("SELECT material_date FROM materials").fetchone()[0], "2026-09-30")
+
+    def test_unknown_snapshot_order_keeps_both_revisions_and_flags_conflict(self):
+        self.put("2026-09-30", [item("YNA-buGW2sCr_do", "YNA", raw_entry="先觀測")], updated_at=None)
+        W.import_archive(self.source, self.out)
+        self.put("2026-09-30", [item("YNA-buGW2sCr_do", "YNA", raw_entry="時間不明")], updated_at=None)
+        result = W.import_archive(self.source, self.out)
+        self.assertEqual(result["totals"]["material_revisions"], 2)
+        conn = self.connect()
+        self.assertEqual(W.query(conn, keyword="先觀測")["總筆數"], 1)
+        receipts = [json.loads(r[0]) for r in conn.execute("SELECT receipt_json FROM ingest_receipts")]
+        self.assertTrue(any("先後未知" in issue for r in receipts for issue in r["issues"]))
+
+    def test_archive_only_promotes_scheduled_yna_cna_ids(self):
+        row = item("YT:buGW2sCr_do", "YT")
+        self.assertEqual(W.canonical_identity(row, "2026-09-30")[1], "strong")
+        for day in ("2026-09-30", "2026-10-01"):
+            self.put(day, [row])
+        result = W.import_archive(self.source, self.out)
+        self.assertEqual(result["totals"]["materials"], 2)
+        self.assertEqual(result["possible_duplicate_count"], 1)
+        self.assertTrue(all(r[0].startswith("legacy:") for r in self.connect().execute("SELECT material_id FROM materials")))
+
+    def test_txt_only_missing_state_and_orphan_duplicate_are_visible(self):
+        folder = self.source / "20260730"
+        folder.mkdir()
+        (folder / "0730晚班交接.txt").write_bytes(b"txt only")
+        self.put("2026-07-31", [item()], suffix="(1)")
+        result = W.import_archive(self.source, self.out)
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["totals"], {})
+        self.assertTrue(any("缺標準 state" in s["reason"] for s in result["skipped"]))
+        self.assertTrue(any("缺標準對照" in e["reason"] for e in result["errors"]))
+
+    def test_cli_uses_archive_subdirectory_and_leaves_phase0_untouched(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        self.put("2026-09-30", [item()])
+        root = self.out.parent
+        phase0 = root / "phase0"
+        phase0.mkdir(parents=True)
+        sentinel = phase0 / "warehouse.sqlite"
+        sentinel.write_bytes(b"phase0 must stay byte-identical")
+        with redirect_stdout(StringIO()):
+            code = W.main(["--warehouse-root", str(root), "import-archive", "--archive-root", str(self.source)])
+        self.assertEqual(code, 0)
+        self.assertEqual(sentinel.read_bytes(), b"phase0 must stay byte-identical")
+        with redirect_stdout(StringIO()) as stdout:
+            code = W.main(["--warehouse-root", str(root), "--dataset", "archive", "query", "--source", "AP"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout.getvalue())["總筆數"], 1)
+
+    def test_interrupt_then_resume_and_row_conflicts_preserved(self):
+        self.put("2026-09-30", [item(), item(raw_entry="同班同碼")])
+        self.put("2026-10-01", [item()])
+        original = W.import_bytes
+        calls = []
+        def interrupt(*args, **kwargs):
+            calls.append(1)
+            if len(calls) == 2:
+                raise KeyboardInterrupt()
+            return original(*args, **kwargs)
+        with mock.patch.object(W, "import_bytes", side_effect=interrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                W.import_archive(self.source, self.out)
+        resumed = W.import_archive(self.source, self.out)
+        self.assertTrue(resumed["processed"][0]["repeated"])
+        self.assertEqual(resumed["totals"]["material_observations"], 3)
+        self.assertEqual(resumed["shifts"][0]["conflict_preserved"], 1)
+
+    def test_source_is_read_only_and_g_output_rejected(self):
+        self.put("2026-09-30", [item()])
+        before = {p.relative_to(self.source).as_posix(): (p.read_bytes(), p.stat().st_mtime_ns) for p in self.source.rglob("*") if p.is_file()}
+        original_open, original_mkdir = Path.open, Path.mkdir
+        def guarded_open(path, mode="r", *args, **kwargs):
+            if path.is_relative_to(self.source):
+                self.assertEqual(mode, "rb", "來源只能 read_bytes")
+            return original_open(path, mode, *args, **kwargs)
+        def guarded_mkdir(path, *args, **kwargs):
+            self.assertFalse(path.is_relative_to(self.source), "不可建立來源目錄")
+            return original_mkdir(path, *args, **kwargs)
+        with mock.patch.object(Path, "open", guarded_open), mock.patch.object(Path, "mkdir", guarded_mkdir):
+            W.import_archive(self.source, self.out)
+        after = {p.relative_to(self.source).as_posix(): (p.read_bytes(), p.stat().st_mtime_ns) for p in self.source.rglob("*") if p.is_file()}
+        self.assertEqual(before, after)
+        for output in (self.source / "archive", Path(r"G:\輸出\archive"), self.root / "phase0"):
+            with self.assertRaises(ValueError):
+                W.import_archive(self.source, output)
+        self.assertEqual(W.output_path(W.DEFAULT_ROOT, "archive").name, "archive")
+
+    def test_bad_snapshot_and_window_mismatch_do_not_stop_other_shifts(self):
+        bad = self.put("2026-09-30", [])
+        bad.write_bytes(b"{broken")
+        self.put("2026-10-01", [item()], window_start="2026-09-30 13:00")
+        self.put("2026-10-02", [item(first_seen_checkpoint="1002-1700")])
+        result = W.import_archive(self.source, self.out)
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(len(result["errors"]), 2)
+        self.assertEqual(result["totals"]["ingest_receipts"], 1)
+
+    def test_unreadable_archive_creates_failure_report_not_empty_success(self):
+        with mock.patch.object(W, "archive_inventory", side_effect=PermissionError("Access is denied")):
+            result = W.import_archive(self.source, self.out)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["shift_count"], 0)
+        self.assertFalse((self.out / "warehouse.sqlite").exists())
+        self.assertIn("Access is denied", (self.out / "reports/archive-import.md").read_text(encoding="utf-8"))
 
 
 class ImportQueryReportTest(unittest.TestCase):
