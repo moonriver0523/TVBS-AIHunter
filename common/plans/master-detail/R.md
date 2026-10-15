@@ -463,3 +463,16 @@ P1b-2 把「不登記就開名」堵住了，但它堵的是**登記與否**，�
 
 ### R50 程序完成 vs 品質完成分開（D24⑤）— ⬜ 使用者 2026-09-28 指示稍後處理
 - 多輪以嚴重稽核項或 needs-review 收尾仍記 DONE（9/26 20:00 分類待修、9/26 22:00 BITE／跨日判斷待人工）。建議結構化區分「完整／帶缺口完成／失敗」；分類／原文告警需核對真假，避免重啟舊 R7 清洗案或把站方原文誤報當污染。
+
+### R54 token 量測器重複計數工具副本 — ✅2026-10-15（`a1a99d5`）
+- **現象**：新版 Claude Code（2.1.300，1015-0430 起）transcript 的 `api-request-blob` 紀錄內含 assistant 工具呼叫副本，`measure()` 遍歷所有帶 `message.content` 的紀錄而重複計數。1015-0430 132→107、0730 205→116、0900 121→74；usage 本就依 `message.id` 去重，不受影響。
+- **修正**：只從 `type=assistant` 計工具，`tool_use.id` 去重；缺 id 的 block 逐個計。測試 `test_s2_cost_p0.py` 19 項、`test_s2_token_metrics*.py` 全綠。
+- **驗收**：1300／1700／2000／2200 四輪 metrics `tool_calls` 與 transcript 唯一 `tool_use` 完全一致。
+- **未做**：舊 jsonl 不回補（只加不改原則）；需要時另產修正版並標 schema。
+
+### R55 切換分支撤回未整合修正（規則退版疏失）— ✅R53 已補進 main；⬜防再發
+- **經過**：10/11 09:31 R53（`1500d14`）只提交在 `feature/s2-ingest-p0-fixes`；10/13 10:47:46 checkout main，`1500d14` 不是 main 祖先，排程讀到舊版 13c（無 Paid Content 補值）與 13c2（捲動 900）。1013-1100 規則 Read 前後 diff 可證；對照三輪工具分佈沒有當下暴增，不單獨歸因美元。
+- **實際後果**：1015-0900 RT 清單同站抓 4 次；1015-0730 收工後補抓前輪漏收 5 則（RT0181／0098／0275／0192／5515）。
+- **補救**：2026-10-15 cherry-pick 進 main（`ddbf8c1`，A48 的 `guid,` 欄位刻意不帶）；同日合併清理孤兒 chrome／MCP 的 3 個 commit（`83d0237`）。
+- **防再發（未動工）**：①規則文件修正一律先進 main，feature 分支只放程式；②launcher 開工記錄 HEAD＋分支名，與 `rule_shas` 一起進 `_token_metrics.jsonl`。
+- **feature 分支仍未進 main**：A47 外電資料庫工具、A48 RT GUID 保存（開關預設 off）、平行掃帶切換工具，另議。
