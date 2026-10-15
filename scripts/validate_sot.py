@@ -78,6 +78,14 @@ HEADLINE_MAX = 18.5
 # 不到而**靜默消失**，錯誤反而被吃掉（違反 common/08 的驗證紀律第 1、2 點）。
 CJK_RE = re.compile(r"[㐀-鿿豈-﫿]")
 TC_CANDIDATE_RE = re.compile(r"^(?=.*\d{3,6}\s*-\s*\d{3,6})[^㐀-鿿豈-﫿]+$")
+# 問答原文邊界專用：含擴展 B 起及相容補充漢字；舊 TC 候選範圍維持。
+QA_HAN_RE = re.compile(r"[㐀-鿿豈-﫿\U00020000-\U0003ffff]")
+QA_ORIGINAL_MAX_LINES = 4
+QA_SPEAKER_SUFFIX_RE = re.compile(r"(?:\s*\d+(?:[./-]\d+)*)+\s*$")
+KANA_HANGUL_RE = re.compile(
+    r"[\u3040-\u30ff\u31f0-\u31ff\uff66-\uff9f\U0001b000-\U0001b16f"
+    r"\u1100-\u11ff\u3130-\u318f\ua960-\ua97f\uac00-\ud7af\ud7b0-\ud7ff]"
+)
 
 
 def is_sot_tc_candidate(line: str) -> bool:
@@ -88,6 +96,28 @@ def is_sot_tc_candidate(line: str) -> bool:
     if "無TC" in s or "無 TC" in s:
         return True
     return bool(TC_CANDIDATE_RE.match(s))
+
+
+def is_sot_qa_speaker(speaker: str) -> bool:
+    """vs. 須分隔講者；Unicode 字母／組合符號內部不算，漢字例外。"""
+    normalized = unicodedata.normalize("NFKC", speaker)
+    for match in re.finditer(r"vs\.", normalized, re.IGNORECASE):
+        before = normalized[:match.start()]
+        if not before.strip():
+            continue
+        previous = before[-1]
+        if unicodedata.category(previous).startswith(("L", "M")) and not QA_HAN_RE.fullmatch(previous):
+            continue
+        after = QA_SPEAKER_SUFFIX_RE.sub("", normalized[match.end():]).strip()
+        if any(unicodedata.category(char).startswith("L") for char in after):
+            return True
+    return False
+
+
+def is_sot_qa_han_boundary(line: str) -> bool:
+    """語系判斷用 NFKC 副本，實際原文仍保留原字。"""
+    normalized = unicodedata.normalize("NFKC", line)
+    return bool(QA_HAN_RE.search(normalized) and not KANA_HANGUL_RE.search(normalized))
 
 
 def parse_sot_sb_blocks(text: str):
@@ -115,12 +145,25 @@ def parse_sot_sb_blocks(text: str):
         if i < len(lines) and is_sot_tc_candidate(lines[i].strip()):
             tc = lines[i].strip()
             i += 1
-        english = ""
-        if i < len(lines):
+        # 一般 SB 維持 TC 後一行；問答原文依邊界讀取，與中文行數無關。
+        is_qa = is_sot_qa_speaker(speaker)
+        english_lines = []
+        format_problem = ""
+        while i < len(lines) and (is_qa or not english_lines):
             s = lines[i].strip()
-            if s and s != "SB":
-                english = s
-                i += 1
+            if not s or s == "SB":
+                break
+            if is_qa and (s.startswith(SECTION_MARKERS)
+                    or TC_RE.fullmatch(s) or _OS_SKIP_RE.match(s)
+                    or is_sot_qa_han_boundary(s)):
+                break
+            # 先檢查停止邊界；四行後已遇到邊界或段落結束就不誤報。
+            if is_qa and len(english_lines) >= QA_ORIGINAL_MAX_LINES:
+                format_problem = "問答 SB 原文後須空一行"
+                break
+            english_lines.append(s)
+            i += 1
+        english = "\n".join(english_lines)
         blocks.append({
             "speaker": speaker,
             "zh_lines": zh_lines,
@@ -130,6 +173,11 @@ def parse_sot_sb_blocks(text: str):
             # 半開區間 [start, i)，供 OS 計字精準跳過整個區塊，見 count_sot_os_chars()
             "line_span": (start, i),
         })
+        # 僅異常問答附加診斷欄位，一般 SB 的完整回傳維持原樣。
+        if format_problem:
+            blocks[-1]["format_problem"] = format_problem
+        if is_qa and not english_lines and i < len(lines) and is_sot_qa_han_boundary(lines[i]):
+            blocks[-1]["original_han_boundary"] = True
     return blocks
 
 # TC field: "#XX MMSS-MMSS" (numbered material), "{來源} [M/D] HHMMSS-HHMMSS"
@@ -179,7 +227,10 @@ def count_sot_os_chars(os_block: str) -> float:
 
     舊版是「先把所有行加起來，再把 SB 的講者／中文／英文逐行扣掉」，只要
     `parse_sot_sb_blocks()` 少認一行（例如中文翻譯換行、英文原句缺漏）就會有殘留，
-    害總長度虛胖。改成用 `line_span` 直接跳過整個 SB 區塊，不會再有加減不對稱。
+    害總長度虛胖。改成用 `line_span` 直接跳過整個 SB 區塊（含全部原文行），
+    不會再有加減不對稱。一般 SB 原文一行；問答 SB 原文最多四行，讀至空行、標記、
+    嚴格 TC 欄位或中文旁白（含漢字、無假名與韓文），後續 OS 照常計字。
+    問答原文後一律空一行再接旁白；外語旁白無空行時可能被誤認為原文。
     """
     if not os_block:
         return 0
@@ -334,6 +385,32 @@ def parse_tc_field(tc: str):
     return to_seconds(start_s), to_seconds(end_s), m.group("num")
 
 
+def tc_digits_problem(digits: str) -> str | None:
+    """TC 數字串的六十進位檢查：MMSS／HHMMSS 的「分」「秒」都必須 < 60。
+
+    2026-10-13「尼泊橋斷1200」：抽格聯絡表上讀到的是「第 N 秒」，直接照抄成
+    `TC0080`／`TC0104`／`TC0155`（應為 0120／0144／0235），to_seconds() 會把
+    `0080` 默默當 80 秒收下、畫面標注行又完全不驗，整篇 7 處錯都沒被抓到。
+    """
+    if len(digits) == 4:
+        mm, ss = int(digits[:2]), int(digits[2:])
+    elif len(digits) == 6:
+        mm, ss = int(digits[2:4]), int(digits[4:])
+    else:
+        return f"「{digits}」不是 4 碼 MMSS 或 6 碼 HHMMSS"
+    if ss >= 60 or mm >= 60:
+        return (f"「{digits}」的分／秒 ≥60，不是合法的 MMSS／HHMMSS"
+                "——疑似把「第幾秒」直接寫成 TC，請換算（例：第 80 秒＝0120）")
+    return None
+
+
+# 畫面標注：`#02 TC0000 + 0006 "畫面"`（P-032／P-043）、`CNN 10/12 TC152115 "畫面"`（P-047）
+VISUAL_TC_RE = re.compile(
+    rf"^(?:#(?P<num>\d+)|{_TC_SRC}\s+(?:\d{{1,2}}/\d{{1,2}}\s+)?)\s*TC"
+    r"(?P<points>\d{4,6}(?:\s*\+\s*\d{4,6})*)"
+)
+
+
 def extract_section(text: str, marker: str) -> str | None:
     """Grab the block of text following a line containing `marker`, up to the
     next section marker or blank-line-then-marker boundary."""
@@ -428,7 +505,10 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
         if not blk["zh_lines"]:
             problems.append(f"第{sb_count}段 SB 缺少中文翻譯口白")
         if not blk["english"]:
-            problems.append(f"第{sb_count}段 SB 缺少英文原句")
+            hint = "；若原文為中文／全漢字，請確認後人工放行" if blk.get("original_han_boundary") else ""
+            problems.append(f"第{sb_count}段 SB 缺少英文原句{hint}")
+        if blk.get("format_problem"):
+            problems.append(f"第{sb_count}段 SB 格式問題：{blk['format_problem']}")
         if not tc_field:
             problems.append(f"第{sb_count}段 SB 找不到 TC 欄位")
             continue
@@ -437,6 +517,10 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
             problems.append(f"第{sb_count}段 SB 的 TC 欄位「{tc_field.strip()}」格式無法辨識")
             continue
         start_sec, end_sec, num = parsed
+        bad = [p for p in (tc_digits_problem(d) for d in re.findall(r"\d{4,6}(?=-|\s*$)", tc_field.strip())) if p]
+        if bad:
+            problems.append(f"第{sb_count}段 SB TC「{tc_field.strip()}」{bad[0]}")
+            continue
         if end_sec <= start_sec:
             problems.append(f"第{sb_count}段 SB TC「{tc_field.strip()}」結束時間不晚於開始時間")
             continue
@@ -484,6 +568,10 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
             ns_untimed += 1
             continue
         start_sec, end_sec, _num = parsed
+        bad = [p for p in (tc_digits_problem(d) for d in re.findall(r"\d{4,6}", ns_m.group("tc").split()[-1])) if p]
+        if bad:
+            problems.append(f"NS「{stripped}」{bad[0]}")
+            continue
         dur = end_sec - start_sec
         if dur <= 0:
             problems.append(f"NS「{stripped}」結束時間不晚於開始時間")
@@ -496,6 +584,29 @@ def validate(text: str, target_seconds: float, videos_dir: str | None):
             f"有 {ns_untimed} 段 NS 沒有可解析的 TC，無法計入總長度"
             "（NS 也要納入計時，格式如 `NS #01 0050-0053 說明`）"
         )
+
+    # --- 畫面標注 TC（不計時，但必須是合法 MMSS／HHMMSS 且不超過片長）---
+    for line in text.splitlines():
+        stripped = line.strip()
+        vm = VISUAL_TC_RE.match(stripped)
+        if not vm:
+            continue
+        points = re.findall(r"\d{4,6}", vm.group("points"))
+        bad = [p for p in (tc_digits_problem(d) for d in points) if p]
+        if bad:
+            problems.append(f"畫面標注「{stripped}」{bad[0]}")
+            continue
+        num = vm.group("num")
+        if videos_dir and num:
+            video_path = find_video_for_material(videos_dir, num)
+            vdur = video_duration_seconds(video_path) if video_path else None
+            if vdur is not None:
+                for d in points:
+                    sec = int(d[:2]) * 60 + int(d[2:]) if len(d) == 4 else None
+                    if sec is not None and sec > vdur:
+                        problems.append(
+                            f"畫面標注「{stripped}」TC{d}({sec}秒)超過 #{num} 影片實際長度({vdur:.1f}秒)"
+                        )
 
     # --- OS reading time ---
     os_block = extract_section(text, "記者OS內文") or extract_section(text, "記者OS")

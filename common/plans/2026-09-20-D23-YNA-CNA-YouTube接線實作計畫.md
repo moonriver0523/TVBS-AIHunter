@@ -205,7 +205,7 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 | `videos.snippet.channelId` | 第二次頻道身分檢查 | 不符即 blocking，避免 uploads playlist／設定接錯 |
 | `videos.snippet.publishedAt` | 發布時間交叉檢查／fallback | 與主值差異超過容許值時列 needs_review，不自動改窗 |
 | `videos.snippet.title` | `title`／hint；優先於 playlist snapshot | 保留原文；YNA 不以機器翻譯標題取代 provenance |
-| `videos.snippet.description` | `description`／`src_text` 優先來源 | 去掉純網址／▣ 導引行後 ≥60 字即直接當 `src_text`（`caption.source=description`、`precision=source-text`，不得標成字幕）；不足才改取字幕（2026-09-20 裁決，2026-10-02 文件對齊程式） |
+| `videos.snippet.description` | `description`／`src_text` 優先來源 | 去掉純網址／▣ 導引行後 ≥60 字即直接當 `src_text`（`caption.source=description`、`precision=source-text`，不得標成字幕）；~~不足才改取字幕~~ **2026-10-05 起一律用 description，不足標 `description-thin`、全空退標題 `title-only`，不抓字幕（見 §3.5）** |
 | `videos.snippet.liveBroadcastContent` | live／upcoming 篩選 | 非 `none` 明列 skipped 或 deferred；規則先定案再上線 |
 | `videos.contentDetails.duration` | ISO-8601 duration；轉 `duration_seconds` 與素材行 `MM:SS` | 無法解析記 known gap；不得填 `00:00` 佔位 |
 | `videos.status.privacyStatus`／`uploadStatus` | 可用性判斷 | 非公開／未處理完成列 deferred 或明確排除，不可靜默少一則 |
@@ -234,6 +234,15 @@ CNA-<11字元、保留大小寫的 YouTube videoId>
 `new_item()` 已會把 `platform` 物件保存進狀態檔，因此不需為每個 YouTube metadata 增加一個頂層 state 欄位。
 
 ### 3.5 字幕與人工判斷
+
+> **🔴 2026-10-05 使用者裁定：YNA／CNA 一律改用 description，正式掃帶不再抓字幕。**
+> 起因：10/05 D23 輪 YNA 抓字幕頻繁撞 YouTube 429（`caption-fetch-blocked`）。
+> - `collect_manifest(description_only=True)` 為預設，正式 collect **零 yt-dlp 字幕呼叫**，也**不再因字幕失敗／429 進 `deferred_video_ids`**。
+> - description 去樣板後 ≥60 字：`src_text`＝description，`precision=source-text`（同前）。
+> - 不足 60 字：仍照收，`src_text`＝去樣板 description，`precision=description-thin`（人工判讀時留意資訊薄）。
+> - 去樣板後全空：退用影片標題，`precision=title-only`；連標題都沒有才 `skipped`（reason=`no-description-no-title`）。
+> - 一律標 `source=description`，**不冒充字幕**。
+> - 下面各條「字幕」相關敘述保留為 `description_only=False` 的舊路徑說明（僅測試／人工明示時用），不再是正式行為。
 
 `collect` 對窗口內且尚未在庫的影片才跑字幕，避免對重疊／已收錄 ID 重複下載。
 

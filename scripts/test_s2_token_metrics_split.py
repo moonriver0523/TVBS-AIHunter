@@ -16,6 +16,7 @@ class SplitMetricsTests(unittest.TestCase):
             for sid, output, tool in (("core-id", 11, "Read"),
                                       ("platform-id", 7, "Bash")):
                 row = {
+                    "type": "assistant",
                     "timestamp": "2026-09-23T10:00:00+00:00",
                     "message": {
                         "id": sid,

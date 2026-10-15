@@ -565,6 +565,7 @@ class BatchPatchMetricsTests(unittest.TestCase):
             lines = []
             for index, (name, tool_input) in enumerate(blocks, 1):
                 lines.append(json.dumps({
+                    "type": "assistant",
                     "timestamp": f"2026-09-24T00:00:0{index}+00:00",
                     "message": {
                         "id": f"m{index}",

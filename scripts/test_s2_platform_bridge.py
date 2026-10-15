@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sys
+import pytest
 from argparse import Namespace
 from pathlib import Path
 
@@ -224,6 +225,13 @@ def test_build_abc_copies_src_text_and_detail_id(tmp_path):
     ]
     skel_path = _write(tmp_path / "abc_skel.json", skel)
     out = tmp_path / "abc_entries.json"
+    # 已填稿卻無原文要先拒絕；未填的 pending 骨架仍可交給下游列缺口。
+    with pytest.raises(SystemExit) as rejected:
+        _build(skeleton=str(skel_path), out=str(out))
+    assert rejected.value.code == 2
+    assert not out.exists()
+    skel[-1]["entry"] = ""
+    _write(skel_path, skel)
     _build(skeleton=str(skel_path), out=str(out))
     entries = _load(out)
 
@@ -287,6 +295,12 @@ def test_e2e_abc_from_raw_build_extract(tmp_path):
     _write(skel_path, rows)
 
     entries_path = tmp_path / "abc_entries.json"
+    with pytest.raises(SystemExit) as rejected:
+        _build(skeleton=str(skel_path), out=str(entries_path))
+    assert rejected.value.code == 2
+    assert not entries_path.exists()
+    by_id["ABC091601003"]["entry"] = ""
+    _write(skel_path, rows)
     _build(skeleton=str(skel_path), out=str(entries_path))
     entries = _load(entries_path)
 

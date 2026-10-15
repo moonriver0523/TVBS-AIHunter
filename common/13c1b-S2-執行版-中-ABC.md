@@ -257,10 +257,11 @@ ABC 一輪可能上百則，**幾乎一定會被卸載**。⛔ 這不是錯誤�
 🔴 **骨架檔（`abc_skeleton_*.json`）本身一律不准 `Edit`——不論改幾格**（2026-09-29 0929-1700 實錯：
 對骨架連 Edit 11 次，第 3～11 次全被「同檔逐筆 Edit 次數上限」hook 擋掉，9 次白費，才改走
 `rewrite-entry`）。硬規則：要改骨架內容只有兩條路——① 一次 `Write` 整份；② 局部修改一律
-`rewrite-entry --init-patch <patch>` 建補丁檔 → `Write` 補丁 → `--patch-file <patch>` 一次 apply。
+`python scripts/s2_platform_bridge.py rewrite-entry --site abc --skeleton <skeleton> --entries <entries> --init-patch <patch>` 建補丁檔 → `Write` 補丁 → 用相同 `--site/--skeleton/--entries`，改帶 `--patch-file <patch>` 一次 apply。
 被 hook 擋第 1 次就立刻改走②，不要重試 `Edit`。
 `python scripts/s2_platform_bridge.py build --skeleton <skeleton> --out <entries>`
 轉成下面 `check-entries` 吃的格式，再接原本 extract→lint→merge。`--help` 有完整範例。
+若判斷已寫在 entries、只缺 `src_text`，用 `build --skeleton <skeleton> --entries <entries> --out <entries>` 將判斷接回同一骨架並補原文；不要用空骨架覆寫已填稿。
 
 ---
 

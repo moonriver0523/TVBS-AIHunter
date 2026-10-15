@@ -169,6 +169,7 @@ def synth_transcript(path, calls):
         for i, (offset, name, inp) in enumerate(calls):
             ts = (t0 + timedelta(seconds=offset)).isoformat().replace('+00:00', 'Z')
             line = {
+                'type': 'assistant',
                 'timestamp': ts,
                 'message': {
                     'id': f'msg{i}',

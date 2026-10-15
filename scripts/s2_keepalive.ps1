@@ -185,6 +185,7 @@ function Invoke-AutoRelogin([string[]]$Sites) {
       回傳 hashtable：站名 -> OK / FAIL / ERR，供覆寫 $now 用。
     #>
     $result = @{}
+    $proc = $null
     if (-not (Test-Path $ReloginScript)) {
         Log "WARN 自動重登腳本找不到：$ReloginScript（略過，交給人工）"
         return $result
@@ -219,11 +220,19 @@ function Invoke-AutoRelogin([string[]]$Sites) {
     } catch {
         Log "WARN 自動重登呼叫失敗：$($_.Exception.Message)"
         foreach ($s in $Sites) { $result[$s] = 'ERR' }
+    } finally {
+        # 2026-10-12：任何離開路徑（例外／逾時 Kill 失敗）都確認整棵樹已退出，免得 node／chrome 殘留。
+        if ($proc) {
+            try { if (-not $proc.HasExited) { $proc.Kill($true); [void]$proc.WaitForExit(5000) } }
+            catch { Log "WARN 重登收尾失敗：$($_.Exception.Message)" }
+            $proc.Dispose()
+        }
     }
     return $result
 }
 
 $lock = $null
+$proc = $null
 try {
     $lock = [System.IO.File]::Open(
         $LockFile, [System.IO.FileMode]::OpenOrCreate,
@@ -323,6 +332,12 @@ try {
     exit $code
 }
 finally {
+    # 2026-10-12：同上，主流程任何離開路徑都確認保活 node 樹已退出。
+    if ($proc) {
+        try { if (-not $proc.HasExited) { $proc.Kill($true); [void]$proc.WaitForExit(5000) } }
+        catch { Log "WARN 保活收尾失敗：$($_.Exception.Message)" }
+        $proc.Dispose()
+    }
     if ($lock) {
         $lock.Dispose()
         # R16（2026-08-24）：這裡原本只 Dispose 不刪檔，而保活每 30 分鐘跑一次，

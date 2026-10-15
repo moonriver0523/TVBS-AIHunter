@@ -112,6 +112,7 @@ document.body.appendChild(a); a.click(); a.remove();
 - **不可用 `<a href={簽章URL} download=…>` 直接指過去**——`download` 屬性對跨網域 URL 會被忽略，中文檔名會失效，一定要先轉成同源 blob URL。
 - 中文全形檔名（含 `（）`／`／`）皆可正確落地，成品**無浮水印**。
 - 下載後用 PowerShell（不是 Bash `mv`，中文檔名在 Git Bash 常編碼錯誤）把檔案從瀏覽器落地資料夾搬到目的地。
+- 🔴 **2026-10-07 實測：頁內 `fetch(ClientMediaUrl)` 被 CORS 擋（`Failed to fetch`），但 `tick` 已經記帳**（之後 `check` 回 `Duplicate_Download`）。可行做法：`browser_run_code_unsafe` 內先 `page.evaluate` 打 `tick`（重打已記帳的張數回 `IsDuplicate:true`，不再計量），再用 `page.request.get(ClientMediaUrl)`（Playwright 端請求，不受 CORS）取 `body()`，轉 base64 掛到 `window`，最後各張用 `browser_evaluate` 的 `filename` 參數落地 base64 檔、本機解碼成 jpg。簽章網址全程不回傳到 agent。`run_code_unsafe` 裡 **`require('fs')` 不可用**，不能直接寫檔。也不要用 `a.click()` 觸發瀏覽器下載（Playwright 下載事件會關掉瀏覽器）。案例：`抗議康校2200`。
 
 ### 驗證計量消耗（多張一次 `tick` 時建議做，非每次必要）
 
