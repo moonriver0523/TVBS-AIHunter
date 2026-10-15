@@ -37,7 +37,7 @@
   「收工清單總表」第 5.5 列。
 - **NS id** 文法與 **AP／RT `src_text` advisory** 見 `13c`「文法短指路」／`13c2` §5。
 - **掃描窗**：狀態檔目前 `checkpoint` 到現在，自己 `resume` 看，不要猜。
-- **掃描順序固定 NS → AP → RT → ENEX → ABC**（不可調換，理由見 `13c` V5-1／V7-1 兩小節）。
+- **掃描順序固定 AP → RT → ENEX → ABC → NS**（2026-10-15 使用者訂案，不可調換，理由見 `13c` V5-1／V7-1 兩小節）。三站輪為 AP → RT → NS。**進 NS 前先載入 `https://newsource.ns.cnn.com/landing` 續期一次**（NS 已排最後，JWT 1h 不可在輪尾過期）。
 - 本輪是否掃 ENEX／ABC，對照 `{CHECKPOINT}` 查 `13c` V5-1／V7-1 的輪次表；
   不掃就回報一行「本輪不掃 ENEX（V5-1）」／「本輪不掃 ABC（V7-1）」。
 - **D23 YouTube 尾端**：五站瀏覽器收工硬步驟後才看 D23；Phase 5 只准執行
