@@ -62,3 +62,7 @@
 - **方向**：只改「閱稿檢視」——去 HTML 標籤、固定 boilerplate（如 `--SUPERS`／`--VIDEO SHOWS` 外殼、重複 DESC），保留 `src_text` 原文完整可取。
 - **先做的事**：唯讀量各站近期單則平均字元與可剝除比例；比對剝除後是否仍足以寫摘要／BITE（需抽樣人工確認）。無證據不動工。
 - **界線**：不得截斷原文、不得影響 BITE 逐字依據；不另加硬上限（見 T15「不要只增加 inspect 硬上限」）。
+
+- **T15 追加（2026-10-15 22:50，只加不改）**：
+  - **① 同 revision 重複查詢省略**：`s2_state.py` 對 `list-topics`／`pending` 計狀態指紋（排除 `updated_at`／`last_render_*`），同輪（`run_id`）、同參數、同指紋、45 分鐘內第二次起只印一行；`--force` 或 `S2_NO_READCACHE=1` 重印；快取旁檔 `<狀態檔>.readcache.json`，不進狀態檔。`--yesterday` 不受影響。測試 `test_s2_readcache.py` 10 項，相鄰 list-topics／naming／registry／batch_prep／metrics 全綠。動機：1015-2200 輪 list-topics 6 次、pending 2 次，`s2_state.py` 呼叫 3→11 次、約 $0.3→$1.5。
+  - **② 站序改 AP→RT→ENEX→ABC→NS（使用者 2026-10-15 訂案）**：依據＝近 15 輪每站上下文增長估算（NS 約 +13.7k／請求、ABC 最重），理論每輪省約 20%（未實測）。改 `13c` V5-1／V7-1 與輪次表、`s2_scan_prompt.md`、`13` 配套註記；`s2_rules_check` 全過（13c 一度超 28,000 載入預算，已縮短）。**風險**：NS JWT 1 小時，保活撞鎖會放棄，輪尾 token 年齡可達 50 分 → 規則要求「進 NS 前先載入 `/landing` 續期」。split-session 契約（`core:NS,AP,RT;platform:ENEX,ABC`）**未動**，該模式仍是舊序，另案。**觀察**：新序頭 3 輪看 NS 有無登出／空窗，與 04:30／07:30 重型輪成本對照。

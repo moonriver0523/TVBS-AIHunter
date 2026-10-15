@@ -3328,6 +3328,68 @@ def cmd_needs_review(state, args):
         print("\n".join(f"{i}: {n}" for i, n in rows) if rows else "(無待人工項目)")
 
 
+# ── T15（2026-10-15）：唯讀查詢「同 revision 重複」只回一行 ───────────────
+# 1015-2200 輪 list-topics 6 次、pending 2 次，狀態沒變時每次整份重印進上下文。
+# revision＝狀態檔內容指紋（排除每次寫檔都會變的時間戳）。同一輪（run_id）、同參數、
+# 同指紋、45 分鐘內的第二次以後只印一行；--force 或 S2_NO_READCACHE=1 強制重印。
+# 快取寫在 `<狀態檔>.readcache.json`（旁檔，不進狀態檔、不影響 render／diff）。
+_READCACHE_TTL_SEC = 45 * 60
+_REVISION_VOLATILE = ("updated_at", "last_render_ts", "last_render_sha")
+
+
+def _state_revision(state):
+    import hashlib
+    top = {k: v for k, v in (state.get("_top") or {}).items() if k not in _REVISION_VOLATILE}
+    body = {"top": top, "items": state.get("items"), "date": state.get("date")}
+    raw = json.dumps(body, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def _readcache_check(state, args):
+    """回傳 True＝本次是同 revision 重複查詢，已印一行、呼叫端不要再印完整輸出。"""
+    if args.cmd not in ("list-topics", "pending"):
+        return False
+    if getattr(args, "force", False) or getattr(args, "yesterday", False):
+        return False
+    if os.environ.get("S2_NO_READCACHE"):
+        return False
+    import time
+    path = str(args.file) + ".readcache.json"
+    key = "|".join([args.cmd] + [f"{k}={getattr(args, k, None)}" for k in ("subs", "compact")])
+    rev = _state_revision(state)
+    now = time.time()
+    try:
+        with open(path, encoding="utf-8") as f:
+            cache = json.load(f)
+        if not isinstance(cache, dict):
+            cache = {}
+    except (OSError, ValueError):
+        cache = {}
+    hit = cache.get(key)
+    run_id = str((state.get("_top") or {}).get("run_id") or "")
+    if (isinstance(hit, dict) and hit.get("rev") == rev and hit.get("run_id") == run_id
+            and now - float(hit.get("ts", 0)) < _READCACHE_TTL_SEC):
+        n = int(hit.get("n", 1)) + 1
+        cache[key] = {"rev": rev, "run_id": run_id, "ts": hit.get("ts", now), "n": n}
+        _readcache_write(path, cache)
+        print(f"ℹ️ {args.cmd}：狀態 revision {rev} 自上次查詢未變（本輪第 {n} 次相同查詢），"
+              f"輸出與前次完全相同，已省略以免重複灌進上下文；要完整重印加 `--force`。")
+        return True
+    cache[key] = {"rev": rev, "run_id": run_id, "ts": now, "n": 1}
+    _readcache_write(path, cache)
+    return False
+
+
+def _readcache_write(path, cache):
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False)
+        os.replace(tmp, path)
+    except OSError:
+        pass  # 快取寫不進去不影響主流程：下次照常完整輸出。
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--file", default=DEFAULT_FILE)
@@ -3345,6 +3407,8 @@ def main():
                     help="A10 P1b：改列前一日封存檔裡 ≥3 則的中主題＋charter，"
                          "建檔輪當今天命名參考（跟上面主流程互斥）")
     lt.add_argument("--archive-dir", help="測試用覆蓋 Archive 資料夾（預設 STATE_DIR/Archive）")
+    lt.add_argument("--force", action="store_true",
+                    help="T15：忽略「同 revision 重複查詢」省略，強制重印完整輸出")
     fs = sub.add_parser("find-similar",
                         help="A10 P1c：開新中主題前先粗篩相似格（名稱／aliases／charter 子字串重疊）")
     fs.add_argument("--text", required=True, help="要開的中主題名稱，或一句短摘要")
@@ -3409,7 +3473,9 @@ def main():
                     help="補第二括號 (BITE)。只補「有 ▎BITE： 段但缺 (BITE)」這一種；"
                          "已有／寫著無BITE／沒有 BITE 段一律拒絕不動")
     pe.add_argument("--checkpoint")
-    sub.add_parser("pending")
+    pnd = sub.add_parser("pending")
+    pnd.add_argument("--force", action="store_true",
+                     help="T15：忽略「同 revision 重複查詢」省略，強制重印完整輸出")
     # ⚠️ WP1（2026-08-03）廢除 to-compile／mark-compiled／compiled 欄位：
     # 它們存在的唯一理由是「讓 agent 不用每輪重寫整份 txt」，改用 s2_render.py
     # 全量渲染後重寫是免費的，增量機制反而多一次呼叫又會漏（0803 標籤比較實錯）。
@@ -3524,6 +3590,8 @@ def main():
 
     args = p.parse_args()
     state = load(args.file)
+    if _readcache_check(state, args):
+        return
     {
         "resume": cmd_resume, "diff": cmd_diff, "add": cmd_add,
         "add-batch": cmd_add_batch,
