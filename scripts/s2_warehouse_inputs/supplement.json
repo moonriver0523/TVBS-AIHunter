@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "sinceDays": 7,
+  "canonicalAliases": [
+    {"name":"杜拜航空劫機案","aliases":["杜拜航空劫機案","杜航劫持","機師衝突迫降沙國","乘客與家屬證詞","以色列與杜航說法","杜拜客機轉降沙烏地","杜拜客機乘客談暴跌兩萬呎","杜拜航班乘客說已控制行凶者","杜拜航班副機師據稱想劫機","杜拜航班副機師疑刺機長","杜拜航班航空公司改口衝突"]}
+  ],
+  "candidateEnglish": {
+    "r1003-01": "Newcastle football fans car crash police",
+    "r1003-02": "Madrigueras Spain floods rescue",
+    "r1003-03": "Riyadh Aramco fire",
+    "r1003-04": "Flydubai hijacking co-pilot investigation",
+    "r1003-05": "North Korea missile South Korea",
+    "r1003-06": "Gaza ceasefire airstrike funeral",
+    "r1003-07": "Saudi Arabia Yemen Houthi airstrike",
+    "r1003-08": "France students protest education",
+    "r1003-09": "Russia Ukraine airstrike civilians",
+    "r1003-10": "Lin Yu-ting Asian Games boxing gold",
+    "r1003-11": "four year old girl grandmother rescue"
+  },
+  "fallbacks": [
+    {"group":"ukraine","name":"X @NOELreports","url":"https://x.com/NOELreports","account":"NOELreports","note":"烏俄戰事媒體帳號，貼文常附前線／打擊目標影片。"},
+    {"group":"ukraine","name":"X @wartranslated","url":"https://x.com/wartranslated","account":"wartranslated","note":"WarTranslated，愛沙尼亞籍部落客；烏俄戰事翻譯／彙整帳號，引用前留意留言區有沒有反駁。"},
+    {"group":"ukraine","name":"YouTube @UNITED24media","url":"https://www.youtube.com/@UNITED24media/videos","note":"烏克蘭政府支持的官方宣傳頻道 UNITED24，立場偏烏克蘭官方，引用時留意這點。"},
+    {"group":"ukraine","name":"YouTube @UATVEnglish","url":"https://www.youtube.com/@UATVEnglish/videos","note":"烏克蘭官方英語新聞頻道，立場偏烏克蘭官方，引用時留意這點。"},
+    {"group":"ukraine","name":"YouTube AZOV media","url":"https://www.youtube.com/c/AZOVmedia/videos","note":"烏克蘭亞速旅（Azov）官方媒體頻道，屬單一軍事單位視角，引用時留意其立場與宣傳性質。"},
+    {"group":"mideast","name":"X @OSINTWarfare","url":"https://x.com/OSINTWarfare","account":"OSINTWarfare","note":"美伊戰爭／中東專用。"},
+    {"group":"mideast","name":"X @CENTCOM","url":"https://x.com/CENTCOM","account":"CENTCOM","note":"美軍中央司令部官方帳號，屬美方官方發布，非獨立第三方。"},
+    {"group":"all","name":"YouTube Reuters","url":"https://www.youtube.com/@Reuters/videos","note":"排除 LIVE 直播影片。"},
+    {"group":"all","name":"YouTube Associated Press","url":"https://www.youtube.com/@AssociatedPress/videos","note":"排除 LIVE 直播影片。"},
+    {"group":"all","name":"YouTube CNN","url":"https://www.youtube.com/@CNN/videos","note":"排除 LIVE 直播影片。"},
+    {"group":"all","name":"CNNi Fast","url":"https://edition.cnn.com/videos/fast/cnni-fast","note":"CNN 官網影音頻道。"},
+    {"group":"all","name":"YouTube CNA（Channel NewsAsia）","url":"https://www.youtube.com/channelnewsasia/videos","note":"頻道影片分頁排最新，排除 LIVE。"},
+    {"group":"korea","name":"YouTube 韓聯社（Yonhap）","url":"https://www.youtube.com/channel/UCTHCOPwqNfZ0uiKOvFyhGwg/videos","note":"僅限南北韓新聞使用，禁用他們的國際編譯新聞。"},
+    {"group":"usmilitary","name":"DVIDS","url":"https://www.dvidshub.net/","note":"美軍相關新聞的 B-ROLL 畫面；正式素材，一般編號，下載影片本體＋詳情頁文稿，不加社群待查證備註。"}
+  ]
+}

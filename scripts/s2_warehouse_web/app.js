@@ -1,14 +1,14 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const node = (tag, cls = '', text = '') => { const e = document.createElement(tag); e.className = cls; e.textContent = text; return e; };
-const button = (text, fn, cls = '') => { const b = node('button', cls, text); b.type = 'button'; b.onclick = fn; return b; };
+const button = (text, fn, cls = '') => { const b = node('button', cls, text); b.type = 'button'; b.onclick = event => { const fail = e => onlineNotice('操作失敗：' + (e.message || String(e))); try { const value = fn(event); if (value?.catch) value.catch(fail); } catch (e) { fail(e); } }; return b; };
 const asciiLower = text => String(text).replace(/[A-Z]/g, c => c.toLowerCase());
 const PAGE_SIZE = 50;
 let manifest, view = 'handoff', results = [], pageNumber = 1, token = 0, controller, timelineOpen = false;
 const cache = new Map();
-const state = () => ({ source: new Set(), T: new Set(), C: new Set(), keyword: '', notes: false, unknown: false, from: '', to: '', shift: '', page: 1 });
+const state = () => ({ source: new Set(), T: new Set(), C: new Set(), bundleTags: new Set(), keyword: '', notes: false, unknown: false, from: '', to: '', shift: '', page: 1 });
 const states = { handoff: state(), archive: state() }; states.handoff.notes = true;
-const current = () => states[view];
+const current = () => states[view] || states.handoff;
 const qualities = { ingestion_fallback: '入庫日代替', embedded_verified: '內文日期已辨識', inferred_recording: '側錄日期推定', structured_source: '來源結構化日期', source_created_fallback: '建立日代替', ambiguous: '多日期待確認', unknown: '日期未知' };
 const setStatus = (text, error = false) => { $('status').textContent = text; $('status').className = error ? 'error' : ''; $('retry').hidden = !error; };
 const fmt = n => n.toLocaleString('zh-TW');
@@ -30,6 +30,7 @@ async function getJSON(path, sha, signal) {
 }
 
 function remember() {
+  if (specialView()) { current().shift = $('shift').value; return; }
   const s = current();
   Object.assign(s, { keyword: $('keyword').value, notes: $('notes').checked, unknown: $('unknown').checked,
     from: $('from').value, to: $('to').value, shift: $('shift').value, page: pageNumber });
@@ -48,6 +49,7 @@ function createFilters() {
     }
     group.append(choices); $('filterGroups').append(group);
   }
+  drawBundleFilters();
 }
 
 function drawTimeline() {
@@ -58,7 +60,7 @@ function drawTimeline() {
   const start = Math.max(0, Math.min(i - Math.floor(visible / 2), all.length - visible));
   const shown = timelineOpen ? all : all.slice(start, start + visible);
   for (const entry of shown) {
-    const b = button(entry.date.slice(5).replace('-', '/'), () => { $('shift').value = entry.date; current().shift = entry.date; drawTimeline(); load(); }, 'day');
+    const b = button(entry.date.slice(5).replace('-', '/'), () => { $('shift').value = entry.date; $('shift').dispatchEvent(new Event('change')); }, 'day');
     b.setAttribute('aria-pressed', String(entry.date === selected)); b.setAttribute('aria-label', `${entry.date} 班，${entry.count} 則`);
     b.append(node('span', '', `${fmt(entry.count)} 則`)); $('timeline').append(b);
   }
@@ -73,33 +75,34 @@ function restore() {
   pageNumber = s.page;
   for (const id of ['keyword', 'from', 'to', 'shift']) $(id).value = s[id];
   $('notes').checked = s.notes; $('unknown').checked = s.unknown;
-  $('shiftPanel').hidden = view !== 'handoff'; $('rangePanel').hidden = view !== 'archive'; $('unknownLabel').hidden = view !== 'archive';
+  $('shiftPanel').hidden = view === 'archive'; $('rangePanel').hidden = view !== 'archive'; $('unknownLabel').hidden = view !== 'archive';
   $('from').required = $('to').required = view === 'archive';
   $('handoffTab').setAttribute('aria-pressed', String(view === 'handoff')); $('archiveTab').setAttribute('aria-pressed', String(view === 'archive'));
   $('title').textContent = view === 'handoff' ? '晚班交接' : '跨日檢索';
   $('subtitle').textContent = view === 'handoff' ? '依班次回看收到的素材，從清單開始校閱。' : '依素材日期尋找線索，跨班次回查手上的素材。';
   $('listTitle').textContent = view === 'handoff' ? '本班素材' : '檢索結果';
   $('keyword').placeholder = view === 'handoff' ? '搜尋本班素材代碼與完整中文摘要' : '搜尋素材代碼、中文摘要、已存來源原文';
-  createFilters(); drawTimeline();
+  createFilters(); drawTimeline(); restoreEditorialView();
 }
 
-function switchView(next) { if (!manifest || view === next) return; remember(); view = next; restore(); load(true); }
+async function switchView(next) { if (!manifest || view === next) return; remember(); view = next; restore(); saveOnlineView(); await load(true); }
 function pass(row, s) {
-  return (s.notes || row.kind !== 'note') && (!s.source.size || s.source.has(row.source_family)) &&
+  return passBundleTags(row, s) && (s.notes || row.kind !== 'note') && (!s.source.size || s.source.has(row.source_family)) &&
     ['T', 'C'].every(k => !s[k].size || (row.tc[k] || []).some(v => s[k].has(v))) &&
     (!s.keyword || asciiLower(row.search_text || row.id + '\n' + row.raw_entry).includes(asciiLower(s.keyword)));
 }
 
 function drawSelection() {
   $('selection').replaceChildren(); let count = 0;
-  for (const key of ['source', 'T', 'C']) for (const value of current()[key]) {
-    count++; $('selection').append(button(`${key === 'source' ? '來源' : key}：${value} ×`, () => { current()[key].delete(value); createFilters(); load(); }, 'chip'));
+  for (const key of ['source', 'T', 'C', 'bundleTags']) for (const value of current()[key]) {
+    count++; $('selection').append(button(`${key === 'source' ? '來源' : key === 'bundleTags' ? '議題包 TAG' : key}：${key === 'bundleTags' ? (tagIndex.get(value)?.name || value) : value} ×`, () => { current()[key].delete(value); createFilters(); load(); }, 'chip'));
   }
   $('filterCount').textContent = count ? `（${count}）` : '';
 }
 
 async function load(keepPage = false) {
   if (!manifest) return;
+  if (specialView()) return loadEditorialView();
   remember(); const s = current(); const request = ++token; controller?.abort(); controller = new AbortController();
   if (!keepPage) s.page = 1; pageNumber = s.page;
   results = []; $('results').replaceChildren(); $('pagination').replaceChildren(); $('resultCount').textContent = '';
@@ -110,11 +113,14 @@ async function load(keepPage = false) {
   const parts = entries.flatMap(e => e.parts); let done = 0;
   $('results').setAttribute('aria-busy', 'true');
   try {
+    await ensureBundleScope(view, s.shift);
+    if (request !== token) return;
+    scopeRows = [];
     for (const part of parts) {
       setStatus(`正在搜尋分片 ${done + 1}／${parts.length}… 完成後顯示精確總數。`);
       const data = await getJSON(part.path, part.sha256, controller.signal);
       if (request !== token) return;
-      for (const row of data.items) if (pass(row, s)) results.push(row);
+      for (const row of data.items) { scopeRows.push(row); if (pass(row, s)) results.push(row); }
       done++;
       await new Promise(resolve => setTimeout(resolve, 0));
     }
@@ -123,7 +129,7 @@ async function load(keepPage = false) {
     $('resultCount').textContent = `${fmt(results.length)} 則`;
     setStatus(view === 'archive' ? `已完整搜尋 ${s.from}～${s.to}${s.unknown ? '＋日期未知' : ''} · ${entries.length} 個日期分片組。關鍵字包含完整已存來源原文。` : `已讀取本班全部 ${parts.length} 個分片 · ${s.notes ? '含備註' : '已排除備註'}。`);
     if (!results.length) setStatus('查無符合條件的素材。可放寬日期或清除篩選後再試。');
-    renderPage(); if ($('matrix').open) renderMatrix();
+    createFilters(); drawSelection(); drawEditorialEntry(); renderPage(); if ($('matrix').open) renderMatrix();
   } catch (error) {
     if (request !== token || error.name === 'AbortError') return;
     results = []; $('results').replaceChildren(); $('pagination').replaceChildren(); $('resultCount').textContent = '搜尋未完成';
@@ -155,6 +161,7 @@ function renderItem(row) {
     const b = button(`${axis} · ${value}`, () => tagFilter(axis, value), 'chip ' + axis.toLowerCase());
     b.setAttribute('aria-pressed', String(current()[axis].has(value))); tags.append(b);
   }
+  materialEditorialActions(row, body, tags);
   body.append(tags); item.append(source, body); return item;
 }
 
@@ -200,11 +207,12 @@ $('shift').onchange = () => { remember(); drawTimeline(); load(); };
 $('timelineToggle').onclick = () => { timelineOpen = !timelineOpen; drawTimeline(); };
 $('notes').onchange = $('unknown').onchange = () => load();
 $('week').onclick = () => preset(7); $('month').onclick = () => preset(30);
-$('reset').onclick = () => { const s = current(); s.source.clear(); s.T.clear(); s.C.clear(); $('keyword').value = ''; $('notes').checked = view === 'handoff'; $('unknown').checked = false; createFilters(); load(); };
+$('reset').onclick = () => { const s = current(); s.source.clear(); s.T.clear(); s.C.clear(); s.bundleTags.clear(); $('keyword').value = ''; $('notes').checked = view === 'handoff'; $('unknown').checked = false; createFilters(); load(); };
 $('matrix').ontoggle = () => { if ($('matrix').open) renderMatrix(); };
 $('retry').onclick = () => manifest ? load() : init();
 
 async function init() {
+  $('results').setAttribute('aria-busy', 'true');
   try {
     manifest = await getJSON('manifest.json');
     if (manifest.format_version !== 1 || !manifest.default_end_date) throw new Error('發布清單版本不支援或尚無班次資料');
@@ -214,7 +222,8 @@ async function init() {
     $('shift').replaceChildren(...[...manifest.shifts].reverse().map(e => { const option = node('option', '', `${e.date} · ${fmt(e.count)} 則`); option.value = e.date; return option; }));
     for (const s of Object.values(states)) { s.shift = manifest.default_end_date; s.to = manifest.default_end_date; s.from = offsetDay(s.to, -6); }
     if (matchMedia('(max-width:800px)').matches) $('filters').open = false;
-    restore(); await load();
+    await initEditorial(); restore(); await load();
   } catch (error) { manifest = undefined; setStatus(error.message + '。請使用 serve.cmd 開啟本機網站。', true); }
+  finally { $('results').setAttribute('aria-busy', 'false'); }
 }
-init();
+// Boot in editorial.js after adapters load.

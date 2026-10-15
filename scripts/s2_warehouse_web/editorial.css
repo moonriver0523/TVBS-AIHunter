@@ -1,0 +1,18 @@
+:root{--bar:0px;--bt:#d3c2ed;--bts:#302e46;--btline:#74658d}
+:root[data-theme=light]{--bt:#654480;--bts:#f0e9f6;--btline:#aa8bbd}
+textarea{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);max-width:100%;min-width:0}
+textarea:focus-visible{outline:2px solid var(--warn);outline-offset:3px}
+.bundle-tag{color:var(--bt);background:var(--bts);border:1px solid var(--btline);border-radius:20px;white-space:normal;text-align:left}
+label.bundle-tag{background:transparent;border:0;border-radius:0;padding:7px 0;font-size:12px}
+.tag-choices{display:flex;flex-direction:column;gap:4px}.tag-day{margin:8px 0}.tag-day h3{color:var(--muted);font-size:12px;margin:12px 0 4px}
+.tag-day>button{font-size:11px;min-height:32px;margin-top:8px}
+#todayBundles{padding:12px 0 8px}#todayBundles h2{font-size:20px}
+.bundle-row>summary{font-size:16px}.bundle-row{padding:16px 0}.bundle-row summary .bundle-meta{display:block;font-size:12px;font-weight:400;margin:6px 0 0 18px}
+.member-link{flex:1;min-width:0;background:transparent;color:var(--accent);text-align:left;border:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.bundle-member{padding-left:12px}.bundle-tools input{font:inherit;color:var(--ink)}
+#editorialNotice{color:var(--warn);white-space:pre-wrap}#editorialNotice:empty{display:none}
+#rundownPage,#bundlesPage{min-width:0}.rd-hub pre,.draft-area pre{overflow-wrap:anywhere;white-space:pre-wrap}
+.rd-card{border-radius:4px}.rd-panel{border-radius:4px}.rd-hub h3{font-size:17px}
+#draftPanel h3{font-size:16px}.bundle-tools label{font-size:13px}
+.rd-result>label{color:var(--ink);font-size:14px}.rd-card .rd-meta,.sp-panel .rd-meta{color:var(--muted)}
+@media(max-width:800px){.tabs{padding:0 8px}.tabs button{min-width:0;flex:1;padding:12px 4px;font-size:12px;white-space:nowrap}.bundle-tools{align-items:stretch}.bundle-tools>input{width:100%}.bundle-tools>button{max-width:100%;overflow-wrap:anywhere}#bundleTarget{width:100%}.bundle-member{padding-left:0}.bundle-member .member-link{flex-basis:100%}.rd-tools button{white-space:normal}.tag-choices{max-height:320px;overflow:auto}.bundle-row>summary{font-size:15px}.rd-hub h2{font-size:19px}}

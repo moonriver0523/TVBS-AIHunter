@@ -5,14 +5,18 @@
 <meta name="color-scheme" content="dark light">
 <title>外電資料庫｜線上 demo</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="app.css"><script defer src="app.js"></script>
+<link rel="stylesheet" href="app.css"><link rel="stylesheet" href="bundles.css"><link rel="stylesheet" href="rundown.css"><link rel="stylesheet" href="supplement.css"><link rel="stylesheet" href="editorial.css">
+<script defer src="app.js"></script><script defer src="bundles.js"></script><script defer src="rundown.js"></script><script defer src="supplement.js"></script><script defer src="editorial.js"></script>
 </head>
 <body>
 <header class="masthead"><div class="brand">TVBS <span>外電資料庫</span></div><div class="edition">本機線上化 demo</div><button id="theme" aria-label="切換深淺色模式">切換淺色</button></header>
-<nav class="tabs" aria-label="資料庫視圖"><button id="handoffTab" aria-pressed="true">晚班交接</button><button id="archiveTab" aria-pressed="false">跨日檢索</button></nav>
+<nav class="tabs" aria-label="資料庫視圖"><button id="handoffTab" aria-pressed="true">晚班交接</button><button id="archiveTab" aria-pressed="false">跨日檢索</button><button id="bundlesTab" aria-pressed="false">今日議題包</button><button id="rundownTab" aria-pressed="false">稿單助手</button></nav>
 <section class="context"><div><h1 id="title">晚班交接</h1><p id="subtitle">依班次回看收到的素材，從清單開始校閱。</p></div><div class="publication"><strong id="coverage">讀取發布清單中…</strong><p id="publicationInfo"></p></div></section>
 <main>
 <section id="shiftPanel" aria-label="班次選擇"><div class="section-head"><label for="shift">選擇班次 <select id="shift"></select></label><button id="timelineToggle" aria-expanded="false">展開全部班次</button></div><div id="timeline" class="timeline" aria-label="班次日期時間軸"></div><p class="hint" id="shiftHint"></p></section>
+<p id="editorialNotice" role="status" class="hint"></p><div id="editorialEntry" class="bundle-tools"></div>
+<section id="bundlesPage" hidden aria-label="今日議題包"><section id="todayBundles"></section><details id="bundlePanel" open class="bundle-area"><summary id="bundleSummary">本班議題包 TAG</summary><p class="bundle-hint">依中主題與 canonical 登記簿分組；同題仍須核對是否同一事件。調整存於此瀏覽器。</p><div class="bundle-tools"><input id="bundleSearch" aria-label="搜尋議題包" placeholder="搜尋議題包名稱"><input id="newBundleName" aria-label="自訂包名稱" placeholder="自訂包名稱" maxlength="120"><button id="newBundle">新建自訂包</button></div><div class="bundle-tools"><label>加入哪個包 <select id="bundleTarget"></select></label><button id="addStaged">加入 F02 暫存素材</button><span id="bundlePending"></span><button id="addPending">加入待選素材</button><button id="showLocks">查看鎖定版本</button></div><p id="bundleStatus" class="bundle-status" role="status"></p><div id="bundleList"></div></details></section>
+<section id="rundownPage" hidden aria-label="稿單助手"><details id="draftPanel" class="draft-area" hidden><summary>開稿包</summary><label class="draft-label">稿題暫名<input id="draftTitle"></label><p id="draftAdvice" class="bundle-hint"></p><div class="bundle-tools"><button id="copyDraft">複製完整開稿包</button><button id="lockDraft">鎖定版本</button></div><p id="draftStatus" class="bundle-status" role="status"></p><pre id="draftText"></pre><details><summary>交給寫稿｜完整純文字複製區</summary><textarea id="draftCopyText" readonly aria-label="交給寫稿的完整開稿包"></textarea></details><h3>鎖定版本</h3><div id="draftLocks"></div></details></section>
 <form id="searchForm">
 <div id="rangePanel" hidden><div class="range"><label>素材日起日<input type="date" id="from" required></label><span class="range-to">至</span><label>素材日迄日<input type="date" id="to" required></label><div class="presets"><button type="button" id="week">近 7 日</button><button type="button" id="month">近 30 日</button></div></div></div>
 <div class="searchbar"><label class="keyword">關鍵字<input id="keyword" type="search" placeholder="搜尋素材代碼、中文摘要、已存來源原文" autocomplete="off"></label><button type="submit" id="search">搜尋素材</button><button type="button" id="reset">清除條件</button></div>

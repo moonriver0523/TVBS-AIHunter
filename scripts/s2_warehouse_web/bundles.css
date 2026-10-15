@@ -1,0 +1,18 @@
+
+.bundle-area,.draft-area,.today-bundles{margin:16px 0;padding:16px;background:var(--surface);border:1px solid var(--line);border-radius:6px;min-width:0;overflow-wrap:anywhere}
+.bundle-area>summary,.draft-area>summary{font-size:16px;font-weight:650;color:var(--ink)}
+.bundle-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+.bundle-tools input,.bundle-tools select,.draft-area input,.bundle-name{min-width:0;max-width:100%;background:var(--bg);border:1px solid var(--line);padding:7px;border-radius:4px}
+.bundle-tools label{display:flex;flex-wrap:wrap;gap:6px;align-items:center;max-width:100%}
+.bundle-row{padding:12px 0;border-top:1px solid var(--line)}
+.bundle-row>summary{color:var(--accent);font-weight:600}.bundle-meta,.bundle-hint{color:var(--muted);font-size:13px;margin:6px 0}
+.bundle-member{display:flex;gap:8px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.bundle-member>a{flex:1;min-width:0}.bundle-member button{flex-shrink:0}.bundle-members{padding-left:22px}
+.today-bundles h3{margin:0 0 6px}.today-bundles ol{padding-left:22px;margin:4px 0;columns:2}.today-bundles li{break-inside:avoid;margin:4px 0}
+.draft-area pre,.numbered-original{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-width:100%;background:var(--soft);padding:12px}
+.draft-area textarea{width:100%;min-height:240px;resize:vertical;background:var(--soft);border:1px solid var(--line);padding:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.draft-label{display:block;margin:12px 0 4px}.draft-label input{display:block;width:100%}.bundle-status{color:var(--warn);white-space:pre-wrap}.draft-lock{padding:10px 0;border-top:1px solid var(--line)}
+.evidence-conclusion{color:var(--ink);font-size:14px;font-weight:600;margin:4px 0 12px}.evidence-primary{background:var(--soft);padding:10px;margin:8px 0}.evidence-technical{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}.evidence-technical summary{color:var(--muted)}
+.item:target,.item.bundle-target{outline:2px solid var(--accent);outline-offset:2px;scroll-margin-top:160px}
+.bundle-area,.draft-area,.today-bundles{scroll-margin-top:calc(var(--bar) + 16px)}
+@media(max-width:600px){.today-bundles ol{columns:1}.bundle-area,.draft-area,.today-bundles{padding:12px}.bundle-tools{align-items:stretch}.bundle-tools label{width:100%}.bundle-tools select,.bundle-tools input{width:100%}.bundle-name{width:100%}.bundle-member{flex-wrap:wrap}.bundle-member>a{flex-basis:75%}}

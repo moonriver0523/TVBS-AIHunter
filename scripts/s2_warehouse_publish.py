@@ -12,6 +12,7 @@ from pathlib import Path
 import tempfile
 
 import s2_warehouse as W
+import s2_warehouse_editorial as E
 
 FORMAT_VERSION = 1
 MAX_SHARD_BYTES = 2_000_000
@@ -75,7 +76,7 @@ def public_text(payload):
     return {key: str(payload.get(key) or "") for key in TEXT_FIELDS}
 
 
-def export_archive(warehouse_root=W.DEFAULT_ROOT, max_bytes=MAX_SHARD_BYTES):
+def export_archive(warehouse_root=W.DEFAULT_ROOT, max_bytes=MAX_SHARD_BYTES, rundown_dir=None):
     if max_bytes < 128:
         raise ValueError("分片上限至少 128 bytes")
     root = allowed_path(warehouse_root)
@@ -115,18 +116,22 @@ def export_archive(warehouse_root=W.DEFAULT_ROOT, max_bytes=MAX_SHARD_BYTES):
         for r in conn.execute("SELECT material_id,axis,value FROM material_tags ORDER BY material_id,axis,value"):
             tags[r["material_id"]][r["axis"]].append(r["value"])
         days = defaultdict(list)
+        payloads = {}
         for r in conn.execute("SELECT m.material_id,m.search_text,r.payload_json FROM materials m "
                               "JOIN material_revisions r ON r.revision_id=m.current_revision_id ORDER BY m.material_id"):
             mid = r["material_id"]
-            row = dict(materials[mid], **public_text(json.loads(r["payload_json"])),
+            payloads[mid] = json.loads(r["payload_json"])
+            row = dict(materials[mid], **public_text(payloads[mid]),
                        tc=tags[mid], search_text=r["search_text"])
             days[row["material_date"] or "unknown"].append(row)
         day_entries = [emit("days", day, rows) for day, rows in sorted(days.items())]
         shifts = defaultdict(list)
         snapshots = defaultdict(set)
+        observations = []
         for r in conn.execute("SELECT s.shift_date,o.* FROM material_observations o JOIN shifts s USING(shift_id) "
                               "ORDER BY s.shift_date,o.shift_id,o.ordinal,o.local_item_id"):
             payload = json.loads(r["payload_json"])
+            observations.append((r["shift_date"], r["material_id"], payload))
             row = dict(materials[r["material_id"]], **public_text(payload))
             family, kind = W.source_class(payload)
             # Reconstruct the observed version's dates, tags and link, not current.
@@ -145,8 +150,21 @@ def export_archive(warehouse_root=W.DEFAULT_ROOT, max_bytes=MAX_SHARD_BYTES):
             snapshots[r["shift_date"]].add(r["shift_id"])
         shift_entries = [dict(emit("shifts", day, rows), snapshot_count=len(snapshots[day]))
                          for day, rows in sorted(shifts.items())]
+        bundles, editorial, references, resolver = E.derive(payloads, materials, observations)
+        bundle_entries = [emit("bundles", day, bundles[day]) for day in sorted(shifts)]
+        editorial_entries = [emit("editorial", day, rows) for day, rows in sorted(editorial.items())]
+        reference_entries = [emit("references", key, rows) for key, rows in sorted(references.items())]
+        inputs = allowed_path(rundown_dir) if rundown_dir else archive / "rundowns"
+        rundown_entries = []
+        for day in sorted(shifts):
+            candidates, report = E.optional_rundown(inputs / (day + ".json"), resolver, payloads)
+            rundown_entries.append(dict(emit("rundowns", day, candidates), mapping=report))
+        supplement = json.loads((Path(__file__).parent / "s2_warehouse_inputs" / "supplement.json").read_text(encoding="utf-8"))
+        config_entries = [emit("config", "supplement", [supplement])]
         content = {"format_version": FORMAT_VERSION, "dataset": "archive", "display_timezone": "Asia/Taipei",
                    "max_shard_bytes": max_bytes, "shifts": shift_entries, "days": day_entries,
+                   "bundles": bundle_entries, "editorial": editorial_entries, "references": reference_entries,
+                   "rundowns": rundown_entries, "config": config_entries,
                    "material_count": count, "observation_count": sum(e["count"] for e in shift_entries),
                    "default_end_date": max(shifts, default=None),
                    "vocabulary": {"sources": sorted({r["source_family"] for r in metadata}),
@@ -173,8 +191,8 @@ def build_demo(publish_dir, demo_dir):
     if demo_dir == publish_dir or demo_dir.is_relative_to(publish_dir) or publish_dir.is_relative_to(demo_dir):
         raise ValueError("demo 與 publish 不可相互包含")
     manifest = json.loads((publish_dir / "manifest.json").read_text(encoding="utf-8"))
-    for group in ("shifts", "days"):
-        for entry in manifest[group]:
+    for group in ("shifts", "days", "bundles", "editorial", "references", "rundowns", "config"):
+        for entry in manifest.get(group, []):
             for part in entry["parts"]:
                 data = (publish_dir / part["path"]).read_bytes()
                 if digest(data) != part["sha256"]:
@@ -194,9 +212,10 @@ def main():
     parser.add_argument("--warehouse-root", type=Path, default=Path(os.environ.get("S2_WAREHOUSE_ROOT", W.DEFAULT_ROOT)))
     parser.add_argument("--max-shard-bytes", type=int, default=MAX_SHARD_BYTES)
     parser.add_argument("--demo-dir", type=Path, help="同時建立本機 demo，例如 D:\\Downloads\\外電資料庫_線上demo")
+    parser.add_argument("--rundown-dir", type=Path, help="可選人工候選稿單目錄，檔名 YYYY-MM-DD.json；預設 archive/rundowns")
     args = parser.parse_args()
     try:
-        result = export_archive(args.warehouse_root, args.max_shard_bytes)
+        result = export_archive(args.warehouse_root, args.max_shard_bytes, args.rundown_dir)
         if args.demo_dir:
             build_demo(result["output"], args.demo_dir)
             result["demo"] = str(args.demo_dir)

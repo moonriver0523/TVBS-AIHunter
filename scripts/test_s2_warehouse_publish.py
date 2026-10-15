@@ -87,7 +87,9 @@ class PublishTest(unittest.TestCase):
         self.put("2026-10-02", [item("RT5678", "RT", first_seen_checkpoint="1002-1700")])
         second = P.export_archive(self.root)
         self.assertNotEqual(first["generation"], second["generation"])
-        self.assertEqual(second["changed_files"], 3)  # new day, shift and manifest
+        # Material/shift, editorial owner, reference bucket, empty bundle and
+        # optional-rundown shards for the new shift, plus the manifest.
+        self.assertEqual(second["changed_files"], 7)
         after = self.files()
         for path, value in before.items():
             if path != "manifest.json":
