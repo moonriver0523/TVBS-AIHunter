@@ -1,0 +1,98 @@
+【主播稿頭】
+川普在阿拉斯加造勢，宣稱臺灣同意買下當地天然氣管線三成的產量、為期20年。而他的期中選戰背後，是世界首富馬斯克7月以來捐出的2.76億美元，約臺幣83億元。錢砸得兇，馬斯克的好感度卻比兩年前大跌20個百分點。
+
+【主標題】
+馬斯克砸83億挺共和黨 人氣卻崩20點
+
+【次標題】
+川普造勢稱臺灣買30%天然氣 為期20年
+馬斯克7月起捐2.76億 打破自己紀錄
+資金砸向參院與德州 傳想修補關係
+恩騰: 淨好感度從負2 掉到負22
+民主黨奪參院機率 從44%升到62%
+白宮新發言人首場簡報 只講14分鐘
+吉爾福伊爾遭要求請辭 駐希臘大使
+
+【側錄素材對照】
+CNN 10-13 17整點 165658（母帶起始 165658）
+CNN 10-13 20整點 195658（母帶起始 195658）
+
+【記者OS內文與對應畫面】
+
+SB
+川普
+臺灣剛剛同意，未來20年買下這條管線輸出天然氣的30%。這保證了計畫成功，這是歷史上最大的承諾之一，不管哪個領域都一樣。
+#07 0001-0015
+Taiwan has just agreed to buy 30% of the gas coming off the pipeline for the next 20 years. That guarantees the success. It's one of the biggest. Commitments in history for anything.
+
+這是川普週二在阿拉斯加瓦西拉（Wasilla）造勢時的說法。他接著表示，臺灣還會投資44億美元，約臺幣1320億元，加上南韓已承諾的500億美元。這是川普的單方說法，素材中沒有臺灣方面的回應。
+#06 TC0015 "川普走進會場、群眾舉手機拍攝"
+#06 TC0040 "川普站上講臺、台下歡呼"
+
+川普的選戰，背後有世界首富馬斯克撐腰。
+==AICG==
+馬斯克7月以來捐出2.76億美元，居本屆共和黨金主之首；a16z創辦人安德里森與霍羅維茲約0.91億美元，投資大亨亞斯約0.55億，OpenAI共同創辦人布羅克曼夫婦約0.25億。
+
+馬斯克的主要政治團體America PAC證實，這筆錢有1.58億給與參議院共和黨領導層結盟的超級政治行動委員會，7600萬進了America PAC，用來催出共和黨選民，他們宣稱已經敲了650萬戶的門。累計下來，本選舉週期馬斯克已捐約3.66億美元，約臺幣110億元，高於2024年的2.9億。
+#02 TC0000 "川普頒國家科學獎章給馬斯克（資料畫面）"
+#01 TC0005 "馬斯克與川普合影、頒獎典禮"
+
+SB
+OpenSecrets主管 Brendan Glavin
+(馬斯克)2024年是整場選舉中所有個人裡捐款最多的人，那在當時就是紀錄。現在他又回來了，而且超越了那個紀錄，後面還有更多。
+#01 0026-0044
+You know, he's exceeding what last - in 2024 he was the top donor of any individual in the election, and that was a record at that time. So now he's come back and he's exceeded that, you know, and there's still more to go.
+
+資金流向也看得出策略。他把錢大量投進參議院這一側，也直接砸進德州——共和黨參議員提名人在那裡陷入膠著，而德州自1994年以來，就沒有選出過民主黨的全州公職官員。路透引述分析師說法，馬斯克曾與川普和國會山莊關係緊繃，捐款也是在修補與黨內領導層的關係。
+#01 TC0305 "參議院議場"
+#01 TC0350 "馬斯克與輝達執行長黃仁勳同台"
+
+SB
+OpenSecrets主管 Brendan Glavin
+當共和黨情勢看起來不妙，如果(馬斯克)能在最後一刻進場砸下這麼多錢，之後共和黨表現不錯，他就能把很大一部分功勞攬在自己身上。
+#01 0538-0552
+And, you know, when things aren't looking great for the Republicans and if he can come in at the, at the last second and spend all this money and then they do well, he's going to be able to take a lot of credit for that
+
+不過，錢買得到影響力，卻買不到人氣。CNN首席資料分析師恩騰（Harry Enten）統計發現，2024年10月馬斯克的淨好感度只落後2個百分點，現在落後22個百分點；獨立選民從落後5個百分點，擴大到落後27個百分點。
+CNN 10/13 TC202228 "恩騰在圖表前解說馬斯克淨好感度"
+
+SB
+CNN首席資料分析師 Harry Enten
+他的淨好感度已經掉進谷底。我的天，比水面低了22個百分點，這是20個百分點的大逆轉。
+CNN 10/13 202254-202301
+His net favorability is way into the basement. I mean, my goodness gracious. It's 22 points below water. That's a 20-point switcheroo.
+
+更尷尬的是，這筆錢也沒讓共和黨在參議院更有把握。依預測市場資料，7月13日民主黨奪回參議院的機率是44%，現在升到62%。
+CNN 10/13 TC202458 "圖表：民主黨奪參議院機率 44%升至62%"
+
+SB
+CNN首席資料分析師 Harry Enten
+這個數字已經上升。民主黨現在以62%的機率被看好奪回參議院多數。所以結果是，錢不只買不到愛，看來也不見得買得到參議院多數。
+CNN 10/13 202518-202528
+That number has gone up. They're now the majority favored at 62% chance to take back the United States Senate. So it turns out money can't just not only not buy you love, but apparently can't necessarily buy you a Senate majority as well.
+
+白宮這頭，也換上了新面孔。
+==AICG==
+10/10獲川普任命、接替萊維特的白宮新任發言人扎哈里亞，10/13首度主持記者會；曾任傳播顧問、國土安全部發言人，獲佩珀代因大學法學學位，也曾旅居北京任律所助理、能說中文。
+
+扎哈里亞週二首度在白宮簡報室面對記者，只講了約14分鐘、接了三家媒體的提問，就以川普要搭海軍陸戰隊一號前往阿拉斯加為由結束。
+#05 TC0019 "扎哈里亞走進白宮簡報室、記者在座"
+
+SB
+白宮新聞秘書 Katie Zacharia
+能擔任川普總統與美國人民的新任白宮新聞秘書，我感到無比榮幸。
+#04 0008-0019
+I am so honored to work for President (Donald) Trump and the American people as the new White House press secretary.
+
+簡報中最大的新聞，是她宣布川普已要求駐希臘大使吉爾福伊爾（Kimberly Guilfoyle）請辭。有報導指控吉爾福伊爾在任前後有不當、甚至可能違法的行為。
+#05 TC0113 "記者提問、扎哈里亞在講臺回應"
+
+SB
+白宮新聞秘書 Katie Zacharia
+我們已經要求吉爾福伊爾大使辭職。她一直是團隊中很棒的資產，我們祝福她。
+#05 0120-0128
+We have asked Ambassador Guilfoyle to resign. She has been a wonderful asset to the team and we wish her well.
+
+至於外界好奇的中國背景，南華早報報導，她曾旅居北京、在當地律師事務所工作；澎湃引述美媒報導說，她自稱中文已經退步，但仍聽得懂不少。
+
+TVBS 許岱軒

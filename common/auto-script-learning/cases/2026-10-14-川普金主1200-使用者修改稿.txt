@@ -1,0 +1,53 @@
+【主播稿頭】
+川普在阿拉斯加造勢，宣稱臺灣要買管線三成天然氣、加碼投資44億美元。選戰燒錢的背後，是馬斯克7月來砸下的2.76億美元，約臺幣83億元，他的好感度卻大跌20個百分點。白宮新發言人也亮相，一開場就請走一名大使，她還曾住北京、會說中文。
+
+【記者OS內文與對應畫面】
+
+SB
+川普
+臺灣剛剛同意，未來20年買下這條管線輸出天然氣的30%。這保證了計畫成功，這是歷史上最大的承諾之一，不管哪個領域都一樣。
+#07 0001-0015
+Taiwan has just agreed to buy 30% of the gas coming off the pipeline for the next 20 years. That guarantees the success. It's one of the biggest. Commitments in history for anything.
+
+川普在阿拉斯加造勢時突然說，臺灣不只要買當地的天然氣，還要加碼投資44億美元，約臺幣1320億，川普搶在我國證實前宣布，當作吸票政績拯救期中選情。
+
+NS#06
+
+不過辦造勢、打廣告全都要燒錢，川普不缺銀彈，因為有全球首富馬斯克撐腰。
+==AICG==
+馬斯克7月以來捐出2.76億美元，居本屆共和黨金主之首；創投基金創辦人與投資大亨，合計捐了快1.5億，OpenAI共同創辦人布羅克曼夫婦約0.25億。
+
+不過這些錢是捐給超級政治行動委員會，主要是幫川普支持的國會議員候選人，不能讓川普後兩年任期變跛腳總統。
+#02 TC0000 "川普頒國家科學獎章給馬斯克（資料畫面）"
+#01 TC0005 "馬斯克與川普合影、頒獎典禮"
+
+SB
+OpenSecrets主管 Brendan Glavin
+當共和黨情勢看起來不妙，如果(馬斯克)能在最後一刻進場砸下這麼多錢，之後共和黨表現不錯，他就能把很大一部分功勞攬在自己身上。
+#01 0538-0552
+And, you know, when things aren't looking great for the Republicans and if he can come in at the, at the last second and spend all this money and then they do well, he's going to be able to take a lot of credit for that
+
+捐錢助選本身就是雙面刃，CNN統計發現，馬斯克的淨好感度比兩年前，大跌20個百分點。
+CNN 10/13 TC202228 "恩騰在圖表前解說馬斯克淨好感度"
+
+SB
+CNN首席資料分析師 Harry Enten
+他的淨好感度已經掉進谷底。我的天，比水面低了22個百分點，這是20個百分點的大逆轉。
+CNN 10/13 202254-202301
+His net favorability is way into the basement. I mean, my goodness gracious. It's 22 points below water. That's a 20-point switcheroo.
+
+白宮此時也換上新面孔。
+
+SB
+白宮新聞秘書 Katie Zacharia
+我們已經要求吉爾福伊爾(美駐希臘)大使辭職。她一直是團隊中很棒的資產，我們祝福她。
+#05 0120-0128
+We have asked Ambassador Guilfoyle to resign. She has been a wonderful asset to the team and we wish her well.
+
+她是白宮新任發言人42歲的扎哈里亞，
+==透AICG==
+10/10獲川普任命、三天後首度主持記者會就是開除希臘大使；她當過國土安全部發言人，也曾旅居北京任律所助理、能說中文。
+
+川普年底前還要跟習近平見面兩次，會說中文的發言人，角色格外受關注。
+
+TVBS 許岱軒
